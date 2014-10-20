@@ -45,8 +45,9 @@ void clock_init(void)
                     RCC_APB2ENR_AFIOEN);
 }
 
-void gpio_set_pin(volatile struct gpio * const gpio,
-                  unsigned int pin, unsigned int mode)
+void gpio_configure_pin(
+    volatile struct gpio * const gpio,
+    unsigned int pin, unsigned int mode)
 {
     if (pin >= 8) {
         pin -= 8;

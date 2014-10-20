@@ -18,8 +18,9 @@
 #define SYSCLK     (SYSCLK_MHZ * 1000000)
 void clock_init(void);
 
-void gpio_set_pin(volatile struct gpio * const gpio,
-                  unsigned int pin, unsigned int mode);
+void gpio_configure_pin(
+    volatile struct gpio * const gpio,
+    unsigned int pin, unsigned int mode);
 
 /* C-accessible registers. */
 static volatile struct scb * const scb = (struct scb *)SCB_BASE;

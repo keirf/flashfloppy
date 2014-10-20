@@ -54,7 +54,7 @@ void console_init(void)
     rcc->apb2enr |= RCC_APB2ENR_USART1EN;
 
     /* Enable TX pin (PA9) for USART output. */
-    gpio_set_pin(gpioa, 9, AFO_pushpull);
+    gpio_configure_pin(gpioa, 9, AFO_pushpull);
 
     /* BAUD, 8n1. */
     usart1->brr = SYSCLK / BAUD;

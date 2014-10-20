@@ -30,13 +30,14 @@ int main(void)
     clock_init();
     console_init();
 
-    gpio_set_pin(gpioa, 0, GPO_opendrain);
+    gpio_configure_pin(gpioa, 0, GPO_opendrain);
 
-    for (i = 0; i < 5; i++) {
+    i = usart1->dr; /* clear UART_SR_RXNE */    
+    for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
         printk("Hello world! printf test: '%5d' '%05d' %08x\n",
                -i, -i, rcc->cfgr);
         gpioa->bsrr = x ^= (1u<<16)|(1u<<0);
-        ms_delay(1000);
+        ms_delay(100);
     }
 
     /* System reset */
