@@ -146,6 +146,32 @@ struct usart {
     uint32_t gtpr; /* 18: Guard time and prescaler */
 };
 
+#define USART_SR_CTS         (1u<<9)
+#define USART_SR_LBD         (1u<<8)
+#define USART_SR_TXE         (1u<<7)
+#define USART_SR_TC          (1u<<6)
+#define USART_SR_RXNE        (1u<<5)
+#define USART_SR_IDLE        (1u<<4)
+#define USART_SR_ORE         (1u<<3)
+#define USART_SR_NE          (1u<<2)
+#define USART_SR_FE          (1u<<1)
+#define USART_SR_PE          (1u<<0)
+
+#define USART_CR1_UE         (1u<<13)
+#define USART_CR1_M          (1u<<12)
+#define USART_CR1_WAKE       (1u<<11)
+#define USART_CR1_PCE        (1u<<10)
+#define USART_CR1_PS         (1u<< 9)
+#define USART_CR1_PEIE       (1u<< 8)
+#define USART_CR1_TXEIE      (1u<< 7)
+#define USART_CR1_TCIE       (1u<< 6)
+#define USART_CR1_RXNEIE     (1u<< 5)
+#define USART_CR1_IDLEIE     (1u<< 4) 
+#define USART_CR1_TE         (1u<< 3)
+#define USART_CR1_RE         (1u<< 2)
+#define USART_CR1_RWU        (1u<< 1)
+#define USART_CR1_SBK        (1u<< 0)
+
 #define USART1_BASE 0x40013800
 static volatile struct usart * const usart1 = (struct usart *)USART1_BASE;
 
