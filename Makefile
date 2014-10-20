@@ -1,6 +1,6 @@
 include Rules.mk
 
-OBJS += main.o head.o
+OBJS += main.o head.o string.o console.o
 
 PROJ = gotek
 
