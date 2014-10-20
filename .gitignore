@@ -1,0 +1,9 @@
+*.[oa]
+.*.d
+*~
+*.ld
+*.elf
+*.bin
+*.hex
+*.orig
+*.rej
