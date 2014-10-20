@@ -1,6 +1,10 @@
 include Rules.mk
 
-OBJS += main.o head.o string.o console.o
+OBJS += console.o
+OBJS += head.o
+OBJS += main.o
+OBJS += string.o
+OBJS += stm32f10x.o
 
 PROJ = gotek
 

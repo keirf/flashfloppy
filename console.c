@@ -53,8 +53,8 @@ void console_init(void)
     /* Enable the peripheral clock */
     rcc->apb2enr |= RCC_APB2ENR_USART1EN;
 
-    /* Enable the GPIO. */
-    gpioa->crh = 0x444444a4u;
+    /* Enable TX pin (PA9) for USART output. */
+    gpio_set_pin(gpioa, 9, AFO_pushpull);
 
     /* BAUD, 8n1. */
     usart1->brr = SYSCLK / BAUD;
