@@ -39,6 +39,15 @@ struct scb {
 #define SCB_BASE 0xe000ed00
 static volatile struct scb * const scb = (struct scb *)SCB_BASE;
 
+/* Power control */
+struct pwr {
+    uint32_t cr;       /* 00: Power control */
+    uint32_t csr;      /* 04: Power control/status */
+};
+
+#define PWR_BASE 0x40007000
+static volatile struct pwr * const pwr = (struct pwr *)PWR_BASE;
+
 /* Reset and clock control */
 struct rcc {
     uint32_t cr;       /* 00: Clock control */
