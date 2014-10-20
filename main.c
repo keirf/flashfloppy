@@ -2,6 +2,11 @@
  * main.c
  * 
  * Bootstrap the STM32F105RB and get things moving.
+ * 
+ * Written & released by Keir Fraser <keir.xen@gmail.com>
+ * 
+ * This is free and unencumbered software released into the public domain.
+ * See the file COPYING for more details, or visit unlicense.org.
  */
 
 #include "stm32f10x.h"
@@ -47,3 +52,13 @@ int main(void)
 
     return 0;
 }
+
+/*
+ * Local variables:
+ * mode: C
+ * c-file-style: "Linux"
+ * c-basic-offset: 4
+ * tab-width: 4
+ * indent-tabs-mode: nil
+ * End:
+ */

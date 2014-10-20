@@ -2,6 +2,11 @@
  * console.c
  * 
  * printf-style interface to USART1.
+ * 
+ * Written & released by Keir Fraser <keir.xen@gmail.com>
+ * 
+ * This is free and unencumbered software released into the public domain.
+ * See the file COPYING for more details, or visit unlicense.org.
  */
 
 #include "stm32f10x.h"
@@ -40,3 +45,13 @@ int printk(const char *format, ...)
 
     return n;
 }
+
+/*
+ * Local variables:
+ * mode: C
+ * c-file-style: "Linux"
+ * c-basic-offset: 4
+ * tab-width: 4
+ * indent-tabs-mode: nil
+ * End:
+ */

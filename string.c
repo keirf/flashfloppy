@@ -2,6 +2,11 @@
  * string.c
  * 
  * String manipulation functions.
+ * 
+ * Written & released by Keir Fraser <keir.xen@gmail.com>
+ * 
+ * This is free and unencumbered software released into the public domain.
+ * See the file COPYING for more details, or visit unlicense.org.
  */
 
 #include "util.h"
@@ -135,3 +140,13 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
 
     return p - str;
 }
+
+/*
+ * Local variables:
+ * mode: C
+ * c-file-style: "Linux"
+ * c-basic-offset: 4
+ * tab-width: 4
+ * indent-tabs-mode: nil
+ * End:
+ */

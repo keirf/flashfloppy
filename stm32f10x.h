@@ -2,6 +2,11 @@
  * stm32f10x.h
  * 
  * Core and peripheral register definitions.
+ * 
+ * Written & released by Keir Fraser <keir.xen@gmail.com>
+ * 
+ * This is free and unencumbered software released into the public domain.
+ * See the file COPYING for more details, or visit unlicense.org.
  */
 
 #ifndef __STM32F10X_H__
@@ -94,3 +99,13 @@ struct usart {
 static volatile struct usart * const usart1 = (struct usart *)USART1_BASE;
 
 #endif /* __STM32F10X_H__ */
+
+/*
+ * Local variables:
+ * mode: C
+ * c-file-style: "Linux"
+ * c-basic-offset: 4
+ * tab-width: 4
+ * indent-tabs-mode: nil
+ * End:
+ */
