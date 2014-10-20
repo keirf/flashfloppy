@@ -2,7 +2,7 @@ TOOL_PREFIX = arm-none-eabi-
 CC = $(TOOL_PREFIX)gcc
 OBJCOPY = $(TOOL_PREFIX)objcopy
 
-CFLAGS  = -g -Os -Wall -nostdlib -I.
+CFLAGS  = -g -Os -Wall -Wno-format -Werror -nostdlib -I.
 CFLAGS += -mlittle-endian -mthumb -mcpu=cortex-m3 -mfloat-abi=soft
 
 CFLAGS += -MMD -MF .$(@F).d

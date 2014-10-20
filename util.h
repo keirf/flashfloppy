@@ -24,6 +24,8 @@ int vprintk(const char *format, va_list ap)
 int printk(const char *format, ...)
     __attribute__ ((format (printf, 1, 2)));
 
+void console_init(void);
+
 #endif /* __UTIL_H__ */
 
 /*

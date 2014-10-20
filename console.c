@@ -13,6 +13,8 @@
 #include "intrinsics.h"
 #include "util.h"
 
+#define BAUD 3000000 /* 3Mbaud */
+
 int vprintk(const char *format, va_list ap)
 {
     static char str[128];
@@ -44,6 +46,22 @@ int printk(const char *format, ...)
     va_end(ap);
 
     return n;
+}
+
+void console_init(void)
+{
+    /* Enable the peripheral clock */
+    rcc->apb2enr |= RCC_APB2ENR_USART1EN;
+
+    /* Enable the GPIO. */
+    gpioa->crh = 0x444444a4u;
+
+    usart1->cr1 = (1u<<13);
+    usart1->cr2 = 0;
+    usart1->cr3 = 0;
+    usart1->gtpr = 0;
+    usart1->brr = SYSCLK / BAUD;
+    usart1->cr1 = (1u<<13) | (1u<<3) | (1u<<2);
 }
 
 /*

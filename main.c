@@ -22,28 +22,54 @@ void ms_delay(int ms)
    }
 }
 
+static void clock_init(void)
+{
+    /* Start up the external oscillator. */
+    rcc->cr |= RCC_CR_HSEON;
+    while (!(rcc->cr & RCC_CR_HSERDY))
+        cpu_relax();
+
+    /* PLLs, scalers, muxes. */
+    rcc->cfgr = (RCC_CFGR_PLLMUL(9) |        /* PLL = 9*8MHz = 72MHz */
+                 RCC_CFGR_PLLSRC_PREDIV1 |
+                 RCC_CFGR_ADCPRE_DIV8 |
+                 RCC_CFGR_PPRE1_DIV2);
+
+    /* Enable and stabilise the PLL. */
+    rcc->cr |= RCC_CR_PLLON;
+    while (!(rcc->cr & RCC_CR_PLLRDY))
+        cpu_relax();
+
+    /* Switch to the externally-driven PLL for system clock. */
+    rcc->cfgr |= RCC_CFGR_SW_PLL;
+    while ((rcc->cfgr & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_PLL)
+        cpu_relax();
+
+    /* Internal oscillator no longer needed. */
+    rcc->cr &= ~RCC_CR_HSION;
+
+    /* Enable basic GPIO and AFIO clocks. */
+    rcc->apb2enr = (RCC_APB2ENR_IOPAEN |
+                    RCC_APB2ENR_IOPBEN |
+                    RCC_APB2ENR_IOPCEN |
+                    RCC_APB2ENR_AFIOEN);
+}
+
 int main(void)
 {
     uint32_t x = 1u<<16;
     int i;
 
-    rcc->apb2enr |= (1u<<14)/* usart1 */ | (1u<<2)/* gpioa */ | (1u<<0)/* afioen */;
+    clock_init();
+    console_init();
 
     gpioa->crl = 0x44444446u;
-    gpioa->crh = 0x444444a4u;
-
-    usart1->cr1 = (1u<<13);
-    usart1->cr2 = 0;
-    usart1->cr3 = 0;
-    usart1->gtpr = 0;
-    usart1->brr = (1u<<4) | 1u; /* 460800 baud @ 8MHz */
-    usart1->cr1 = (1u<<13) | (1u<<3) | (1u<<2);
 
     for (i = 0; i < 5; i++) {
-        printk("Hello world! printf test: '%5d' '%05d' '%#014hhx' '%p' '%%'\n",
-               -i, -i, 0x65383^i, gpioa);
+        printk("Hello world! printf test: '%5d' '%05d' %08x\n",
+               -i, -i, rcc->cfgr);
         gpioa->bsrr = x ^= (1u<<16)|(1u<<0);
-        ms_delay(100);
+        ms_delay(1000);
     }
 
     /* System reset */

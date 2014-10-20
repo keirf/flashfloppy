@@ -18,4 +18,4 @@ flash: all
 	-w $(PROJ).bin /dev/ttyUSB0
 
 serial:
-	sudo miniterm.py --baud=460800 /dev/ttyUSB0
+	sudo miniterm.py --baud=3000000 /dev/ttyUSB0
