@@ -65,7 +65,7 @@ void delay_ticks(unsigned int ticks)
 
 void delay_ns(unsigned int ns)
 {
-    delay_ticks((ns * 1000u) / STK_MHZ);
+    delay_ticks((ns * STK_MHZ) / 1000u);
 }
 
 void delay_us(unsigned int us)
