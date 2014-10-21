@@ -15,6 +15,8 @@
 
 #define DAT 10 /* PB10 */
 #define CLK 11 /* PB11 */
+#define write_clk(val) gpio_write_pin(gpiob, CLK, val)
+#define write_dat(val) gpio_write_pin(gpiob, DAT, val)
 
 static const uint8_t digits[] = {
     0x7e, 0x0c, 0xb6, 0x9e, 0xcc, 0xda, 0xfa, 0x0e, /* 0-7 */
@@ -27,18 +29,18 @@ static void write(uint8_t x)
 
     /* Data, LSB first */
     for (i = 0; i < 8; i++) {
-        gpio_write_pin(gpiob, CLK, 0);
-        gpio_write_pin(gpiob, DAT, x&1);
+        write_clk(0);
+        write_dat(x&1);
         x >>= 1;
-        delay_us(3);
-        gpio_write_pin(gpiob, CLK, 1);
-        delay_us(3);
+        delay_us(2);
+        write_clk(1);
+        delay_us(2);
     }
 
     /* Wait for ACK from TM1651 */
-    gpio_write_pin(gpiob, CLK, 0);
-    gpio_write_pin(gpiob, DAT, 1);
-    gpio_write_pin(gpiob, CLK, 1);
+    write_clk(0);
+    write_dat(1);
+    write_clk(1);
     gpio_configure_pin(gpiob, DAT, GPI_pulled);
     for (i = 0; (i < 5) && gpio_read_pin(gpiob, DAT); i++)
         delay_us(1);
@@ -48,19 +50,19 @@ static void write(uint8_t x)
 
 static void start(void)
 {
-    gpio_write_pin(gpiob, CLK, 1);
-    gpio_write_pin(gpiob, DAT, 1);
+    write_clk(1);
+    write_dat(1);
     delay_us(2);
-    gpio_write_pin(gpiob, DAT, 0);
-    gpio_write_pin(gpiob, CLK, 0);
+    write_dat(0);
+    write_clk(0);
 } 
 
 static void stop(void)
 {
-    gpio_write_pin(gpiob, CLK, 0);
-    gpio_write_pin(gpiob, DAT, 0);
-    gpio_write_pin(gpiob, CLK, 1);
-    gpio_write_pin(gpiob, DAT, 1);
+    write_clk(0);
+    write_dat(0);
+    write_clk(1);
+    write_dat(1);
 }
 
 void leds_write_hex(unsigned int x)

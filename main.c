@@ -26,10 +26,10 @@ int main(void)
     i = usart1->dr; /* clear UART_SR_RXNE */    
     for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
         leds_write_hex(i);
-        printk("Hello world! printf test: '%5d' '%02x' %08x\n",
-               -i, i, rcc->cfgr);
+        printk("%04x ", i);
+        if ((i & 7) == 7) printk("\n");
         gpio_write_pin(gpioa, 0, i&1);
-        delay_ms(300);
+        delay_ms(80);
     }
 
     /* System reset */
