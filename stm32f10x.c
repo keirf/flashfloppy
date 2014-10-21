@@ -53,7 +53,7 @@ void delay_ticks(unsigned int ticks)
 {
     unsigned int diff, cur, prev = stk->val;
 
-    while (ticks > 0) {
+    for (;;) {
         cur = stk->val;
         diff = (prev - cur) & STK_MASK;
         if (ticks <= diff)
