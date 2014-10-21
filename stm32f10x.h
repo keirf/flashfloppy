@@ -22,6 +22,10 @@ void gpio_configure_pin(
     volatile struct gpio * const gpio,
     unsigned int pin, unsigned int mode);
 
+#define gpio_write_pin(gpio, pin, level) \
+    ((gpio)->bsrr = ((level) ? 0x1u : 0x10000u) << (pin))
+#define gpio_read_pin(gpio, pin) (((gpio)->idr >> (pin)) & 1)
+
 /* C-accessible registers. */
 static volatile struct scb * const scb = (struct scb *)SCB_BASE;
 static volatile struct pwr * const pwr = (struct pwr *)PWR_BASE;

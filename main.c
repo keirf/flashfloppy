@@ -24,20 +24,21 @@ void ms_delay(int ms)
 
 int main(void)
 {
-    uint32_t x = 1u<<16;
     int i;
 
     clock_init();
     console_init();
+    leds_init();
 
     gpio_configure_pin(gpioa, 0, GPO_opendrain);
 
     i = usart1->dr; /* clear UART_SR_RXNE */    
     for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
-        printk("Hello world! printf test: '%5d' '%05d' %08x\n",
-               -i, -i, rcc->cfgr);
-        gpioa->bsrr = x ^= (1u<<16)|(1u<<0);
-        ms_delay(100);
+        leds_write_hex(i);
+        printk("Hello world! printf test: '%5d' '%02x' %08x\n",
+               -i, i, rcc->cfgr);
+        gpio_write_pin(gpioa, 0, i&1);
+        ms_delay(300);
     }
 
     /* System reset */

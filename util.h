@@ -26,6 +26,9 @@ int printk(const char *format, ...)
 
 void console_init(void);
 
+void leds_init(void);
+void leds_write_hex(unsigned int x);
+
 #endif /* __UTIL_H__ */
 
 /*

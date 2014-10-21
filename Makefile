@@ -2,6 +2,7 @@ include Rules.mk
 
 OBJS += console.o
 OBJS += head.o
+OBJS += led.o
 OBJS += main.o
 OBJS += string.o
 OBJS += stm32f10x.o
