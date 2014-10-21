@@ -19,11 +19,12 @@
  * 3-7 are varying degrees of retina burn */
 #define BRIGHTNESS 1
 
-/* Specified f_max is 500kHz with 50% duty cycle, so clock should change 
+/* TM1651 specified f_max is 500kHz with 50% duty cycle, so clock should change 
  * change value no more often than 1us. Pick 2us here conservatively. 
- * Actually we can clock much faster than this and, conversely, very much 
- * slower too. */
-#define DELAY_US 2
+ * The duty cycle can vary a great deal from 50% as long as the clock remains
+ * at each logic level for >1us. Also we can clock as slow as we like, down
+ * to DC. */
+#define CLOCK_PERIOD_US 2
 
 /* Serial bus */
 #define DAT 10 /* PB10 */
@@ -31,14 +32,14 @@
 
 static void write_clk(unsigned int val)
 {
+    delay_ns(CLOCK_PERIOD_US*1000/2);
     gpio_write_pin(gpiob, CLK, val);
-    delay_us(DELAY_US);
+    delay_ns(CLOCK_PERIOD_US*1000/2);
 }
 
 static void write_dat(unsigned int val)
 {
     gpio_write_pin(gpiob, DAT, val);
-    delay_us(DELAY_US);
 }
 
 static const uint8_t digits[] = {
@@ -58,6 +59,7 @@ static void write(uint8_t x)
         write_clk(0);
     }
 
+    /* Blithely assume we get a timely ACK. */
     write_dat(0);
     write_clk(1);
     write_clk(0);
