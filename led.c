@@ -21,15 +21,6 @@ static const uint8_t digits[] = {
     0xfe, 0xde, 0xee, 0xf8, 0x72, 0xbc, 0xf2, 0xe2, /* 8-f */
 };
 
-static void delay_us(int us)
-{
-    while (us-- > 0) {
-        volatile int x=60;
-        while (x-- > 0)
-            __asm("nop");
-    }
-}
-
 static void write(uint8_t x)
 {
     unsigned int i;

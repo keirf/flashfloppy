@@ -43,6 +43,39 @@ void clock_init(void)
                     RCC_APB2ENR_IOPBEN |
                     RCC_APB2ENR_IOPCEN |
                     RCC_APB2ENR_AFIOEN);
+
+    /* Enable SysTick counter at 72/8=9MHz. */
+    stk->load = STK_MASK;
+    stk->ctrl = STK_CTRL_ENABLE;
+}
+
+void delay_ticks(unsigned int ticks)
+{
+    unsigned int diff, cur, prev = stk->val;
+
+    while (ticks > 0) {
+        cur = stk->val;
+        diff = (prev - cur) & STK_MASK;
+        if (ticks <= diff)
+            break;
+        ticks -= diff;
+        prev = cur;
+    }
+}
+
+void delay_ns(unsigned int ns)
+{
+    delay_ticks((ns * 1000u) / STK_MHZ);
+}
+
+void delay_us(unsigned int us)
+{
+    delay_ticks(us * STK_MHZ);
+}
+
+void delay_ms(unsigned int ms)
+{
+    delay_ticks(ms * 1000u * STK_MHZ);
 }
 
 void gpio_configure_pin(

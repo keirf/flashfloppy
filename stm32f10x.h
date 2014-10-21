@@ -18,6 +18,12 @@
 #define SYSCLK     (SYSCLK_MHZ * 1000000)
 void clock_init(void);
 
+#define STK_MHZ    (SYSCLK_MHZ / 8)
+void delay_ticks(unsigned int ticks);
+void delay_ns(unsigned int ns);
+void delay_us(unsigned int us);
+void delay_ms(unsigned int ms);
+
 void gpio_configure_pin(
     volatile struct gpio * const gpio,
     unsigned int pin, unsigned int mode);
@@ -27,6 +33,7 @@ void gpio_configure_pin(
 #define gpio_read_pin(gpio, pin) (((gpio)->idr >> (pin)) & 1)
 
 /* C-accessible registers. */
+static volatile struct stk * const stk = (struct stk *)STK_BASE;
 static volatile struct scb * const scb = (struct scb *)SCB_BASE;
 static volatile struct pwr * const pwr = (struct pwr *)PWR_BASE;
 static volatile struct rcc * const rcc = (struct rcc *)RCC_BASE;

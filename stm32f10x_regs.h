@@ -14,6 +14,23 @@
 
 #include <stdint.h>
 
+/* SysTick timer */
+struct stk {
+    uint32_t ctrl;     /* 00: Control and status */
+    uint32_t load;     /* 04: Reload value */
+    uint32_t val;      /* 08: Current value */
+    uint32_t calib;    /* 0C: Calibration value */
+};
+
+#define STK_CTRL_COUNTFLAG  (1u<<16)
+#define STK_CTRL_CLKSOURCE  (1u<< 2)
+#define STK_CTRL_TICKINT    (1u<< 1)
+#define STK_CTRL_ENABLE     (1u<< 0)
+
+#define STK_MASK            ((1u<<24)-1)
+
+#define STK_BASE 0xe000e010
+
 /* System control block */
 struct scb {
     uint32_t cpuid;    /* 00: CPUID base */

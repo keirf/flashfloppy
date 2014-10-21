@@ -13,15 +13,6 @@
 #include "intrinsics.h"
 #include "util.h"
 
-void ms_delay(int ms)
-{
-   while (ms-- > 0) {
-      volatile int x=5971;
-      while (x-- > 0)
-         __asm("nop");
-   }
-}
-
 int main(void)
 {
     int i;
@@ -38,7 +29,7 @@ int main(void)
         printk("Hello world! printf test: '%5d' '%02x' %08x\n",
                -i, i, rcc->cfgr);
         gpio_write_pin(gpioa, 0, i&1);
-        ms_delay(300);
+        delay_ms(300);
     }
 
     /* System reset */
