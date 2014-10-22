@@ -149,6 +149,61 @@ struct gpio {
 #define GPIOF_BASE 0x40011c00
 #define GPIOG_BASE 0x40012000
 
+/* DMA */
+struct dma_chn {
+    uint32_t ccr;        /* +00: Configuration */
+    uint32_t cndtr;      /* +04: Number of data */
+    uint32_t cpar;       /* +08: Peripheral address */
+    uint32_t cmar;       /* +0C: Memory address */
+    uint32_t rsvd;       /* +10: - */
+};
+struct dma {
+    uint32_t isr;        /* 00: Interrupt status */
+    uint32_t ifcr;       /* 04: Interrupt flag clear */
+    struct dma_chn ch1;  /* 08: Channel 1 */
+    struct dma_chn ch2;  /* 1C: Channel 2 */
+    struct dma_chn ch3;  /* 30: Channel 3 */
+    struct dma_chn ch4;  /* 44: Channel 4 */
+    struct dma_chn ch5;  /* 58: Channel 5 */
+    struct dma_chn ch6;  /* 6C: Channel 6 */
+    struct dma_chn ch7;  /* 80: Channel 7 */
+};
+
+#define DMA1_BASE 0x40020000
+#define DMA2_BASE 0x40020400
+
+/* Timer */
+struct tim {
+    uint32_t cr1;   /* 00: Control 1 */
+    uint32_t cr2;   /* 04: Control 2 */
+    uint32_t smcr;  /* 08: Slave mode control */
+    uint32_t dier;  /* 0C: DMA/interrupt enable */
+    uint32_t sr;    /* 10: Status */
+    uint32_t egr;   /* 14: Event generation */
+    uint32_t ccmr1; /* 18: Capture/compare mode 1 */
+    uint32_t ccmr2; /* 1C: Capture/compare mode 2 */
+    uint32_t ccer;  /* 20: Capture/compare enable */
+    uint32_t cnt;   /* 24: Counter */
+    uint32_t psc;   /* 28: Prescaler */
+    uint32_t arr;   /* 2C: Auto-reload */
+    uint32_t rcr;   /* 30: Repetition counter */
+    uint32_t ccr1;  /* 34: Capture/compare 1 */
+    uint32_t ccr2;  /* 38: Capture/compare 2 */
+    uint32_t ccr3;  /* 3C: Capture/compare 3 */
+    uint32_t ccr4;  /* 40: Capture/compare 4 */
+    uint32_t bdtr;  /* 44: Break and dead-time */
+    uint32_t dcr;   /* 48: DMA control */
+    uint32_t dmar;  /* 4C: DMA address for full transfer */
+};
+
+#define TIM1_BASE 0x40012c00
+#define TIM2_BASE 0x40000000
+#define TIM3_BASE 0x40000400
+#define TIM4_BASE 0x40000800
+#define TIM5_BASE 0x40000c00
+#define TIM6_BASE 0x40001000
+#define TIM7_BASE 0x40001400
+
 /* USART */
 struct usart {
     uint32_t sr;   /* 00: Status */
