@@ -57,6 +57,7 @@ static volatile struct gpio * const gpiod = (struct gpio *)GPIOD_BASE;
 static volatile struct gpio * const gpioe = (struct gpio *)GPIOE_BASE;
 static volatile struct gpio * const gpiof = (struct gpio *)GPIOF_BASE;
 static volatile struct gpio * const gpiog = (struct gpio *)GPIOG_BASE;
+static volatile struct afio * const afio = (struct afio *)AFIO_BASE;
 static volatile struct dma * const dma1 = (struct dma *)DMA1_BASE;
 static volatile struct dma * const dma2 = (struct dma *)DMA2_BASE;
 static volatile struct tim * const tim1 = (struct tim *)TIM1_BASE;
