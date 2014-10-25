@@ -13,6 +13,8 @@
 #include "intrinsics.h"
 #include "util.h"
 
+int EXC_reset(void) __attribute__((alias("main")));
+
 int main(void)
 {
     int i;

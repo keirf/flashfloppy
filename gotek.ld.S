@@ -18,7 +18,7 @@ SECTIONS
 {
   .text : {
     _stext = .;
-    *(.text.head)
+    *(.vector_table)
     *(.text)
     *(.text*)
     *(.rodata)

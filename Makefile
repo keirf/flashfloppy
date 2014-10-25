@@ -1,7 +1,7 @@
 include Rules.mk
 
 OBJS += console.o
-OBJS += head.o
+OBJS += vectors.o
 OBJS += led.o
 OBJS += main.o
 OBJS += string.o
