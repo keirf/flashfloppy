@@ -15,6 +15,8 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+void *memset(void *s, int c, size_t n);
+
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));
 
@@ -28,6 +30,11 @@ void console_init(void);
 
 void leds_init(void);
 void leds_write_hex(unsigned int x);
+
+/* Text/data/BSS address ranges. */
+extern char _stext[], _etext[];
+extern char _sdat[], _edat[];
+extern char _sbss[], _ebss[];
 
 #endif /* __UTIL_H__ */
 

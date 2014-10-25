@@ -19,6 +19,8 @@ int main(void)
 {
     int i;
 
+    memset(_sbss, 0, _ebss-_sbss);
+
     clock_init();
     console_init();
     leds_init();

@@ -6,6 +6,7 @@ OBJS += led.o
 OBJS += main.o
 OBJS += string.o
 OBJS += stm32f10x.o
+OBJS += util.o
 
 PROJ = gotek
 
