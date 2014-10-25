@@ -12,6 +12,7 @@
 #ifndef __INTRINSICS_H__
 #define __INTRINSICS_H__
 
+#define illegal() asm volatile (".short 0xde00");
 #define cpu_relax() asm volatile ("nop" ::: "memory")
 #define IRQ_global_disable() asm volatile ("cpsid i" ::: "memory")
 #define IRQ_global_enable() asm volatile ("cpsie i" ::: "memory")

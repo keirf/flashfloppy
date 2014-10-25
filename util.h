@@ -15,6 +15,10 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+#include "intrinsics.h"
+
+#define ASSERT(p) if (!(p)) illegal();
+
 void *memset(void *s, int c, size_t n);
 
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
