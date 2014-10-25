@@ -14,20 +14,32 @@
 
 #include "stm32f10x_regs.h"
 
+/* Clocks */
 #define SYSCLK_MHZ 72
 #define SYSCLK     (SYSCLK_MHZ * 1000000)
 void clock_init(void);
 
+/* SysTick Timer */
 #define STK_MHZ    (SYSCLK_MHZ / 8)
 void delay_ticks(unsigned int ticks);
 void delay_ns(unsigned int ns);
 void delay_us(unsigned int us);
 void delay_ms(unsigned int ms);
 
+/* NVIC */
+#define IRQx_enable(x) (nvic->iser[(x)>>5] = 1u<<((x)&31))
+#define IRQx_disable(x) (nvic->icer[(x)>>5] = 1u<<((x)&31))
+#define IRQx_is_enabled(x) ((nvic->iser[(x)>>5]>>((x)&31))&1)
+#define IRQx_set_pending(x) (nvic->ispr[(x)>>5] = 1u<<((x)&31))
+#define IRQx_clear_pending(x) (nvic->icpr[(x)>>5] = 1u<<((x)&31))
+#define IRQx_is_pending(x) ((nvic->ispr[(x)>>5]>>((x)&31))&1)
+#define IRQx_set_prio(x,y) (nvic->ipr[x] = (y) << 4)
+#define IRQx_get_prio(x) (nvic->ipr[x] >> 4)
+
+/* GPIO */
 void gpio_configure_pin(
     volatile struct gpio * const gpio,
     unsigned int pin, unsigned int mode);
-
 #define gpio_write_pin(gpio, pin, level) \
     ((gpio)->bsrr = ((level) ? 0x1u : 0x10000u) << (pin))
 #define gpio_read_pin(gpio, pin) (((gpio)->idr >> (pin)) & 1)
@@ -35,6 +47,7 @@ void gpio_configure_pin(
 /* C-accessible registers. */
 static volatile struct stk * const stk = (struct stk *)STK_BASE;
 static volatile struct scb * const scb = (struct scb *)SCB_BASE;
+static volatile struct nvic * const nvic = (struct nvic *)NVIC_BASE;
 static volatile struct pwr * const pwr = (struct pwr *)PWR_BASE;
 static volatile struct rcc * const rcc = (struct rcc *)RCC_BASE;
 static volatile struct gpio * const gpioa = (struct gpio *)GPIOA_BASE;

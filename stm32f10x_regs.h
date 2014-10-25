@@ -55,6 +55,18 @@ struct scb {
 
 #define SCB_BASE 0xe000ed00
 
+/* Nested vectored interrupt controller */
+struct nvic {
+    uint32_t iser[32]; /*  00: Interrupt set-enable */
+    uint32_t icer[32]; /*  80: Interrupt clear-enable */
+    uint32_t ispr[32]; /* 100: Interrupt set-pending */
+    uint32_t icpr[32]; /* 180: Interrupt clear-pending */
+    uint32_t iabr[64]; /* 200: Interrupt active */
+    uint8_t ipr[80];   /* 300: Interrupt priority */
+};
+
+#define NVIC_BASE 0xe000e100
+
 /* Power control */
 struct pwr {
     uint32_t cr;       /* 00: Power control */

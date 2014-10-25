@@ -21,7 +21,7 @@ int vprintk(const char *format, va_list ap)
     char *p;
     int n;
 
-    irq_disable();
+    IRQ_global_disable();
 
     n = vsnprintf(str, sizeof(str), format, ap);
 
@@ -31,7 +31,7 @@ int vprintk(const char *format, va_list ap)
         usart1->dr = *p;
     }
 
-    irq_enable();
+    IRQ_global_enable();
 
     return n;
 }
