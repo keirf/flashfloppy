@@ -97,14 +97,18 @@ static void dma_issue(void)
 
     /* Request DMA next time the counter reloads.
      * 
-     * NOTE: We don't leave UDE permanently set because then the DMA request is
-     * continually asserted until ACKed by the DMA controller. There is then a
-     * race if the 1st DMA to CCR[preload] occurs just /after/ the timer has
-     * loaded CCR[active], but /before/ it sends the update-event DMA 
-     * request). The 2nd DMA will then overwrite the 1st before it is loaded 
-     * into the active register, and is effectively lost.
+     * NOTE: We don't leave UDE set while idle as the timer would signal a DMA
+     * request regardless, and continue to assert in the absence of an ACK from
+     * the DMA controller (ref STMicro RM0008, 13.3.1 "DMA Transactions").
      * 
-     * By enabling UDE last, we ensure that the 1st DMA is synchronised with an 
+     * The 1st DMA transaction would then occur immediately that the DMA
+     * channel is enabled, unsychronised with any contemporary update event.
+     * The unsynchronised DMA (to CCR[preload]) could occur just /after/ the 
+     * timer has loaded CCR[active], but /before/ it sends the next
+     * update-event DMA request. The 2nd DMA will then overwrite the 1st before
+     * it is loaded into the active register; the 1st DMA is effectively lost.
+     * 
+     * By enabling UDE last, we ensure that the 1st DMA is synchronised with an
      * update event, just the same as all successive DMAs. */
     tim2->dier = TIM_DIER_UDE;
 }
