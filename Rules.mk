@@ -2,7 +2,10 @@ TOOL_PREFIX = arm-none-eabi-
 CC = $(TOOL_PREFIX)gcc
 OBJCOPY = $(TOOL_PREFIX)objcopy
 
-CFLAGS  = -g -Os -Wall -Wno-format -Werror -nostdlib -I.
+CFLAGS  = -g -Os -nostdlib -std=gnu99
+CFLAGS += -Wall -Werror -Wno-format -Wdeclaration-after-statement
+CFLAGS += -Wstrict-prototypes -Wredundant-decls -Wnested-externs
+CFLAGS += -fno-common -fno-exceptions -fno-strict-aliasing
 CFLAGS += -mlittle-endian -mthumb -mcpu=cortex-m3 -mfloat-abi=soft
 
 CFLAGS += -MMD -MF .$(@F).d
