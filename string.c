@@ -110,6 +110,8 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             }
             width--;
             x = -x;
+        } else {
+            flags &= ~SIGN;
         }
 
         if (flags & ALTERNATE) {
