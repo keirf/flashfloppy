@@ -39,7 +39,7 @@ static const uint8_t digits[] = {
     0x7f, 0x6f, 0x77, 0x7c, 0x39, 0x5e, 0x79, 0x71, /* 8-f */
 };
 
-static uint8_t dmabuf[50], *dmap, flags, pending[3];
+static uint8_t dmabuf[48], *dmap, flags, pending[3];
 #define FLG_PENDING  (1u<<0)
 #define FLG_UPDATING (1u<<1)
 
@@ -71,12 +71,6 @@ static void start(void)
 static void dma_prep(void)
 {
     dmap = dmabuf;
-    /* Sometimes the first DMA seems to get lost. Issue a no-op first write. 
-     * (At a guess, timer loads active registers then issues update events, 
-     * so there's a race on first DMA occurring then immediately overwriting 
-     * itself with the second DMA. This would indicate that DMA requests are
-     * asserted by peripherals until ACKed by the DMA controller.) */
-    *dmap++ = 4;
 }
 
 static void dma_issue(void)
@@ -100,6 +94,19 @@ static void dma_issue(void)
                      DMA_CCR_DIR_M2P |
                      DMA_CCR_TCIE |
                      DMA_CCR_EN);
+
+    /* Request DMA next time the counter reloads.
+     * 
+     * NOTE: We don't leave UDE permanently set because then the DMA request is
+     * continually asserted until ACKed by the DMA controller. There is then a
+     * race if the 1st DMA to CCR[preload] occurs just /after/ the timer has
+     * loaded CCR[active], but /before/ it sends the update-event DMA 
+     * request). The 2nd DMA will then overwrite the 1st before it is loaded 
+     * into the active register, and is effectively lost.
+     * 
+     * By enabling UDE last, we ensure that the 1st DMA is synchronised with an 
+     * update event, just the same as all successive DMAs. */
+    tim2->dier = TIM_DIER_UDE;
 }
 
 static void leds_update(void)
@@ -189,8 +196,7 @@ void leds_init(void)
                    TIM_CCMR2_CC3S(TIM_CCS_OUTPUT) |
                    TIM_CCMR2_OC3M(TIM_OCM_TOGGLE) |
                    TIM_CCMR2_OC3PE);
-    tim2->dier = TIM_DIER_UDE; /* Request DMA when counter reloads */
-    tim2->cr2 = 0;
+    tim2->cr2 = tim2->dier = 0;
     tim2->cr1 = TIM_CR1_CEN;
 
     /* DMA setup: issues writes from a pre-filled buffer to the DAT CCR. */
@@ -218,10 +224,11 @@ static void IRQ_led(void)
     uint8_t _flags = flags;
     flags = 0;
 
-    /* Clear DMA controller, and stop the clock. */
+    /* Stop the CLK output and clear the DMA controller. */
+    tim2->CLK_CCR = 0; /* CLK output locked HIGH */
+    tim2->dier = 0; /* disable dma requests */
     dma1->ch2.ccr = 0;
     dma1->ifcr = DMA_IFCR_CTCIF2;
-    tim2->CLK_CCR = 0;
 
     /* An update must have been in progress. */
     ASSERT(_flags & FLG_UPDATING);
