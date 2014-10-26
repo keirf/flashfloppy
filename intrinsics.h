@@ -20,6 +20,7 @@ struct exception_frame {
 
 #define illegal() asm volatile (".short 0xde00");
 
+#define barrier() asm volatile("" ::: "memory")
 #define cpu_relax() asm volatile ("nop" ::: "memory")
 
 #define read_special(reg) ({                        \

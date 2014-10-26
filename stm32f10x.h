@@ -13,6 +13,7 @@
 #define __STM32F10X_H__
 
 #include "stm32f10x_regs.h"
+#include "intrinsics.h"
 
 void exception_init(void);
 void system_reset(void);
@@ -30,8 +31,14 @@ void delay_us(unsigned int us);
 void delay_ms(unsigned int ms);
 
 /* NVIC */
-#define IRQx_enable(x) (nvic->iser[(x)>>5] = 1u<<((x)&31))
-#define IRQx_disable(x) (nvic->icer[(x)>>5] = 1u<<((x)&31))
+#define IRQx_enable(x) do {                     \
+    barrier();                                  \
+    nvic->iser[(x)>>5] = 1u<<((x)&31);          \
+} while (0)
+#define IRQx_disable(x) do {                    \
+    nvic->icer[(x)>>5] = 1u<<((x)&31);          \
+    barrier();                                  \
+} while (0)
 #define IRQx_is_enabled(x) ((nvic->iser[(x)>>5]>>((x)&31))&1)
 #define IRQx_set_pending(x) (nvic->ispr[(x)>>5] = 1u<<((x)&31))
 #define IRQx_clear_pending(x) (nvic->icpr[(x)>>5] = 1u<<((x)&31))
