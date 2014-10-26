@@ -35,7 +35,7 @@ static const uint8_t digits[] = {
     0x7f, 0x6f, 0x77, 0x7c, 0x39, 0x5e, 0x79, 0x71, /* 8-f */
 };
 
-static uint8_t dmabuf[48], *dmap;
+static uint8_t dmabuf[50], *dmap;
 
 static void write(uint8_t x)
 {
@@ -65,6 +65,12 @@ static void start(void)
 static void dma_prep(void)
 {
     dmap = dmabuf;
+    /* Sometimes the first DMA seems to get lost. Issue a no-op first write. 
+     * (At a guess, timer loads active registers then issues update events, 
+     * so there's a race on first DMA occurring then immediately overwriting 
+     * itself with the second DMA. This would indicate that DMA requests are
+     * asserted by peripherals until ACKed by the DMA controller.) */
+    *dmap++ = 4;
 }
 
 static void dma_issue(void)
@@ -142,14 +148,15 @@ void leds_init(void)
     tim2->ccer = TIM_CCER_CC3E | TIM_CCER_CC4E;
     tim2->ccmr2 = (TIM_CCMR2_CC3S(TIM_CCS_OUTPUT) |
                    TIM_CCMR2_OC3M(TIM_OCM_FORCE_HIGH));
+    /* Initialise the CCRs immediately, before we set preload flags. */
+    tim2->CLK_CCR = 0; /* locked HIGH; set to 2 to enable 50% duty cycle */
+    tim2->DAT_CCR = 4; /* locked HIGH; updated by dma */
     tim2->ccmr2 = (TIM_CCMR2_CC4S(TIM_CCS_OUTPUT) |
                    TIM_CCMR2_OC4M(TIM_OCM_PWM2) |
                    TIM_CCMR2_OC4PE |
                    TIM_CCMR2_CC3S(TIM_CCS_OUTPUT) |
                    TIM_CCMR2_OC3M(TIM_OCM_TOGGLE) |
                    TIM_CCMR2_OC3PE);
-    tim2->CLK_CCR = 0; /* locked HIGH; set to 2 to enable 50% duty cycle */
-    tim2->DAT_CCR = 4; /* locked HIGH; updated by dma */
     tim2->dier = TIM_DIER_UDE; /* Request DMA when counter reloads */
     tim2->cr2 = 0;
     tim2->cr1 = TIM_CR1_CEN;
