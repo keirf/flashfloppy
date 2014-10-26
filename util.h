@@ -38,7 +38,7 @@ void leds_write_hex(unsigned int x);
 
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];
-extern char _sdat[], _edat[];
+extern char _sdat[], _edat[], _ldat[];
 extern char _sbss[], _ebss[];
 
 #endif /* __UTIL_H__ */

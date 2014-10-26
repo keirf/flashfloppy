@@ -19,8 +19,12 @@ int main(void)
 {
     int i;
 
+    /* Relocate DATA. Initialise BSS. */
+    if (_sdat != _ldat)
+        memcpy(_sdat, _ldat, _edat-_sdat);
     memset(_sbss, 0, _ebss-_sbss);
 
+    /* STM core bringup. */
     clock_init();
     console_init();
     leds_init();
