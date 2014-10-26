@@ -516,6 +516,89 @@ struct usart {
 
 #define USART1_BASE 0x40013800
 
+/* USB On-The-Go Full Speed interface */
+struct usb_otg {
+    uint32_t gotctl;   /* 00: Control and status */
+    uint32_t gotgint;  /* 04: Interrupt */
+    uint32_t gahbcfg;  /* 08: AHB configuration */
+    uint32_t gusbcfg;  /* 0C: USB configuration */
+    uint32_t grstctl;  /* 10: Reset */
+    uint32_t gintsts;  /* 14: Core interrupt */
+    uint32_t gintmsk;  /* 18: Interrupt mask */
+    uint32_t grxstsr;  /* 1C: Receive status debug read */
+    uint32_t grxstsp;  /* 20: Receive status debug pop */
+    uint32_t grxfsiz;  /* 24: Receive FIFO size */
+    union {
+        uint32_t hnptxfsiz;  /* 28: Host non-periodic transmit FIFO size */
+        uint32_t dieptxf0;   /* 28: Endpoint 0 transmit FIFO size */
+    };
+    uint32_t hnptxsts; /* 2C: Non-periodic transmit FIFO/queue status */
+    uint32_t _0[2];
+    uint32_t gccfg;    /* 38: General core configuration */
+    uint32_t cid;      /* 3C: Core ID */
+    uint32_t _1[48];
+    uint32_t hptxfsiz; /* 100: Host periodic transmit FIFO size */
+    uint32_t dieptxf1; /* 104: Device IN endpoint transmit FIFO #1 size */
+    uint32_t dieptxf2; /* 108: Device IN endpoint transmit FIFO #2 size */
+    uint32_t dieptxf3; /* 10C: Device IN endpoint transmit FIFO #3 size */
+    uint32_t _2[188];
+    uint32_t hcfg;     /* 400: Host configuration */
+    uint32_t hfir;     /* 404: Host frame interval */
+    uint32_t hfnum;    /* 408: Host frame number / frame time remaining */
+    uint32_t _3[1];    /* 40C: */
+    uint32_t hptxsts;  /* 410: Host periodic transmit FIFO / queue status */
+    uint32_t haint;    /* 414: Host all channels interrupt status */
+    uint32_t haintmsk; /* 418: Host all channels interrupt mask */
+    uint32_t _4[9];
+    uint32_t hprt;     /* 440: Host port control and status */
+    uint32_t _5[47];
+    struct {
+        uint32_t charac; /* +00: Host channel-x characteristics */
+        uint32_t _0[1];
+        uint32_t intsts; /* +08: Host channel-x interrupt status */
+        uint32_t intmsk; /* +0C: Host channel-x interrupt mask */
+        uint32_t tsiz;   /* +10: Host channel x transfer size */
+        uint32_t _1[3];
+    } hc[8];           /* 500..5E0: */
+    uint32_t _6[128];
+
+    uint32_t dcfg;     /* 800: Device configuration */
+    uint32_t dctl;     /* 804: Device control */
+    uint32_t dsts;     /* 808: Device status */
+    uint32_t _7[1];
+    uint32_t diepmsk;  /* 810: Device IN endpoint common interrupt mask */
+    uint32_t doepmsk;  /* 814: Device OUT endpoint common interrupt mask */
+    uint32_t daint;    /* 818: Device all endpoints interrupt status */
+    uint32_t daintmsk; /* 81C: Device all endpoints interrupt mask */
+    uint32_t _8[2];
+    uint32_t dvbusdis; /* 828: Device VBUS discharge time */
+    uint32_t dvbuspulse; /* 82C: Device VBUS pulsing time */
+    uint32_t _9[1];
+    uint32_t diepempmsk; /* 834: Device IN endpoint FIFO empty int. mask */
+    uint32_t _10[50];
+    struct {
+        uint32_t ctl;    /* +00: Device IN endpoint-x control */
+        uint32_t _0[1];
+        uint32_t intsts; /* +08: Device IN endpoint-x interrupt status */
+        uint32_t _1[3];
+        uint32_t txfsts; /* +18: Device IN endpoint-x transmit FIFO status */
+        uint32_t _2[1];
+    } diep[4];         /* 900..960: */
+    uint32_t _11[96];
+    struct {
+        uint32_t ctl;    /* +00: Device OUT endpoint-x control */
+        uint32_t _0[1];
+        uint32_t intsts; /* +08: Device OUT endpoint-x interrupt status */
+        uint32_t _1[1];
+        uint32_t tsiz;   /* +10: Device OUT endpoint-x transmit FIFO status */
+        uint32_t _2[3];
+    } doep[4];         /* B00..B60: */
+    uint32_t _12[160];
+    uint32_t pcgcctl;  /* E00: Power and clock gating control */
+};
+
+#define USB_OTG_BASE 0x50000000
+
 #endif /* __STM32F10X_REGS_H__ */
 
 /*

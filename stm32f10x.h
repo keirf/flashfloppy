@@ -78,6 +78,7 @@ static volatile struct tim * const tim5 = (struct tim *)TIM5_BASE;
 static volatile struct tim * const tim6 = (struct tim *)TIM6_BASE;
 static volatile struct tim * const tim7 = (struct tim *)TIM7_BASE;
 static volatile struct usart * const usart1 = (struct usart *)USART1_BASE;
+static volatile struct usb_otg *const usb_otg = (struct usb_otg *)USB_OTG_BASE;
 
 /* NVIC table */
 extern uint32_t vector_table[];
