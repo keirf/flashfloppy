@@ -20,6 +20,7 @@
 #define ASSERT(p) if (!(p)) illegal();
 
 void *memset(void *s, int c, size_t n);
+void *memcpy(void *dest, const void *src, size_t n);
 
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));

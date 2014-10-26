@@ -19,6 +19,15 @@ void *memset(void *s, int c, size_t n)
     return s;
 }
 
+void *memcpy(void *dest, const void *src, size_t n)
+{
+    char *p = dest;
+    const char *q = src;
+    while (n--)
+        *p++ = *q++;
+    return dest;
+}
+
 /*
  * Local variables:
  * mode: C
