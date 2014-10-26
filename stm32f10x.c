@@ -11,6 +11,26 @@
 
 #include "stm32f10x.h"
 #include "intrinsics.h"
+#include "util.h"
+
+void EXC_unexpected(struct exception_frame *frame)
+{
+    uint8_t exc = (uint8_t)read_special(psr);
+    printk("Unexpected %s #%u at PC=%08x\n",
+           (exc < 16) ? "Exception" : "IRQ",
+           (exc < 16) ? exc : exc - 16,
+           frame->pc);
+    system_reset();
+}
+
+void exception_init(void)
+{
+    scb->vtor = (uint32_t)(unsigned long)vector_table;
+    scb->ccr |= SCB_CCR_DIV_0_TRP | SCB_CCR_UNALIGN_TRP;
+    scb->shcsr |= (SCB_SHCSR_USGFAULTENA |
+                   SCB_SHCSR_BUSFAULTENA |
+                   SCB_SHCSR_MEMFAULTENA);
+}
 
 void clock_init(void)
 {
@@ -88,6 +108,13 @@ void gpio_configure_pin(
     } else {
         gpio->crl = (gpio->crl & ~(0xfu<<(pin<<2))) | (mode<<(pin<<2));
     }
+}
+
+void system_reset(void)
+{
+    printk("Resetting...\n");
+    scb->aircr = SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
+    for (;;) ;
 }
 
 /*

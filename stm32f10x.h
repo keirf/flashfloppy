@@ -14,6 +14,9 @@
 
 #include "stm32f10x_regs.h"
 
+void exception_init(void);
+void system_reset(void);
+
 /* Clocks */
 #define SYSCLK_MHZ 72
 #define SYSCLK     (SYSCLK_MHZ * 1000000)
@@ -68,6 +71,9 @@ static volatile struct tim * const tim5 = (struct tim *)TIM5_BASE;
 static volatile struct tim * const tim6 = (struct tim *)TIM6_BASE;
 static volatile struct tim * const tim7 = (struct tim *)TIM7_BASE;
 static volatile struct usart * const usart1 = (struct usart *)USART1_BASE;
+
+/* NVIC table */
+extern uint32_t vector_table[];
 
 #endif /* __STM32F10X_H__ */
 

@@ -25,6 +25,7 @@ int main(void)
     memset(_sbss, 0, _ebss-_sbss);
 
     /* STM core bringup. */
+    exception_init();
     clock_init();
     console_init();
     leds_init();
@@ -40,9 +41,7 @@ int main(void)
         delay_ms(80);
     }
 
-    /* System reset */
-    scb->aircr = SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
-    for (;;) ;
+    ASSERT(0);
 
     return 0;
 }

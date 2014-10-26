@@ -37,6 +37,7 @@ vector_table:
     I(60) I(61) I(62) I(63) I(64) I(65) I(66) I(67)
 
     .text
-.type EXC_unused,%function
+    .thumb_func
 EXC_unused:
-    bx  lr
+    mov r0, sp
+    b   EXC_unexpected
