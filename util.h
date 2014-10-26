@@ -19,6 +19,10 @@
 
 #define ASSERT(p) if (!(p)) illegal();
 
+typedef char bool_t;
+#define TRUE 1
+#define FALSE 0
+
 void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 
