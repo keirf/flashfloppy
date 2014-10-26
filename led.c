@@ -30,12 +30,18 @@
 #define DAT_CCR ccr3
 #define CLK_CCR ccr4
 
+/* Command completion is DMA1 channel 2: IRQ 12. */
+#define LED_IRQ 12
+void IRQ_12(void) __attribute__((alias("IRQ_led")));
+
 static const uint8_t digits[] = {
     0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, /* 0-7 */
     0x7f, 0x6f, 0x77, 0x7c, 0x39, 0x5e, 0x79, 0x71, /* 8-f */
 };
 
-static uint8_t dmabuf[50], *dmap;
+static uint8_t dmabuf[50], *dmap, flags, pending[3];
+#define FLG_PENDING  (1u<<0)
+#define FLG_UPDATING (1u<<1)
 
 static void write(uint8_t x)
 {
@@ -80,38 +86,56 @@ static void dma_issue(void)
 
     ASSERT((dmap-dmabuf) <= sizeof(dmabuf));
 
+    flags = FLG_UPDATING;
+    barrier();
+
     /* Start the clock output, 50% duty cycle. */
     tim2->CLK_CCR = 2;
 
     /* Start DMA. */
-    dma1->ch2.ccr = 0;
     dma1->ch2.cndtr = dmap - dmabuf;
     dma1->ch2.ccr = (DMA_CCR_MSIZE_8BIT |
                      DMA_CCR_PSIZE_16BIT |
                      DMA_CCR_MINC |
                      DMA_CCR_DIR_M2P |
+                     DMA_CCR_TCIE |
                      DMA_CCR_EN);
+}
 
-    /* Wait for DMA to finish. */
-    while (!(dma1->isr & DMA_ISR_TCIF2))
-        cpu_relax();
-    dma1->ifcr = DMA_IFCR_CTCIF2;
+static void leds_update(void)
+{
+    dma_prep();
+    start();
+    write(0xc0);    /* set addr 0 */
+    write(pending[0]); /* dat0 */
+    write(pending[1]); /* dat1 */
+    write(pending[2]); /* dat2 */
+    write(0x00);    /* dat3 */
+    stop();
+    dma_issue();
+}
 
-    /* Stop the clock. */
-    tim2->CLK_CCR = 0;
+static void leds_write(uint8_t d[3])
+{
+    bool_t defer = !!(flags & FLG_UPDATING);
+
+    if (defer)
+        IRQx_disable(LED_IRQ);
+
+    memcpy(pending, d, 3);
+    flags |= FLG_PENDING;
+
+    if (defer)
+        IRQx_enable(LED_IRQ);
+
+    if (!defer || (flags == FLG_PENDING))
+        leds_update();
 }
 
 void leds_write_hex(unsigned int x)
 {
-    dma_prep();
-    start();
-    write(0xc0);              /* set addr 0 */
-    write(digits[(x>>8)&15]); /* dat0 */
-    write(digits[(x>>4)&15]); /* dat1 */
-    write(digits[(x>>0)&15]); /* dat2 */
-    write(0x00);              /* dat3 */
-    stop();
-    dma_issue();
+    uint8_t d[3] = { digits[(x>>8)&15], digits[(x>>4)&15], digits[x&15] };
+    leds_write(d);
 }
 
 void leds_init(void)
@@ -124,6 +148,14 @@ void leds_init(void)
     /* Turn on the clocks. */
     rcc->ahbenr |= RCC_AHBENR_DMA1EN;
     rcc->apb1enr |= RCC_APB1ENR_TIM2EN;
+
+    /* Clear IRQ line and then enable it. Peripherals pulse their interrupt
+     * line when any ISR flag transitions to set. If we do not ensure the ISR
+     * flag is initially cleared, we will never receive an interrupt. */
+    dma1->ifcr = DMA_IFCR_CTCIF2;
+    IRQx_set_prio(LED_IRQ, 15); /* lowest */
+    IRQx_clear_pending(LED_IRQ);
+    IRQx_enable(LED_IRQ);
 
     /* Timer setup. 
      * The counter is incremented every 10us, and counts 0 to 3 before 
@@ -178,6 +210,25 @@ void leds_init(void)
     stop();
 
     dma_issue();
+}
+
+static void IRQ_led(void)
+{
+    /* Latch and zap the progress flags. */
+    uint8_t _flags = flags;
+    flags = 0;
+
+    /* Clear DMA controller, and stop the clock. */
+    dma1->ch2.ccr = 0;
+    dma1->ifcr = DMA_IFCR_CTCIF2;
+    tim2->CLK_CCR = 0;
+
+    /* An update must have been in progress. */
+    ASSERT(_flags & FLG_UPDATING);
+
+    /* Issue the next update if one is pending. */
+    if (_flags & FLG_PENDING)
+        leds_update();
 }
 
 /*
