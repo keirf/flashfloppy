@@ -49,8 +49,9 @@ void console_init(void)
     /* Enable the peripheral clock */
     rcc->apb2enr |= RCC_APB2ENR_USART1EN;
 
-    /* Enable TX pin (PA9) for USART output. */
+    /* Enable TX pin (PA9) for USART output, RX pin (PA10) as input. */
     gpio_configure_pin(gpioa, 9, AFO_pushpull);
+    gpio_configure_pin(gpioa, 10, GPI_floating);
 
     /* BAUD, 8n1. */
     usart1->brr = SYSCLK / BAUD;
