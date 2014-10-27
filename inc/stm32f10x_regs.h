@@ -589,8 +589,107 @@ struct usb_otg {
         uint32_t _2[3];
     } doep[4];         /* B00..B60: */
     uint32_t _12[160];
+
     uint32_t pcgcctl;  /* E00: Power and clock gating control */
 };
+
+#define OTG_GAHBCFG_PTXFELVL (1u<< 8)
+#define OTG_GAHBCFG_TXFELVL  (1u<< 7)
+#define OTG_GAHBCFG_GINTMSK  (1u<< 0)
+
+#define OTG_GUSBCFG_CTXPKT   (1u<<31)
+#define OTG_GUSBCFG_FDMOD    (1u<<30)
+#define OTG_GUSBCFG_FHMOD    (1u<<29)
+#define OTG_GUSBCFG_TRDT(x)  ((x)<<10)
+#define OTG_GUSBCFG_HNPCAP   (1u<< 9)
+#define OTG_GUSBCFG_SRPCAP   (1u<< 8)
+#define OTG_GUSBCFG_PHYSEL   (1u<< 6)
+#define OTG_GUSBCFG_TOCAL(x) ((x)<< 0)
+
+/* GINTSTS and GINTMSK */
+#define OTG_GINT_WKUPINT     (1u<<31) /* Host + Device */
+#define OTG_GINT_SRQINT      (1u<<30) /* H + D */
+#define OTG_GINT_DISCINT     (1u<<29) /* H */
+#define OTG_GINT_CIDSCHG     (1u<<28) /* H + D */
+#define OTG_GINT_PTXFE       (1u<<26) /* H */
+#define OTG_GINT_HCINT       (1u<<25) /* H */
+#define OTG_GINT_HPRTINT     (1u<<24) /* H */
+#define OTG_GINT_IPXFR       (1u<<21) /* H */
+#define OTG_GINT_IISOIXFR    (1u<<20) /* D */
+#define OTG_GINT_OEPINT      (1u<<19) /* D */
+#define OTG_GINT_IEPINT      (1u<<18) /* D */
+#define OTG_GINT_EOPF        (1u<<15) /* D */
+#define OTG_GINT_ISOODRP     (1u<<14) /* D */
+#define OTG_GINT_ENUMDNE     (1u<<13) /* D */
+#define OTG_GINT_USBRST      (1u<<12) /* D */
+#define OTG_GINT_USBSUSP     (1u<<11) /* D */
+#define OTG_GINT_ESUSP       (1u<<10) /* D */
+#define OTG_GINT_GONAKEFF    (1u<< 7) /* D */
+#define OTG_GINT_GINAKEFF    (1u<< 6) /* D */
+#define OTG_GINT_NPTXFE      (1u<< 5) /* H */
+#define OTG_GINT_RXFLVL      (1u<< 4) /* H + D */
+#define OTG_GINT_SOF         (1u<< 3) /* H + D */
+#define OTG_GINT_OTGINT      (1u<< 2) /* H + D */
+#define OTG_GINT_MMIS        (1u<< 1) /* H + D */
+#define OTG_GINT_CMOD        (1u<< 0) /* H + D */
+
+#define OTG_GCCFG_SOFOUTEN   (1u<<20)
+#define OTG_GCCFG_VBUSBEN    (1u<<19)
+#define OTG_GCCFG_VBUSASEN   (1u<<18)
+#define OTG_GCCFG_PWRDWN     (1u<<16)
+
+#define OTG_HCFG_FSLSS       (1u<<2)
+#define OTG_HCFG_FSLSPCS_48  (1u<<0)
+
+#define OTG_HPRT_PSPD_FULL   (1u<<17)
+#define OTG_HPRT_PSPD_LOW    (2u<<17)
+#define OTG_HPRT_PSPD_MASK   (1u<<17) /* read-only */
+#define OTG_HPRT_PPWR        (1u<<12)
+#define OTG_HPRT_PRST        (1u<< 8)
+#define OTG_HPRT_PSUSP       (1u<< 7)
+#define OTG_HPRT_PRES        (1u<< 6)
+#define OTG_HPRT_POCCHNG     (1u<< 5) /* raises HPRTINT */
+#define OTG_HPRT_POCA        (1u<< 4)
+#define OTG_HPRT_PENCHNG     (1u<< 3) /* raises HPRTINT */
+#define OTG_HPRT_PENA        (1u<< 2)
+#define OTG_HPRT_PCDET       (1u<< 1) /* raises HPRTINT */
+#define OTG_HPRT_PCSTS       (1u<< 0)
+#define OTG_HPRT_INTS (OTG_HPRT_POCCHNG|OTG_HPRT_PENCHNG|OTG_HPRT_PCDET)
+
+/* HCINTSTS and HCINTMSK */
+#define OTG_HCINT_DTERR      (1u<<10)
+#define OTG_HCINT_FRMOR      (1u<< 9)
+#define OTG_HCINT_BBERR      (1u<< 8)
+#define OTG_HCINT_TXERR      (1u<< 7)
+#define OTG_HCINT_NYET       (1u<< 6)
+#define OTG_HCINT_ACK        (1u<< 5)
+#define OTG_HCINT_NAK        (1u<< 4)
+#define OTG_HCINT_STALL      (1u<< 3)
+#define OTG_HCINT_CHH        (1u<< 1)
+#define OTG_HCINT_XFRC       (1u<< 0)
+
+#define OTG_HCCHAR_CHENA     (1u<<31)
+#define OTG_HCCHAR_CHDIS     (1u<<30)
+#define OTG_HCCHAR_ODDFRM    (1u<<29)
+#define OTG_HCCHAR_DAD(x)    ((x)<<22)
+#define OTG_HCCHAR_MCNT(x)   ((x)<<20)
+#define OTG_HCCHAR_ETYP_CTRL (0u<<18)
+#define OTG_HCCHAR_ETYP_ISO  (1u<<18)
+#define OTG_HCCHAR_ETYP_BULK (2u<<18)
+#define OTG_HCCHAR_ETYP_INT  (3u<<18)
+#define OTG_HCCHAR_LSDEV     (1u<<17)
+#define OTG_HCCHAR_EPDIR_OUT (0u<<15)
+#define OTG_HCCHAR_EPDIR_IN  (1u<<15)
+#define OTG_HCCHAR_EPNUM(x)  ((x)<<11)
+#define OTG_HCCHAR_MPSIZ(x)  ((x)<< 0)
+
+#define OTG_HCTSIZ_DPID_DATA0 (0u<<29)
+#define OTG_HCTSIZ_DPID_DATA2 (1u<<29)
+#define OTG_HCTSIZ_DPID_DATA1 (2u<<29)
+#define OTG_HCTSIZ_DPID_MDATA (3u<<29)
+#define OTG_HCTSIZ_DPID_SETUP (3u<<29)
+#define OTG_HCTSIZ_PKTCNT(x)  ((x)<<19)
+#define OTG_HCTSIZ_XFRSIZ(x)  ((x)<< 0)
 
 #define USB_OTG_BASE 0x50000000
 

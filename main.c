@@ -25,6 +25,7 @@ int main(void)
     clock_init();
     console_init();
     leds_init();
+    usb_init();
 
     gpio_configure_pin(gpioa, 0, GPO_opendrain);
 

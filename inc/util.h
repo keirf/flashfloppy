@@ -32,6 +32,8 @@ void console_init(void);
 void leds_init(void);
 void leds_write_hex(unsigned int x);
 
+void usb_init(void);
+
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];
 extern char _sdat[], _edat[], _ldat[];
