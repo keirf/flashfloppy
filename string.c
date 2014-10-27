@@ -9,8 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include "util.h"
-
 static void do_putch(char **p, char *end, char c)
 {
     if (*p < end)

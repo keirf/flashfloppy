@@ -9,10 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include "stm32f10x.h"
-#include "intrinsics.h"
-#include "util.h"
-
 int EXC_reset(void) __attribute__((alias("main")));
 
 int main(void)

@@ -9,11 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#ifndef __INTRINSICS_H__
-#define __INTRINSICS_H__
-
-#include <stdint.h>
-
 struct exception_frame {
     uint32_t r0, r1, r2, r3, r12, lr, pc, psr;
 };
@@ -31,8 +26,6 @@ struct exception_frame {
 
 #define IRQ_global_disable() asm volatile ("cpsid i" ::: "memory")
 #define IRQ_global_enable() asm volatile ("cpsie i" ::: "memory")
-
-#endif /* __INTRINSICS_H__ */
 
 /*
  * Local variables:

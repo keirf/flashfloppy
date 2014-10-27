@@ -1,7 +1,8 @@
 /*
- * util.c
+ * decls.h
  * 
- * General-purpose utility functions.
+ * Pull in all other header files in an orderly fashion. Source files include
+ * only this header, and only once.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -9,22 +10,14 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-void *memset(void *s, int c, size_t n)
-{
-    char *p = s;
-    while (n--)
-        *p++ = c;
-    return s;
-}
+#include <stdint.h>
+#include <stdarg.h>
+#include <stddef.h>
 
-void *memcpy(void *dest, const void *src, size_t n)
-{
-    char *p = dest;
-    const char *q = src;
-    while (n--)
-        *p++ = *q++;
-    return dest;
-}
+#include "stm32f10x_regs.h"
+#include "stm32f10x.h"
+#include "intrinsics.h"
+#include "util.h"
 
 /*
  * Local variables:

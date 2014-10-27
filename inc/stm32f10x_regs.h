@@ -9,11 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#ifndef __STM32F10X_REGS_H__
-#define __STM32F10X_REGS_H__
-
-#include <stdint.h>
-
 /* SysTick timer */
 struct stk {
     uint32_t ctrl;     /* 00: Control and status */
@@ -598,8 +593,6 @@ struct usb_otg {
 };
 
 #define USB_OTG_BASE 0x50000000
-
-#endif /* __STM32F10X_REGS_H__ */
 
 /*
  * Local variables:

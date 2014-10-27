@@ -9,10 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include "stm32f10x.h"
-#include "intrinsics.h"
-#include "util.h"
-
 #define BAUD 3000000 /* 3Mbaud */
 
 int vprintk(const char *format, va_list ap)

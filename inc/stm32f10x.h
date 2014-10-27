@@ -9,12 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#ifndef __STM32F10X_H__
-#define __STM32F10X_H__
-
-#include "stm32f10x_regs.h"
-#include "intrinsics.h"
-
 void exception_init(void);
 void system_reset(void);
 
@@ -82,8 +76,6 @@ static volatile struct usb_otg *const usb_otg = (struct usb_otg *)USB_OTG_BASE;
 
 /* NVIC table */
 extern uint32_t vector_table[];
-
-#endif /* __STM32F10X_H__ */
 
 /*
  * Local variables:

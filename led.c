@@ -14,10 +14,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include "stm32f10x.h"
-#include "intrinsics.h"
-#include "util.h"
-
 /* Brightness range is 0-7: 
  * 0 is very dim
  * 1-2 are easy on the eyes 

@@ -9,14 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#ifndef __UTIL_H__
-#define __UTIL_H__
-
-#include <stdarg.h>
-#include <stddef.h>
-
-#include "intrinsics.h"
-
 #define ASSERT(p) if (!(p)) illegal();
 
 typedef char bool_t;
@@ -44,8 +36,6 @@ void leds_write_hex(unsigned int x);
 extern char _stext[], _etext[];
 extern char _sdat[], _edat[], _ldat[];
 extern char _sbss[], _ebss[];
-
-#endif /* __UTIL_H__ */
 
 /*
  * Local variables:

@@ -9,10 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include "stm32f10x.h"
-#include "intrinsics.h"
-#include "util.h"
-
 void EXC_unexpected(struct exception_frame *frame)
 {
     uint8_t exc = (uint8_t)read_special(psr);
