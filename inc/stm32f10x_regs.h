@@ -171,10 +171,10 @@ struct rcc {
 #define RCC_APB1ENR_CAN1EN   (1u<<25)
 #define RCC_APB1ENR_I2C2EN   (1u<<22)
 #define RCC_APB1ENR_I2C1EN   (1u<<21)
-#define RCC_APB1ENR_UART5EN  (1u<<20)
-#define RCC_APB1ENR_UART4EN  (1u<<19)
-#define RCC_APB1ENR_UART3EN  (1u<<18)
-#define RCC_APB1ENR_UART2EN  (1u<<17)
+#define RCC_APB1ENR_USART5EN (1u<<20)
+#define RCC_APB1ENR_USART4EN (1u<<19)
+#define RCC_APB1ENR_USART3EN (1u<<18)
+#define RCC_APB1ENR_USART2EN (1u<<17)
 #define RCC_APB1ENR_SPI3EN   (1u<<15)
 #define RCC_APB1ENR_SPI2EN   (1u<<14)
 #define RCC_APB1ENR_WWDGEN   (1u<<11)
@@ -247,6 +247,8 @@ struct afio {
 #define AFIO_MAPR_TIM2_REMAP_PARTIAL_2 (2u<< 8)
 #define AFIO_MAPR_TIM1_REMAP_FULL      (3u<< 6)
 #define AFIO_MAPR_TIM1_REMAP_PARTIAL   (1u<< 6)
+#define AFIO_MAPR_USART3_REMAP_FULL    (3u<< 4)
+#define AFIO_MAPR_USART3_REMAP_PARTIAL (1u<< 4)
 
 #define AFIO_BASE 0x40010000
 
@@ -510,6 +512,8 @@ struct usart {
 #define USART_CR1_SBK        (1u<< 0)
 
 #define USART1_BASE 0x40013800
+#define USART2_BASE 0x40004400
+#define USART3_BASE 0x40004800
 
 /* USB On-The-Go Full Speed interface */
 struct usb_otg {
@@ -634,7 +638,7 @@ struct usb_otg {
 #define OTG_GINT_CMOD        (1u<< 0) /* H + D */
 
 #define OTG_GCCFG_SOFOUTEN   (1u<<20)
-#define OTG_GCCFG_VBUSBEN    (1u<<19)
+#define OTG_GCCFG_VBUSBSEN   (1u<<19)
 #define OTG_GCCFG_VBUSASEN   (1u<<18)
 #define OTG_GCCFG_PWRDWN     (1u<<16)
 
