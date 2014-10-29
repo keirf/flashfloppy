@@ -69,6 +69,14 @@ static void enable_host_channel(void)
 {
     volatile uint32_t *fifo;
     int i;
+    struct setup_pkt {
+        uint8_t bmRequestType;
+        uint8_t bRequest;
+        uint16_t wValue;
+        uint16_t wIndex;
+        uint16_t wLength;
+    } s = { 0x80, 0x6, 0x100, 0, 8 };
+    uint32_t *p = (uint32_t *)&s;
 
 #define CHN 0
     usb_otg->hc[CHN].intsts = ~0u;
@@ -87,13 +95,13 @@ static void enable_host_channel(void)
                                OTG_HCCHAR_EPNUM(0x0) |
                                OTG_HCCHAR_MPSIZ(64));
     usb_otg->hc[CHN].tsiz = (OTG_HCTSIZ_DPID_SETUP |
-                             OTG_HCTSIZ_PKTCNT(3) |
-                             OTG_HCTSIZ_XFRSIZ(3*64));
+                             OTG_HCTSIZ_PKTCNT(1) |
+                             OTG_HCTSIZ_XFRSIZ(8));
     usb_otg->hc[CHN].charac |= OTG_HCCHAR_CHENA;
 
     fifo = (volatile uint32_t *)((char *)usb_otg + 0x1000);
-    for (i = 0; i < 3*64/4; i++)
-        *fifo = 0xaaaaaaaau;
+    for (i = 0; i < 8/4; i++)
+        *fifo = *p++;
 }
 
 static void IRQ_usb(void)
@@ -106,7 +114,7 @@ static void IRQ_usb(void)
          * status and r/w control bits. Clear the IRQs via writeback, then 
          * separate IRQs from everything else for further processing. */
         uint32_t hprt_int, hprt = usb_otg->hprt;
-        usb_otg->hprt = hprt; /* clears the lines */
+        usb_otg->hprt = hprt & ~OTG_HPRT_PENA; /* clears the lines */
         hprt_int = hprt & OTG_HPRT_INTS;
         hprt ^= hprt_int;
 
@@ -126,7 +134,7 @@ static void IRQ_usb(void)
         }
 
         if (hprt_int & OTG_HPRT_PENCHNG) {
-            if (hprt & OTG_HPRT_PENA) {
+            if (hprt_int & OTG_HPRT_PENA) {
                 printk("USB port enabled: %s-speed device attached.\n",
                        (hprt & OTG_HPRT_PSPD_MASK) != OTG_HPRT_PSPD_FULL
                        ? "Low" : "Full");
@@ -139,7 +147,7 @@ static void IRQ_usb(void)
             }
         }
 
-        if ((hprt & (OTG_HPRT_PENA|OTG_HPRT_PCSTS)) == OTG_HPRT_PCSTS) {
+        if ((hprt & OTG_HPRT_PCSTS) && !(hprt_int & OTG_HPRT_PENA)) {
             printk("USB RST\n");
             usb_otg->hprt = hprt | OTG_HPRT_PRST;
             delay_ms(10);

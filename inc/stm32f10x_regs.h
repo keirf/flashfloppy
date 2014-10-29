@@ -658,7 +658,8 @@ struct usb_otg {
 #define OTG_HPRT_PENA        (1u<< 2)
 #define OTG_HPRT_PCDET       (1u<< 1) /* raises HPRTINT */
 #define OTG_HPRT_PCSTS       (1u<< 0)
-#define OTG_HPRT_INTS (OTG_HPRT_POCCHNG|OTG_HPRT_PENCHNG|OTG_HPRT_PCDET)
+#define OTG_HPRT_INTS (OTG_HPRT_POCCHNG|OTG_HPRT_PENCHNG|OTG_HPRT_PCDET| \
+                       OTG_HPRT_PENA) /* PENA is also set-to-clear  */
 
 /* HCINTSTS and HCINTMSK */
 #define OTG_HCINT_DTERR      (1u<<10)
