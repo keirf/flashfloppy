@@ -53,6 +53,7 @@ int printk(const char *format, ...)
     __attribute__ ((format (printf, 1, 2)));
 
 void console_init(void);
+void console_sync(void);
 
 void leds_init(void);
 void leds_write_hex(unsigned int x);

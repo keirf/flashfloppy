@@ -511,6 +511,18 @@ struct usart {
 #define USART_CR1_RWU        (1u<< 1)
 #define USART_CR1_SBK        (1u<< 0)
 
+#define USART_CR3_CTSIE      (1u<<10)
+#define USART_CR3_CTSE       (1u<< 9)
+#define USART_CR3_RTSE       (1u<< 8)
+#define USART_CR3_DMAT       (1u<< 7)
+#define USART_CR3_DMAR       (1u<< 6)
+#define USART_CR3_SCEN       (1u<< 5)
+#define USART_CR3_NACK       (1u<< 4)
+#define USART_CR3_HDSEL      (1u<< 3)
+#define USART_CR3_IRLP       (1u<< 2)
+#define USART_CR3_IREN       (1u<< 1)
+#define USART_CR3_EIE        (1u<< 0)
+
 #define USART1_BASE 0x40013800
 #define USART2_BASE 0x40004400
 #define USART3_BASE 0x40004800

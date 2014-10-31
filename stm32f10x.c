@@ -108,6 +108,7 @@ void gpio_configure_pin(
 
 void system_reset(void)
 {
+    console_sync();
     printk("Resetting...\n");
     scb->aircr = SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
     for (;;) ;
