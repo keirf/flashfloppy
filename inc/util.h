@@ -15,6 +15,31 @@ typedef char bool_t;
 #define TRUE 1
 #define FALSE 0
 
+#ifndef offsetof
+#define offsetof(a,b) __builtin_offsetof(a,b)
+#endif
+#define container_of(ptr, type, member) ({                      \
+        typeof( ((type *)0)->member ) *__mptr = (ptr);          \
+        (type *)( (char *)__mptr - offsetof(type,member) );})
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+#define min(x,y) ({                             \
+    const typeof(x) _x = (x);                   \
+    const typeof(y) _y = (y);                   \
+    (void) (&_x == &_y);                        \
+    _x < _y ? _x : _y; })
+
+#define max(x,y) ({                             \
+    const typeof(x) _x = (x);                   \
+    const typeof(y) _y = (y);                   \
+    (void) (&_x == &_y);                        \
+    _x > _y ? _x : _y; })
+
+#define min_t(type,x,y) \
+    ({ type __x = (x); type __y = (y); __x < __y ? __x: __y; })
+#define max_t(type,x,y) \
+    ({ type __x = (x); type __y = (y); __x > __y ? __x: __y; })
+
 void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 
