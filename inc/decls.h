@@ -19,6 +19,8 @@
 #include "intrinsics.h"
 #include "util.h"
 
+#include "usb_protocol.h"
+
 /*
  * Local variables:
  * mode: C
