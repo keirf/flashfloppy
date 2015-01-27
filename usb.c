@@ -14,6 +14,21 @@ void IRQ_67(void) __attribute__((alias("IRQ_usb")));
 
 #define LOW_SPEED 1
 
+struct usbdev_chn {
+    enum {
+        CHN_idle,
+        CHN_inflight
+    } state;
+    struct usb_device_request req;
+    void (*next_state)(void);
+};
+
+struct usbdev {
+    struct usbdev_chn chn[16];
+};
+
+//static struct usbdev usbdev;
+
 void usb_init(void)
 {
     delay_ms(250); /* Get serial client up */
@@ -65,48 +80,112 @@ void usb_init(void)
     usb_otg->gccfg = OTG_GCCFG_PWRDWN;
 }
 
-static void enable_host_channel(void)
+static void write_host_channel(uint16_t chn, void *dat, uint16_t sz)
 {
-    volatile uint32_t *fifo;
-    int i;
-    struct setup_pkt {
-        uint8_t bmRequestType;
-        uint8_t bRequest;
-        uint16_t wValue;
-        uint16_t wIndex;
-        uint16_t wLength;
-    } s = { 0x80, 0x6, 0x100, 0, 8 };
-    uint32_t *p = (uint32_t *)&s;
+    volatile uint32_t *fifo = (volatile uint32_t *)(
+        (char *)usb_otg + ((chn+1)<<12));
+    uint16_t i, mps = 8, nr_packets;
+    uint32_t *p = (uint32_t *)dat;
 
-#define CHN 0
-    usb_otg->hc[CHN].intsts = ~0u;
-    usb_otg->hc[CHN].intmsk = ~0u; /* XXX */
-    usb_otg->haintmsk = (1u<<CHN);
+    usb_otg->hc[chn].intsts = ~0u;
+    usb_otg->hc[chn].intmsk = ~0u; /* XXX */
+    usb_otg->haintmsk = (1u<<chn);
     printk("Enabled %08x %08x\n",
-           usb_otg->hc[CHN].intsts,
-           usb_otg->hc[CHN].intmsk);
+           usb_otg->hc[chn].intsts,
+           usb_otg->hc[chn].intmsk);
 
-    usb_otg->hc[CHN].charac = (OTG_HCCHAR_DAD(0x00) |
+    nr_packets = (sz + mps - 1) / mps;
+
+    usb_otg->hc[chn].charac = (OTG_HCCHAR_DAD(0x00) |
                                OTG_HCCHAR_ETYP_CTRL |
 #ifdef LOW_SPEED
                                OTG_HCCHAR_LSDEV |
 #endif
                                OTG_HCCHAR_EPDIR_OUT |
                                OTG_HCCHAR_EPNUM(0x0) |
-                               OTG_HCCHAR_MPSIZ(64));
-    usb_otg->hc[CHN].tsiz = (OTG_HCTSIZ_DPID_SETUP |
-                             OTG_HCTSIZ_PKTCNT(1) |
-                             OTG_HCTSIZ_XFRSIZ(8));
-    usb_otg->hc[CHN].charac |= OTG_HCCHAR_CHENA;
+                               OTG_HCCHAR_MPSIZ(mps));
+    usb_otg->hc[chn].tsiz = (OTG_HCTSIZ_DPID_SETUP |
+                             OTG_HCTSIZ_PKTCNT(nr_packets) |
+                             OTG_HCTSIZ_XFRSIZ(sz));
+    usb_otg->hc[chn].charac |= OTG_HCCHAR_CHENA;
 
-    fifo = (volatile uint32_t *)((char *)usb_otg + 0x1000);
-    for (i = 0; i < 8/4; i++)
+    for (i = 0; i < (sz+3)/4; i++)
         *fifo = *p++;
+}
+
+static void usbdev_get_mps_ep0(void)
+{
+    struct usb_device_request req = {
+        .bmRequestType = USB_DIR_IN | USB_TYPE_STD | USB_RX_DEVICE,
+        .bRequest = USB_REQ_GET_DESCRIPTOR,
+        .wValue = (USB_DESC_DEVICE << 8) | 0,
+        .wLength = 8
+    };
+
+    write_host_channel(0, &req, sizeof(req));
+}
+
+static void usbdev_rx_mps_ep0(uint16_t chn)
+{
+    uint16_t mps = 8, nr_packets, sz;
+
+    nr_packets = 1;
+    sz = 8;
+
+    usb_otg->hc[chn].charac = (OTG_HCCHAR_DAD(0x00) |
+                               OTG_HCCHAR_ETYP_CTRL |
+#ifdef LOW_SPEED
+                               OTG_HCCHAR_LSDEV |
+#endif
+                               OTG_HCCHAR_EPDIR_IN |
+                               OTG_HCCHAR_EPNUM(0x0) |
+                               OTG_HCCHAR_MPSIZ(mps));
+    usb_otg->hc[chn].tsiz = (OTG_HCTSIZ_DPID_DATA1 |
+                             OTG_HCTSIZ_PKTCNT(nr_packets) |
+                             OTG_HCTSIZ_XFRSIZ(sz));
+    usb_otg->hc[chn].charac |= OTG_HCCHAR_CHENA;
+}
+
+static void HCINT_xfrc(uint16_t chn)
+{
+    /* XXX TODO: State machine off XFRC 
+     * Second time through should trigger Status stage */
+    printk("XFRC %d\n", chn);
+    usbdev_rx_mps_ep0(chn);
+}
+
+static void HCINT_ack(uint16_t chn)
+{
+    printk("ACK %d\n", chn);
+}
+
+static void IRQ_usb_channel(uint16_t chn)
+{
+    uint32_t hcint = usb_otg->hc[chn].intsts & usb_otg->hc[chn].intmsk;
+    uint16_t i;
+    void (*hnd[])(uint16_t) = {
+        [0] = HCINT_xfrc,
+        [5] = HCINT_ack,
+    };
+
+    usb_otg->hc[chn].intsts = hcint;
+
+    for (i = 0; hcint; i++) {
+        if (hcint & 1) {
+            if ((i >= ARRAY_SIZE(hnd)) || !hnd[i])
+                printk("Bad HCINT %u:%u\n", chn, i);
+            else
+                (*hnd[i])(chn);
+        }
+        hcint >>= 1;
+    }
 }
 
 static void IRQ_usb(void)
 {
     uint32_t gintsts = usb_otg->gintsts;
+
+    printk("---\n");
 
     if (gintsts & OTG_GINT_HPRTINT) {
 
@@ -141,25 +220,30 @@ static void IRQ_usb(void)
 #ifndef LOW_SPEED
                 if ((hprt & OTG_HPRT_PSPD_MASK) == OTG_HPRT_PSPD_FULL)
 #endif
-                    enable_host_channel();
+                    usbdev_get_mps_ep0();
             } else {
                 printk("USB port disabled.\n");
             }
         }
 
-        if ((hprt & OTG_HPRT_PCSTS) && !(hprt_int & OTG_HPRT_PENA)) {
-            printk("USB RST\n");
-            usb_otg->hprt = hprt | OTG_HPRT_PRST;
-            delay_ms(10);
-            usb_otg->hprt = hprt;
+        if (!(hprt_int & OTG_HPRT_PENA)) {
+//            usbdev.state = USBDEV_detached;
+            if (hprt & OTG_HPRT_PCSTS) {
+                printk("USB RST\n");
+                usb_otg->hprt = hprt | OTG_HPRT_PRST;
+                delay_ms(10);
+                usb_otg->hprt = hprt;
+            }
         }
     }
 
     if (gintsts & OTG_GINT_HCINT) {
-        uint32_t hcint = usb_otg->hc[CHN].intsts;
-        usb_otg->hc[CHN].intsts = hcint;
-        printk("HCINT %08x\n", hcint);
-        ASSERT(0);
+        uint16_t chn, haint = usb_otg->haint & usb_otg->haintmsk;
+        for (chn = 0; haint; chn++) {
+            if (haint & 1)
+                IRQ_usb_channel(chn);
+            haint >>= 1;
+        }
     }
 
 #if 0
@@ -173,7 +257,16 @@ static void IRQ_usb(void)
 #endif
 
     if (gintsts & OTG_GINT_RXFLVL) {
-        printk("Rx FIFO non-empty.\n");
+        uint32_t rxsts = usb_otg->grxstsp;
+        printk("Rx FIFO non-empty %08x.\n", rxsts);
+        if (OTG_RXSTS_PKTSTS(rxsts) == OTG_RXSTS_PKTSTS_IN) {
+            volatile uint32_t *fifo = (volatile uint32_t *)(
+                (char *)usb_otg + (1<<12));
+            uint16_t i, sz = OTG_RXSTS_BCNT(rxsts);
+            for (i = 0; i < (sz+3)/4; i++)
+                printk("%08x ", *fifo);
+            printk("\n");
+        }
     }
 
     if (gintsts & OTG_GINT_MMIS) {

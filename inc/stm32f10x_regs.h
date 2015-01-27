@@ -649,6 +649,11 @@ struct usb_otg {
 #define OTG_GINT_MMIS        (1u<< 1) /* H + D */
 #define OTG_GINT_CMOD        (1u<< 0) /* H + D */
 
+#define OTG_RXSTS_PKTSTS_IN  (2u)
+#define OTG_RXSTS_PKTSTS(r)  (((r)>>17)&0xf)
+#define OTG_RXSTS_BCNT(r)    (((r)>>4)&0x7ff)
+#define OTG_RXSTS_CHNUM(r)   ((r)&0xf)
+
 #define OTG_GCCFG_SOFOUTEN   (1u<<20)
 #define OTG_GCCFG_VBUSBSEN   (1u<<19)
 #define OTG_GCCFG_VBUSASEN   (1u<<18)
@@ -678,7 +683,7 @@ struct usb_otg {
 #define OTG_HCINT_FRMOR      (1u<< 9)
 #define OTG_HCINT_BBERR      (1u<< 8)
 #define OTG_HCINT_TXERR      (1u<< 7)
-#define OTG_HCINT_NYET       (1u<< 6)
+#define OTG_HCINT_NYET       (1u<< 6) /* high-speed only; not STM32F10x */
 #define OTG_HCINT_ACK        (1u<< 5)
 #define OTG_HCINT_NAK        (1u<< 4)
 #define OTG_HCINT_STALL      (1u<< 3)
