@@ -1,8 +1,8 @@
 /*
- * decls.h
+ * usb.h
  * 
- * Pull in all other header files in an orderly fashion. Source files include
- * only this header, and only once.
+ * USB host stack. Declarations for public interfaces and state shared between
+ * components and clients.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -10,17 +10,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include <stdint.h>
-#include <stdarg.h>
-#include <stddef.h>
-
-#include "stm32f10x_regs.h"
-#include "stm32f10x.h"
-#include "intrinsics.h"
-#include "util.h"
-
-#include "usb_protocol.h"
-#include "usb.h"
+void usb_init(void);
 
 /*
  * Local variables:

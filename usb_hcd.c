@@ -1,7 +1,7 @@
 /*
- * usb.c
+ * usb_hcd.c
  * 
- * USB-On-The-Go in Host Mode.
+ * STM32F105xx/STM32F107xx USB OTG Host Controller Driver.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -13,21 +13,6 @@
 void IRQ_67(void) __attribute__((alias("IRQ_usb")));
 
 #define LOW_SPEED 1
-
-struct usbdev_chn {
-    enum {
-        CHN_idle,
-        CHN_inflight
-    } state;
-    struct usb_device_request req;
-    void (*next_state)(void);
-};
-
-struct usbdev {
-    struct usbdev_chn chn[16];
-};
-
-//static struct usbdev usbdev;
 
 void usb_init(void)
 {
@@ -80,7 +65,8 @@ void usb_init(void)
     usb_otg->gccfg = OTG_GCCFG_PWRDWN;
 }
 
-static void write_host_channel(uint16_t chn, void *dat, uint16_t sz)
+static void write_host_channel(uint16_t chn, void *dat, uint16_t sz,
+                               uint32_t pid)
 {
     volatile uint32_t *fifo = (volatile uint32_t *)(
         (char *)usb_otg + ((chn+1)<<12));
@@ -94,7 +80,7 @@ static void write_host_channel(uint16_t chn, void *dat, uint16_t sz)
            usb_otg->hc[chn].intsts,
            usb_otg->hc[chn].intmsk);
 
-    nr_packets = (sz + mps - 1) / mps;
+    nr_packets = (sz + mps - 1) / mps ?: 1;
 
     usb_otg->hc[chn].charac = (OTG_HCCHAR_DAD(0x00) |
                                OTG_HCCHAR_ETYP_CTRL |
@@ -104,7 +90,7 @@ static void write_host_channel(uint16_t chn, void *dat, uint16_t sz)
                                OTG_HCCHAR_EPDIR_OUT |
                                OTG_HCCHAR_EPNUM(0x0) |
                                OTG_HCCHAR_MPSIZ(mps));
-    usb_otg->hc[chn].tsiz = (OTG_HCTSIZ_DPID_SETUP |
+    usb_otg->hc[chn].tsiz = (pid |
                              OTG_HCTSIZ_PKTCNT(nr_packets) |
                              OTG_HCTSIZ_XFRSIZ(sz));
     usb_otg->hc[chn].charac |= OTG_HCCHAR_CHENA;
@@ -122,7 +108,7 @@ static void usbdev_get_mps_ep0(void)
         .wLength = 8
     };
 
-    write_host_channel(0, &req, sizeof(req));
+    write_host_channel(0, &req, sizeof(req), OTG_HCTSIZ_DPID_SETUP);
 }
 
 static void usbdev_rx_mps_ep0(uint16_t chn)
@@ -146,12 +132,27 @@ static void usbdev_rx_mps_ep0(uint16_t chn)
     usb_otg->hc[chn].charac |= OTG_HCCHAR_CHENA;
 }
 
+static void usbdev_send_status(uint16_t chn)
+{
+    write_host_channel(chn, NULL, 0, OTG_HCTSIZ_DPID_DATA1);
+}
+
 static void HCINT_xfrc(uint16_t chn)
 {
     /* XXX TODO: State machine off XFRC 
      * Second time through should trigger Status stage */
+    static int stage = 0;
     printk("XFRC %d\n", chn);
-    usbdev_rx_mps_ep0(chn);
+    switch (stage++) {
+    case 0:
+        usbdev_rx_mps_ep0(chn);
+        break;
+    case 1:
+        usbdev_send_status(chn);
+        break;
+    default:
+        break;
+    }
 }
 
 static void HCINT_ack(uint16_t chn)
@@ -227,7 +228,6 @@ static void IRQ_usb(void)
         }
 
         if (!(hprt_int & OTG_HPRT_PENA)) {
-//            usbdev.state = USBDEV_detached;
             if (hprt & OTG_HPRT_PCSTS) {
                 printk("USB RST\n");
                 usb_otg->hprt = hprt | OTG_HPRT_PRST;

@@ -4,7 +4,7 @@ OBJS += led.o
 OBJS += main.o
 OBJS += string.o
 OBJS += stm32f10x.o
-OBJS += usb.o
+OBJS += usb_hcd.o
 OBJS += util.o
 
 include Rules.mk
