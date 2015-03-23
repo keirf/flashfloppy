@@ -12,7 +12,12 @@
 #define USB_IRQ 67
 void IRQ_67(void) __attribute__((alias("IRQ_usb")));
 
-#define LOW_SPEED 1
+struct usb_dev {
+    enum { USBSPD_low, USBSPD_full } speed;
+    int stage;
+};
+
+static struct usb_dev root_dev;
 
 void usb_init(void)
 {
@@ -54,13 +59,8 @@ void usb_init(void)
     IRQx_enable(USB_IRQ);
 
     /* Turn on full-speed PHY. */
-#ifndef LOW_SPEED
     usb_otg->hcfg = OTG_HCFG_FSLSPCS_48;
     usb_otg->hfir = 48000;
-#else
-    usb_otg->hcfg = 2;
-    usb_otg->hfir = 6000;
-#endif
     usb_otg->hprt = (usb_otg->hprt & ~OTG_HPRT_INTS) | OTG_HPRT_PPWR;
     usb_otg->gccfg = OTG_GCCFG_PWRDWN;
 }
@@ -71,7 +71,7 @@ static void write_host_channel(uint16_t chn, void *dat, uint16_t sz,
     volatile uint32_t *fifo = (volatile uint32_t *)(
         (char *)usb_otg + ((chn+1)<<12));
     uint16_t i, mps = 8, nr_packets;
-    uint32_t *p = (uint32_t *)dat;
+    uint32_t charac, *p = (uint32_t *)dat;
 
     usb_otg->hc[chn].intsts = ~0u;
     usb_otg->hc[chn].intmsk = ~0u; /* XXX */
@@ -82,14 +82,15 @@ static void write_host_channel(uint16_t chn, void *dat, uint16_t sz,
 
     nr_packets = (sz + mps - 1) / mps ?: 1;
 
-    usb_otg->hc[chn].charac = (OTG_HCCHAR_DAD(0x00) |
-                               OTG_HCCHAR_ETYP_CTRL |
-#ifdef LOW_SPEED
-                               OTG_HCCHAR_LSDEV |
-#endif
-                               OTG_HCCHAR_EPDIR_OUT |
-                               OTG_HCCHAR_EPNUM(0x0) |
-                               OTG_HCCHAR_MPSIZ(mps));
+    charac = (OTG_HCCHAR_DAD(0x00) |
+              OTG_HCCHAR_ETYP_CTRL |
+              OTG_HCCHAR_EPDIR_OUT |
+              OTG_HCCHAR_EPNUM(0x0) |
+              OTG_HCCHAR_MPSIZ(mps));
+    if (root_dev.speed == USBSPD_low)
+        charac |= OTG_HCCHAR_LSDEV;
+
+    usb_otg->hc[chn].charac = charac;
     usb_otg->hc[chn].tsiz = (pid |
                              OTG_HCTSIZ_PKTCNT(nr_packets) |
                              OTG_HCTSIZ_XFRSIZ(sz));
@@ -114,18 +115,20 @@ static void usbdev_get_mps_ep0(void)
 static void usbdev_rx_mps_ep0(uint16_t chn)
 {
     uint16_t mps = 8, nr_packets, sz;
+    uint32_t charac;
 
     nr_packets = 1;
     sz = 8;
 
-    usb_otg->hc[chn].charac = (OTG_HCCHAR_DAD(0x00) |
-                               OTG_HCCHAR_ETYP_CTRL |
-#ifdef LOW_SPEED
-                               OTG_HCCHAR_LSDEV |
-#endif
-                               OTG_HCCHAR_EPDIR_IN |
-                               OTG_HCCHAR_EPNUM(0x0) |
-                               OTG_HCCHAR_MPSIZ(mps));
+    charac = (OTG_HCCHAR_DAD(0x00) |
+              OTG_HCCHAR_ETYP_CTRL |
+              OTG_HCCHAR_EPDIR_IN |
+              OTG_HCCHAR_EPNUM(0x0) |
+              OTG_HCCHAR_MPSIZ(mps));
+    if (root_dev.speed == USBSPD_low)
+        charac |= OTG_HCCHAR_LSDEV;
+
+    usb_otg->hc[chn].charac = charac;
     usb_otg->hc[chn].tsiz = (OTG_HCTSIZ_DPID_DATA1 |
                              OTG_HCTSIZ_PKTCNT(nr_packets) |
                              OTG_HCTSIZ_XFRSIZ(sz));
@@ -141,9 +144,8 @@ static void HCINT_xfrc(uint16_t chn)
 {
     /* XXX TODO: State machine off XFRC 
      * Second time through should trigger Status stage */
-    static int stage = 0;
-    printk("XFRC %d\n", chn);
-    switch (stage++) {
+    printk("XFRC %d - stage %d\n", chn, root_dev.stage);
+    switch (root_dev.stage++) {
     case 0:
         usbdev_rx_mps_ep0(chn);
         break;
@@ -215,13 +217,29 @@ static void IRQ_usb(void)
 
         if (hprt_int & OTG_HPRT_PENCHNG) {
             if (hprt_int & OTG_HPRT_PENA) {
+                uint32_t hcfg = usb_otg->hcfg;
+                root_dev.speed = ((hprt & OTG_HPRT_PSPD_MASK)
+                                  == OTG_HPRT_PSPD_FULL)
+                    ? USBSPD_full : USBSPD_low;
                 printk("USB port enabled: %s-speed device attached.\n",
-                       (hprt & OTG_HPRT_PSPD_MASK) != OTG_HPRT_PSPD_FULL
-                       ? "Low" : "Full");
-#ifndef LOW_SPEED
-                if ((hprt & OTG_HPRT_PSPD_MASK) == OTG_HPRT_PSPD_FULL)
-#endif
+                       (root_dev.speed == USBSPD_low) ? "Low" : "Full");
+                if (root_dev.speed == USBSPD_full) {
+                    if ((hcfg & OTG_HCFG_FSLSPCS) != OTG_HCFG_FSLSPCS_48) {
+                        usb_otg->hcfg = OTG_HCFG_FSLSPCS_48;
+                        usb_otg->hfir = 48000;
+                        hprt_int &= ~OTG_HPRT_PENA;
+                    }
+                } else {
+                    if ((hcfg & OTG_HCFG_FSLSPCS) != OTG_HCFG_FSLSPCS_6) {
+                        usb_otg->hcfg = OTG_HCFG_FSLSPCS_6;
+                        usb_otg->hfir = 6000;
+                        hprt_int &= ~OTG_HPRT_PENA;
+                    }
+                }
+                if (hprt_int & OTG_HPRT_PENA) {
+                    root_dev.stage = 0;
                     usbdev_get_mps_ep0();
+                }
             } else {
                 printk("USB port disabled.\n");
             }
@@ -231,8 +249,9 @@ static void IRQ_usb(void)
             if (hprt & OTG_HPRT_PCSTS) {
                 printk("USB RST\n");
                 usb_otg->hprt = hprt | OTG_HPRT_PRST;
-                delay_ms(10);
+                delay_ms(50); /* USB Spec: TDRSTR (Root-port reset time) */
                 usb_otg->hprt = hprt;
+                delay_ms(10); /* USB Spec: TRSTRCY (Post-reset recovery) */
             }
         }
     }

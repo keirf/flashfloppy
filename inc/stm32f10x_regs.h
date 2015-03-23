@@ -660,7 +660,9 @@ struct usb_otg {
 #define OTG_GCCFG_PWRDWN     (1u<<16)
 
 #define OTG_HCFG_FSLSS       (1u<<2)
+#define OTG_HCFG_FSLSPCS     (3u<<0)
 #define OTG_HCFG_FSLSPCS_48  (1u<<0)
+#define OTG_HCFG_FSLSPCS_6   (2u<<0)
 
 #define OTG_HPRT_PSPD_FULL   (1u<<17)
 #define OTG_HPRT_PSPD_LOW    (2u<<17)
