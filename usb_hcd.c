@@ -15,6 +15,7 @@ void IRQ_67(void) __attribute__((alias("IRQ_usb")));
 struct usb_dev {
     enum { USBSPD_low, USBSPD_full } speed;
     int stage;
+    int errcnt;
 };
 
 static struct usb_dev root_dev;
@@ -140,16 +141,37 @@ static void usbdev_send_status(uint16_t chn)
     write_host_channel(chn, NULL, 0, OTG_HCTSIZ_DPID_DATA1);
 }
 
-static void HCINT_xfrc(uint16_t chn)
+static void chn_halt(uint16_t chn)
 {
-    /* XXX TODO: State machine off XFRC 
-     * Second time through should trigger Status stage */
-    printk("XFRC %d - stage %d\n", chn, root_dev.stage);
+    usb_otg->hc[chn].charac |= OTG_HCCHAR_CHDIS | OTG_HCCHAR_CHENA;
+}
+
+static void port_reset(void)
+{
+    uint32_t hprt = usb_otg->hprt & ~OTG_HPRT_INTS;
+    printk("USB RST\n");
+    usb_otg->hprt = hprt | OTG_HPRT_PRST;
+    delay_ms(50); /* USB Spec: TDRSTR (Root-port reset time) */
+    usb_otg->hprt = hprt;
+    delay_ms(10); /* USB Spec: TRSTRCY (Post-reset recovery) */
+}
+
+static void next_state(uint16_t chn)
+{
+    if (root_dev.errcnt == 3) {
+        root_dev.errcnt = 0;
+        root_dev.stage = 0;
+        port_reset();
+    }
+    printk("STATE %d\n", root_dev.stage);
     switch (root_dev.stage++) {
     case 0:
-        usbdev_rx_mps_ep0(chn);
+        usbdev_get_mps_ep0();
         break;
     case 1:
+        usbdev_rx_mps_ep0(chn);
+        break;
+    case 2:
         usbdev_send_status(chn);
         break;
     default:
@@ -157,9 +179,38 @@ static void HCINT_xfrc(uint16_t chn)
     }
 }
 
+static void HCINT_xfrc(uint16_t chn)
+{
+    printk("XFRC %d\n", chn);
+    root_dev.errcnt = 0;
+    chn_halt(chn);
+}
+
+static void HCINT_chh(uint16_t chn)
+{
+    printk("CHH %d\n", chn);
+    next_state(chn);
+}
+
 static void HCINT_ack(uint16_t chn)
 {
     printk("ACK %d\n", chn);
+}
+
+static void HCINT_nak(uint16_t chn)
+{
+    printk("NAK %d\n", chn);
+    root_dev.errcnt = 0;
+    root_dev.stage--;
+    chn_halt(chn);
+}
+
+static void HCINT_txerr(uint16_t chn)
+{
+    printk("TXERR %d\n", chn);
+    root_dev.errcnt++;
+    root_dev.stage = 0;
+    chn_halt(chn);
 }
 
 static void IRQ_usb_channel(uint16_t chn)
@@ -168,7 +219,10 @@ static void IRQ_usb_channel(uint16_t chn)
     uint16_t i;
     void (*hnd[])(uint16_t) = {
         [0] = HCINT_xfrc,
+        [1] = HCINT_chh,
+        [4] = HCINT_nak,
         [5] = HCINT_ack,
+        [7] = HCINT_txerr
     };
 
     usb_otg->hc[chn].intsts = hcint;
@@ -238,7 +292,7 @@ static void IRQ_usb(void)
                 }
                 if (hprt_int & OTG_HPRT_PENA) {
                     root_dev.stage = 0;
-                    usbdev_get_mps_ep0();
+                    next_state(0);
                 }
             } else {
                 printk("USB port disabled.\n");
@@ -247,11 +301,8 @@ static void IRQ_usb(void)
 
         if (!(hprt_int & OTG_HPRT_PENA)) {
             if (hprt & OTG_HPRT_PCSTS) {
-                printk("USB RST\n");
-                usb_otg->hprt = hprt | OTG_HPRT_PRST;
-                delay_ms(50); /* USB Spec: TDRSTR (Root-port reset time) */
-                usb_otg->hprt = hprt;
-                delay_ms(10); /* USB Spec: TRSTRCY (Post-reset recovery) */
+                delay_ms(100); /* USB Spec: TATTDB (Debounce interval) */
+                port_reset();
             }
         }
     }
