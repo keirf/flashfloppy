@@ -1,7 +1,7 @@
 /*
  * main.c
  * 
- * Bootstrap the STM32F105RB and get things moving.
+ * Bootstrap the STM32F103C8T6 and get things moving.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -24,14 +24,14 @@ int main(void)
     exception_init();
     clock_init();
     console_init();
-    leds_init();
-    usb_init();
+    /*leds_init();*/
+    /*usb_init();*/
 
     gpio_configure_pin(gpioa, 0, GPO_opendrain);
 
     i = usart1->dr; /* clear UART_SR_RXNE */    
     for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
-        leds_write_hex(i);
+        /*leds_write_hex(i);*/
         printk("%04x ", i);
         if ((i & 7) == 7) printk("\n");
         gpio_write_pin(gpioa, 0, i&1);

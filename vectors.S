@@ -6,7 +6,7 @@
 .global vector_table
 vector_table:
     /* Top of stack */
-    .word _stext
+    .word _stacktop
 
     /* Exceptions (1-15) */
 #define E(x) .word x; .weak x; .thumb_set x, EXC_unused;
