@@ -102,6 +102,26 @@ struct nvic {
 
 #define NVIC_BASE 0xe000e100
 
+/* Flash memory interface */
+struct flash {
+    uint32_t acr;      /* 00: Flash access control */
+    uint32_t keyr;     /* 04: FPEC key */
+    uint32_t optkeyr;  /* 08: Flash OPTKEY */
+    uint32_t sr;       /* 0C: Flash status */
+    uint32_t cr;       /* 10: Flash control */
+    uint32_t ar;       /* 14: Flash address */
+    uint32_t rsvd;     /* 18: - */
+    uint32_t obr;      /* 1C: Option byte */
+    uint32_t wrpr;     /* 20: Write protection */
+};
+
+#define FLASH_ACR_PRFTBS     (1u<< 5)
+#define FLASH_ACR_PRFTBE     (1u<< 4)
+#define FLASH_ACR_HLFCYA     (1u<< 3)
+#define FLASH_ACR_LATENCY(w) ((w)<<0) /* wait states */
+
+#define FLASH_BASE 0x40022000
+
 /* Power control */
 struct pwr {
     uint32_t cr;       /* 00: Power control */

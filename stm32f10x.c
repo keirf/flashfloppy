@@ -30,6 +30,9 @@ void exception_init(void)
 
 void clock_init(void)
 {
+    /* Flash controller: reads require 2 wait states at 72MHz. */
+    flash->acr = FLASH_ACR_PRFTBE | FLASH_ACR_LATENCY(2);
+
     /* Start up the external oscillator. */
     rcc->cr |= RCC_CR_HSEON;
     while (!(rcc->cr & RCC_CR_HSERDY))

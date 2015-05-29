@@ -52,6 +52,7 @@ void gpio_configure_pin(
 static volatile struct stk * const stk = (struct stk *)STK_BASE;
 static volatile struct scb * const scb = (struct scb *)SCB_BASE;
 static volatile struct nvic * const nvic = (struct nvic *)NVIC_BASE;
+static volatile struct flash * const flash = (struct flash *)FLASH_BASE;
 static volatile struct pwr * const pwr = (struct pwr *)PWR_BASE;
 static volatile struct rcc * const rcc = (struct rcc *)RCC_BASE;
 static volatile struct gpio * const gpioa = (struct gpio *)GPIOA_BASE;
