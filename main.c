@@ -11,8 +11,12 @@
 
 int EXC_reset(void) __attribute__((alias("main")));
 
+FATFS fatfs;
+FIL file;
+
 int main(void)
 {
+    FRESULT fr;
     int i;
 
     /* Relocate DATA. Initialise BSS. */
@@ -26,6 +30,23 @@ int main(void)
     console_init();
     /*leds_init();*/
     /*usb_init();*/
+
+    delay_ms(500); /* XXX */
+    f_mount(&fatfs, "", 0);
+    fr = f_open(&file, "small", FA_READ);
+    printk("File open %d\n", fr);
+    if (fr == FR_OK) {
+        char buf[32];
+        UINT i, nr;
+        while (f_read(&file, buf, sizeof(buf), &nr) == FR_OK) {
+            if (nr == 0) {
+                printk("\nEOF\n");
+                break;
+            }
+            for (i = 0; i < nr; i++)
+                printk("%c", buf[i]);
+        }
+    }
 
     gpio_configure_pin(gpioa, 0, GPO_opendrain);
 

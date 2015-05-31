@@ -23,6 +23,8 @@ void delay_ticks(unsigned int ticks);
 void delay_ns(unsigned int ns);
 void delay_us(unsigned int us);
 void delay_ms(unsigned int ms);
+#define stk_us(x) ((x) * STK_MHZ)
+#define stk_ms(x) stk_us((x) * 1000)
 
 /* NVIC */
 #define IRQx_enable(x) do {                     \

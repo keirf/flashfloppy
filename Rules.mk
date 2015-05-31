@@ -49,7 +49,7 @@ LDFLAGS += $(FLAGS) -Wl,--gc-sections
 	@echo OBJCOPY $@
 	$(OBJCOPY) -O binary $< $@
 
-clean:
+clean::
 	rm -f *~ *.o *.elf *.hex *.bin *.ld $(DEPS)
 
 -include $(DEPS)

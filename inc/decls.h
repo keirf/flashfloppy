@@ -22,6 +22,8 @@
 #include "usb_protocol.h"
 #include "usb.h"
 
+#include "../fatfs/ff.h"
+
 /*
  * Local variables:
  * mode: C
