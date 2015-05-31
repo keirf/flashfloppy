@@ -494,6 +494,62 @@ struct tim {
 #define TIM6_BASE 0x40001000
 #define TIM7_BASE 0x40001400
 
+/* SPI/I2S */
+struct spi {
+    uint32_t cr1;     /* 00: Control 1 */
+    uint32_t cr2;     /* 04: Control 2 */
+    uint32_t sr;      /* 08: Status */
+    uint32_t dr;      /* 0C: Data */
+    uint32_t crcpr;   /* 10: CRC polynomial */
+    uint32_t rxcrcr;  /* 14: RX CRC */
+    uint32_t txcrcr;  /* 18: TX CRC */
+    uint32_t i2scfgr; /* 1C: I2S configuration */
+    uint32_t i2spr;   /* 20: I2S prescaler */
+};
+
+#define SPI_CR1_BIDIMODE  (1u<<15)
+#define SPI_CR1_BIDIOE    (1u<<14)
+#define SPI_CR1_CRCEN     (1u<<13)
+#define SPI_CR1_CRCNEXT   (1u<<12)
+#define SPI_CR1_DFF       (1u<<11)
+#define SPI_CR1_RXONLY    (1u<<10)
+#define SPI_CR1_SSM       (1u<< 9)
+#define SPI_CR1_SSI       (1u<< 8)
+#define SPI_CR1_LSBFIRST  (1u<< 7)
+#define SPI_CR1_SPE       (1u<< 6)
+#define SPI_CR1_BR_DIV2   (0u<< 3)
+#define SPI_CR1_BR_DIV4   (1u<< 3)
+#define SPI_CR1_BR_DIV8   (2u<< 3)
+#define SPI_CR1_BR_DIV1   (3u<< 3)
+#define SPI_CR1_BR_DIV32  (4u<< 3)
+#define SPI_CR1_BR_DIV64  (5u<< 3)
+#define SPI_CR1_BR_DIV128 (6u<< 3)
+#define SPI_CR1_BR_DIV256 (7u<< 3)
+#define SPI_CR1_BR_MASK   (7u<< 3)
+#define SPI_CR1_MSTR      (1u<< 2)
+#define SPI_CR1_CPOL      (1u<< 1)
+#define SPI_CR1_CPHA      (1u<< 0)
+
+#define SPI_CR2_TXEIE     (1u<< 7)
+#define SPI_CR2_RXNEIE    (1u<< 6)
+#define SPI_CR2_ERRIE     (1u<< 5)
+#define SPI_CR2_SSOE      (1u<< 2)
+#define SPI_CR2_TXDMAEN   (1u<< 1)
+#define SPI_CR2_RXDMAEN   (1u<< 0)
+
+#define SPI_SR_BSY        (1u<< 7)
+#define SPI_SR_OVR        (1u<< 6)
+#define SPI_SR_MODF       (1u<< 5)
+#define SPI_SR_CRCERR     (1u<< 4)
+#define SPI_SR_USR        (1u<< 3)
+#define SPI_SR_CHSIDE     (1u<< 2)
+#define SPI_SR_TXE        (1u<< 1)
+#define SPI_SR_RXNE       (1u<< 0)
+
+#define SPI1_BASE 0x40013000
+#define SPI2_BASE 0x40003800
+#define SPI3_BASE 0x40003C00
+
 /* USART */
 struct usart {
     uint32_t sr;   /* 00: Status */
