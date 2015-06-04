@@ -1,5 +1,6 @@
-Gotek Firmware
-==============
+FlashFloppy
+===========
 
-Work-in-progress alternative firmware for the Gotek floppy emulator.
-All code is public domain (see the COPYING file).
+Work-in-progress floppy emulator for STM32F10x.
+
+Most code is public domain; the rest is MIT/BSD (see the COPYING file).
