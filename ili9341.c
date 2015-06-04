@@ -24,7 +24,7 @@
 #define PIN_CS    3
 #define set_pin(pin, val) gpio_write_pin(gpioa, pin, val)
 
-#define spi spi2
+#define spi spi1
 
 #define ILI9341_NOP     0x00
 #define ILI9341_SWRESET 0x01
@@ -201,7 +201,7 @@ void ili9341_init(void)
     uint8_t i;
 
     /* Turn on the clocks. */
-    rcc->apb1enr |= RCC_APB1ENR_SPI2EN;
+    rcc->apb2enr |= RCC_APB2ENR_SPI1EN;
 
     /* Configure general-purpose I/Os. */
     gpio_configure_pin(gpioa, PIN_DCRS, GPO_pushpull);
@@ -212,17 +212,21 @@ void ili9341_init(void)
     set_pin(PIN_CS, 1);    /* deselect */
 
     /* Configure SPI I/Os. */
-    gpio_configure_pin(gpiob, 13, AFO_pushpull); /* PA13: CK */
-    gpio_configure_pin(gpiob, 14, GPI_pulled);   /* PA14: MISO */
+    gpio_configure_pin(gpioa, 5, AFO_pushpull); /* CK */
+    gpio_configure_pin(gpioa, 6, GPI_pulled);   /* MISO */
     gpio_write_pin(gpioa, 6, 1); /* MISO is pulled up */
-    gpio_configure_pin(gpiob, 15, AFO_pushpull); /* PA15: MOSI */
+    gpio_configure_pin(gpioa, 7, AFO_pushpull); /* MOSI */
 
-    /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
+    /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge.
+     * Although ILI9341 is specified to run at only 10MHz for write cycles
+     * (and even less than that for read cycles, which we don't use), in
+     * practice parts seem to clock much faster and this success is echoed 
+     * by other users. */
     spi->cr2 = 0;
     spi->cr1 = (SPI_CR1_MSTR | /* master */
                 SPI_CR1_SSM | SPI_CR1_SSI | /* software NSS */
                 SPI_CR1_SPE |
-                SPI_CR1_BR_DIV8); /* 36/8 = 4.5MHz */
+                SPI_CR1_BR_DIV2); /* 72/2 = 36MHz(!) */
 
     /* Drain SPI I/O. */
     while (!(spi->sr & SPI_SR_TXE))

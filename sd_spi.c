@@ -23,7 +23,7 @@ static DSTATUS status = STA_NOINIT;
 #define CT_SDHC (CT_BLOCK | CT_SD2) /* SDHC is v2.xx and fixed-block-size */
 static uint8_t cardtype;
 
-#define spi spi1
+#define spi spi2
 
 #define cs_assert()   gpio_write_pin(gpioa, 4, 0);
 #define cs_deassert() gpio_write_pin(gpioa, 4, 1);
@@ -139,14 +139,14 @@ DSTATUS disk_initialize(BYTE pdrv)
     status |= STA_NOINIT;
 
     /* Turn on the clocks. */
-    rcc->apb2enr |= RCC_APB2ENR_SPI1EN;
+    rcc->apb1enr |= RCC_APB1ENR_SPI2EN;
 
     /* Enable external I/O pins. */
-    gpio_configure_pin(gpioa, 4, GPO_pushpull); /* PA4: SS */
-    gpio_configure_pin(gpioa, 5, AFO_pushpull); /* PA5: CK */
-    gpio_configure_pin(gpioa, 6, GPI_pulled);   /* PA6: MISO */
-    gpio_write_pin(gpioa, 6, 1); /* MISO is pulled up */
-    gpio_configure_pin(gpioa, 7, AFO_pushpull); /* PA7: MOSI */
+    gpio_configure_pin(gpioa, 4, GPO_pushpull);  /* SS */
+    gpio_configure_pin(gpiob, 13, AFO_pushpull); /* CK */
+    gpio_configure_pin(gpiob, 14, GPI_pulled);   /* MISO */
+    gpio_write_pin(gpiob, 14, 1); /* MISO is pulled up */
+    gpio_configure_pin(gpiob, 15, AFO_pushpull); /* MOSI */
 
     cs_deassert();
 
@@ -155,7 +155,7 @@ DSTATUS disk_initialize(BYTE pdrv)
     cr1 = (SPI_CR1_MSTR | /* master */
            SPI_CR1_SSM | SPI_CR1_SSI | /* software NSS */
            SPI_CR1_SPE);
-    spi->cr1 = cr1 | SPI_CR1_BR_DIV256; /* ~281kHz (<400kHz) */
+    spi->cr1 = cr1 | SPI_CR1_BR_DIV128; /* ~281kHz (<400kHz) */
 
     /* Drain SPI I/O. */
     while (!(spi->sr & SPI_SR_TXE))
@@ -233,17 +233,17 @@ out:
 
     if (!(status & STA_NOINIT)) {
         /* We can now switch to Default Speed (25MHz). Closest we can get is 
-         * 72Mhz/4 = 18MHz. */
-        spi->cr1 = cr1 | SPI_CR1_BR_DIV4;
+         * 36Mhz/2 = 18MHz. */
+        spi->cr1 = cr1 | SPI_CR1_BR_DIV2;
     } else {
         /* Disable SPI. */
         spi->cr1 = 0;
-        rcc->apb2enr &= ~RCC_APB2ENR_SPI1EN;
+        rcc->apb1enr &= ~RCC_APB1ENR_SPI2EN;
         /* Configure external I/O pins as pulled inputs. */
-        gpio_configure_pin(gpioa, 4, GPI_pulled);
-        gpio_configure_pin(gpioa, 5, GPI_pulled); /* PA5: CK */
-        gpio_configure_pin(gpioa, 6, GPI_pulled);   /* PA6: MISO */
-        gpio_configure_pin(gpioa, 7, GPI_pulled); /* PA7: MOSI */
+        gpio_configure_pin(gpioa, 4, GPI_pulled);  /* SS */
+        gpio_configure_pin(gpiob, 13, GPI_pulled); /* CK */
+        gpio_configure_pin(gpiob, 14, GPI_pulled); /* MISO */
+        gpio_configure_pin(gpiob, 15, GPI_pulled); /* MOSI */
     }
 
     printk("SD Card configured\n");
