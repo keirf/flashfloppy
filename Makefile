@@ -1,6 +1,8 @@
 OBJS += console.o
 OBJS += vectors.o
 #OBJS += led.o
+OBJS += ili9341.o
+OBJS += font8x8.o
 OBJS += main.o
 OBJS += sd_spi.o
 OBJS += string.o

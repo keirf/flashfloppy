@@ -520,7 +520,7 @@ struct spi {
 #define SPI_CR1_BR_DIV2   (0u<< 3)
 #define SPI_CR1_BR_DIV4   (1u<< 3)
 #define SPI_CR1_BR_DIV8   (2u<< 3)
-#define SPI_CR1_BR_DIV1   (3u<< 3)
+#define SPI_CR1_BR_DIV16  (3u<< 3)
 #define SPI_CR1_BR_DIV32  (4u<< 3)
 #define SPI_CR1_BR_DIV64  (5u<< 3)
 #define SPI_CR1_BR_DIV128 (6u<< 3)
