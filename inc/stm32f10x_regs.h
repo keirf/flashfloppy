@@ -1,3 +1,4 @@
+
 /*
  * stm32f10x_regs.h
  * 
@@ -230,14 +231,26 @@ struct gpio {
     uint32_t lckr; /* 18: Port configuration lock */
 };
 
+#define _GPI_pulled(level) (0x8u|((level)<<4))
 #define GPI_analog    0x0u
 #define GPI_floating  0x4u
-#define GPI_pulled    0x8u
-/* NB. Outputs have slew rate set up for 10MHz. */
-#define GPO_pushpull  0x1u
-#define GPO_opendrain 0x5u
-#define AFO_pushpull  0x9u
-#define AFO_opendrain 0xdu
+#define GPI_pull_down _GPI_pulled(LOW)
+#define GPI_pull_up   _GPI_pulled(HIGH)
+
+#define _GPO_pushpull(speed,level)  (0x0u|(speed)|((level)<<4))
+#define _GPO_opendrain(speed,level) (0x4u|(speed)|((level)<<4))
+#define _AFO_pushpull(speed)        (0x8u|(speed))
+#define _AFO_opendrain(speed)       (0xcu|(speed))
+#define _2MHz  2
+#define _10MHz 1
+#define _50MHz 3
+#define LOW  0
+#define HIGH 1
+/* Default output modes have slew rate set up for 10MHz. */
+#define GPO_pushpull  _GPO_pushpull(_10MHz,LOW)
+#define GPO_opendrain _GPO_opendrain(_10MHz,LOW)
+#define AFO_pushpull  _AFO_pushpull(_10MHz)
+#define AFO_opendrain _AFO_opendrain(_10MHz)
 
 #define GPIOA_BASE 0x40010800
 #define GPIOB_BASE 0x40010c00

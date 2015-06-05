@@ -24,9 +24,10 @@ static DSTATUS status = STA_NOINIT;
 static uint8_t cardtype;
 
 #define spi spi2
+#define PIN_CS 4
 
-#define cs_assert()   gpio_write_pin(gpioa, 4, 0);
-#define cs_deassert() gpio_write_pin(gpioa, 4, 1);
+#define cs_assert()   gpio_write_pin(gpioa, PIN_CS, 0);
+#define cs_deassert() gpio_write_pin(gpioa, PIN_CS, 1);
 
 static uint8_t spi_xchg_byte(uint8_t out)
 {
@@ -142,11 +143,10 @@ DSTATUS disk_initialize(BYTE pdrv)
     rcc->apb1enr |= RCC_APB1ENR_SPI2EN;
 
     /* Enable external I/O pins. */
-    gpio_configure_pin(gpioa, 4, GPO_pushpull);  /* SS */
-    gpio_configure_pin(gpiob, 13, AFO_pushpull); /* CK */
-    gpio_configure_pin(gpiob, 14, GPI_pulled);   /* MISO */
-    gpio_write_pin(gpiob, 14, 1); /* MISO is pulled up */
-    gpio_configure_pin(gpiob, 15, AFO_pushpull); /* MOSI */
+    gpio_configure_pin(gpioa, PIN_CS, GPO_pushpull); /* SS */
+    gpio_configure_pin(gpiob, 13, AFO_pushpull);     /* CK */
+    gpio_configure_pin(gpiob, 14, GPI_pull_up);      /* MISO */
+    gpio_configure_pin(gpiob, 15, AFO_pushpull);     /* MOSI */
 
     cs_deassert();
 
@@ -239,11 +239,11 @@ out:
         /* Disable SPI. */
         spi->cr1 = 0;
         rcc->apb1enr &= ~RCC_APB1ENR_SPI2EN;
-        /* Configure external I/O pins as pulled inputs. */
-        gpio_configure_pin(gpioa, 4, GPI_pulled);  /* SS */
-        gpio_configure_pin(gpiob, 13, GPI_pulled); /* CK */
-        gpio_configure_pin(gpiob, 14, GPI_pulled); /* MISO */
-        gpio_configure_pin(gpiob, 15, GPI_pulled); /* MOSI */
+        /* Configure external I/O pins as pulled-up inputs. */
+        gpio_configure_pin(gpioa, PIN_CS, GPI_pull_up); /* SS */
+        gpio_configure_pin(gpiob, 13, GPI_pull_up);     /* CK */
+        gpio_configure_pin(gpiob, 14, GPI_pull_up);     /* MISO */
+        gpio_configure_pin(gpiob, 15, GPI_pull_up);     /* MOSI */
     }
 
     printk("SD Card configured\n");

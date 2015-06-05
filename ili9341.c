@@ -18,7 +18,6 @@
  * """
  */
 
-/* PB13 CK, PB14 MISO, PB15 MOSI, PA1 DC/RS, PA2 RESET, PA3 CS. */
 #define PIN_DCRS  1
 #define PIN_RESET 2
 #define PIN_CS    3
@@ -213,8 +212,7 @@ void ili9341_init(void)
 
     /* Configure SPI I/Os. */
     gpio_configure_pin(gpioa, 5, AFO_pushpull); /* CK */
-    gpio_configure_pin(gpioa, 6, GPI_pulled);   /* MISO */
-    gpio_write_pin(gpioa, 6, 1); /* MISO is pulled up */
+    gpio_configure_pin(gpioa, 6, GPI_pull_up);  /* MISO */
     gpio_configure_pin(gpioa, 7, AFO_pushpull); /* MOSI */
 
     /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge.

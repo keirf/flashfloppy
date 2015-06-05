@@ -101,6 +101,8 @@ void gpio_configure_pin(
     volatile struct gpio * const gpio,
     unsigned int pin, unsigned int mode)
 {
+    gpio_write_pin(gpio, pin, mode >> 4);
+    mode &= 0xfu;
     if (pin >= 8) {
         pin -= 8;
         gpio->crh = (gpio->crh & ~(0xfu<<(pin<<2))) | (mode<<(pin<<2));
