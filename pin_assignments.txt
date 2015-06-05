@@ -1,0 +1,89 @@
+TFT LCD:
+--------
+GPOut:
+ PA0: TCHCS (XPT2046 CS)
+ PA1: DC/RS (ILI9341 Data/Command Select)
+ PA2: RESET (ILI9341 Reset)
+ PA3: TFTCS (ILI9341 CS)
+SPI1:
+ PA5: CK
+ PA6: MISO
+ PA7: MOSI
+
+SD CARD:
+--------
+GPOut:
+ PA4: CS
+SPI2:
+ PB13: CK
+ PB14: MISO
+ PB15: MOSI
+
+Debug Console:
+--------------
+USART1:
+ PA9: TX
+ PA10: RX
+
+Floppy:
+-------
+(all selected from available 5v I/Os, listed below)
+GPIn:
+ PB2: MTR
+ PB3: SEL0
+ PB4: SEL1
+ PB5: DIR
+ PB6: STEP
+ PB7: DKWE
+ PB8: SIDE
+GPOut:
+ PA11: CHNG
+ PA12: INDEX
+ PA13: TRK0
+ PA14: WRPROT
+ PA15: RDY
+Timer1/1:
+ PA8: DKRD
+Timer4/4:
+ PB9: DKWD
+
+Available 5v I/Os on PA/PB, with Timer Aliases
+----------------------------------------------
+ PA8: T1/1
+ PA11: T1/4
+ PA12:
+ PA13:
+ PA14:
+ PA15:
+ PB2:
+ PB3: T2/2 (remap)
+ PB4: T3/1 (remap)
+ PB6: T4/1
+ PB7: T4/2
+ PB8: T4/3
+ PB9: T4/4
+ PB10: T2/3 (remap) [nb. used in T2/3 mode by LEDs on Gotek]
+ PB11: T2/4 (remap) [nb. used in T2/4 mode by LEDs on Gotek]
+ PB12:
+
+Floppy drive 34-pin Shugart(-ish) interface. For reference:
+-----------------------------------------------------------
+  2: <- DENSITY(PC) / RDY(?) / CHNG(Amiga)
+  3: oo (key)
+  4: oo
+  6: oo
+  8: <- INDEX
+ 10: -> SEL0
+ 12: -> SEL1
+ 14: -> SEL2
+ 16: -> MTR
+ 18: -> DIR
+ 20: -> STEP
+ 22: -> DKWD
+ 24: -> DKWE
+ 26: <- TRK0
+ 28: <- WRPROT
+ 30: <- DKRD
+ 32: -> SIDE
+ 34: <- CHNG(PC) / RDY(Amiga)
+All odd pins are ground.
