@@ -203,17 +203,14 @@ void ili9341_init(void)
     rcc->apb2enr |= RCC_APB2ENR_SPI1EN;
 
     /* Configure general-purpose I/Os. */
-    gpio_configure_pin(gpioa, PIN_DCRS, GPO_pushpull);
-    gpio_configure_pin(gpioa, PIN_RESET, GPO_pushpull);
-    gpio_configure_pin(gpioa, PIN_CS, GPO_pushpull);
-    set_pin(PIN_DCRS, 1);
-    set_pin(PIN_RESET, 1); /* de-assert RESET */
-    set_pin(PIN_CS, 1);    /* deselect */
+    gpio_configure_pin(gpioa, PIN_DCRS, GPO_pushpull(_50MHz,HIGH));
+    gpio_configure_pin(gpioa, PIN_RESET, GPO_pushpull(_2MHz,HIGH));
+    gpio_configure_pin(gpioa, PIN_CS, GPO_pushpull(_50MHz,HIGH));
 
     /* Configure SPI I/Os. */
-    gpio_configure_pin(gpioa, 5, AFO_pushpull); /* CK */
-    gpio_configure_pin(gpioa, 6, GPI_pull_up);  /* MISO */
-    gpio_configure_pin(gpioa, 7, AFO_pushpull); /* MOSI */
+    gpio_configure_pin(gpioa, 5, AFO_pushpull(_50MHz)); /* CK */
+    gpio_configure_pin(gpioa, 6, GPI_pull_up);          /* MISO */
+    gpio_configure_pin(gpioa, 7, AFO_pushpull(_50MHz)); /* MOSI */
 
     /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge.
      * Although ILI9341 is specified to run at only 10MHz for write cycles

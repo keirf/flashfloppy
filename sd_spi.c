@@ -26,9 +26,6 @@ static uint8_t cardtype;
 #define spi spi2
 #define PIN_CS 4
 
-#define cs_assert()   gpio_write_pin(gpioa, PIN_CS, 0);
-#define cs_deassert() gpio_write_pin(gpioa, PIN_CS, 1);
-
 static uint8_t spi_xchg_byte(uint8_t out)
 {
     spi->dr = out;
@@ -42,12 +39,12 @@ static uint8_t spi_xchg_byte(uint8_t out)
 
 static void spi_acquire(void)
 {
-    cs_assert();
+    gpio_write_pin(gpioa, PIN_CS, 0);
 }
 
 static void spi_release(void)
 {
-    cs_deassert();
+    gpio_write_pin(gpioa, PIN_CS, 1);
     /* Need a dummy transfer as SD deselect is sync'ed to the clock. */
     spi_recv();
 }
@@ -143,12 +140,10 @@ DSTATUS disk_initialize(BYTE pdrv)
     rcc->apb1enr |= RCC_APB1ENR_SPI2EN;
 
     /* Enable external I/O pins. */
-    gpio_configure_pin(gpioa, PIN_CS, GPO_pushpull); /* SS */
-    gpio_configure_pin(gpiob, 13, AFO_pushpull);     /* CK */
-    gpio_configure_pin(gpiob, 14, GPI_pull_up);      /* MISO */
-    gpio_configure_pin(gpiob, 15, AFO_pushpull);     /* MOSI */
-
-    cs_deassert();
+    gpio_configure_pin(gpioa, PIN_CS, GPO_pushpull(_50MHz,HIGH));
+    gpio_configure_pin(gpiob, 13, AFO_pushpull(_50MHz)); /* CK */
+    gpio_configure_pin(gpiob, 14, GPI_pull_up);          /* MISO */
+    gpio_configure_pin(gpiob, 15, AFO_pushpull(_50MHz)); /* MOSI */
 
     /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     spi->cr2 = 0;
@@ -240,10 +235,10 @@ out:
         spi->cr1 = 0;
         rcc->apb1enr &= ~RCC_APB1ENR_SPI2EN;
         /* Configure external I/O pins as pulled-up inputs. */
-        gpio_configure_pin(gpioa, PIN_CS, GPI_pull_up); /* SS */
-        gpio_configure_pin(gpiob, 13, GPI_pull_up);     /* CK */
-        gpio_configure_pin(gpiob, 14, GPI_pull_up);     /* MISO */
-        gpio_configure_pin(gpiob, 15, GPI_pull_up);     /* MOSI */
+        gpio_configure_pin(gpioa, PIN_CS, GPI_pull_up);
+        gpio_configure_pin(gpiob, 13, GPI_pull_up); /* CK */
+        gpio_configure_pin(gpiob, 14, GPI_pull_up); /* MISO */
+        gpio_configure_pin(gpiob, 15, GPI_pull_up); /* MOSI */
     }
 
     printk("SD Card configured\n");

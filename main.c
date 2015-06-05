@@ -52,7 +52,7 @@ int main(void)
         }
     }
 
-    gpio_configure_pin(gpioa, 0, GPO_opendrain);
+    gpio_configure_pin(gpioa, 0, GPO_opendrain(_2MHz,LOW));
 
     i = usart1->dr; /* clear UART_SR_RXNE */    
     for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {

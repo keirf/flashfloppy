@@ -148,8 +148,8 @@ void leds_write_hex(unsigned int x)
 void leds_init(void)
 {
     /* Prepare the bus: timer 2 outputting on PB{10,11}. */
-    gpio_configure_pin(gpiob, DAT_PIN, AFO_pushpull);
-    gpio_configure_pin(gpiob, CLK_PIN, AFO_pushpull);
+    gpio_configure_pin(gpiob, DAT_PIN, AFO_pushpull(_2MHz));
+    gpio_configure_pin(gpiob, CLK_PIN, AFO_pushpull(_2MHz));
     afio->mapr |= AFIO_MAPR_TIM2_REMAP_PARTIAL_2;
 
     /* Turn on the clocks. */
