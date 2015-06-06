@@ -14,6 +14,14 @@ void spi_quiesce(SPI spi);
 void spi_16bit_frame(SPI spi);
 void spi_8bit_frame(SPI spi);
 
+void spi_xmit16(SPI spi, uint16_t out);
+uint16_t spi_xchg16(SPI spi, uint16_t out);
+#define spi_recv16(spi) spi_xchg16(spi, 0xffffu)
+
+#define spi_xmit8(spi, x) spi_xmit16(spi, (uint8_t)(x))
+#define spi_xchg8(spi, x) (uint8_t)spi_xchg16(spi, (uint8_t)(x))
+#define spi_recv8(spi) spi_xchg8(spi, 0xffu)
+
 /*
  * Local variables:
  * mode: C

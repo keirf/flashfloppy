@@ -87,13 +87,6 @@
 
 extern const char font8x8[128][8];
 
-static void spiwrite(uint16_t c)
-{
-    while (!(spi->sr & SPI_SR_TXE))
-        cpu_relax();
-    spi->dr = c;
-}
-
 static void spi_acquire(void)
 {
     set_pin(PIN_CS, 0);
@@ -109,7 +102,7 @@ static void writecommand(uint8_t c)
 {
     set_pin(PIN_DCRS, 0);
     spi_acquire();
-    spiwrite(c);
+    spi_xmit8(spi, c);
     spi_release();
 }
 
@@ -117,7 +110,7 @@ static void writedata(uint8_t c)
 {
     set_pin(PIN_DCRS, 1);
     spi_acquire();
-    spiwrite(c);
+    spi_xmit8(spi, c);
     spi_release();
 }
 
@@ -150,7 +143,7 @@ static void fill_rect(
     spi_acquire();
     spi_16bit_frame(spi);
     for (i = 0; i < w*h; i++)
-        spiwrite(c);
+        spi_xmit16(spi, c);
     spi_8bit_frame(spi);
     spi_release();
 }
@@ -169,9 +162,9 @@ static void draw_char(uint16_t x, uint16_t y, unsigned char c)
         k = font8x8[c][j/2];
         for (i = 0; i < 8; i++) {
             if (k & 1) {
-                spiwrite(0xffff);
+                spi_xmit16(spi, 0xffff);
             } else {
-                spiwrite(BG_COL);
+                spi_xmit16(spi, BG_COL);
             }
             k >>= 1;
         }

@@ -28,6 +28,23 @@ void spi_8bit_frame(SPI spi)
     spi->cr1 &= ~SPI_CR1_DFF;
 }
 
+void spi_xmit16(SPI spi, uint16_t out)
+{
+    while (!(spi->sr & SPI_SR_TXE))
+        cpu_relax();
+    spi->dr = out;
+}
+
+uint16_t spi_xchg16(SPI spi, uint16_t out)
+{
+    while (!(spi->sr & SPI_SR_TXE))
+        cpu_relax();
+    spi->dr = out;
+    while (!(spi->sr & SPI_SR_RXNE))
+        continue;
+    return spi->dr;
+}
+
 /*
  * Local variables:
  * mode: C

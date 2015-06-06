@@ -37,19 +37,6 @@ static uint8_t cardtype;
 #define spi spi2
 #define PIN_CS 4
 
-static uint16_t spi_xchg(uint16_t out)
-{
-    spi->dr = out;
-    while (!(spi->sr & SPI_SR_RXNE))
-        continue;
-    return spi->dr;
-}
-
-#define spi_recv16() spi_xchg(0xffff)
-#define spi_xmit16(x) spi_xchg((uint16_t)(x))
-#define spi_recv8() spi_xchg(0xff)
-#define spi_xmit8(x) spi_xchg((uint8_t)(x))
-
 static void spi_acquire(void)
 {
     gpio_write_pin(gpioa, PIN_CS, 0);
@@ -60,7 +47,7 @@ static void spi_release(void)
     spi_quiesce(spi);
     gpio_write_pin(gpioa, PIN_CS, 1);
     /* Need a dummy transfer as SD deselect is sync'ed to the clock. */
-    spi_recv8();
+    (void)spi_recv8(spi);
 }
 
 static uint8_t wait_ready(void)
@@ -70,7 +57,7 @@ static uint8_t wait_ready(void)
 
     /* Wait 500ms for card to be ready. */
     do {
-        res = spi_recv8();
+        res = spi_recv8(spi);
         duration = (start - stk->val) & STK_MASK;
     } while ((res != 0xff) && (duration < stk_ms(500)));
 
@@ -93,18 +80,21 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg)
     if ((res = wait_ready()) != 0xff)
         return 0xff;
 
-    spi_xmit8(cmd);
-    spi_xmit8(arg>>24);
-    spi_xmit8(arg>>16);
-    spi_xmit8(arg>> 8);
-    spi_xmit8(arg>> 0);
+    spi_xmit8(spi, cmd);
+    spi_xmit8(spi, arg>>24);
+    spi_xmit8(spi, arg>>16);
+    spi_xmit8(spi, arg>> 8);
+    spi_xmit8(spi, arg>> 0);
     /* Send a dummy CRC unless command requires it to be valid. 
      * Bit 0 is Stop bit (always set). */
-    spi_xmit8((cmd == CMD(0)) ? 0x95 : (cmd == CMD(8)) ? 0x87 : 0x01);
+    spi_xmit8(spi, (cmd == CMD(0)) ? 0x95 : (cmd == CMD(8)) ? 0x87 : 0x01);
+
+    /* Resync with receive stream. (We ignored rx bytes, above). */
+    spi_quiesce(spi);
 
     /* Wait up to 80 clocks for a valid response (MSB clear). */
     for (i = 0; i < 10; i++)
-        if (!((res = spi_recv8()) & 0x80))
+        if (!((res = spi_recv8(spi)) & 0x80))
             break;
 
     return res;
@@ -117,7 +107,7 @@ static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
 
     /* Wait 100ms for data to be ready. */
     do {
-        token = spi_recv8();
+        token = spi_recv8(spi);
         duration = (start - stk->val) & STK_MASK;
     } while ((token == 0xff) && (duration < stk_ms(100)));
     if (token != 0xfe) /* valid data token? */
@@ -127,14 +117,14 @@ static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
 
     /* Grab the data. */
     while (bytes) {
-        uint16_t w = spi_recv16();
+        uint16_t w = spi_recv16(spi);
         *buff++ = w >> 8;
         *buff++ = w;
         bytes -= 2;
     }
 
     /* Discard the CRC. */
-    spi_recv16();
+    (void)spi_recv16(spi);
 
     spi_8bit_frame(spi);
 
@@ -175,7 +165,7 @@ DSTATUS disk_initialize(BYTE pdrv)
 
     /* Wait 80 cycles for card to ready itself. */
     for (i = 0; i < 10; i++)
-        spi_recv8();
+        (void)spi_recv8(spi);
 
     /* Reset, enter idle state (SPI mode). */
     if (send_cmd(CMD(0), 0) != 1)
@@ -188,7 +178,7 @@ DSTATUS disk_initialize(BYTE pdrv)
         /* Command was understood. We have a v2.00-compliant card.
          * Get the 4-byte response and validate.  */
         for (i = rcv = 0; i < 4; i++)
-            rcv = (rcv << 8) | spi_recv8();
+            rcv = (rcv << 8) | spi_recv8(spi);
         if ((rcv & 0x1ff) != 0x1aa)
             goto out;
 
@@ -203,9 +193,9 @@ DSTATUS disk_initialize(BYTE pdrv)
         /* Read OCR register, check for SDSD/SDHC/SDXC configuration. */
         if (send_cmd(CMD(58), 0) != 0)
             goto out;
-        rcv = spi_recv8(); /* Only care about first byte (bits 31:24) */
+        rcv = spi_recv8(spi); /* Only care about first byte (bits 31:24) */
         for (i = 0; i < 3; i++)
-            spi_recv8();
+            (void)spi_recv8(spi);
         if (!(rcv & 0x80)) /* Bit 31: fail if card is still busy */
             goto out;
         cardtype = (rcv & 0x40) ? CT_SDHC : CT_SD2; /* Bit 30: SDHC? */
