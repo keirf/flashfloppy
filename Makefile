@@ -5,6 +5,7 @@ OBJS += ili9341.o
 OBJS += font8x8.o
 OBJS += main.o
 OBJS += sd_spi.o
+OBJS += spi.o
 OBJS += string.o
 OBJS += stm32f10x.o
 #OBJS += usb_hcd.o

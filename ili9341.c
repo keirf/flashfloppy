@@ -101,8 +101,7 @@ static void spi_acquire(void)
 
 static void spi_release(void)
 {
-    while ((spi->sr & (SPI_SR_TXE|SPI_SR_BSY)) != SPI_SR_TXE)
-        cpu_relax();
+    spi_quiesce(spi);
     set_pin(PIN_CS, 1);
 }
 
@@ -147,13 +146,13 @@ static void fill_rect(
 {
     unsigned int i;
     set_addr_window(x, y, x+w-1, y+h-1);
-    spi->cr1 |= SPI_CR1_DFF;
     set_pin(PIN_DCRS, 1);
     spi_acquire();
+    spi_16bit_frame(spi);
     for (i = 0; i < w*h; i++)
         spiwrite(c);
+    spi_8bit_frame(spi);
     spi_release();
-    spi->cr1 &= ~SPI_CR1_DFF;
 }
 
 static void draw_char(uint16_t x, uint16_t y, unsigned char c)
@@ -162,9 +161,9 @@ static void draw_char(uint16_t x, uint16_t y, unsigned char c)
 
     set_addr_window(x, y, x+7, y+15);
 
-    spi->cr1 |= SPI_CR1_DFF;
     set_pin(PIN_DCRS, 1);
     spi_acquire();
+    spi_16bit_frame(spi);
 
     for (j = 0; j < 16; j++) {
         k = font8x8[c][j/2];
@@ -178,8 +177,8 @@ static void draw_char(uint16_t x, uint16_t y, unsigned char c)
         }
     }
 
+    spi_8bit_frame(spi);
     spi_release();
-    spi->cr1 &= ~SPI_CR1_DFF;
 }
 
 static void draw_string(uint16_t x, uint16_t y, char *str)

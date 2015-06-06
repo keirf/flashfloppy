@@ -57,8 +57,7 @@ static void spi_acquire(void)
 
 static void spi_release(void)
 {
-    while ((spi->sr & (SPI_SR_TXE|SPI_SR_BSY)) != SPI_SR_TXE)
-        cpu_relax();
+    spi_quiesce(spi);
     gpio_write_pin(gpioa, PIN_CS, 1);
     /* Need a dummy transfer as SD deselect is sync'ed to the clock. */
     spi_recv8();
@@ -124,9 +123,7 @@ static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
     if (token != 0xfe) /* valid data token? */
         return 0;
 
-    while ((spi->sr & (SPI_SR_TXE|SPI_SR_BSY)) != SPI_SR_TXE)
-        cpu_relax();
-    spi->cr1 |= SPI_CR1_DFF;
+    spi_16bit_frame(spi);
 
     /* Grab the data. */
     while (bytes) {
@@ -139,9 +136,7 @@ static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
     /* Discard the CRC. */
     spi_recv16();
 
-    while ((spi->sr & (SPI_SR_TXE|SPI_SR_BSY)) != SPI_SR_TXE)
-        cpu_relax();
-    spi->cr1 &= ~SPI_CR1_DFF;
+    spi_8bit_frame(spi);
 
     return 1;
 }

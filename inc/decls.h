@@ -19,6 +19,8 @@
 #include "intrinsics.h"
 #include "util.h"
 
+#include "spi.h"
+
 #include "usb_protocol.h"
 #include "usb.h"
 
