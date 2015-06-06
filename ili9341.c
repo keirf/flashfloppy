@@ -18,6 +18,20 @@
  * """
  */
 
+#if 1
+/* Although ILI9341 is specified to run at only 10MHz for write cycles (and 
+ * even less than that for read cycles, which we don't use), in practice parts 
+ * seem to clock much faster and this success is echoed by other users. */
+#define SPI_BR_DIV SPI_CR1_BR_DIV2 /* 36MHz(!) */
+#define SPI_PIN_SPEED _50MHz
+#else
+/* 9MHz will do for now. Worried about signal quality, power requirements and
+ * bandwidth requirements. */
+#define SPI_BR_DIV SPI_CR1_BR_DIV8 /* 9MHz */
+#define SPI_PIN_SPEED _10MHz
+#endif
+
+
 #define PIN_DCRS  1
 #define PIN_RESET 2
 #define PIN_CS    3
@@ -203,25 +217,21 @@ void ili9341_init(void)
     rcc->apb2enr |= RCC_APB2ENR_SPI1EN;
 
     /* Configure general-purpose I/Os. */
-    gpio_configure_pin(gpioa, PIN_DCRS, GPO_pushpull(_50MHz,HIGH));
-    gpio_configure_pin(gpioa, PIN_RESET, GPO_pushpull(_2MHz,HIGH));
-    gpio_configure_pin(gpioa, PIN_CS, GPO_pushpull(_50MHz,HIGH));
+    gpio_configure_pin(gpioa, PIN_DCRS, GPO_pushpull(SPI_PIN_SPEED, HIGH));
+    gpio_configure_pin(gpioa, PIN_RESET, GPO_pushpull(_2MHz, HIGH));
+    gpio_configure_pin(gpioa, PIN_CS, GPO_pushpull(SPI_PIN_SPEED, HIGH));
 
     /* Configure SPI I/Os. */
-    gpio_configure_pin(gpioa, 5, AFO_pushpull(_50MHz)); /* CK */
-    gpio_configure_pin(gpioa, 6, GPI_pull_up);          /* MISO */
-    gpio_configure_pin(gpioa, 7, AFO_pushpull(_50MHz)); /* MOSI */
+    gpio_configure_pin(gpioa, 5, AFO_pushpull(SPI_PIN_SPEED)); /* CK */
+    gpio_configure_pin(gpioa, 6, GPI_pull_up); /* MISO */
+    gpio_configure_pin(gpioa, 7, AFO_pushpull(SPI_PIN_SPEED)); /* MOSI */
 
-    /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge.
-     * Although ILI9341 is specified to run at only 10MHz for write cycles
-     * (and even less than that for read cycles, which we don't use), in
-     * practice parts seem to clock much faster and this success is echoed 
-     * by other users. */
+    /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     spi->cr2 = 0;
     spi->cr1 = (SPI_CR1_MSTR | /* master */
                 SPI_CR1_SSM | SPI_CR1_SSI | /* software NSS */
                 SPI_CR1_SPE |
-                SPI_CR1_BR_DIV2); /* 72/2 = 36MHz(!) */
+                SPI_BR_DIV);
 
     /* Drain SPI I/O. */
     while (!(spi->sr & SPI_SR_TXE))

@@ -33,10 +33,10 @@ int main(void)
     /*usb_init();*/
 
     delay_ms(500); /* XXX */
+    f_mount(&fatfs, "", 1);
     printk("Pre\n");
     ili9341_init();
     printk("Post\n");
-    f_mount(&fatfs, "", 0);
     fr = f_open(&file, "small", FA_READ);
     printk("File open %d\n", fr);
     if (fr == FR_OK) {

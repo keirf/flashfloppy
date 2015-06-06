@@ -11,6 +11,17 @@
 
 #include "fatfs/diskio.h"
 
+#if 0
+/* We can now switch to Default Speed (25MHz). Closest we can get is 36Mhz/2 = 
+ * 18MHz. */
+#define DEFAULT_SPEED_DIV SPI_CR1_BR_DIV2 /* 18MHz */
+#define SPI_PIN_SPEED _50MHz
+#else
+/* Best speed I can reliably achieve right now is 9Mbit/s. */
+#define DEFAULT_SPEED_DIV SPI_CR1_BR_DIV4 /* 9MHz */
+#define SPI_PIN_SPEED _10MHz
+#endif
+
 #define CMD(n)  (0x40 | (n))
 #define ACMD(n) (0xc0 | (n))
 
@@ -140,10 +151,10 @@ DSTATUS disk_initialize(BYTE pdrv)
     rcc->apb1enr |= RCC_APB1ENR_SPI2EN;
 
     /* Enable external I/O pins. */
-    gpio_configure_pin(gpioa, PIN_CS, GPO_pushpull(_50MHz,HIGH));
-    gpio_configure_pin(gpiob, 13, AFO_pushpull(_50MHz)); /* CK */
-    gpio_configure_pin(gpiob, 14, GPI_pull_up);          /* MISO */
-    gpio_configure_pin(gpiob, 15, AFO_pushpull(_50MHz)); /* MOSI */
+    gpio_configure_pin(gpioa, PIN_CS, GPO_pushpull(SPI_PIN_SPEED, HIGH));
+    gpio_configure_pin(gpiob, 13, AFO_pushpull(SPI_PIN_SPEED)); /* CK */
+    gpio_configure_pin(gpiob, 14, GPI_pull_up); /* MISO */
+    gpio_configure_pin(gpiob, 15, AFO_pushpull(SPI_PIN_SPEED)); /* MOSI */
 
     /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     spi->cr2 = 0;
@@ -227,9 +238,7 @@ out:
     spi_release();
 
     if (!(status & STA_NOINIT)) {
-        /* We can now switch to Default Speed (25MHz). Closest we can get is 
-         * 36Mhz/2 = 18MHz. */
-        spi->cr1 = cr1 | SPI_CR1_BR_DIV2;
+        spi->cr1 = cr1 | DEFAULT_SPEED_DIV;
     } else {
         /* Disable SPI. */
         spi->cr1 = 0;
