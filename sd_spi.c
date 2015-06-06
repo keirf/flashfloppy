@@ -102,6 +102,7 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg)
 
 static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
 {
+    bool_t ok;
     uint8_t token;
     uint32_t start = stk->val, duration;
 
@@ -115,6 +116,9 @@ static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
 
     spi_16bit_frame(spi);
 
+    spi->crcpr = 0x1021; /* CRC-CCITT */
+    spi->cr1 |= SPI_CR1_CRCEN;
+
     /* Grab the data. */
     while (bytes) {
         uint16_t w = spi_recv16(spi);
@@ -123,12 +127,15 @@ static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
         bytes -= 2;
     }
 
-    /* Discard the CRC. */
+    /* Retrieve and check the CRC. */
     (void)spi_recv16(spi);
+    spi_quiesce(spi);
+    ok = !spi->rxcrcr;
+    spi->cr1 &= ~SPI_CR1_CRCEN;
 
     spi_8bit_frame(spi);
 
-    return 1;
+    return ok;
 }
 
 DSTATUS disk_initialize(BYTE pdrv)
@@ -256,7 +263,9 @@ DSTATUS disk_status (BYTE pdrv)
 
 DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
 {
-    bool_t multi_sector = (count > 1);
+    uint8_t retry = 0;
+    UINT todo;
+    BYTE *p;
 
     if (pdrv || !count)
         return RES_PARERR;
@@ -266,20 +275,26 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
     if (!(cardtype & CT_BLOCK))
         sector <<= 9;
 
-    /* READ_{MULTIPLE,SINGLE}_BLOCK */
-    if (send_cmd(CMD(multi_sector ? 18 : 17), sector) != 0)
-        return RES_ERROR;
-    while (count && datablock_recv(buff, 512)) {
-        count--;
-        buff += 512;
-    }
-    /* STOP_TRANSMISSION */
-    if (multi_sector)
-        send_cmd(CMD(12), 0);
+    do {
+        todo = count;
+        p = buff;
 
-    spi_release();
+        /* READ_{MULTIPLE,SINGLE}_BLOCK */
+        if (send_cmd(CMD((count > 1) ? 18 : 17), sector) != 0)
+            continue;
 
-    return count ? RES_ERROR : RES_OK;
+        while (datablock_recv(p, 512) && --todo)
+            p += 512;
+
+        /* STOP_TRANSMISSION */
+        if (count > 1)
+            send_cmd(CMD(12), 0);
+
+        spi_release();
+
+    } while (todo && (++retry < 3));
+
+    return todo ? RES_ERROR : RES_OK;
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
