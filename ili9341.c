@@ -87,28 +87,39 @@
 
 extern const char font8x8[128][8];
 
-static void spiwrite(uint8_t c)
+static void spiwrite(uint16_t c)
 {
+    while (!(spi->sr & SPI_SR_TXE))
+        cpu_relax();
     spi->dr = c;
-    while (!(spi->sr & SPI_SR_RXNE))
-        continue;
-    (void)spi->dr;
+}
+
+static void spi_acquire(void)
+{
+    set_pin(PIN_CS, 0);
+}
+
+static void spi_release(void)
+{
+    while ((spi->sr & (SPI_SR_TXE|SPI_SR_BSY)) != SPI_SR_TXE)
+        cpu_relax();
+    set_pin(PIN_CS, 1);
 }
 
 static void writecommand(uint8_t c)
 {
     set_pin(PIN_DCRS, 0);
-    set_pin(PIN_CS, 0);
+    spi_acquire();
     spiwrite(c);
-    set_pin(PIN_CS, 1);
+    spi_release();
 }
 
 static void writedata(uint8_t c)
 {
     set_pin(PIN_DCRS, 1);
-    set_pin(PIN_CS, 0);
+    spi_acquire();
     spiwrite(c);
-    set_pin(PIN_CS, 1);
+    spi_release();
 }
 
 static void set_addr_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
@@ -136,13 +147,13 @@ static void fill_rect(
 {
     unsigned int i;
     set_addr_window(x, y, x+w-1, y+h-1);
+    spi->cr1 |= SPI_CR1_DFF;
     set_pin(PIN_DCRS, 1);
-    set_pin(PIN_CS, 0);
-    for (i = 0; i < w*h; i++) {
-        spiwrite(c>>8);
-        spiwrite(c>>0);
-    }
-    set_pin(PIN_CS, 1);
+    spi_acquire();
+    for (i = 0; i < w*h; i++)
+        spiwrite(c);
+    spi_release();
+    spi->cr1 &= ~SPI_CR1_DFF;
 }
 
 static void draw_char(uint16_t x, uint16_t y, unsigned char c)
@@ -151,24 +162,24 @@ static void draw_char(uint16_t x, uint16_t y, unsigned char c)
 
     set_addr_window(x, y, x+7, y+15);
 
+    spi->cr1 |= SPI_CR1_DFF;
     set_pin(PIN_DCRS, 1);
-    set_pin(PIN_CS, 0);
+    spi_acquire();
 
     for (j = 0; j < 16; j++) {
         k = font8x8[c][j/2];
         for (i = 0; i < 8; i++) {
             if (k & 1) {
-                spiwrite(0xff);
-                spiwrite(0xff);
+                spiwrite(0xffff);
             } else {
-                spiwrite(BG_COL>>8);
-                spiwrite(BG_COL>>0);
+                spiwrite(BG_COL);
             }
             k >>= 1;
         }
     }
 
-    set_pin(PIN_CS, 1);
+    spi_release();
+    spi->cr1 &= ~SPI_CR1_DFF;
 }
 
 static void draw_string(uint16_t x, uint16_t y, char *str)
