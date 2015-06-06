@@ -273,3 +273,13 @@ void ili9341_init(void)
     draw_string(0, 100, "New Zealand Story.ADF\x09\x89");
     fill_rect(20, 20, 20, 20, 0xf800);
 }
+
+/*
+ * Local variables:
+ * mode: C
+ * c-file-style: "Linux"
+ * c-basic-offset: 4
+ * tab-width: 4
+ * indent-tabs-mode: nil
+ * End:
+ */

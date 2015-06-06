@@ -330,3 +330,13 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)
 
     return res;
 }
+
+/*
+ * Local variables:
+ * mode: C
+ * c-file-style: "Linux"
+ * c-basic-offset: 4
+ * tab-width: 4
+ * indent-tabs-mode: nil
+ * End:
+ */

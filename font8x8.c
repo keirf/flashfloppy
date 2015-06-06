@@ -286,3 +286,13 @@ const char font8x8[256][8] = {
     { 0x00, 0x00, 0x06, 0x3E, 0x66, 0x3E, 0x06, 0x00},   /* U+00FE (thorn) */
     { 0x00, 0x33, 0x00, 0x33, 0x33, 0x3E, 0x30, 0x1F}    /* U+00FF (y umlaut) */
 };
+
+/*
+ * Local variables:
+ * mode: C
+ * c-file-style: "Linux"
+ * c-basic-offset: 4
+ * tab-width: 4
+ * indent-tabs-mode: nil
+ * End:
+ */
