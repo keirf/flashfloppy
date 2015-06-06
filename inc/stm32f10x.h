@@ -50,37 +50,52 @@ void gpio_configure_pin(
     ((gpio)->bsrr = ((level) ? 0x1u : 0x10000u) << (pin))
 #define gpio_read_pin(gpio, pin) (((gpio)->idr >> (pin)) & 1)
 
+/* C pointer types */
+#define STK volatile struct stk * const
+#define SCB volatile struct scb * const
+#define NVIC volatile struct nvic * const
+#define FLASH volatile struct flash * const
+#define PWR volatile struct pwr * const
+#define RCC volatile struct rcc * const
+#define GPIO volatile struct gpio * const
+#define AFIO volatile struct afio * const
+#define DMA volatile struct dma * const
+#define TIM volatile struct tim * const
+#define SPI volatile struct spi * const
+#define USART volatile struct usart * const
+#define USB_OTG volatile struct usb_otg * const
+
 /* C-accessible registers. */
-static volatile struct stk * const stk = (struct stk *)STK_BASE;
-static volatile struct scb * const scb = (struct scb *)SCB_BASE;
-static volatile struct nvic * const nvic = (struct nvic *)NVIC_BASE;
-static volatile struct flash * const flash = (struct flash *)FLASH_BASE;
-static volatile struct pwr * const pwr = (struct pwr *)PWR_BASE;
-static volatile struct rcc * const rcc = (struct rcc *)RCC_BASE;
-static volatile struct gpio * const gpioa = (struct gpio *)GPIOA_BASE;
-static volatile struct gpio * const gpiob = (struct gpio *)GPIOB_BASE;
-static volatile struct gpio * const gpioc = (struct gpio *)GPIOC_BASE;
-static volatile struct gpio * const gpiod = (struct gpio *)GPIOD_BASE;
-static volatile struct gpio * const gpioe = (struct gpio *)GPIOE_BASE;
-static volatile struct gpio * const gpiof = (struct gpio *)GPIOF_BASE;
-static volatile struct gpio * const gpiog = (struct gpio *)GPIOG_BASE;
-static volatile struct afio * const afio = (struct afio *)AFIO_BASE;
-static volatile struct dma * const dma1 = (struct dma *)DMA1_BASE;
-static volatile struct dma * const dma2 = (struct dma *)DMA2_BASE;
-static volatile struct tim * const tim1 = (struct tim *)TIM1_BASE;
-static volatile struct tim * const tim2 = (struct tim *)TIM2_BASE;
-static volatile struct tim * const tim3 = (struct tim *)TIM3_BASE;
-static volatile struct tim * const tim4 = (struct tim *)TIM4_BASE;
-static volatile struct tim * const tim5 = (struct tim *)TIM5_BASE;
-static volatile struct tim * const tim6 = (struct tim *)TIM6_BASE;
-static volatile struct tim * const tim7 = (struct tim *)TIM7_BASE;
-static volatile struct spi * const spi1 = (struct spi *)SPI1_BASE;
-static volatile struct spi * const spi2 = (struct spi *)SPI2_BASE;
-static volatile struct spi * const spi3 = (struct spi *)SPI3_BASE;
-static volatile struct usart * const usart1 = (struct usart *)USART1_BASE;
-static volatile struct usart * const usart2 = (struct usart *)USART2_BASE;
-static volatile struct usart * const usart3 = (struct usart *)USART3_BASE;
-static volatile struct usb_otg *const usb_otg = (struct usb_otg *)USB_OTG_BASE;
+static STK stk = (struct stk *)STK_BASE;
+static SCB scb = (struct scb *)SCB_BASE;
+static NVIC nvic = (struct nvic *)NVIC_BASE;
+static FLASH flash = (struct flash *)FLASH_BASE;
+static PWR pwr = (struct pwr *)PWR_BASE;
+static RCC rcc = (struct rcc *)RCC_BASE;
+static GPIO gpioa = (struct gpio *)GPIOA_BASE;
+static GPIO gpiob = (struct gpio *)GPIOB_BASE;
+static GPIO gpioc = (struct gpio *)GPIOC_BASE;
+static GPIO gpiod = (struct gpio *)GPIOD_BASE;
+static GPIO gpioe = (struct gpio *)GPIOE_BASE;
+static GPIO gpiof = (struct gpio *)GPIOF_BASE;
+static GPIO gpiog = (struct gpio *)GPIOG_BASE;
+static AFIO afio = (struct afio *)AFIO_BASE;
+static DMA dma1 = (struct dma *)DMA1_BASE;
+static DMA dma2 = (struct dma *)DMA2_BASE;
+static TIM tim1 = (struct tim *)TIM1_BASE;
+static TIM tim2 = (struct tim *)TIM2_BASE;
+static TIM tim3 = (struct tim *)TIM3_BASE;
+static TIM tim4 = (struct tim *)TIM4_BASE;
+static TIM tim5 = (struct tim *)TIM5_BASE;
+static TIM tim6 = (struct tim *)TIM6_BASE;
+static TIM tim7 = (struct tim *)TIM7_BASE;
+static SPI spi1 = (struct spi *)SPI1_BASE;
+static SPI spi2 = (struct spi *)SPI2_BASE;
+static SPI spi3 = (struct spi *)SPI3_BASE;
+static USART usart1 = (struct usart *)USART1_BASE;
+static USART usart2 = (struct usart *)USART2_BASE;
+static USART usart3 = (struct usart *)USART3_BASE;
+static USB_OTG usb_otg = (struct usb_otg *)USB_OTG_BASE;
 
 /* NVIC table */
 extern uint32_t vector_table[];
