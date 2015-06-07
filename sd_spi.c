@@ -11,7 +11,7 @@
 
 #include "fatfs/diskio.h"
 
-#if 0
+#if 1
 /* We can now switch to Default Speed (25MHz). Closest we can get is 36Mhz/2 = 
  * 18MHz. */
 #define DEFAULT_SPEED_DIV SPI_CR1_BR_DIV2 /* 18MHz */
@@ -48,6 +48,7 @@ static void spi_release(void)
     gpio_write_pin(gpioa, PIN_CS, 1);
     /* Need a dummy transfer as SD deselect is sync'ed to the clock. */
     (void)spi_recv8(spi);
+    spi_quiesce(spi);
 }
 
 static uint8_t wait_ready(void)
@@ -219,9 +220,7 @@ DSTATUS disk_initialize(BYTE pdrv)
     spi->cr1 = cr1 | SPI_CR1_BR_DIV128; /* ~281kHz (<400kHz) */
 
     /* Drain SPI I/O. */
-    while (!(spi->sr & SPI_SR_TXE))
-        cpu_relax();
-    (void)spi->dr;
+    spi_quiesce(spi);
 
     /* Wait 80 cycles for card to ready itself. */
     for (i = 0; i < 10; i++)
@@ -297,6 +296,7 @@ out:
     spi_release();
 
     if (!(status & STA_NOINIT)) {
+        delay_us(10); /* XXX small delay here stops SPI getting stuck?? */
         spi->cr1 = cr1 | DEFAULT_SPEED_DIV;
     } else {
         /* Disable SPI. */

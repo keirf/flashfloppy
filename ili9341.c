@@ -237,9 +237,7 @@ void ili9341_init(void)
                 SPI_BR_DIV);
 
     /* Drain SPI I/O. */
-    while (!(spi->sr & SPI_SR_TXE))
-        cpu_relax();
-    (void)spi->dr;
+    spi_quiesce(spi);
 
     /* Reset. */
     delay_ms(5);
