@@ -1,0 +1,10 @@
+Floppy timings:
+---------------
+Citizen Z1DE-58A (a generic HD PC drive):
+ Read pulse width: low for ~400ns
+ INDEX pulse width: low for 2ms
+ STEP: latched on trailing (rising) edge
+  - RDDAT immediately deasserted
+  - TRK0 immediately deasserted
+  - TRK0 asserted after 3ms
+  - RDDAT asserted after 18ms

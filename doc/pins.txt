@@ -7,7 +7,7 @@ GPOut:
  PA1: DC/RS (ILI9341 Data/Command Select)
  PA2: RESET (ILI9341 Reset)
  PA3: TFTCS (ILI9341 CS)
-SPI1:
+SPI1: (Rx:DMA1/2, Tx:DMA1/3)
  PA5: CK
  PA6: MISO
  PA7: MOSI
@@ -16,14 +16,14 @@ SD CARD:
 --------
 GPOut:
  PA4: CS
-SPI2:
+SPI2: (Rx:DMA1/4, Tx:DMA1/5)
  PB13: CK
  PB14: MISO
  PB15: MOSI
 
 Debug Console:
 --------------
-USART1:
+USART1: (Rx:DMA1/5, Tx:DMA1/4)
  PA9: TX
  PA10: RX
 
@@ -35,19 +35,19 @@ GPIn:
  PB3: SEL0
  PB4: SEL1
  PB5: DIR
- PB6: STEP
- PB7: DKWE
- PB8: SIDE
+ PB8: STEP
+ PB9: DKWE
+ PB10: SIDE
 GPOut:
  PA11: CHNG
  PA12: INDEX
  PA13: TRK0
  PA14: WRPROT
  PA15: RDY
-Timer1/1:
- PA8: DKRD
-Timer4/4:
- PB9: DKWD
+Timer4/2: (CC2:DMA1/4, UP:DMA1/7)
+ PB7: DKRD
+Timer4/1: (CC1:DMA1/1, UP:DMA1/7)
+ PB6: DKWD
 
 Available 5v I/Os on PA/PB, with Timer Aliases
 ----------------------------------------------
