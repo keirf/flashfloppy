@@ -4,9 +4,11 @@ GPIn:
  PB0: T_IRQ (XPT2046 PENIRQ)
 GPOut:
  PB1: T_CS  (XPT2046 CS)
- PA1: DC/RS (ILI9341 Data/Command Select)
+ PA0: DC/RS (ILI9341 Data/Command Select)
  PA2: RESET (ILI9341 Reset)
  PA3: TFTCS (ILI9341 CS)
+Timer2/2:
+ PA1: LED Backlight PWM
 SPI1: (Rx:DMA1/2, Tx:DMA1/3)
  PA5: CK
  PA6: MISO
