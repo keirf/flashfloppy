@@ -57,11 +57,12 @@ void clock_init(void)
     /* Internal oscillator no longer needed. */
     rcc->cr &= ~RCC_CR_HSION;
 
-    /* Enable basic GPIO and AFIO clocks. */
+    /* Enable basic GPIO and AFIO clocks, and DMA. */
     rcc->apb2enr = (RCC_APB2ENR_IOPAEN |
                     RCC_APB2ENR_IOPBEN |
-                    RCC_APB2ENR_IOPCEN |
+                    /*RCC_APB2ENR_IOPCEN |*/
                     RCC_APB2ENR_AFIOEN);
+    rcc->ahbenr |= RCC_AHBENR_DMA1EN;
 
     /* Enable SysTick counter at 72/8=9MHz. */
     stk->load = STK_MASK;

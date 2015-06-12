@@ -16,6 +16,8 @@ void system_reset(void);
 #define SYSCLK_MHZ 72
 #define SYSCLK     (SYSCLK_MHZ * 1000000)
 void clock_init(void);
+#define sysclk_ns(x) (((x) * SYSCLK_MHZ) / 1000)
+#define sysclk_us(x) ((x) * SYSCLK_MHZ)
 
 /* SysTick Timer */
 #define STK_MHZ    (SYSCLK_MHZ / 8)
@@ -59,6 +61,7 @@ void gpio_configure_pin(
 #define RCC volatile struct rcc * const
 #define GPIO volatile struct gpio * const
 #define AFIO volatile struct afio * const
+#define EXTI volatile struct exti * const
 #define DMA volatile struct dma * const
 #define TIM volatile struct tim * const
 #define SPI volatile struct spi * const
@@ -80,6 +83,7 @@ static GPIO gpioe = (struct gpio *)GPIOE_BASE;
 static GPIO gpiof = (struct gpio *)GPIOF_BASE;
 static GPIO gpiog = (struct gpio *)GPIOG_BASE;
 static AFIO afio = (struct afio *)AFIO_BASE;
+static EXTI exti = (struct exti *)EXTI_BASE;
 static DMA dma1 = (struct dma *)DMA1_BASE;
 static DMA dma2 = (struct dma *)DMA2_BASE;
 static TIM tim1 = (struct tim *)TIM1_BASE;

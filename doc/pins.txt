@@ -33,12 +33,12 @@ Floppy:
 -------
 (all selected from available 5v I/Os, listed below)
 GPIn:
- PB2: MTR
- PB3: SEL0
- PB4: SEL1
- PB5: DIR
- PB8: STEP
- PB9: DKWE
+ PB2: DIR
+ PB3: MTR
+ PB4: STEP
+ PB5: SEL0
+ PB8: SEL1
+ PB9: WGATE
  PB10: SIDE
 GPOut:
  PA11: CHNG
@@ -47,9 +47,9 @@ GPOut:
  PA14: WRPROT
  PA15: RDY
 Timer4/2: (CC2:DMA1/4, UP:DMA1/7)
- PB7: DKRD
+ PB7: RDATA
 Timer4/1: (CC1:DMA1/1, UP:DMA1/7)
- PB6: DKWD
+ PB6: WDATA
 
 Available 5v I/Os on PA/PB, with Timer Aliases
 ----------------------------------------------

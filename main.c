@@ -14,6 +14,7 @@ int EXC_reset(void) __attribute__((alias("main")));
 FATFS fatfs;
 FIL file;
 void ili9341_init(void);
+void floppy_init(void);
 
 int main(void)
 {
@@ -31,8 +32,9 @@ int main(void)
     console_init();
     /*leds_init();*/
     /*usb_init();*/
-
     delay_ms(500); /* XXX */
+    floppy_init();
+
     f_mount(&fatfs, "", 1);
     printk("Pre\n");
     ili9341_init();

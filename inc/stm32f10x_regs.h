@@ -280,6 +280,17 @@ struct afio {
 
 #define AFIO_BASE 0x40010000
 
+struct exti {
+    uint32_t imr;        /* 00: Interrupt mask */
+    uint32_t emr;        /* 04: Event mask */
+    uint32_t rtsr;       /* 08: Rising trigger selection */
+    uint32_t ftsr;       /* 0C: Falling trigger selection */
+    uint32_t swier;      /* 10: Software interrupt event */
+    uint32_t pr;         /* 14: Pending */
+};
+
+#define EXTI_BASE 0x40010400
+
 /* DMA */
 struct dma_chn {
     uint32_t ccr;        /* +00: Configuration */

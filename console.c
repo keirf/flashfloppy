@@ -116,7 +116,6 @@ void console_sync(void)
 void console_init(void)
 {
     /* Turn on the clocks. */
-    rcc->ahbenr |= RCC_AHBENR_DMA1EN;
     rcc->apb2enr |= RCC_APB2ENR_USART1EN;
 
     /* Enable TX pin (PA9) for USART output, RX pin (PA10) as input. */
