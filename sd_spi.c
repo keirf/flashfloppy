@@ -230,9 +230,8 @@ DSTATUS disk_initialize(BYTE pdrv)
     if (send_cmd(CMD(0), 0) != 1)
         goto out;
 
-    /* Enable CRC checking. */
-    if (send_cmd(CMD(59), 1) != 1)
-        goto out;
+    /* Enable CRC checking. Not all cards support this. */
+    (void)send_cmd(CMD(59), 1);
 
     /* Send interface condition (2.7-3.6v, check bits). 
      * This also validates that the card responds to v2.00-only commands. */
