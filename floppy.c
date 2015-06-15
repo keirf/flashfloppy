@@ -144,12 +144,12 @@ int floppy_handle(void)
 {
     FRESULT fr;
     UINT nr;
-    uint32_t time = stk->val;
+    uint32_t now = stk_now();
     uint16_t i;
 
     for (i = 0; i < ARRAY_SIZE(disk); i++) {
         if (!disk[i].step_start
-            || (((disk[i].step_start - time) & STK_MASK) < stk_ms(2)))
+            || (stk_diff(disk[i].step_start, now) < stk_ms(2)))
             continue;
         disk[i].cyl += disk[i].step_inward ? 1 : -1;
         disk[i].step_start = 0;
@@ -192,7 +192,7 @@ static void IRQ_input_changed(void)
                 || (disk[i].cyl == (step_inward ? 84 : 0)))
                 continue;
             disk[i].step_inward = step_inward;
-            disk[i].step_start = stk->val;
+            disk[i].step_start = stk_now();
         }
     }
 }

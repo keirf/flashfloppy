@@ -62,14 +62,13 @@ static void spi_release(void)
 
 static uint8_t wait_ready(void)
 {
+    stk_time_t start = stk_now();
     uint8_t res;
-    uint32_t start = stk->val, duration;
 
     /* Wait 500ms for card to be ready. */
     do {
         res = spi_recv8(spi);
-        duration = (start - stk->val) & STK_MASK;
-    } while ((res != 0xff) && (duration < stk_ms(500)));
+    } while ((res != 0xff) && (stk_timesince(start) < stk_ms(500)));
 
     return res;
 }
@@ -167,13 +166,12 @@ static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
 {
     bool_t ok;
     uint8_t token;
-    uint32_t start = stk->val, duration;
+    uint32_t start = stk_now();
 
     /* Wait 100ms for data to be ready. */
     do {
         token = spi_recv8(spi);
-        duration = (start - stk->val) & STK_MASK;
-    } while ((token == 0xff) && (duration < stk_ms(100)));
+    } while ((token == 0xff) && (stk_timesince(start) < stk_ms(100)));
     if (token != 0xfe) /* valid data token? */
         return 0;
 
@@ -203,7 +201,7 @@ static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
 
 DSTATUS disk_initialize(BYTE pdrv)
 {
-    uint32_t start, duration, cr1;
+    uint32_t start, cr1;
     uint16_t rcv;
     uint8_t i;
 
@@ -255,10 +253,9 @@ DSTATUS disk_initialize(BYTE pdrv)
             goto out;
 
         /* Request SDHC/SDXC and start card initialisation. */
-        start = stk->val;
+        start = stk_now();
         while (send_cmd(ACMD(41), 1u<<30)) {
-            duration = (start - stk->val) & STK_MASK;
-            if (duration >= stk_ms(1000))
+            if (stk_timesince(start) >= stk_ms(1000))
                 goto out; /* initialisation timeout */
         }
 
@@ -285,10 +282,9 @@ DSTATUS disk_initialize(BYTE pdrv)
         }
 
         /* Wait for card initialisation. */
-        start = stk->val;
+        start = stk_now();
         while (send_cmd(cmd, 0)) {
-            duration = (start - stk->val) & STK_MASK;
-            if (duration >= stk_ms(1000))
+            if (stk_timesince(start) >= stk_ms(1000))
                 goto out; /* initialisation timeout */
         }
 
