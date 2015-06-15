@@ -25,6 +25,15 @@
 #define CMD(n)  (0x40 | (n))
 #define ACMD(n) (0xc0 | (n))
 
+#define R1_MBZ         (1u<<7)
+#define R1_ParamErr    (1u<<6)
+#define R1_AddressErr  (1u<<5)
+#define R1_EraseSeqErr (1u<<4)
+#define R1_CRCErr      (1u<<3)
+#define R1_IllegalCmd  (1u<<2)
+#define R1_EraseReset  (1u<<1)
+#define R1_IdleState   (1u<<0)
+
 static DSTATUS status = STA_NOINIT;
 
 #define CT_MMC  0x01
@@ -117,7 +126,7 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg)
     for (;;) {
 
         /* ACMDx == CMD55 + CMDx */
-        if ((cmd & 0x80) && ((res = send_cmd(CMD(55), 0)) > 1))
+        if ((cmd & 0x80) && ((res = send_cmd(CMD(55), 0)) & ~R1_IdleState))
             return res;
 
         spi_acquire();
@@ -140,11 +149,11 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg)
 
         /* Wait up to 80 clocks for a valid response (MSB clear). */
         for (i = 0; i < 10; i++)
-            if (!((res = spi_recv8(spi)) & 0x80))
+            if (!((res = spi_recv8(spi)) & R1_MBZ))
                 break;
 
         /* Retry if no response or CRC error. */
-        if (!(res & 0x88) || (++retry >= 3))
+        if (!(res & (R1_MBZ|R1_CRCErr)) || (++retry >= 3))
             break;
 
         /* Resync the SPI interface before retrying. */
@@ -227,15 +236,16 @@ DSTATUS disk_initialize(BYTE pdrv)
         (void)spi_recv8(spi);
 
     /* Reset, enter idle state (SPI mode). */
-    if (send_cmd(CMD(0), 0) != 1)
+    if (send_cmd(CMD(0), 0) != R1_IdleState)
         goto out;
 
     /* Enable CRC checking. Not all cards support this. */
-    (void)send_cmd(CMD(59), 1);
+    if ((send_cmd(CMD(59), 1) & ~R1_IllegalCmd) != R1_IdleState)
+        goto out;
 
     /* Send interface condition (2.7-3.6v, check bits). 
      * This also validates that the card responds to v2.00-only commands. */
-    if (send_cmd(CMD(8), 0x1aa) == 1) {
+    if (send_cmd(CMD(8), 0x1aa) == R1_IdleState) {
 
         /* Command was understood. We have a v2.00-compliant card.
          * Get the 4-byte response and validate.  */
@@ -268,7 +278,7 @@ DSTATUS disk_initialize(BYTE pdrv)
          * Try initialisation with ACMD41. This will work if it's an SDC. */
         uint8_t cmd = ACMD(41);
         cardtype = CT_SD1;
-        if (send_cmd(cmd, 0) > 1) {
+        if (send_cmd(cmd, 0) & ~R1_IdleState) {
             /* Must be MMC: Fall back to CMD1. */
             cmd = CMD(1);
             cardtype = CT_MMC;
