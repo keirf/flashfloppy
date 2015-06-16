@@ -185,14 +185,15 @@ static void draw_string(uint16_t x, uint16_t y, char *str)
 
 static void backlight_init(void)
 {
-    /* Set up timer, switch backlight off. */
+    /* Set up timer, switch backlight off. 
+     * We switch a PNP transistor so PWM output is active low. */
     rcc->apb1enr |= RCC_APB1ENR_TIM2EN;
     gpio_configure_pin(gpioa, PIN_LED, AFO_pushpull(_2MHz));
     tim2->arr = 999; /* count 0-999 inclusive */
     tim2->psc = SYSCLK_MHZ - 1; /* tick at 1MHz */
     tim2->ccer = TIM_CCER_CC2E;
     tim2->ccmr1 = (TIM_CCMR1_CC2S(TIM_CCS_OUTPUT) |
-                   TIM_CCMR1_OC2M(TIM_OCM_PWM1));
+                   TIM_CCMR1_OC2M(TIM_OCM_PWM2)); /* PWM2: low then high */
     tim2->ccr2 = tim2->cr2 = tim2->dier = 0;
     tim2->cr1 = TIM_CR1_CEN;
 }

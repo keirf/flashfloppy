@@ -8,7 +8,7 @@ GPOut:
  PA2: RESET (ILI9341 Reset)
  PA3: TFTCS (ILI9341 CS)
 Timer2/2:
- PA1: LED Backlight PWM
+ PA1: LED Backlight PWM (see further details below)
 SPI1: (Rx:DMA1/2, Tx:DMA1/3)
  PA5: CK
  PA6: MISO
@@ -91,3 +91,23 @@ Floppy drive 34-pin Shugart(-ish) interface. For reference:
  32: -> SIDE
  34: <- CHNG(PC) / RDY(Amiga)
 All odd pins are ground.
+
+PWM backlight control:
+----------------------
+PA1 is an active-low PWM control for the LCD backlight.
+It drives a PNP transistor (e.g. BC212, BC327) through a resistor:
+
+                 Vcc(3.3v)
+                  |
+                 / E
+PA1 ----|1k|----|  B  PNP BJT (eg BC327)
+                 \ C
+                  |
+                 ---
+                 10R
+                 ---
+                  |
+                 LED
+
+Base current is ~2.5mA. Collector current <50mA, aided by a series
+current-limiting resistor.
