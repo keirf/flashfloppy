@@ -31,7 +31,6 @@
 #define SPI_PIN_SPEED _10MHz
 #endif
 
-#define PIN_LED   1
 #define PIN_DCRS  0
 #define PIN_RESET 2
 #define PIN_CS    3
@@ -183,28 +182,6 @@ static void draw_string(uint16_t x, uint16_t y, char *str)
     }
 }
 
-static void backlight_init(void)
-{
-    /* Set up timer, switch backlight off. 
-     * We switch a PNP transistor so PWM output is active low. */
-    rcc->apb1enr |= RCC_APB1ENR_TIM2EN;
-    gpio_configure_pin(gpioa, PIN_LED, AFO_pushpull(_2MHz));
-    tim2->arr = 999; /* count 0-999 inclusive */
-    tim2->psc = SYSCLK_MHZ - 1; /* tick at 1MHz */
-    tim2->ccer = TIM_CCER_CC2E;
-    tim2->ccmr1 = (TIM_CCMR1_CC2S(TIM_CCS_OUTPUT) |
-                   TIM_CCMR1_OC2M(TIM_OCM_PWM2)); /* PWM2: low then high */
-    tim2->ccr2 = tim2->cr2 = tim2->dier = 0;
-    tim2->cr1 = TIM_CR1_CEN;
-}
-
-/* Set brightness level: 0-10. */
-void backlight_set(uint8_t level)
-{
-    /* Logarithmic scale. */
-    tim2->ccr2 = (level < 2) ? level : 1u << level;
-}
-
 /* Some cryptic command banging is required to set up the controller. 
  * Summarised here as <command>, <# data bytes>, <data...> */
 const uint8_t init_seq[] = {
@@ -237,8 +214,6 @@ void ili9341_init(void)
 {
     const uint8_t *init_p;
     uint8_t i;
-
-    backlight_init();
 
     /* Turn on the clocks. */
     rcc->apb2enr |= RCC_APB2ENR_SPI1EN;
@@ -284,7 +259,6 @@ void ili9341_init(void)
     fill_rect(0, 0, 320, 240, BG_COL);
     writecommand(ILI9341_DISPON);
     delay_ms(100); /* wait for screen to refresh to black */
-    backlight_set(8);
 
     /* Example garbage. */
     draw_string(0, 100, "New Zealand Story.ADF\x09\x89");

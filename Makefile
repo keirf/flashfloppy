@@ -2,6 +2,7 @@ OBJS += console.o
 OBJS += vectors.o
 #OBJS += led.o
 OBJS += floppy.o
+OBJS += backlight.o
 OBJS += ili9341.o
 OBJS += font8x8.o
 OBJS += main.o

@@ -13,8 +13,6 @@ int EXC_reset(void) __attribute__((alias("main")));
 
 FATFS fatfs;
 FIL file;
-void ili9341_init(void);
-void floppy_init(void);
 
 int main(void)
 {
@@ -33,12 +31,14 @@ int main(void)
     /*leds_init();*/
     /*usb_init();*/
     delay_ms(500); /* XXX */
-    floppy_init();
+
+    backlight_init();
+    ili9341_init();
+    backlight_set(8);
+
+    floppy_init(NULL, NULL);
 
     f_mount(&fatfs, "", 1);
-    printk("Pre\n");
-    ili9341_init();
-    printk("Post\n");
     fr = f_open(&file, "small", FA_READ);
     printk("File open %d\n", fr);
     if (fr == FR_OK) {

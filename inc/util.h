@@ -58,6 +58,13 @@ void console_sync(void);
 void leds_init(void);
 void leds_write_hex(unsigned int x);
 
+void ili9341_init(void);
+
+void backlight_init(void);
+void backlight_set(uint8_t level);
+
+void floppy_init(const char *disk0_name, const char *disk1_name);
+
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];
 extern char _sdat[], _edat[], _ldat[];

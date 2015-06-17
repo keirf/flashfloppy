@@ -7,8 +7,8 @@ GPOut:
  PA0: DC/RS (ILI9341 Data/Command Select)
  PA2: RESET (ILI9341 Reset)
  PA3: TFTCS (ILI9341 CS)
-Timer2/2:
- PA1: LED Backlight PWM (see further details below)
+Timer1/1:
+ PA8: LED Backlight PWM (5v tolerant; see further details below)
 SPI1: (Rx:DMA1/2, Tx:DMA1/3)
  PA5: CK
  PA6: MISO
@@ -94,20 +94,37 @@ All odd pins are ground.
 
 PWM backlight control:
 ----------------------
-PA1 is an active-low PWM control for the LCD backlight.
-It drives a PNP transistor (e.g. BC212, BC327) through a resistor:
+PA8 is an active-low open-drain PWM control for the LCD backlight. It
+must be a 5v-tolerant pin, as it is pulled up to 5v. It drives a PNP
+transistor (e.g. BC212, BC327) through a resistor:
 
-                 Vcc(3.3v)
+                 Vcc(5v)
                   |
                  / E
-PA1 ----|1k|----|  B  PNP BJT (eg BC327)
+PA8 ----|1k|----|  B  PNP BJT (eg BC327)
                  \ C
                   |
                  ---
-                 10R
+                 33R
                  ---
                   |
                  LED
 
-Base current is ~2.5mA. Collector current <50mA, aided by a series
-current-limiting resistor.
+Ib ~= 5mA; Ic = I_led ~= 50mA; V_led ~= 3.2V.
+
+33ohm series resistor is chosen to limit LED current to 50-60mA in the
+operating voltage range of 3.0-3.3V with a conservative Vce(sat).
+Assuming Vce(sat)=0.1-0.2V:
+V_led=3.0V -> V_r=1.8-1.9V -> I=55-58mA
+V_led=3.2V -> V_r=1.6-1.7V -> I=48-52mA
+V_led=3.3V -> V_r=1.5-1.6V -> I=45-48mA
+
+Actual readings (Vcc=4.9V):
+BC327-40: Vce=0.04V; V_led=3.19V; V_r=1.66V; I=48.0mA
+BC212L:   Vce=0.09V; V_led=3.19V; V_r=1.59V; I=47.6mA
+
+Driving the load with 5v rather than 3.3v means ~100mW is disippated
+in the series resistor rather than a surface-mount linear
+regulator. It also means -dV/dI through the LED is larger (because the
+series resistor is larger), and variations in the transistor's
+Vce(sat) matter less; thus we more accurately control I_led.
