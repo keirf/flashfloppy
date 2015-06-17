@@ -505,6 +505,15 @@ struct tim {
 #define TIM_CCER_CC1P        (1u<< 1)
 #define TIM_CCER_CC1E        (1u<< 0)
 
+#define TIM_BDTR_MOE         (1u<<15)
+#define TIM_BDTR_AOE         (1u<<14)
+#define TIM_BDTR_BKP         (1u<<13)
+#define TIM_BDTR_BKE         (1u<<12)
+#define TIM_BDTR_OSSR        (1u<<11)
+#define TIM_BDTR_OSSI        (1u<<10)
+#define TIM_BDTR_LOCK(x)     ((x)<<8)
+#define TIM_BDTR_DTG(x)      ((x)<<0)
+
 #define TIM1_BASE 0x40012c00
 #define TIM2_BASE 0x40000000
 #define TIM3_BASE 0x40000400
