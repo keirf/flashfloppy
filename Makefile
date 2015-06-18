@@ -4,6 +4,7 @@ OBJS += vectors.o
 OBJS += floppy.o
 OBJS += backlight.o
 OBJS += ili9341.o
+OBJS += xpt2046.o
 OBJS += font8x8.o
 OBJS += main.o
 OBJS += sd_spi.o

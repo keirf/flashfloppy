@@ -37,6 +37,11 @@
 #define set_pin(pin, val) gpio_write_pin(gpioa, pin, val)
 
 #define spi spi1
+/* 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
+#define SPI_CR1 (SPI_CR1_MSTR | /* master */                    \
+                 SPI_CR1_SSM | SPI_CR1_SSI | /* software NSS */ \
+                 SPI_CR1_SPE |                                  \
+                 SPI_BR_DIV)
 
 #define ILI9341_NOP     0x00
 #define ILI9341_SWRESET 0x01
@@ -88,6 +93,7 @@ extern const char font8x8[128][8];
 
 static void spi_acquire(void)
 {
+    spi->cr1 = SPI_CR1;
     set_pin(PIN_CS, 0);
 }
 
@@ -133,7 +139,7 @@ static void set_addr_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
     writecommand(ILI9341_RAMWR);
 }
 
-static void fill_rect(
+void fill_rect(
     uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c)
 {
     unsigned int i;
@@ -210,7 +216,7 @@ const uint8_t init_seq[] = {
     0
 };
 
-void ili9341_init(void)
+void tft_init(void)
 {
     const uint8_t *init_p;
     uint8_t i;
@@ -228,12 +234,9 @@ void ili9341_init(void)
     gpio_configure_pin(gpioa, 6, GPI_pull_up); /* MISO */
     gpio_configure_pin(gpioa, 7, AFO_pushpull(SPI_PIN_SPEED)); /* MOSI */
 
-    /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
+    /* Configure SPI. */
     spi->cr2 = 0;
-    spi->cr1 = (SPI_CR1_MSTR | /* master */
-                SPI_CR1_SSM | SPI_CR1_SSI | /* software NSS */
-                SPI_CR1_SPE |
-                SPI_BR_DIV);
+    spi->cr1 = SPI_CR1;
 
     /* Drain SPI I/O. */
     spi_quiesce(spi);

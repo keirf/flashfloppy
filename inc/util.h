@@ -58,10 +58,14 @@ void console_sync(void);
 void leds_init(void);
 void leds_write_hex(unsigned int x);
 
-void ili9341_init(void);
+void tft_init(void);
+void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c);
 
 void backlight_init(void);
 void backlight_set(uint8_t level);
+
+void touch_init(void);
+bool_t touch_get_xy(uint16_t *px, uint16_t *py);
 
 void floppy_init(const char *disk0_name, const char *disk1_name);
 
