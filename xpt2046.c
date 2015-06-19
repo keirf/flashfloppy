@@ -66,10 +66,9 @@ bool_t touch_get_xy(uint16_t *px, uint16_t *py)
     if (gpio_read_pin(gpio, PIN_IRQ))
         return FALSE;
 
-    /* Partial selection sort, to find median-of-7 in each dimension. Discard
-     * the first sample; it's an outlier intolerably often. */
-    for (i = 1; i < 5; i++) {
-        for (j = i; j < 8; j++) {
+    /* Selection sort. Ignore the first sample; it's often an outlier. */
+    for (i = 1; i < 7; i++) {
+        for (j = i+1; j < 8; j++) {
             uint16_t t = x[i];
             if (t > x[j]) {
                 x[i] = x[j];
@@ -82,6 +81,11 @@ bool_t touch_get_xy(uint16_t *px, uint16_t *py)
             }
         }
     }
+
+    /* Check range of middle three values is tightly bounded. This is good for
+     * rejecting noisy readings when the panel is lightly touched or tapped. */
+    if (((x[5]-x[3]) > 16) || ((y[5]-y[3]) > 16))
+        return FALSE;
 
     /* Return the median. */
     *px = x[4];
