@@ -10,26 +10,28 @@
  */
 
 /* Must be a 5v-tolerant pin with a timer channel attached. */
-#define gpio_led gpioa
-#define PIN_LED 8
+#define gpio_led gpiob
+#define PIN_LED 10
 
-/* Timer channel for above pin: Timer 1, channel 1. */
-#define tim tim1
-#define PWM_CCR ccr1
+/* Timer channel for above pin: Timer 2, channel 3. */
+#define tim tim2
+#define PWM_CCR ccr3
 
 void backlight_init(void)
 {
     /* Set up timer, switch backlight off. 
      * We switch a PNP transistor so PWM output is active low. */
-    rcc->apb2enr |= RCC_APB2ENR_TIM1EN;
+    rcc->apb1enr |= RCC_APB1ENR_TIM2EN;
     tim->arr = 999; /* count 0-999 inclusive */
     tim->psc = SYSCLK_MHZ - 1; /* tick at 1MHz */
-    tim->ccer = TIM_CCER_CC1E;
-    tim->ccmr1 = (TIM_CCMR1_CC1S(TIM_CCS_OUTPUT) |
-                  TIM_CCMR1_OC1M(TIM_OCM_PWM2)); /* PWM2: low then high */
-    tim->bdtr = TIM_BDTR_MOE;
+    tim->ccer = TIM_CCER_CC3E;
+    tim->ccmr2 = (TIM_CCMR2_CC3S(TIM_CCS_OUTPUT) |
+                  TIM_CCMR2_OC3M(TIM_OCM_PWM2)); /* PWM2: low then high */
     tim->PWM_CCR = tim->cr2 = tim->dier = 0;
     tim->cr1 = TIM_CR1_CEN;
+
+    /* Set up the output pin. */
+    afio->mapr |= AFIO_MAPR_TIM2_REMAP_PARTIAL_2;
     gpio_configure_pin(gpio_led, PIN_LED, AFO_opendrain(_2MHz));
 }
 

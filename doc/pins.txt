@@ -7,8 +7,8 @@ GPOut:
  PA0: DC/RS (ILI9341 Data/Command Select)
  PA2: RESET (ILI9341 Reset)
  PA3: TFTCS (ILI9341 CS)
-Timer1/1:
- PA8: LED Backlight PWM (5v tolerant; see further details below)
+Timer2/3:
+ PB10: LED Backlight PWM (5v tolerant; see further details below)
 SPI1: (Rx:DMA1/2, Tx:DMA1/3)
  PA5: CK
  PA6: MISO
@@ -31,44 +31,48 @@ USART1: (Rx:DMA1/5, Tx:DMA1/4)
 
 Floppy:
 -------
-(all selected from available 5v I/Os, listed below)
-GPIn:
- PB2: DIR
- PB3: MTR
- PB4: STEP
- PB5: SEL0
- PB8: SEL1
- PB9: WGATE
- PB10: SIDE
+GPIn: (all must be 5v tolerant)
+ PA8: DIR
+ PA11: STEP
+ PA12: SEL0
+ PA13: SEL1
+ PA14: WGATE
+ PA15: SIDE
 GPOut:
- PA11: CHNG
- PA12: INDEX
- PA13: TRK0
- PA14: WRPROT
- PA15: RDY
+ PB3: CHNG
+ PB4: INDEX
+ PB5: TRK0
+ PB11: WRPROT
+ PB12: RDY
 Timer4/2: (CC2:DMA1/4, UP:DMA1/7)
- PB7: RDATA
+ PB7: RDATA (must be 5v tolerant)
 Timer4/1: (CC1:DMA1/1, UP:DMA1/7)
  PB6: WDATA
 
-Available 5v I/Os on PA/PB, with Timer Aliases
-----------------------------------------------
+5v I/Os on PA/PB, with Timer Aliases
+------------------------------------
+[- prefix means unavailable for stated reason]
  PA8: T1/1
+-PA9: [USART1_TX]
+-PA10: [USART1_RX]
  PA11: T1/4
  PA12:
  PA13:
  PA14:
  PA15:
- PB2:
+-PB2: [BOOT1]
  PB3: T2/2 (remap)
  PB4: T3/1 (remap)
  PB6: T4/1
  PB7: T4/2
- PB8: T4/3
- PB9: T4/4
+-PB8: [NOT ON MAPLE MINI]
+-PB9: [NOT ON MAPLE MINI]
  PB10: T2/3 (remap) [nb. used in T2/3 mode by LEDs on Gotek]
  PB11: T2/4 (remap) [nb. used in T2/4 mode by LEDs on Gotek]
  PB12:
+-PB13: [SPI2_SCK]
+-PB14: [SPI2_MISO]
+-PB15: [SPI2_MOSI]
 
 Floppy drive 34-pin Shugart(-ish) interface. For reference:
 -----------------------------------------------------------
@@ -94,14 +98,14 @@ All odd pins are ground.
 
 PWM backlight control:
 ----------------------
-PA8 is an active-low open-drain PWM control for the LCD backlight. It
+PB10 is an active-low open-drain PWM control for the LCD backlight. It
 must be a 5v-tolerant pin, as it is pulled up to 5v. It drives a PNP
 transistor (e.g. BC212, BC327) through a resistor:
 
                  Vcc(5v)
                   |
                  / E
-PA8 ----|1k|----|  B  PNP BJT (eg BC327)
+PB10 ---|1k|----|  B  PNP BJT (eg BC327)
                  \ C
                   |
                  ---
