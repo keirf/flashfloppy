@@ -24,12 +24,15 @@ PROJ = gotek
 
 all: $(PROJ).elf $(PROJ).bin $(PROJ).hex
 
+FLASH=0x8000000
+BAUD=921600
+
 flash: $(PROJ).bin
-	sudo ~/stm32flash/stm32flash -S 0x08000000 -g 0x08000000 \
-	-w $< /dev/ttyUSB0
+	sudo ~/stm32flash/stm32flash -S $(FLASH) -g $(FLASH) \
+	-b $(BAUD) -v -w $< /dev/ttyUSB0
 
 start:
-	sudo ~/stm32flash/stm32flash -g 0x08000000 /dev/ttyUSB0
+	sudo ~/stm32flash/stm32flash -b $(BAUD) -g $(FLASH) /dev/ttyUSB0
 
 serial:
 	sudo miniterm.py --baud=3000000 /dev/ttyUSB0
