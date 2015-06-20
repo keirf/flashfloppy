@@ -19,7 +19,7 @@ void EXC_unexpected(struct exception_frame *frame)
     system_reset();
 }
 
-void exception_init(void)
+static void exception_init(void)
 {
     scb->vtor = (uint32_t)(unsigned long)vector_table;
     scb->ccr |= SCB_CCR_DIV_0_TRP | SCB_CCR_UNALIGN_TRP;
@@ -28,7 +28,7 @@ void exception_init(void)
                    SCB_SHCSR_MEMFAULTENA);
 }
 
-void clock_init(void)
+static void clock_init(void)
 {
     /* Flash controller: reads require 2 wait states at 72MHz. */
     flash->acr = FLASH_ACR_PRFTBE | FLASH_ACR_LATENCY(2);
@@ -57,16 +57,29 @@ void clock_init(void)
     /* Internal oscillator no longer needed. */
     rcc->cr &= ~RCC_CR_HSION;
 
+    /* Enable SysTick counter at 72/8=9MHz. */
+    stk->load = STK_MASK;
+    stk->ctrl = STK_CTRL_ENABLE;
+}
+
+static void peripheral_init(void)
+{
+    /* Turn off serial-wire JTAG and reclaim the GPIOs. */
+    afio->mapr = AFIO_MAPR_SWJ_CFG_DISABLED;
+
     /* Enable basic GPIO and AFIO clocks, and DMA. */
     rcc->apb2enr = (RCC_APB2ENR_IOPAEN |
                     RCC_APB2ENR_IOPBEN |
                     /*RCC_APB2ENR_IOPCEN |*/
                     RCC_APB2ENR_AFIOEN);
     rcc->ahbenr |= RCC_AHBENR_DMA1EN;
+}
 
-    /* Enable SysTick counter at 72/8=9MHz. */
-    stk->load = STK_MASK;
-    stk->ctrl = STK_CTRL_ENABLE;
+void stm32_init(void)
+{
+    exception_init();
+    clock_init();
+    peripheral_init();
 }
 
 void delay_ticks(unsigned int ticks)

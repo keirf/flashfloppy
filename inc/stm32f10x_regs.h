@@ -267,6 +267,7 @@ struct afio {
     uint32_t mapr2;      /* 1C: AF remap and debug I/O configuration #2 */
 };
 
+#define AFIO_MAPR_SWJ_CFG_DISABLED     (4u<<24)
 #define AFIO_MAPR_TIM4_REMAP_FULL      (1u<<12)
 #define AFIO_MAPR_TIM3_REMAP_FULL      (3u<<10)
 #define AFIO_MAPR_TIM3_REMAP_PARTIAL   (2u<<10)

@@ -24,13 +24,9 @@ int main(void)
         memcpy(_sdat, _ldat, _edat-_sdat);
     memset(_sbss, 0, _ebss-_sbss);
 
-    /* STM core bringup. */
-    exception_init();
-    clock_init();
+    stm32_init();
+
     console_init();
-    /*leds_init();*/
-    /*usb_init();*/
-    delay_ms(500); /* XXX */
 
     backlight_init();
     tft_init();

@@ -9,13 +9,12 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-void exception_init(void);
+void stm32_init(void);
 void system_reset(void);
 
 /* Clocks */
 #define SYSCLK_MHZ 72
 #define SYSCLK     (SYSCLK_MHZ * 1000000)
-void clock_init(void);
 #define sysclk_ns(x) (((x) * SYSCLK_MHZ) / 1000)
 #define sysclk_us(x) ((x) * SYSCLK_MHZ)
 
