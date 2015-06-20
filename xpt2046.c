@@ -23,9 +23,6 @@
                  SPI_CR1_SPE |                                  \
                  SPI_BR_DIV)
 
-/* EXTI0: IRQ 6 */
-void IRQ_6(void) __attribute__((alias("IRQ_touch")));
-
 static void spi_acquire(void)
 {
     spi->cr1 = SPI_CR1;
@@ -102,16 +99,10 @@ void touch_init(void)
     gpio_configure_pin(gpio, PIN_IRQ, GPI_floating);
     gpio_configure_pin(gpio, PIN_CS, GPO_pushpull(_2MHz, HIGH));
 
-    /* Floppy already initialised EXTI mappings for GPIOB. */
-
     /* ILI9341 already initialised SPI pins and general config. */
 
     /* Set PD0=PD1=0 (power-saving mode; PENIRQ active). */
     get_xy_samples(1, &x, &y);
-}
-
-static void IRQ_touch(void)
-{
 }
 
 /*
