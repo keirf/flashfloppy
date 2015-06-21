@@ -31,7 +31,7 @@
 #define SPI_PIN_SPEED _10MHz
 #endif
 
-#define PIN_DCRS  0
+#define PIN_DCRS  1
 #define PIN_RESET 2
 #define PIN_CS    3
 #define set_pin(pin, val) gpio_write_pin(gpioa, pin, val)

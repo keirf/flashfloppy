@@ -9,9 +9,10 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define gpio gpiob
+#define GPIO_IRQ gpiob
 #define PIN_IRQ 0
-#define PIN_CS  1
+#define GPIO_CS gpioa
+#define PIN_CS 0
 
 /* We clock the SPI dead slow, giving plenty of settling time during 
  * sample acquisition. */
@@ -26,13 +27,13 @@
 static void spi_acquire(void)
 {
     spi->cr1 = SPI_CR1;
-    gpio_write_pin(gpio, PIN_CS, 0);
+    gpio_write_pin(GPIO_CS, PIN_CS, 0);
 }
 
 static void spi_release(void)
 {
     spi_quiesce(spi);
-    gpio_write_pin(gpio, PIN_CS, 1);
+    gpio_write_pin(GPIO_CS, PIN_CS, 1);
 }
 
 static void get_xy_samples(uint8_t nr, uint16_t *px, uint16_t *py)
@@ -57,10 +58,10 @@ bool_t touch_get_xy(uint16_t *px, uint16_t *py)
     uint8_t i, j;
 
     /* Get raw samples. Ensure PENIRQ was active throughout. */
-    if (gpio_read_pin(gpio, PIN_IRQ))
+    if (gpio_read_pin(GPIO_IRQ, PIN_IRQ))
         return FALSE;
     get_xy_samples(8, x, y);
-    if (gpio_read_pin(gpio, PIN_IRQ))
+    if (gpio_read_pin(GPIO_IRQ, PIN_IRQ))
         return FALSE;
 
     /* Selection sort. Ignore the first sample; it's often an outlier. */
@@ -96,8 +97,8 @@ void touch_init(void)
     uint16_t x, y;
 
     /* Configure general-purpose I/Os. */
-    gpio_configure_pin(gpio, PIN_IRQ, GPI_floating);
-    gpio_configure_pin(gpio, PIN_CS, GPO_pushpull(_2MHz, HIGH));
+    gpio_configure_pin(GPIO_IRQ, PIN_IRQ, GPI_floating);
+    gpio_configure_pin(GPIO_CS, PIN_CS, GPO_pushpull(_2MHz, HIGH));
 
     /* ILI9341 already initialised SPI pins and general config. */
 
