@@ -1,4 +1,4 @@
-All code except fatfs/* and ili9341.c is licensed as follows:
+All code except src/fatfs/* and src/ili9341.c is licensed as follows:
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 This is free and unencumbered software released into the public domain.
 
@@ -27,7 +27,7 @@ For more information, please refer to <http://unlicense.org/>
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 
-All code within fatfs/* is licensed as follows:
+All code within src/fatfs/* is licensed as follows:
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 FatFs module is a free software that opened under license policy of
 following conditions.
@@ -44,7 +44,7 @@ by use of this software.
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 
-All code within ili9341.c is licensed as follows:
+All code within src/ili9341.c is licensed as follows:
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 Adafruit invests time and resources providing this open source code,
 please support Adafruit and open-source hardware by purchasing

@@ -24,7 +24,7 @@
 #include "usb_protocol.h"
 #include "usb.h"
 
-#include "../fatfs/ff.h"
+#include "../src/fatfs/ff.h"
 
 /*
  * Local variables:

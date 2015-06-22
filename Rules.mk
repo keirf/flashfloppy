@@ -66,7 +66,7 @@ build.o: $(OBJS)
 
 clean:: $(addprefix _clean_,$(SUBDIRS))
 	rm -f *~ *.o *.elf *.hex *.bin *.ld $(DEPS)
-_clean_%/: FORCE
+_clean_%: FORCE
 	$(MAKE) -f $(ROOT)/Rules.mk -C $* clean
 
 -include $(DEPS)
