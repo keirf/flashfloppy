@@ -60,6 +60,42 @@ static uint16_t dmabuf[1024];
 static uint8_t sectors[2][512];
 static FIL file;
 
+#if 0
+/* List changes at floppy inputs and sequentially activate outputs. */
+static void floppy_check(void)
+{
+    uint16_t i=0, mask, pin, prev_pin=0, idr, prev_idr;
+
+    gpio_configure_pin(gpio_timer, pin_rdata, GPO_bus);
+
+    mask = m(pin_dir) | m(pin_step) | m(pin_sel0)
+        | m(pin_sel1) | m(pin_wgate) | m(pin_side);
+    prev_idr = 0;
+    for (;;) {
+        switch (i++) {
+        case 0: pin = pin_dskchg; break;
+        case 1: pin = pin_index; break;
+        case 2: pin = pin_trk0; break;
+        case 3: pin = pin_wrprot; break;
+        case 4: pin = pin_rdata; break;
+        case 5: pin = pin_rdy; break;
+        default: pin = 0; i = 0; break;
+        }
+        if (prev_pin) gpio_write_pin(gpio_out, prev_pin, 0);
+        if (pin) gpio_write_pin(gpio_out, pin, 1);
+        prev_pin = pin;
+        delay_ms(50);
+        idr = gpio_in->idr & mask;
+        idr |= gpio_timer->idr & m(pin_wdata);
+        if (idr ^ prev_idr)
+            printk("IN: %04x->%04x\n", prev_idr, idr);
+        prev_idr = idr;
+    }
+}
+#else
+#define floppy_check() ((void)0)
+#endif
+
 void floppy_init(const char *disk0_name, const char *disk1_name)
 {
     uint16_t i;
@@ -83,6 +119,8 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     rcc->apb1enr |= RCC_APB1ENR_TIM4EN;
     gpio_configure_pin(gpio_timer, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_timer, pin_rdata, AFO_bus);
+
+    floppy_check();
 
     /* PA[15:0] -> EXT[15:0] */
     afio->exticr1 = afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x0000;
