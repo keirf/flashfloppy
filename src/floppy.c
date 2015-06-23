@@ -36,8 +36,7 @@
 
 #define m(pin) (1u<<(pin))
 
-/* EXTI[9:5]: IRQ 23; EXTI[15:10]: IRQ 40 */
-void IRQ_23(void) __attribute__((alias("IRQ_input_changed")));
+/* EXTI[15:10]: IRQ 40 */
 void IRQ_40(void) __attribute__((alias("IRQ_input_changed")));
 
 /* DMA1 channel 7: IRQ 17. */
@@ -45,7 +44,7 @@ void IRQ_17(void) __attribute__((alias("IRQ_feed_rdata")));
 
 static const struct {
     uint8_t irq, pri;
-} irqs[] = { {23,2}, {40,2}, {17,3} };
+} irqs[] = { {40,2}, {17,3} };
 
 static struct {
     const char *filename;
