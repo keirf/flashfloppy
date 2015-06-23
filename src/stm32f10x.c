@@ -64,15 +64,15 @@ static void clock_init(void)
 
 static void peripheral_init(void)
 {
-    /* Turn off serial-wire JTAG and reclaim the GPIOs. */
-    afio->mapr = AFIO_MAPR_SWJ_CFG_DISABLED;
-
     /* Enable basic GPIO and AFIO clocks, and DMA. */
     rcc->apb2enr = (RCC_APB2ENR_IOPAEN |
                     RCC_APB2ENR_IOPBEN |
                     /*RCC_APB2ENR_IOPCEN |*/
                     RCC_APB2ENR_AFIOEN);
     rcc->ahbenr |= RCC_AHBENR_DMA1EN;
+
+    /* Turn off serial-wire JTAG and reclaim the GPIOs. */
+    afio->mapr = AFIO_MAPR_SWJ_CFG_DISABLED;
 }
 
 void stm32_init(void)
