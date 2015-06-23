@@ -81,7 +81,7 @@ Timer4/1: (CC1:DMA1/1, UP:DMA1/7)
 
 Floppy drive 34-pin Shugart(-ish) interface. For reference:
 -----------------------------------------------------------
-  2: <- DENSITY(PC) / RDY(?) / CHNG(Amiga)
+  2: <- CHNG(Amiga) / -> DENSEL(PC)
   3: oo (key)
   4: oo
   6: oo
@@ -100,8 +100,15 @@ Floppy drive 34-pin Shugart(-ish) interface. For reference:
  32: -> SIDE
  34: <- CHNG(PC) / RDY(Amiga)
 All odd pins are ground.
-NB. Supercard Pro drives pin 2 as an output, HIGH, push-pull.
-    It is not really safe to connect pin 2 to the SCP.
+
+Supercard Pro / Kryoflux:
+-------------------------
+Drive the bus with high-drive octal line drivers ('244/'245).
+Pins 8/26-30/34 are configured as input, with 1k pull-ups.
+All other pins are *push-pull* outputs (not open collector!).
+Note pin 2 is a push-pull output, we must take care not to drive it to
+0V from the floppy side unless we are on a host (eg Amiga) which is
+expecting to receive a signal there.
 
 PWM backlight control:
 ----------------------
