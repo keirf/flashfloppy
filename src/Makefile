@@ -1,6 +1,5 @@
 OBJS += console.o
 OBJS += vectors.o
-#OBJS += led.o
 OBJS += floppy.o
 OBJS += backlight.o
 OBJS += ili9341.o
@@ -11,7 +10,6 @@ OBJS += sd_spi.o
 OBJS += spi.o
 OBJS += string.o
 OBJS += stm32f10x.o
-#OBJS += usb_hcd.o
 OBJS += util.o
 
 SUBDIRS += fatfs

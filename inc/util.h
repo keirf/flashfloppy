@@ -66,9 +66,6 @@ int printk(const char *format, ...)
 void console_init(void);
 void console_sync(void);
 
-void leds_init(void);
-void leds_write_hex(unsigned int x);
-
 void tft_init(void);
 void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c);
 
