@@ -27,6 +27,20 @@ struct exception_frame {
 #define IRQ_global_disable() asm volatile ("cpsid i" ::: "memory")
 #define IRQ_global_enable() asm volatile ("cpsie i" ::: "memory")
 
+static inline uint16_t _rev16(uint16_t x)
+{
+    uint16_t result;
+    asm volatile ("rev16 %0,%1" : "=r" (result) : "r" (x));
+    return result;
+}
+
+static inline uint32_t _rev32(uint32_t x)
+{
+    uint32_t result;
+    asm volatile ("rev %0,%1" : "=r" (result) : "r" (x));
+    return result;
+}
+
 /*
  * Local variables:
  * mode: C

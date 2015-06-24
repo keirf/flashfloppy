@@ -13,4 +13,6 @@ OBJS += string.o
 OBJS += stm32f10x.o
 #OBJS += usb_hcd.o
 OBJS += util.o
+
 SUBDIRS += fatfs
+SUBDIRS += image

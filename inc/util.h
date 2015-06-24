@@ -43,6 +43,8 @@ typedef char bool_t;
 void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 
+int strncmp(const char *s1, const char *s2, size_t n);
+
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));
 
@@ -51,6 +53,15 @@ int vprintk(const char *format, va_list ap)
 
 int printk(const char *format, ...)
     __attribute__ ((format (printf, 1, 2)));
+
+#define le16toh(x) (x)
+#define le32toh(x) (x)
+#define htole16(x) (x)
+#define htole32(x) (x)
+#define be16toh(x) _rev16(x)
+#define be32toh(x) _rev32(x)
+#define htobe16(x) _rev16(x)
+#define htobe32(x) _rev32(x)
 
 void console_init(void);
 void console_sync(void);
@@ -68,6 +79,7 @@ void touch_init(void);
 bool_t touch_get_xy(uint16_t *px, uint16_t *py);
 
 void floppy_init(const char *disk0_name, const char *disk1_name);
+int floppy_handle(void);
 
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];

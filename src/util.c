@@ -26,6 +26,16 @@ void *memcpy(void *dest, const void *src, size_t n)
     return dest;
 }
 
+int strncmp(const char *s1, const char *s2, size_t n)
+{
+    while (n--) {
+        int diff = *s1++ - *s2++;
+        if (diff)
+            return diff;
+    }
+    return 0;
+}
+
 /*
  * Local variables:
  * mode: C

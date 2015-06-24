@@ -9,8 +9,11 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#define O_FALSE 0
+#define O_TRUE  1
+
 #define GPI_bus GPI_floating
-#define GPO_bus GPO_pushpull(_2MHz,LOW)
+#define GPO_bus GPO_pushpull(_2MHz,O_FALSE)
 #define AFO_bus AFO_pushpull(_2MHz)
 
 /* All gpio_in pins must be 5v tolerant. */
@@ -46,18 +49,9 @@ static const struct {
     uint8_t irq, pri;
 } irqs[] = { {40,2}, {17,3} };
 
-static struct {
-    const char *filename;
-    uint8_t cyl;
-    bool_t sel;
-    bool_t step_inward;
-    uint32_t step_start;
-    bool_t read_active;
-} disk[2];
-
+static struct drive drive[2];
+static struct image image;
 static uint16_t dmabuf[1024];
-static uint8_t sectors[2][512];
-static FIL file;
 
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
@@ -99,8 +93,9 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
 {
     uint16_t i;
 
-    disk[0].filename = disk0_name;
-    disk[1].filename = disk1_name;
+    drive[0].filename = disk0_name;
+    drive[1].filename = disk1_name;
+    drive[0].cyl = drive[1].cyl = 80; /* XXX */
 
     gpio_configure_pin(gpio_in, pin_sel0,  GPI_bus);
     gpio_configure_pin(gpio_in, pin_sel1,  GPI_bus);
@@ -137,9 +132,9 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     /* Timer setup. 
      * The counter is incremented at full SYSCLK rate. 
      *  
-     * Ch.2 (RDDATA) is in PWM mode 1. It outputs HIGH for 400ns and then 
-     * LOW until the counter reloads. By changing the ARR via DMA we alter
-     * the time between (fixed-width) HIGH pulses, mimicking floppy drive 
+     * Ch.2 (RDDATA) is in PWM mode 1. It outputs O_TRUE for 400ns and then 
+     * O_FALSE until the counter reloads. By changing the ARR via DMA we alter
+     * the time between (fixed-width) O_TRUE pulses, mimicking floppy drive 
      * timings. */
     tim4->psc = 0;
     tim4->ccer = TIM_CCER_CC2E;
@@ -173,26 +168,29 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
 int floppy_handle(void)
 {
     FRESULT fr;
-    UINT nr;
     uint32_t now = stk_now();
     uint16_t i;
 
-    for (i = 0; i < ARRAY_SIZE(disk); i++) {
-        if (!disk[i].step_start
-            || (stk_diff(disk[i].step_start, now) < stk_ms(2)))
+    for (i = 0; i < ARRAY_SIZE(drive); i++) {
+        if (!drive[i].step.active
+            || (stk_diff(drive[i].step.start, now) < stk_ms(2)))
             continue;
-        disk[i].cyl += disk[i].step_inward ? 1 : -1;
-        disk[i].step_start = 0;
+        drive[i].cyl += drive[i].step.inward ? 1 : -1;
+        drive[i].step.active = FALSE;
+        printk("Disk %d: cyl %d\n", i, drive[i].cyl);
+        if ((i == 0) && (drive[i].cyl == 0))
+            gpio_write_pin(gpio_out, pin_trk0, O_TRUE);
     }
 
-    if (disk[0].step_start)
+    if (drive[0].step.active)
         return 0;
 
-    if (!disk[0].read_active) {
-        fr = f_open(&file, disk[0].filename, FA_READ)
-            ?: f_read(&file, sectors, sizeof(sectors), &nr);
-        if (fr != FR_OK || nr != sizeof(sectors))
+    if (!drive[0].image) {
+        struct image *im = &image;
+        fr = f_open(&im->fp, drive[0].filename, FA_READ);
+        if (fr)
             return -1;
+        drive[0].image = im;
     }
 
     return 0;
@@ -210,19 +208,22 @@ static void IRQ_input_changed(void)
     changed = exti->pr;
     exti->pr = changed;
 
-    idr = gpiob->idr;
+    idr = gpio_in->idr;
 
-    disk[0].sel = !!(idr & m(pin_sel0));
-    disk[1].sel = !!(idr & m(pin_sel1));
+    drive[0].sel = !!(idr & m(pin_sel0));
+    drive[1].sel = !!(idr & m(pin_sel1));
 
-    if ((changed|idr) & m(pin_step)) {
-        bool_t step_inward = !!(idr & m(pin_dir));
-        for (i = 0; i < ARRAY_SIZE(disk); i++) {
-            if (!disk[i].sel || disk[i].step_start
-                || (disk[i].cyl == (step_inward ? 84 : 0)))
+    if (changed & idr & m(pin_step)) {
+        bool_t step_inward = !(idr & m(pin_dir));
+        for (i = 0; i < ARRAY_SIZE(drive); i++) {
+            if (!drive[i].sel || drive[i].step.active
+                || (drive[i].cyl == (step_inward ? 84 : 0)))
                 continue;
-            disk[i].step_inward = step_inward;
-            disk[i].step_start = stk_now();
+            drive[i].step.inward = step_inward;
+            drive[i].step.start = stk_now();
+            drive[i].step.active = TRUE;
+            if (i == 0)
+                gpio_write_pin(gpio_out, pin_trk0, O_FALSE);
         }
     }
 }

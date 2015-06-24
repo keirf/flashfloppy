@@ -21,10 +21,8 @@
 
 #include "spi.h"
 
-#include "usb_protocol.h"
-#include "usb.h"
-
 #include "../src/fatfs/ff.h"
+#include "floppy.h"
 
 /*
  * Local variables:

@@ -14,6 +14,22 @@ int EXC_reset(void) __attribute__((alias("main")));
 FATFS fatfs;
 FIL file;
 
+static void do_tft(void)
+{
+    uint16_t x, y;
+    int sx, sy;
+    if (!touch_get_xy(&x, &y))
+        return;
+    /* x=0x160-0xe20; y=0x190-0xe60 */
+    sx = (x - 0x160) * 320 / (0xe20-0x160);
+    sy = (y - 0x190) * 240 / (0xe60-0x190);
+    if (sx < 0) sx = 0;
+    if (sx >= 320) sx = 319;
+    if (sy < 0) sy = 0;
+    if (sy >= 240) sy=239;
+    fill_rect(sx, sy, 2, 2, 0xf800);
+}
+
 int main(void)
 {
     FRESULT fr;
@@ -53,18 +69,8 @@ int main(void)
 
     i = usart1->dr; /* clear UART_SR_RXNE */    
     for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
-        uint16_t x, y;
-        int sx, sy;
-        if (!touch_get_xy(&x, &y))
-            continue;
-        /* x=0x160-0xe20; y=0x190-0xe60 */
-        sx = (x - 0x160) * 320 / (0xe20-0x160);
-        sy = (y - 0x190) * 240 / (0xe60-0x190);
-        if (sx < 0) sx = 0;
-        if (sx >= 320) sx = 319;
-        if (sy < 0) sy = 0;
-        if (sy >= 240) sy=239;
-        fill_rect(sx, sy, 2, 2, 0xf800);
+        do_tft();
+        floppy_handle();
     }
 
     ASSERT(0);
