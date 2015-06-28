@@ -29,30 +29,30 @@ USART1: (Rx:DMA1/5, Tx:DMA1/4)
  PA9: TX
  PA10: RX
 
-Speaker:
+Speaker (switching NPN BJT):
 --------
-Timer3/4:
- PB1: Speaker PWM (switching NPN BJT)
+Timer3/x:
+ PB1/Ch4: Speaker PWM [LC Tech; PB4/Ch1 on Maple Mini]
 
 Floppy:
 -------
 GPIn: (all must be 5v tolerant)
  PA8: DIR
  PA11: STEP
- PA12: SEL0
- PA13: SEL1
+ PA12: SELA
+ PA13: SELB
  PA14: WGATE
  PA15: SIDE
 GPOut:
  PB3: CHNG
- PB4: INDEX
+ PB4: INDEX [LC Tech; PB2 on Maple Mini]
  PB5: TRK0
  PB11: WRPROT
  PB12: RDY
 Timer4/2: (CC2:DMA1/4, UP:DMA1/7)
- PB7: RDATA (must be 5v tolerant)
+ PB7: RDATA
 Timer4/1: (CC1:DMA1/1, UP:DMA1/7)
- PB6: WDATA
+ PB6: WDATA (must be 5v tolerant)
 
 5v I/Os on PA/PB, with Timer Aliases
 ------------------------------------
@@ -65,12 +65,12 @@ Timer4/1: (CC1:DMA1/1, UP:DMA1/7)
  PA13:
  PA14:
  PA15:
--PB2: [BOOT1]
+-PB2: [BOOT1, (but could be shared)]
  PB3: T2/2 (remap)
  PB4: T3/1 (remap)
  PB6: T4/1
  PB7: T4/2
--PB8: [NOT ON MAPLE MINI]
+-PB8: T4/3 [BOOT0 ON MAPLE MINI (but could be shared)]
 -PB9: [NOT ON MAPLE MINI]
  PB10: T2/3 (remap) [nb. used in T2/3 mode by LEDs on Gotek]
  PB11: T2/4 (remap) [nb. used in T2/4 mode by LEDs on Gotek]

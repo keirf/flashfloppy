@@ -34,8 +34,8 @@
 #define pin_rdy    12
 
 #define gpio_timer gpiob
-#define pin_wdata   6
-#define pin_rdata   7 /* must be 5v tolerant */
+#define pin_wdata   6 /* must be 5v tolerant */
+#define pin_rdata   7
 
 #define m(pin) (1u<<(pin))
 
