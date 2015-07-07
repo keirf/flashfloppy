@@ -62,17 +62,30 @@ static void clock_init(void)
     stk->ctrl = STK_CTRL_ENABLE;
 }
 
+static void gpio_init(GPIO gpio)
+{
+    /* Input with weak pull up. */
+    gpio->odr = 0xffffu;
+    gpio->crl = gpio->crh = 0x88888888u;
+}
+
 static void peripheral_init(void)
 {
     /* Enable basic GPIO and AFIO clocks, and DMA. */
+    rcc->apb1enr = 0;
     rcc->apb2enr = (RCC_APB2ENR_IOPAEN |
                     RCC_APB2ENR_IOPBEN |
-                    /*RCC_APB2ENR_IOPCEN |*/
+                    RCC_APB2ENR_IOPCEN |
                     RCC_APB2ENR_AFIOEN);
-    rcc->ahbenr |= RCC_AHBENR_DMA1EN;
+    rcc->ahbenr = RCC_AHBENR_DMA1EN;
 
     /* Turn off serial-wire JTAG and reclaim the GPIOs. */
     afio->mapr = AFIO_MAPR_SWJ_CFG_DISABLED;
+
+    /* All pins in a stable state. */
+    gpio_init(gpioa);
+    gpio_init(gpiob);
+    gpio_init(gpioc);
 }
 
 void stm32_init(void)
@@ -111,9 +124,7 @@ void delay_ms(unsigned int ms)
     delay_ticks(ms * 1000u * STK_MHZ);
 }
 
-void gpio_configure_pin(
-    volatile struct gpio * const gpio,
-    unsigned int pin, unsigned int mode)
+void gpio_configure_pin(GPIO gpio, unsigned int pin, unsigned int mode)
 {
     gpio_write_pin(gpio, pin, mode >> 4);
     mode &= 0xfu;

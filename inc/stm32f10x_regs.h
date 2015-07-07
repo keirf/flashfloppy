@@ -129,7 +129,22 @@ struct pwr {
     uint32_t csr;      /* 04: Power control/status */
 };
 
+#define PWR_CR_DBP           (1u<< 8)
+
 #define PWR_BASE 0x40007000
+
+/* Backup */
+struct bkp {
+    uint32_t _0[1];    /* 00: - */
+    uint32_t dr1[10];  /* 04-28: Data block #1 */
+    uint32_t rtccr;    /* 2C: RTC clock calibration */
+    uint32_t cr;       /* 30: Control */
+    uint32_t csr;      /* 34: Control/status */
+    uint32_t _1[2];    /* 38-3C: - */
+    uint32_t dr2[32];  /* 40-BC: Data block #2 */
+};
+
+#define BKP_BASE 0x40006c00
 
 /* Reset and clock control */
 struct rcc {
