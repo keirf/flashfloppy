@@ -32,33 +32,30 @@ static void do_tft(void)
 
 static void board_init(void)
 {
-    uint16_t id, i;
+    uint32_t crh;
+    uint16_t id;
 
-    /* Test if PC13-15 are externally pulled low. We pull each line up to 3.3v
-     * via the internal weak pullup: maximum 50k resistance. Load on each line
-     * could be (conservatively) 50pF, allowing for LSE crystal load caps. Need
-     * to wait time T for input to reach 1.71v to read as HIGH.
-     * T = -RCln(1-Vthresh/Vcc) = -50k*50p*ln(1-1.71/3.3) ~= 1.9us. 
-     * It's a negligible delay so pad it some more... */
-    delay_us(5);
+    /* Test whether PC13-15 are externally pulled low. We pull each line up to
+     * 3.3v via the internal weak pullup (<50k resistance). Load on each line
+     * is conservatively <50pF, allowing for LSE crystal load caps. Need to
+     * wait time T for input to reach 1.71v to read as HIGH.
+     * T = -RCln(1-Vthresh/Vcc) = -50k*50p*ln(1-1.71/3.3) ~= 1.9us. */
+    crh = gpioc->crh;
+    gpioc->odr = 0xffffu;
+    gpioc->crh = 0x88888888u; /* PC8-15: Input with pull-up */
+    delay_us(5); /* 1.9us is a tiny delay so fine to pad it some more */
+    id = (gpioc->idr >> 13) & 7; /* ID should now be stable at PC[15:13] */
+    gpioc->crh = crh;
 
-    /* Selective external pullups plus the weaker internal pullups define 
-     * a board identifier. Check it's one we recognise. */
-    switch (id = (gpioc->idr >> 13) & 7) {
+    /* Selective external pulldowns define a board identifier.
+     * Check if it's one we recognise. */
+    switch (id) {
     case 7: /* Rev LC150 */
         break;
     default:
         printk("Unknown board ID %x\n", id);
         ASSERT(0);
     }
-
-    /* PB2/BOOT1 is externally pulled up or down on every board. */
-    gpio_configure_pin(gpiob, 2, GPI_floating);
-
-    /* External pulldowns don't need the internal pullup. */
-    for (i = 0; i < 3; i++)
-        if (!(id & (1<<i)))
-            gpio_configure_pin(gpioc, i+13, GPI_floating);
 }
 
 int main(void)

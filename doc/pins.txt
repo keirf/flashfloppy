@@ -56,11 +56,13 @@ Timer4/1: (CC1:DMA1/1, UP:DMA1/7)
 
 Unused:
 -------
- PB1 [Maple Mini, LED (weak low, or drive it)]
- PB2 [LC Tech, BOOT1 (float)]
- PB8 [LC Tech, n/c (weak high); Maple Mini, BOOT0/Button (float)]
- PB9 [LC Tech, n/c (weak high); Maple Mini, USB DISConnect (weak high)]
- PC13-15 [LC Tech, n/c (weak high); Maple Mini, pulled low (float)]
+Set to ANALOG-INPUT to disable the Schmitt Trigger Input and eliminate
+parasitic switching load.
+ PB1 [Maple Mini, LED (floats)]
+ PB2 [LC Tech, BOOT1 (ext.pull)]
+ PB8 [LC Tech, n/c (floats); Maple Mini, BOOT0/Button (ext.pull)]
+ PB9 [LC Tech, n/c (floats); Maple Mini, USB DISConnect (ext.pull)]
+ PC13-15 [LC Tech, n/c (floats); Maple Mini (ext.pull)]
 
 Floppy drive 34-pin Shugart(-ish) interface. For reference:
 -----------------------------------------------------------

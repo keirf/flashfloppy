@@ -64,9 +64,10 @@ static void clock_init(void)
 
 static void gpio_init(GPIO gpio)
 {
-    /* Input with weak pull up. */
-    gpio->odr = 0xffffu;
-    gpio->crl = gpio->crh = 0x88888888u;
+    /* Analog Input: disables Schmitt Trigger Inputs hence zero load for any 
+     * voltage at the input pin (and voltage build-up is clamped by protection 
+     * diodes even if the pin floats). */
+    gpio->crl = gpio->crh = 0;
 }
 
 static void peripheral_init(void)
