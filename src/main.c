@@ -75,6 +75,8 @@ int main(void)
 
     board_init();
 
+    speaker_init();
+
     backlight_init();
     tft_init();
     backlight_set(8);

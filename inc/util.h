@@ -66,6 +66,9 @@ int printk(const char *format, ...)
 void console_init(void);
 void console_sync(void);
 
+void speaker_init(void);
+void speaker_pulse (uint8_t volume);
+
 void tft_init(void);
 void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c);
 
