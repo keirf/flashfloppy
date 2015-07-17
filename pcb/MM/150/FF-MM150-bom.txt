@@ -1,12 +1,16 @@
-F1: Bourns MF-PSMF075X-2 (0805)
-D1: 1N4148 (through hole)
-D2: NXP PTVS5V0P1UP (SOD-128)
-C1-C2: 0.1uF (0805)
-C3: Vishay 293D106X9020B2TE3 (3528)
-Q1: 2N3904 (TO-92)
-Q2: 2N3906 (TO-92)
-U1: Maple Mini STM32 (DIP40)
-U2-U3: 74LS38 (DIP14)
-R1: 33R,1%,1/4W (through hole)
-R2: 10K,5%,1/8W (through hole)
-R3-R16: 1K,5%,1/8W (through hole)
+REF         PART DESCRIPTION                   RS ORDER
+===         ================                   ========
+F1          Bourns MF-PSMF075X-2 (0805)        691-7516
+D1          1N4148 (through hole)
+D2          NXP PTVS5V0P1UP (SOD-128)          791-9052
+            NXP PTVS5V0P1UTP (alternative)     791-9055
+C1-C2       0.1uF (0805)                       390-990
+C3          Vishay 293D106X9020B2TE3 (3528)    684-3904
+Q1          2N3904 (TO-92)
+Q2          2N3906 (TO-92)
+U1          Maple Mini STM32 (DIP40)
+U2-U3       74LS38 (DIP14)                     709-2292
+R1          33R,1%,1/4W (through hole)         506-4683
+R2          10K,5%,1/8W (through hole)
+R3-R16      1K,5%,1/8W (through hole)
+P5          TE/AMP 171826-4 4-pin header       680-1225
