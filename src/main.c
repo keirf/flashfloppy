@@ -86,7 +86,7 @@ int main(void)
     backlight_set(8);
     touch_init();
 
-    floppy_init(NULL, NULL);
+    floppy_init("nzs_crack.hfe", NULL);
 
     f_mount(&fatfs, "", 1);
     fr = f_open(&file, "small", FA_READ);
@@ -108,6 +108,7 @@ int main(void)
     for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
         do_tft();
         floppy_handle();
+        delay_us(500);
     }
 
     ASSERT(0);

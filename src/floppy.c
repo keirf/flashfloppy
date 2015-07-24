@@ -51,7 +51,7 @@ static const struct {
 
 static struct drive drive[2];
 static struct image image;
-static uint16_t dmabuf[1024];
+static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
 
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
@@ -97,7 +97,7 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
 
     drive[0].filename = disk0_name;
     drive[1].filename = disk1_name;
-    drive[0].cyl = drive[1].cyl = 80; /* XXX */
+    drive[0].cyl = drive[1].cyl = 1; /* XXX */
 
     gpio_configure_pin(gpio_in, pin_sel0,  GPI_bus);
     gpio_configure_pin(gpio_in, pin_sel1,  GPI_bus);
@@ -167,32 +167,93 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
                      DMA_CCR_EN);
 }
 
+static uint32_t max_load_us, max_prefetch_us;
+
 int floppy_handle(void)
 {
     FRESULT fr;
-    uint32_t now = stk_now();
-    uint16_t i;
+    uint32_t load_us, prefetch_us, now = stk_now(), time_since_index;
+    uint16_t i, nr_to_wrap, nr_to_cons, nr, dmacons;
+    stk_time_t timestamp[3];
 
     for (i = 0; i < ARRAY_SIZE(drive); i++) {
-        if (!drive[i].step.active
-            || (stk_diff(drive[i].step.start, now) < stk_ms(2)))
-            continue;
-        drive[i].cyl += drive[i].step.inward ? 1 : -1;
-        drive[i].step.active = FALSE;
-        printk("Disk %d: cyl %d\n", i, drive[i].cyl);
-        if ((i == 0) && (drive[i].cyl == 0))
-            gpio_write_pin(gpio_out, pin_trk0, O_TRUE);
+
+        time_since_index = stk_diff(drive[i].index.time, now);
+        if (time_since_index >= stk_ms(200)) {
+            drive[i].index.time -= stk_ms(200);
+            drive[i].index.time &= STK_MASK;
+        }
+
+        if (drive[i].step.active) {
+            drive[i].step.settling = FALSE;
+            if (stk_diff(drive[i].step.start, now) < stk_ms(2))
+                continue;
+            speaker_pulse(5);
+            drive[i].cyl += drive[i].step.inward ? 1 : -1;
+            drive[i].step.active = FALSE;
+            drive[i].step.settling = TRUE;
+            if ((i == 0) && (drive[i].cyl == 0))
+                gpio_write_pin(gpio_out, pin_trk0, O_TRUE);
+        } else if (drive[i].step.settling) {
+            if (stk_diff(drive[i].step.start, now) < stk_ms(16))
+                continue;
+            drive[i].step.settling = FALSE;
+        }
     }
 
-    if (drive[0].step.active)
+    if (drive[0].step.active || drive[0].step.settling)
         return 0;
+
+    time_since_index = stk_diff(drive[0].index.time, now);
+    if (drive[0].index.active ^ (time_since_index <= stk_ms(2))) {
+        drive[0].index.active ^= 1;
+        gpio_write_pin(gpio_out, pin_index,
+                       drive[0].index.active ? O_TRUE : O_FALSE);
+    }
 
     if (!drive[0].image) {
         struct image *im = &image;
         fr = f_open(&im->fp, drive[0].filename, FA_READ);
-        if (fr)
+        if (fr || !hfe_open(im))
             return -1;
         drive[0].image = im;
+        im->cur_track = -1;
+    }
+
+    if (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track)
+        hfe_seek_track(drive[0].image, drive[0].cyl*2 + drive[0].head);
+
+    timestamp[0] = stk_now();
+
+    dmacons = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr;
+
+    if ((dmacons < dmacons_prev)
+        ? (dmaprod > dmacons_prev) || (dmaprod < dmacons)
+        : (dmaprod > dmacons_prev) && (dmaprod < dmacons))
+        printk("Overflow! %x-%x-%x\n", dmacons_prev, dmaprod, dmacons);
+
+    nr_to_wrap = ARRAY_SIZE(dmabuf) - dmaprod;
+    nr_to_cons = (dmacons - dmaprod) & (ARRAY_SIZE(dmabuf) - 1);
+    nr = min(nr_to_wrap, nr_to_cons);
+    if (nr) {
+        dmaprod += hfe_load_mfm(drive[0].image, &dmabuf[dmaprod], nr);
+        dmaprod &= ARRAY_SIZE(dmabuf) - 1;
+    }
+
+    dmacons_prev = dmacons;
+
+    timestamp[1] = stk_now();
+
+    hfe_prefetch_data(drive[0].image);
+
+    timestamp[2] = stk_now();
+
+    load_us = stk_diff(timestamp[0],timestamp[1])/STK_MHZ;
+    prefetch_us = stk_diff(timestamp[1],timestamp[2])/STK_MHZ;
+    if ((load_us > max_load_us) || (prefetch_us > max_prefetch_us)) {
+        max_load_us = max_t(uint32_t, max_load_us, load_us);
+        max_prefetch_us = max_t(uint32_t, max_prefetch_us, prefetch_us);
+        printk("New max: %u %u\n", max_load_us, max_prefetch_us);
     }
 
     return 0;

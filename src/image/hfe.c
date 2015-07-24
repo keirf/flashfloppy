@@ -86,15 +86,72 @@ bool_t hfe_seek_track(struct image *im, uint8_t track)
         || (im->fr = f_read(&im->fp, &thdr, sizeof(thdr), &nr)))
         return FALSE;
 
-    thdr.offset = le16toh(thdr.offset);
-    thdr.len = le16toh(thdr.len);
+    im->hfe.trk_off = le16toh(thdr.offset);
+    im->hfe.trk_pos = im->prod = im->cons = 0;
+    im->hfe.trk_len = le16toh(thdr.len) / 2;
+    im->hfe.ticks = 0;
+    im->tracklen_bc = im->hfe.trk_len * 8;
+    im->cur_bc = 0;
+    im->cur_track = track;
 
+    printk("Seek %u\n", track);
     return TRUE;
 }
 
-void hfe_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
+void hfe_prefetch_data(struct image *im)
 {
-    
+    UINT nr;
+    uint8_t *buf = (uint8_t *)im->buf;
+
+    if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-256)*8)
+        return;
+
+    f_lseek(&im->fp,
+            im->hfe.trk_off * 512
+            + (im->cur_track & 1) * 256
+            + ((im->hfe.trk_pos & ~255) << 1)
+            + (im->hfe.trk_pos & 255));
+    f_read(&im->fp, &buf[(im->prod/8) % sizeof(im->buf)], 256, &nr);
+    im->prod += nr * 8;
+    im->hfe.trk_pos += nr;
+    if (im->hfe.trk_pos >= im->hfe.trk_len)
+        im->hfe.trk_pos = 0;
+}
+
+uint16_t hfe_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
+{
+    uint32_t ticks = im->hfe.ticks, ticks_per_cell = sysclk_us(2) * 16;
+    uint32_t y = 8, todo = nr;
+    uint8_t x, *buf = (uint8_t *)im->buf;
+
+    while (im->cons != im->prod) {
+        if (im->cur_bc >= im->tracklen_bc) {
+            ASSERT(im->cur_bc == im->tracklen_bc);
+            im->cur_bc = 0;
+            /* Skip tail of current 256-byte block. */
+            im->cons = (im->cons + 256*8-1) & ~(256*8-1);
+        }
+        y = im->cons % 8;
+        x = buf[(im->cons/8) % sizeof(im->buf)] >> y;
+        im->cons += 8 - y;
+        im->cur_bc += 8 - y;
+        while (y++ < 8) {
+            ticks += ticks_per_cell;
+            if (x & 1) {
+                *tbuf++ = ticks >> 4;
+                ticks &= 15;
+                if (!--todo)
+                    goto out;
+            }
+            x >>= 1;
+        }
+    }
+
+out:
+    im->cons -= 8 - y;
+    im->cur_bc -= 8 - y;
+    im->hfe.ticks = ticks;
+    return nr - todo;
 }
 
 /*
