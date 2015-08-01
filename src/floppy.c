@@ -28,7 +28,7 @@
 /* Outputs are buffered, thus do *not* need to be 5v tolerant. */
 #define gpio_out gpiob
 #define pin_dskchg  3
-#define pin_index   4
+static uint8_t pin_index; /* PB2 (MM150); PB4 (LC150) */
 #define pin_trk0    5
 #define pin_wrprot 11
 #define pin_rdy    12
@@ -92,6 +92,8 @@ static void floppy_check(void)
 void floppy_init(const char *disk0_name, const char *disk1_name)
 {
     uint16_t i;
+
+    pin_index = (board_id == BRDREV_MM150) ? 2 : 4;
 
     drive[0].filename = disk0_name;
     drive[1].filename = disk1_name;

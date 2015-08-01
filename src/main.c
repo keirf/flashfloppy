@@ -30,6 +30,8 @@ static void do_tft(void)
     fill_rect(sx, sy, 2, 2, 0xf800);
 }
 
+uint8_t board_id;
+
 static void board_init(void)
 {
     uint32_t crh;
@@ -49,8 +51,10 @@ static void board_init(void)
 
     /* Selective external pulldowns define a board identifier.
      * Check if it's one we recognise. */
-    switch (id) {
-    case 7: /* Rev LC150 */
+    switch (board_id = id) {
+    case BRDREV_MM150:
+        break;
+    case BRDREV_LC150:
         break;
     default:
         printk("Unknown board ID %x\n", id);

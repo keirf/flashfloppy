@@ -13,13 +13,10 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-/* PWM pin */
+/* MM150: Timer 3, channel 1, PB4 
+ * LC150: Timer 3, channel 4, PB1 */
 #define gpio_spk gpiob
-#define PIN_SPK 1
-
-/* Timer channel for above pin: Timer 2, channel 3. */
 #define tim tim3
-#define PWM_CCR ccr4
 
 #define MAX_KHZ 5   /* Limits highest frequency */
 #define TICK_MHZ 8  /* Controls volume range */
@@ -27,30 +24,38 @@
 
 void speaker_init(void)
 {
+    uint8_t pin_spk = (board_id == BRDREV_MM150) ? 4 : 1;
+
     /* PWM2 mode achieves a LOW-HIGH-LOW pulse in one-pulse mode, which is 
      * what we require to drive an NPN BJT with grounded emitter. */
     rcc->apb1enr |= RCC_APB1ENR_TIM3EN;
     tim->psc = SYSCLK_MHZ/TICK_MHZ - 1;
     tim->arr = ARR;
-    tim->ccer = TIM_CCER_CC4E;
+    tim->ccer = TIM_CCER_CC1E|TIM_CCER_CC4E;
+    tim->ccmr1 = (TIM_CCMR1_CC1S(TIM_CCS_OUTPUT) |
+                  TIM_CCMR1_OC1M(TIM_OCM_PWM2)); /* PWM2: low then high */
     tim->ccmr2 = (TIM_CCMR2_CC4S(TIM_CCS_OUTPUT) |
                   TIM_CCMR2_OC4M(TIM_OCM_PWM2)); /* PWM2: low then high */
     tim->cr2 = tim->dier = 0;
     speaker_pulse(0); /* ensures output LOW */
 
     /* Set up the output pin. */
-    gpio_configure_pin(gpio_spk, PIN_SPK, AFO_pushpull(_2MHz));
+    afio->mapr |= AFIO_MAPR_TIM3_REMAP_PARTIAL;
+    gpio_configure_pin(gpio_spk, pin_spk, AFO_pushpull(_2MHz));
 }
 
 /* Volume: 0 (silence) - 20 (loudest) */
 void speaker_pulse(uint8_t volume)
 {
+    volatile uint32_t *pwm_ccr =
+        (board_id == BRDREV_MM150) ? &tim->ccr1 : &tim->ccr4;
+
     /* Don't overlap pulses; limit the maximum frequency. */
     if (tim->cr1 & TIM_CR1_CEN)
         return;
 
     /* Quadratic scaling of pulse width seems to give linear-ish volume. */
-    tim->PWM_CCR = ARR + 1 - volume*volume;
+    *pwm_ccr = ARR + 1 - volume*volume;
     tim->cr1 = TIM_CR1_OPM | TIM_CR1_CEN;
 }
 

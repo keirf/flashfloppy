@@ -81,6 +81,10 @@ bool_t touch_get_xy(uint16_t *px, uint16_t *py);
 void floppy_init(const char *disk0_name, const char *disk1_name);
 int floppy_handle(void);
 
+extern uint8_t board_id;
+#define BRDREV_MM150 0
+#define BRDREV_LC150 7
+
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];
 extern char _sdat[], _edat[], _ldat[];
