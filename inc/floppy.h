@@ -9,6 +9,9 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#define DRIVE_RPM 300u
+#define DRIVE_MS_PER_REV (60000u/DRIVE_RPM)
+
 struct drive {
     const char *filename;
     uint8_t cyl, head;
@@ -30,7 +33,7 @@ struct hfe_image {
     uint16_t tlut_base;
     uint16_t trk_off;
     uint16_t trk_pos, trk_len;
-    uint32_t ticks;
+    uint32_t ticks, ticks_per_cell;
 };
 
 struct image {

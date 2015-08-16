@@ -108,7 +108,6 @@ int main(void)
     for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
         do_tft();
         floppy_handle();
-        delay_us(500);
     }
 
     ASSERT(0);

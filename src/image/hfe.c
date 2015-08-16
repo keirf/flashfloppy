@@ -89,8 +89,10 @@ bool_t hfe_seek_track(struct image *im, uint8_t track)
     im->hfe.trk_off = le16toh(thdr.offset);
     im->hfe.trk_pos = im->prod = im->cons = 0;
     im->hfe.trk_len = le16toh(thdr.len) / 2;
-    im->hfe.ticks = 0;
     im->tracklen_bc = im->hfe.trk_len * 8;
+    im->hfe.ticks_per_cell = ((sysclk_ms(DRIVE_MS_PER_REV) * 16u)
+                              / im->tracklen_bc);
+    im->hfe.ticks = 0;
     im->cur_bc = 0;
     im->cur_track = track;
 
@@ -112,6 +114,7 @@ void hfe_prefetch_data(struct image *im)
             + ((im->hfe.trk_pos & ~255) << 1)
             + (im->hfe.trk_pos & 255));
     f_read(&im->fp, &buf[(im->prod/8) % sizeof(im->buf)], 256, &nr);
+    ASSERT(nr == 256);
     im->prod += nr * 8;
     im->hfe.trk_pos += nr;
     if (im->hfe.trk_pos >= im->hfe.trk_len)
@@ -120,7 +123,7 @@ void hfe_prefetch_data(struct image *im)
 
 uint16_t hfe_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
-    uint32_t ticks = im->hfe.ticks, ticks_per_cell = sysclk_us(2) * 16;
+    uint32_t ticks = im->hfe.ticks, ticks_per_cell = im->hfe.ticks_per_cell;
     uint32_t y = 8, todo = nr;
     uint8_t x, *buf = (uint8_t *)im->buf;
 
@@ -138,7 +141,7 @@ uint16_t hfe_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
         while (y++ < 8) {
             ticks += ticks_per_cell;
             if (x & 1) {
-                *tbuf++ = ticks >> 4;
+                *tbuf++ = (ticks >> 4) - 1;
                 ticks &= 15;
                 if (!--todo)
                     goto out;

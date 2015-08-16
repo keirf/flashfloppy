@@ -72,6 +72,7 @@ void system_reset(void);
 #define SYSCLK     (SYSCLK_MHZ * 1000000)
 #define sysclk_ns(x) (((x) * SYSCLK_MHZ) / 1000)
 #define sysclk_us(x) ((x) * SYSCLK_MHZ)
+#define sysclk_ms(x) ((x) * SYSCLK_MHZ * 1000)
 
 /* SysTick Timer */
 #define STK_MHZ    (SYSCLK_MHZ / 8)

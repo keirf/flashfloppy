@@ -220,8 +220,11 @@ int floppy_handle(void)
         im->cur_track = -1;
     }
 
-    if (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track)
+    drive[0].head = !gpio_read_pin(gpio_in, pin_side); /* XXX */
+    if (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track) {
         hfe_seek_track(drive[0].image, drive[0].cyl*2 + drive[0].head);
+        dmacons_prev = dmaprod = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr; /* XXX */
+    }
 
     timestamp[0] = stk_now();
 
