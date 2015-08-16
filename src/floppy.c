@@ -41,13 +41,8 @@ static uint8_t pin_index; /* PB2 (MM150); PB4 (LC150) */
 
 /* EXTI[15:10]: IRQ 40 */
 void IRQ_40(void) __attribute__((alias("IRQ_input_changed")));
-
-/* DMA1 channel 7: IRQ 17. */
-void IRQ_17(void) __attribute__((alias("IRQ_feed_rdata")));
-
-static const struct {
-    uint8_t irq, pri;
-} irqs[] = { {40,2}, {17,3} };
+#define EXTI_IRQ 40
+#define EXTI_IRQ_PRI 2 /* very high */
 
 static struct drive drive[2];
 static struct image image;
@@ -125,11 +120,9 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
         m(pin_step) | m(pin_sel0) | m(pin_sel1) | m(pin_wgate) | m(pin_side);
 
     /* Enable interrupts. */
-    for (i = 0; i < ARRAY_SIZE(irqs); i++) {
-        IRQx_set_prio(irqs[i].irq, irqs[i].pri);
-        IRQx_set_pending(irqs[i].irq);
-        IRQx_enable(irqs[i].irq);
-    }
+    IRQx_set_prio(EXTI_IRQ, EXTI_IRQ_PRI);
+    IRQx_set_pending(EXTI_IRQ);
+    IRQx_enable(EXTI_IRQ);
 
     /* Timer setup. 
      * The counter is incremented at full SYSCLK rate. 
@@ -151,8 +144,7 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     for (i = 0; i < ARRAY_SIZE(dmabuf); i++)
         dmabuf[i] = SYSCLK_MHZ * ((i&1) ? 2 : 4);
 
-    /* DMA from a circular buffer into Timer 4's ARR. Take interrupts as the
-     * buffer empties so that we keep DMA endlessly supplied. */
+    /* DMA from a circular buffer into Timer 4's ARR. */
     dma1->ch7.cpar = (uint32_t)(unsigned long)&tim4->arr;
     dma1->ch7.cmar = (uint32_t)(unsigned long)dmabuf;
     dma1->ch7.cndtr = ARRAY_SIZE(dmabuf);
@@ -162,8 +154,6 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
                      DMA_CCR_MINC |
                      DMA_CCR_CIRC |
                      DMA_CCR_DIR_M2P |
-                     DMA_CCR_HTIE |
-                     DMA_CCR_TCIE |
                      DMA_CCR_EN);
 }
 
@@ -260,11 +250,6 @@ int floppy_handle(void)
     }
 
     return 0;
-}
-
-static void IRQ_feed_rdata(void)
-{
-    dma1->ifcr = DMA_IFCR_CGIF7;
 }
 
 static void IRQ_input_changed(void)
