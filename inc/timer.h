@@ -1,8 +1,7 @@
 /*
- * decls.h
+ * timer.h
  * 
- * Pull in all other header files in an orderly fashion. Source files include
- * only this header, and only once.
+ * Deadline-based timer callbacks.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -10,20 +9,16 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include <stdint.h>
-#include <stdarg.h>
-#include <stddef.h>
+struct timer {
+    stk_time_t deadline;
+    void (*cb_fn)(void *);
+    void *cb_dat;
+    struct timer *next;
+};
 
-#include "stm32f10x_regs.h"
-#include "stm32f10x.h"
-#include "intrinsics.h"
-#include "util.h"
+void timer_set(struct timer *timer);
 
-#include "spi.h"
-#include "timer.h"
-
-#include "../src/fatfs/ff.h"
-#include "floppy.h"
+void timers_init(void);
 
 /*
  * Local variables:

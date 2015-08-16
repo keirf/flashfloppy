@@ -73,6 +73,7 @@ int main(void)
     memset(_sbss, 0, _ebss-_sbss);
 
     stm32_init();
+    timers_init();
 
     console_init();
     delay_ms(250); /* XXX printk debug delay */

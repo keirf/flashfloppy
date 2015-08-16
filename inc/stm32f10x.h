@@ -85,6 +85,7 @@ typedef uint32_t stk_time_t;
 #define stk_now() (stk->val)
 #define stk_diff(x,y) (((x)-(y)) & STK_MASK)
 #define stk_timesince(x) stk_diff(x,stk_now())
+#define stk_deadline(x) stk_diff(stk_now(),x)
 
 #define stk_us(x) ((x) * STK_MHZ)
 #define stk_ms(x) stk_us((x) * 1000)

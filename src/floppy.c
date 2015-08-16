@@ -48,6 +48,9 @@ static struct drive drive[2];
 static struct image image;
 static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
 
+static struct timer index_timer;
+static void index_pulse(void *);
+
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
 static void floppy_check(void)
@@ -113,6 +116,10 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
 
     floppy_check();
 
+    index_timer.deadline = stk_deadline(stk_ms(200));
+    index_timer.cb_fn = index_pulse;
+    timer_set(&index_timer);
+
     /* PA[15:0] -> EXT[15:0] */
     afio->exticr1 = afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x0000;
 
@@ -162,17 +169,11 @@ static uint32_t max_load_us, max_prefetch_us;
 int floppy_handle(void)
 {
     FRESULT fr;
-    uint32_t load_us, prefetch_us, now = stk_now(), time_since_index;
+    uint32_t load_us, prefetch_us, now = stk_now();
     uint16_t i, nr_to_wrap, nr_to_cons, nr, dmacons;
     stk_time_t timestamp[3];
 
     for (i = 0; i < ARRAY_SIZE(drive); i++) {
-
-        time_since_index = stk_diff(drive[i].index.time, now);
-        if (time_since_index >= stk_ms(200)) {
-            drive[i].index.time -= stk_ms(200);
-            drive[i].index.time &= STK_MASK;
-        }
 
         if (drive[i].step.active) {
             drive[i].step.settling = FALSE;
@@ -193,13 +194,6 @@ int floppy_handle(void)
 
     if (drive[0].step.active || drive[0].step.settling)
         return 0;
-
-    time_since_index = stk_diff(drive[0].index.time, now);
-    if (drive[0].index.active ^ (time_since_index <= stk_ms(2))) {
-        drive[0].index.active ^= 1;
-        gpio_write_pin(gpio_out, pin_index,
-                       drive[0].index.active ? O_TRUE : O_FALSE);
-    }
 
     if (!drive[0].image) {
         struct image *im = &image;
@@ -250,6 +244,19 @@ int floppy_handle(void)
     }
 
     return 0;
+}
+
+static void index_pulse(void *dat)
+{
+    drive[0].index.active ^= 1;
+    if (drive[0].index.active) {
+        gpio_write_pin(gpio_out, pin_index, O_TRUE);
+        index_timer.deadline = stk_diff(index_timer.deadline, stk_ms(2));
+    } else {
+        gpio_write_pin(gpio_out, pin_index, O_FALSE);
+        index_timer.deadline = stk_diff(index_timer.deadline, stk_ms(198));
+    }
+    timer_set(&index_timer);
 }
 
 static void IRQ_input_changed(void)
