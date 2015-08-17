@@ -82,6 +82,9 @@ bool_t hfe_seek_track(struct image *im, uint8_t track)
     struct track_header thdr;
     UINT nr;
 
+    /* TODO: Fake out unformatted tracks. */
+    track = min_t(uint8_t, track, im->nr_tracks-1);
+
     if ((im->fr = f_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4))
         || (im->fr = f_read(&im->fp, &thdr, sizeof(thdr), &nr)))
         return FALSE;
@@ -138,7 +141,8 @@ uint16_t hfe_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
         x = buf[(im->cons/8) % sizeof(im->buf)] >> y;
         im->cons += 8 - y;
         im->cur_bc += 8 - y;
-        while (y++ < 8) {
+        while (y < 8) {
+            y++;
             ticks += ticks_per_cell;
             if (x & 1) {
                 *tbuf++ = (ticks >> 4) - 1;

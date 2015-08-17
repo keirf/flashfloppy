@@ -29,6 +29,13 @@ struct drive {
     struct image *image;
 };
 
+struct adf_image {
+    uint32_t trk_off;
+    uint16_t trk_pos, trk_len;
+    uint32_t ticks;
+    uint32_t mfm[16], mfm_cons;
+};
+
 struct hfe_image {
     uint16_t tlut_base;
     uint16_t trk_off;
@@ -55,9 +62,15 @@ struct image {
     uint32_t tracklen_bc, cur_bc; /* Track length and cursor, in bitcells */
 
     union {
+        struct adf_image adf;
         struct hfe_image hfe;
     };
 };
+
+bool_t adf_open(struct image *im);
+bool_t adf_seek_track(struct image *im, uint8_t track);
+void adf_prefetch_data(struct image *im);
+uint16_t adf_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr);
 
 bool_t hfe_open(struct image *im);
 bool_t hfe_seek_track(struct image *im, uint8_t track);

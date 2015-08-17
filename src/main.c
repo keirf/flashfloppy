@@ -87,7 +87,7 @@ int main(void)
     backlight_set(8);
     touch_init();
 
-    floppy_init("nzs_crack.hfe", NULL);
+    floppy_init("nzs_crack.adf", NULL);
 
     f_mount(&fatfs, "", 1);
     fr = f_open(&file, "small", FA_READ);

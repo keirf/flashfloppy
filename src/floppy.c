@@ -51,6 +51,11 @@ static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
 static struct timer index_timer;
 static void index_pulse(void *);
 
+#define image_open adf_open
+#define image_seek_track adf_seek_track
+#define image_prefetch_data adf_prefetch_data
+#define image_load_mfm adf_load_mfm
+
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
 static void floppy_check(void)
@@ -198,7 +203,7 @@ int floppy_handle(void)
     if (!drive[0].image) {
         struct image *im = &image;
         fr = f_open(&im->fp, drive[0].filename, FA_READ);
-        if (fr || !hfe_open(im))
+        if (fr || !image_open(im))
             return -1;
         drive[0].image = im;
         im->cur_track = -1;
@@ -206,7 +211,7 @@ int floppy_handle(void)
 
     drive[0].head = !gpio_read_pin(gpio_in, pin_side); /* XXX */
     if (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track) {
-        hfe_seek_track(drive[0].image, drive[0].cyl*2 + drive[0].head);
+        image_seek_track(drive[0].image, drive[0].cyl*2 + drive[0].head);
         dmacons_prev = dmaprod = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr; /* XXX */
     }
 
@@ -223,7 +228,7 @@ int floppy_handle(void)
     nr_to_cons = (dmacons - dmaprod) & (ARRAY_SIZE(dmabuf) - 1);
     nr = min(nr_to_wrap, nr_to_cons);
     if (nr) {
-        dmaprod += hfe_load_mfm(drive[0].image, &dmabuf[dmaprod], nr);
+        dmaprod += image_load_mfm(drive[0].image, &dmabuf[dmaprod], nr);
         dmaprod &= ARRAY_SIZE(dmabuf) - 1;
     }
 
@@ -231,7 +236,7 @@ int floppy_handle(void)
 
     timestamp[1] = stk_now();
 
-    hfe_prefetch_data(drive[0].image);
+    image_prefetch_data(drive[0].image);
 
     timestamp[2] = stk_now();
 

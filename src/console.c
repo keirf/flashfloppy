@@ -22,7 +22,7 @@ static unsigned int cons, prod, dma_sz;
 
 /* The console can be set into synchronous mode in which case DMA is disabled 
  * and the transmit-empty flag is polled manually for each byte. */
-static bool_t sync_console;
+static bool_t sync_console = 1;
 
 static void kick_tx(void)
 {
