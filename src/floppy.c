@@ -46,7 +46,7 @@ void IRQ_40(void) __attribute__((alias("IRQ_input_changed")));
 
 static struct drive drive[2];
 static struct image image;
-static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
+static uint16_t dmabuf[2048], g_dmaprod, g_dmacons_prev;
 
 static struct timer index_timer;
 static void index_pulse(void *);
@@ -61,8 +61,6 @@ static void index_pulse(void *);
 static void floppy_check(void)
 {
     uint16_t i=0, mask, pin, prev_pin=0, idr, prev_idr;
-
-    gpio_configure_pin(gpio_timer, pin_rdata, GPO_bus);
 
     mask = m(pin_dir) | m(pin_step) | m(pin_sel0)
         | m(pin_sel1) | m(pin_wgate) | m(pin_side);
@@ -94,8 +92,6 @@ static void floppy_check(void)
 
 void floppy_init(const char *disk0_name, const char *disk1_name)
 {
-    uint16_t i;
-
     pin_index = (board_id == BRDREV_MM150) ? 2 : 4;
 
     drive[0].filename = disk0_name;
@@ -117,7 +113,7 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
 
     rcc->apb1enr |= RCC_APB1ENR_TIM4EN;
     gpio_configure_pin(gpio_timer, pin_wdata, GPI_bus);
-    gpio_configure_pin(gpio_timer, pin_rdata, AFO_bus);
+    gpio_configure_pin(gpio_timer, pin_rdata, GPO_bus);
 
     floppy_check();
 
@@ -136,7 +132,7 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     IRQx_set_pending(EXTI_IRQ);
     IRQx_enable(EXTI_IRQ);
 
-    /* Timer setup. 
+    /* Timer setup:
      * The counter is incremented at full SYSCLK rate. 
      *  
      * Ch.2 (RDDATA) is in PWM mode 1. It outputs O_TRUE for 400ns and then 
@@ -150,16 +146,40 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     tim4->ccr2 = sysclk_ns(400);
     tim4->dier = TIM_DIER_UDE;
     tim4->cr2 = 0;
-    tim4->cr1 = TIM_CR1_CEN;
 
-    /* XXX dummy data */
-    for (i = 0; i < ARRAY_SIZE(dmabuf); i++)
-        dmabuf[i] = SYSCLK_MHZ * ((i&1) ? 2 : 4);
-
-    /* DMA from a circular buffer into Timer 4's ARR. */
+    /* DMA setup: From a circular buffer into Timer 4's ARR. */
     dma1->ch7.cpar = (uint32_t)(unsigned long)&tim4->arr;
     dma1->ch7.cmar = (uint32_t)(unsigned long)dmabuf;
     dma1->ch7.cndtr = ARRAY_SIZE(dmabuf);
+}
+
+static bool_t rddat_active;
+
+static void rddat_stop(void)
+{
+    if (!rddat_active)
+        return;
+    rddat_active = FALSE;
+
+    /* Turn off the output pin */
+    gpio_configure_pin(gpio_timer, pin_rdata, GPO_bus);
+
+    /* Turn off timer and DMA. */
+    tim4->cr1 = 0;
+    dma1->ch7.ccr = 0;
+    dma1->ch7.cndtr = ARRAY_SIZE(dmabuf);
+
+    /* Reinitialise the circular buffer to empty. */
+    g_dmacons_prev = g_dmaprod = 0;
+}
+
+static void rddat_start(void)
+{
+    if (rddat_active)
+        return;
+    rddat_active = TRUE;
+
+    /* Start DMA from circular buffer. */
     dma1->ch7.ccr = (DMA_CCR_PL_HIGH |
                      DMA_CCR_MSIZE_16BIT |
                      DMA_CCR_PSIZE_16BIT |
@@ -167,6 +187,14 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
                      DMA_CCR_CIRC |
                      DMA_CCR_DIR_M2P |
                      DMA_CCR_EN);
+
+    /* Start timer. */
+    tim4->arr = 1; /* 1 tick before first UEV */
+    tim4->cnt = 0;
+    tim4->cr1 = TIM_CR1_CEN;
+
+    /* Enable output. */
+    gpio_configure_pin(gpio_timer, pin_rdata, AFO_bus);
 }
 
 static uint32_t max_load_us, max_prefetch_us;
@@ -175,7 +203,7 @@ int floppy_handle(void)
 {
     FRESULT fr;
     uint32_t load_us, prefetch_us, now = stk_now();
-    uint16_t i, nr_to_wrap, nr_to_cons, nr, dmacons;
+    uint16_t i, nr_to_wrap, nr_to_cons, nr, dmacons, dmacons_prev, dmaprod;
     stk_time_t timestamp[3];
 
     for (i = 0; i < ARRAY_SIZE(drive); i++) {
@@ -184,8 +212,9 @@ int floppy_handle(void)
             drive[i].step.settling = FALSE;
             if (stk_diff(drive[i].step.start, now) < stk_ms(2))
                 continue;
-            speaker_pulse(5);
+            speaker_pulse(10);
             drive[i].cyl += drive[i].step.inward ? 1 : -1;
+            barrier(); /* update cyl /then/ clear active */
             drive[i].step.active = FALSE;
             drive[i].step.settling = TRUE;
             if ((i == 0) && (drive[i].cyl == 0))
@@ -197,7 +226,7 @@ int floppy_handle(void)
         }
     }
 
-    if (drive[0].step.active || drive[0].step.settling)
+    if (drive[0].step.active)
         return 0;
 
     if (!drive[0].image) {
@@ -210,29 +239,48 @@ int floppy_handle(void)
     }
 
     drive[0].head = !gpio_read_pin(gpio_in, pin_side); /* XXX */
-    if (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track) {
+    if (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track)
         image_seek_track(drive[0].image, drive[0].cyl*2 + drive[0].head);
-        dmacons_prev = dmaprod = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr; /* XXX */
-    }
 
     timestamp[0] = stk_now();
 
+    /* Snapshot the DMA buffer state. */
+    IRQx_disable(EXTI_IRQ);
     dmacons = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr;
+    dmacons_prev = g_dmacons_prev;
+    dmaprod = g_dmaprod;
+    IRQx_enable(EXTI_IRQ);
 
-    if ((dmacons < dmacons_prev)
-        ? (dmaprod > dmacons_prev) || (dmaprod < dmacons)
-        : (dmaprod > dmacons_prev) && (dmaprod < dmacons))
-        printk("Overflow! %x-%x-%x\n", dmacons_prev, dmaprod, dmacons);
+    /* Check for DMA catching up with the producer index (underrun). */
+    if (((dmacons < dmacons_prev)
+         ? (dmaprod >= dmacons_prev) || (dmaprod < dmacons)
+         : (dmaprod >= dmacons_prev) && (dmaprod < dmacons))
+        && (dmacons != dmacons_prev))
+        printk("Buffer underrun! %x-%x-%x\n", dmacons_prev, dmaprod, dmacons);
 
     nr_to_wrap = ARRAY_SIZE(dmabuf) - dmaprod;
-    nr_to_cons = (dmacons - dmaprod) & (ARRAY_SIZE(dmabuf) - 1);
+    nr_to_cons = (dmacons - dmaprod - 1) & (ARRAY_SIZE(dmabuf) - 1);
     nr = min(nr_to_wrap, nr_to_cons);
     if (nr) {
         dmaprod += image_load_mfm(drive[0].image, &dmabuf[dmaprod], nr);
         dmaprod &= ARRAY_SIZE(dmabuf) - 1;
     }
 
-    dmacons_prev = dmacons;
+    /* Commit DMA buffer updates. */
+    IRQx_disable(EXTI_IRQ);
+    if (drive[0].step.active) {
+        /* We raced the STEP signal. */
+        IRQx_enable(EXTI_IRQ);
+        return 0;
+    }
+    g_dmacons_prev = dmacons;
+    g_dmaprod = dmaprod;
+    /* Ensure there's sufficient buffered data, and the heads are settled,
+     * before enabling output. */
+    if (!rddat_active && !drive[0].step.settling
+        && (dmaprod >= (ARRAY_SIZE(dmabuf)/2)))
+        rddat_start();
+    IRQx_enable(EXTI_IRQ);
 
     timestamp[1] = stk_now();
 
@@ -285,8 +333,10 @@ static void IRQ_input_changed(void)
             drive[i].step.inward = step_inward;
             drive[i].step.start = stk_now();
             drive[i].step.active = TRUE;
-            if (i == 0)
+            if (i == 0) {
                 gpio_write_pin(gpio_out, pin_trk0, O_FALSE);
+                rddat_stop();
+            }
         }
     }
 }
