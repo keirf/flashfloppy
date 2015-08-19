@@ -67,6 +67,8 @@ struct image {
     };
 };
 
+#define TRACKNR_INVALID ((uint16_t)-1)
+
 bool_t adf_open(struct image *im);
 bool_t adf_seek_track(struct image *im, uint8_t track);
 void adf_prefetch_data(struct image *im);

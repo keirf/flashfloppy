@@ -51,6 +51,8 @@ static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
 static struct timer index_timer;
 static void index_pulse(void *);
 
+static struct cancellation floppy_cancellation;
+
 #define image_open adf_open
 #define image_seek_track adf_seek_track
 #define image_prefetch_data adf_prefetch_data
@@ -199,54 +201,13 @@ static void rddat_start(void)
 
 static uint32_t max_load_us, max_prefetch_us;
 
-static int _floppy_handle(struct cancellation *c)
+static int floppy_load_flux(void)
 {
-    FRESULT fr;
-    uint32_t load_us, prefetch_us, now = stk_now();
-    uint16_t i, nr_to_wrap, nr_to_cons, nr, dmacons;
-    stk_time_t timestamp[3];
-
-    for (i = 0; i < ARRAY_SIZE(drive); i++) {
-
-        if (drive[i].step.active) {
-            drive[i].step.settling = FALSE;
-            if (stk_diff(drive[i].step.start, now) < stk_ms(2))
-                continue;
-            speaker_pulse(10);
-            drive[i].cyl += drive[i].step.inward ? 1 : -1;
-            barrier(); /* update cyl /then/ clear active */
-            drive[i].step.active = FALSE;
-            drive[i].step.settling = TRUE;
-            if ((i == 0) && (drive[i].cyl == 0))
-                gpio_write_pin(gpio_out, pin_trk0, O_TRUE);
-        } else if (drive[i].step.settling) {
-            if (stk_diff(drive[i].step.start, now) < stk_ms(16))
-                continue;
-            drive[i].step.settling = FALSE;
-        }
-    }
-
-    if (!drive[0].image) {
-        struct image *im = &image;
-        fr = f_open(&im->fp, drive[0].filename, FA_READ);
-        if (fr || !image_open(im))
-            return -1;
-        drive[0].image = im;
-        im->cur_track = -1;
-    }
-
-    if (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track)
-        image_seek_track(drive[0].image, drive[0].cyl*2 + drive[0].head);
-
-    enable_cancel(c);
+    uint16_t nr_to_wrap, nr_to_cons, nr, dmacons;
 
     if (drive[0].step.active
-        || (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track)) {
-        disable_cancel(c);
-        return 0;
-    }
-
-    timestamp[0] = stk_now();
+        || (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track))
+        return -1;
 
     dmacons = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr;
 
@@ -275,9 +236,55 @@ static int _floppy_handle(struct cancellation *c)
         rddat_start();
     }
 
-    timestamp[1] = stk_now();
+    return 0;
+}
 
-    disable_cancel(c);
+int floppy_handle(void)
+{
+    FRESULT fr;
+    uint32_t i, load_us, prefetch_us, now = stk_now();
+    stk_time_t timestamp[3];
+
+    for (i = 0; i < ARRAY_SIZE(drive); i++) {
+
+        if (drive[i].step.active) {
+            drive[i].step.settling = FALSE;
+            if (stk_diff(drive[i].step.start, now) < stk_ms(2))
+                continue;
+            speaker_pulse(10);
+            drive[i].cyl += drive[i].step.inward ? 1 : -1;
+            barrier(); /* update cyl /then/ clear active */
+            drive[i].step.active = FALSE;
+            drive[i].step.settling = TRUE;
+            if ((i == 0) && (drive[i].cyl == 0))
+                gpio_write_pin(gpio_out, pin_trk0, O_TRUE);
+        } else if (drive[i].step.settling) {
+            if (stk_diff(drive[i].step.start, now) < stk_ms(16))
+                continue;
+            drive[i].step.settling = FALSE;
+        }
+    }
+
+    if (!drive[0].image) {
+        struct image *im = &image;
+        fr = f_open(&im->fp, drive[0].filename, FA_READ);
+        if (fr || !image_open(im))
+            return -1;
+        drive[0].image = im;
+        im->cur_track = TRACKNR_INVALID;
+    }
+
+    if (drive[0].image->cur_track == TRACKNR_INVALID)
+        image_seek_track(drive[0].image, drive[0].cyl*2 + drive[0].head);
+
+    timestamp[0] = stk_now();
+
+    if (call_cancellable_fn(&floppy_cancellation, floppy_load_flux) == -1) {
+        drive[0].image->cur_track = TRACKNR_INVALID;
+        return 0;
+    }
+
+    timestamp[1] = stk_now();
 
     image_prefetch_data(drive[0].image);
 
@@ -292,23 +299,6 @@ static int _floppy_handle(struct cancellation *c)
     }
 
     return 0;
-}
-
-static int _floppy_cancel(struct cancellation *c)
-{
-    if (drive[0].image)
-        drive[0].image->cur_track = -1;
-    return 0;
-}
-
-struct cancellation floppy_cancellation  = {
-    .fn = _floppy_handle,
-    .cancel = _floppy_cancel
-};
-
-int floppy_handle(void)
-{
-    return call_cancellable_fn(&floppy_cancellation);
 }
 
 static void index_pulse(void *dat)

@@ -43,7 +43,7 @@ SECTIONS
   } >RW
 
   .bss : {
-    . = ALIGN(4);
+    . = ALIGN(8);
     _sbss = .;
     _irq_stackbottom = .;
     . = . + 512;

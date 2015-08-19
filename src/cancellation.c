@@ -14,44 +14,31 @@ asm (
     ".thumb_func \n"
     "call_cancellable_fn:\n"
     "    stmdb.w sp!, {r0, r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"
-    "    str     sp, [r0]\n"
-    "    ldr     r1, [r0, #8]\n"    
-    "1:  blx     r1\n"
-    "    add     sp,#4\n"
+    "    str     sp, [r0]\n" /* c->sp = PSP */
+    "    blx     r1\n"       /* (*fn)() */
+    "    ldr     r2, [sp]\n"
+    "    mov     r1, #0\n"
+    "    str     r1, [r2]\n" /* c->sp = NULL */
+    "do_cancel:\n"
+    "    add     sp, #4\n"
     "    ldmia.w sp!, {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n"
-    "\n"
-    ".global exec_cancellation\n"
-    ".thumb_func \n"
-    "exec_cancellation:\n"
-    "    ldr     r0, [sp]\n"
-    "    ldr     r1, [r0, #12]\n"
-    "    b       1b\n"
     );
 
-void exec_cancellation(void);
-
-void enable_cancel(struct cancellation *c)
-{
-    c->cancellable = TRUE;
-}
-
-void disable_cancel(struct cancellation *c)
-{
-    c->cancellable = FALSE;
-}
+void do_cancel(void);
 
 void cancel_call(struct cancellation *c)
 {
     struct exception_frame *frame;
     uint32_t *new_frame;
 
-    if (!c->cancellable)
+    if (c->sp == NULL)
         return;
-    c->cancellable = FALSE;
 
-    /* Update frame to point at cancellation PC, and clear STKALIGN. */
+    /* Modify return frame: Jump to exit of call_cancellable_fn() with
+     * return code -1 and clean xPSR. */
     frame = (struct exception_frame *)read_special(psp);
-    frame->pc = (uint32_t)exec_cancellation;
+    frame->r0 = -1;
+    frame->pc = (uint32_t)do_cancel;
     frame->psr &= 1u<<24; /* Preserve Thumb mode; clear everything else */
 
     /* Find new frame address, set STKALIGN if misaligned. */
@@ -64,6 +51,9 @@ void cancel_call(struct cancellation *c)
     /* Copy the stack frame and update Process SP. */
     memmove(new_frame, frame, 32);
     write_special(psp, new_frame);
+
+    /* Do this work at most once per invocation of call_cancellable_fn. */
+    c->sp = NULL;
 }
 
 /*
