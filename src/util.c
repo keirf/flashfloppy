@@ -26,6 +26,19 @@ void *memcpy(void *dest, const void *src, size_t n)
     return dest;
 }
 
+void *memmove(void *dest, const void *src, size_t n)
+{
+    char *p;
+    const char *q;
+    if (dest < src)
+        return memcpy(dest, src, n);
+    p = dest; p += n;
+    q = src; q += n;
+    while (n--)
+        *--p = *--q;
+    return dest;
+}
+
 int strncmp(const char *s1, const char *s2, size_t n)
 {
     while (n--) {

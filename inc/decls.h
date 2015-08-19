@@ -18,6 +18,7 @@
 #include "stm32f10x.h"
 #include "intrinsics.h"
 #include "util.h"
+#include "cancellation.h"
 
 #include "spi.h"
 #include "timer.h"

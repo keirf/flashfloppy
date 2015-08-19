@@ -46,7 +46,7 @@ void IRQ_40(void) __attribute__((alias("IRQ_input_changed")));
 
 static struct drive drive[2];
 static struct image image;
-static uint16_t dmabuf[2048], g_dmaprod, g_dmacons_prev;
+static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
 
 static struct timer index_timer;
 static void index_pulse(void *);
@@ -170,7 +170,7 @@ static void rddat_stop(void)
     dma1->ch7.cndtr = ARRAY_SIZE(dmabuf);
 
     /* Reinitialise the circular buffer to empty. */
-    g_dmacons_prev = g_dmaprod = 0;
+    dmacons_prev = dmaprod = 0;
 }
 
 static void rddat_start(void)
@@ -199,11 +199,11 @@ static void rddat_start(void)
 
 static uint32_t max_load_us, max_prefetch_us;
 
-int floppy_handle(void)
+static int _floppy_handle(struct cancellation *c)
 {
     FRESULT fr;
     uint32_t load_us, prefetch_us, now = stk_now();
-    uint16_t i, nr_to_wrap, nr_to_cons, nr, dmacons, dmacons_prev, dmaprod;
+    uint16_t i, nr_to_wrap, nr_to_cons, nr, dmacons;
     stk_time_t timestamp[3];
 
     for (i = 0; i < ARRAY_SIZE(drive); i++) {
@@ -226,9 +226,6 @@ int floppy_handle(void)
         }
     }
 
-    if (drive[0].step.active)
-        return 0;
-
     if (!drive[0].image) {
         struct image *im = &image;
         fr = f_open(&im->fp, drive[0].filename, FA_READ);
@@ -238,18 +235,20 @@ int floppy_handle(void)
         im->cur_track = -1;
     }
 
-    drive[0].head = !gpio_read_pin(gpio_in, pin_side); /* XXX */
     if (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track)
         image_seek_track(drive[0].image, drive[0].cyl*2 + drive[0].head);
 
+    enable_cancel(c);
+
+    if (drive[0].step.active
+        || (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track)) {
+        disable_cancel(c);
+        return 0;
+    }
+
     timestamp[0] = stk_now();
 
-    /* Snapshot the DMA buffer state. */
-    IRQx_disable(EXTI_IRQ);
     dmacons = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr;
-    dmacons_prev = g_dmacons_prev;
-    dmaprod = g_dmaprod;
-    IRQx_enable(EXTI_IRQ);
 
     /* Check for DMA catching up with the producer index (underrun). */
     if (((dmacons < dmacons_prev)
@@ -266,23 +265,19 @@ int floppy_handle(void)
         dmaprod &= ARRAY_SIZE(dmabuf) - 1;
     }
 
-    /* Commit DMA buffer updates. */
-    IRQx_disable(EXTI_IRQ);
-    if (drive[0].step.active) {
-        /* We raced the STEP signal. */
-        IRQx_enable(EXTI_IRQ);
-        return 0;
-    }
-    g_dmacons_prev = dmacons;
-    g_dmaprod = dmaprod;
+    dmacons_prev = dmacons;
+
     /* Ensure there's sufficient buffered data, and the heads are settled,
      * before enabling output. */
     if (!rddat_active && !drive[0].step.settling
-        && (dmaprod >= (ARRAY_SIZE(dmabuf)/2)))
+        && (dmaprod >= (ARRAY_SIZE(dmabuf)/2))) {
+        printk("Trk %u\n", drive[0].image->cur_track);
         rddat_start();
-    IRQx_enable(EXTI_IRQ);
+    }
 
     timestamp[1] = stk_now();
+
+    disable_cancel(c);
 
     image_prefetch_data(drive[0].image);
 
@@ -297,6 +292,23 @@ int floppy_handle(void)
     }
 
     return 0;
+}
+
+static int _floppy_cancel(struct cancellation *c)
+{
+    if (drive[0].image)
+        drive[0].image->cur_track = -1;
+    return 0;
+}
+
+struct cancellation floppy_cancellation  = {
+    .fn = _floppy_handle,
+    .cancel = _floppy_cancel
+};
+
+int floppy_handle(void)
+{
+    return call_cancellable_fn(&floppy_cancellation);
 }
 
 static void index_pulse(void *dat)
@@ -336,6 +348,17 @@ static void IRQ_input_changed(void)
             if (i == 0) {
                 gpio_write_pin(gpio_out, pin_trk0, O_FALSE);
                 rddat_stop();
+                cancel_call(&floppy_cancellation);
+            }
+        }
+    }
+
+    if (changed & m(pin_side)) {
+        for (i = 0; i < ARRAY_SIZE(drive); i++) {
+            drive[i].head = !(idr & m(pin_side));
+            if (i == 0) {
+                rddat_stop();
+                cancel_call(&floppy_cancellation);
             }
         }
     }

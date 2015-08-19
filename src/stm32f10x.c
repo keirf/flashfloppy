@@ -33,7 +33,7 @@ static void exception_init(void)
 
     /* Initialise interrupts and exceptions. */
     scb->vtor = (uint32_t)(unsigned long)vector_table;
-    scb->ccr |= SCB_CCR_DIV_0_TRP | SCB_CCR_UNALIGN_TRP;
+    scb->ccr |= SCB_CCR_STKALIGN | SCB_CCR_DIV_0_TRP | SCB_CCR_UNALIGN_TRP;
     scb->shcsr |= (SCB_SHCSR_USGFAULTENA |
                    SCB_SHCSR_BUSFAULTENA |
                    SCB_SHCSR_MEMFAULTENA);

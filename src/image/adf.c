@@ -62,7 +62,6 @@ bool_t adf_seek_track(struct image *im, uint8_t track)
     im->cur_bc = 0;
     im->cur_track = track;
 
-    printk("Seek %u\n", track);
     return TRUE;
 }
 

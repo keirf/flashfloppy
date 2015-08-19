@@ -1,3 +1,4 @@
+OBJS += cancellation.o
 OBJS += console.o
 OBJS += vectors.o
 OBJS += floppy.o
