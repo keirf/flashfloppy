@@ -16,6 +16,15 @@ void IRQ_25(void) __attribute__((alias("IRQ_timer")));
 
 #define tim tim1
 
+/* IRQ only on counter overflow, one-time enable. */
+#define TIM_CR1 (TIM_CR1_URS | TIM_CR1_OPM)
+
+/* Empirically-determined offset applied to timer deadlines to counteract the
+ * latency incurred by reprogram_timer() and IRQ_timer(). */
+#define SLACK_TICKS 12
+
+#define TIMER_INACTIVE ((struct timer *)1ul)
+
 static struct timer *head;
 
 static int32_t get_delta(stk_time_t now, stk_time_t deadline)
@@ -28,14 +37,49 @@ static int32_t get_delta(stk_time_t now, stk_time_t deadline)
 
 static void reprogram_timer(int32_t delta)
 {
-    tim->cr1 = 0;
-    tim->cnt = 0;
-    tim->arr = (delta <= 1) ? 1 : delta-1;
-    tim->sr = 0;
-    tim->cr1 = TIM_CR1_OPM | TIM_CR1_CEN;
+    tim->cr1 = TIM_CR1;
+    if (delta < 0x10000u) {
+        /* Fine-grained deadline (sub-microsecond accurate) */
+        tim->psc = SYSCLK_MHZ/STK_MHZ-1;
+        tim->arr = (delta <= SLACK_TICKS) ? 1 : delta-SLACK_TICKS;
+    } else {
+        /* Coarse-grained deadline, fires in time to set a shorter,
+         * fine-grained deadline. */
+        tim->psc = sysclk_us(100)-1;
+        tim->arr = delta/stk_us(100)-50; /* 5ms early */
+    }
+    tim->egr = TIM_EGR_UG; /* update CNT, PSC, ARR */
+    tim->sr = 0; /* dummy write, gives hardware time to process EGR.UG=1 */
+    tim->cr1 = TIM_CR1 | TIM_CR1_CEN;
 }
 
-void timer_set(struct timer *timer)
+void timer_init(struct timer *timer, void (*cb_fn)(void *), void *cb_dat)
+{
+    timer->cb_fn = cb_fn;
+    timer->cb_dat = cb_dat;
+    timer->next = TIMER_INACTIVE;
+}
+
+static bool_t timer_is_active(struct timer *timer)
+{
+    return timer->next != TIMER_INACTIVE;
+}
+
+static void _timer_cancel(struct timer *timer)
+{
+    struct timer *t, **pprev;
+
+    if (!timer_is_active(timer))
+        return;
+
+    for (pprev = &head; (t = *pprev) != timer; pprev = &t->next)
+        continue;
+
+    *pprev = t->next;
+    t->next = TIMER_INACTIVE;
+}
+
+void timer_set(struct timer *timer, stk_time_t deadline)
 {
     struct timer *t, **pprev;
     stk_time_t now;
@@ -43,8 +87,12 @@ void timer_set(struct timer *timer)
 
     IRQx_disable(TIMER_IRQ);
 
+    _timer_cancel(timer);
+
+    timer->deadline = deadline;
+
     now = stk_now();
-    delta = get_delta(now, timer->deadline);
+    delta = get_delta(now, deadline);
     for (pprev = &head; (t = *pprev) != NULL; pprev = &t->next)
         if (delta <= get_delta(now, t->deadline))
             break;
@@ -57,10 +105,16 @@ void timer_set(struct timer *timer)
     IRQx_enable(TIMER_IRQ);
 }
 
+void timer_cancel(struct timer *timer)
+{
+    IRQx_disable(TIMER_IRQ);
+    _timer_cancel(timer);
+    IRQx_enable(TIMER_IRQ);
+}
+
 void timers_init(void)
 {
     rcc->apb2enr |= RCC_APB2ENR_TIM1EN;
-    tim->psc = SYSCLK_MHZ/STK_MHZ-1;
     tim->cr2 = 0;
     tim->dier = TIM_DIER_UIE;
     IRQx_set_prio(TIMER_IRQ, TIMER_IRQ_PRI);
@@ -72,13 +126,15 @@ static void IRQ_timer(void)
     struct timer *t;
     int32_t delta;
 
+    tim->sr = 0;
+
     while ((t = head) != NULL) {
-        if ((delta = get_delta(stk_now(), t->deadline)) > 0) {
+        if ((delta = get_delta(stk_now(), t->deadline)) > SLACK_TICKS) {
             reprogram_timer(delta);
             break;
         }
         head = t->next;
-        t->next = NULL;
+        t->next = TIMER_INACTIVE;
         (*t->cb_fn)(t->cb_dat);
     }
 }

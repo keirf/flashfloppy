@@ -59,7 +59,7 @@ bool_t adf_seek_track(struct image *im, uint8_t track)
     im->adf.mfm_cons = 512;
     im->tracklen_bc = TRACKLEN_BC;
     im->adf.ticks = 0;
-    im->cur_bc = 0;
+    im->cur_bc = im->cur_ticks = 0;
     im->cur_track = track;
 
     return TRUE;
@@ -94,6 +94,7 @@ uint16_t adf_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
             x = im->adf.mfm[im->adf.mfm_cons/32] << y;
             im->adf.mfm_cons += 32 - y;
             im->cur_bc += 32 - y;
+            im->cur_ticks += (32 - y) * ticks_per_cell;
             while (y < 32) {
                 y++;
                 ticks += ticks_per_cell;
@@ -109,7 +110,7 @@ uint16_t adf_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
 
         if (im->cur_bc >= im->tracklen_bc) {
             ASSERT(im->cur_bc == im->tracklen_bc);
-            im->cur_bc = 0;
+            im->cur_bc = im->cur_ticks = 0;
         }
 
         /* We need more MFM: ensure we have buffered data to convert. */
@@ -177,6 +178,7 @@ uint16_t adf_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
 out:
     im->adf.mfm_cons -= 32 - y;
     im->cur_bc -= 32 - y;
+    im->cur_ticks -= (32 - y) * ticks_per_cell;
     im->adf.ticks = ticks;
     return nr - todo;
 }

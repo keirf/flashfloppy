@@ -48,15 +48,26 @@ static struct drive drive[2];
 static struct image image;
 static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
 
-static struct timer index_timer;
+static struct {
+    struct timer timer;
+    bool_t active;
+    stk_time_t prev_time, next_time;
+} index;
 static void index_pulse(void *);
 
 static struct cancellation floppy_cancellation;
 
+#if 1
 #define image_open adf_open
 #define image_seek_track adf_seek_track
 #define image_prefetch_data adf_prefetch_data
 #define image_load_mfm adf_load_mfm
+#else
+#define image_open hfe_open
+#define image_seek_track hfe_seek_track
+#define image_prefetch_data hfe_prefetch_data
+#define image_load_mfm hfe_load_mfm
+#endif
 
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
@@ -119,9 +130,10 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
 
     floppy_check();
 
-    index_timer.deadline = stk_deadline(stk_ms(200));
-    index_timer.cb_fn = index_pulse;
-    timer_set(&index_timer);
+    index.prev_time = stk_now();
+    index.next_time = ~0u;
+    timer_init(&index.timer, index_pulse, NULL);
+    timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(200)));
 
     /* PA[15:0] -> EXT[15:0] */
     afio->exticr1 = afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x0000;
@@ -199,14 +211,24 @@ static void rddat_start(void)
     gpio_configure_pin(gpio_timer, pin_rdata, AFO_bus);
 }
 
-static uint32_t max_load_us, max_prefetch_us;
+static void image_stop_track(struct image *im)
+{
+    im->cur_track = TRACKNR_INVALID;
+    if (!index.active)
+        timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(200)));
+}
+
+static uint32_t max_load_ticks, max_prefetch_us;
 
 static int floppy_load_flux(void)
 {
+    uint32_t ticks, i;
     uint16_t nr_to_wrap, nr_to_cons, nr, dmacons;
+    stk_time_t now;
+    struct drive *drv = &drive[0];
 
-    if (drive[0].step.active
-        || (drive[0].cyl*2 + drive[0].head != drive[0].image->cur_track))
+    if (drv->step.active
+        || (drv->cyl*2 + drv->head != drv->image->cur_track))
         return -1;
 
     dmacons = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr;
@@ -218,21 +240,46 @@ static int floppy_load_flux(void)
         && (dmacons != dmacons_prev))
         printk("Buffer underrun! %x-%x-%x\n", dmacons_prev, dmaprod, dmacons);
 
+    ticks = drv->image->cur_ticks;
+
     nr_to_wrap = ARRAY_SIZE(dmabuf) - dmaprod;
     nr_to_cons = (dmacons - dmaprod - 1) & (ARRAY_SIZE(dmabuf) - 1);
     nr = min(nr_to_wrap, nr_to_cons);
     if (nr) {
-        dmaprod += image_load_mfm(drive[0].image, &dmabuf[dmaprod], nr);
+        dmaprod += image_load_mfm(drv->image, &dmabuf[dmaprod], nr);
         dmaprod &= ARRAY_SIZE(dmabuf) - 1;
     }
 
     dmacons_prev = dmacons;
 
+    /* Check if we have crossed the index mark. */
+    if (drv->image->cur_ticks < ticks) {
+        /* Synchronise index pulse to the bitstream. */
+        for (;;) {
+            /* Snapshot current position in flux stream, including progress
+             * through current timer sample. */
+            now = stk_now();
+            ticks = tim4->arr - tim4->cnt; /* Ticks left in current sample */
+            dmacons = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr; /* Next sample */
+            /* If another sample was loaded meanwhile, try again for a 
+             * consistent snapshot. */
+            if (dmacons == dmacons_prev)
+                break;
+            dmacons_prev = dmacons;
+        }
+        ticks -= drv->image->cur_ticks >> 4;
+        /* Sum all flux timings in the DMA buffer. */
+        for (i = dmacons; i != dmaprod; i = (i+1) & (ARRAY_SIZE(dmabuf)-1))
+            ticks += dmabuf[i];
+        /* Calculate deadline for index timer. */
+        index.next_time = stk_diff(now, ticks);
+    }
+
     /* Ensure there's sufficient buffered data, and the heads are settled,
      * before enabling output. */
-    if (!rddat_active && !drive[0].step.settling
+    if (!rddat_active && !drv->step.settling
         && (dmaprod >= (ARRAY_SIZE(dmabuf)/2))) {
-        printk("Trk %u\n", drive[0].image->cur_track);
+        printk("Trk %u\n", drv->image->cur_track);
         rddat_start();
     }
 
@@ -242,60 +289,76 @@ static int floppy_load_flux(void)
 int floppy_handle(void)
 {
     FRESULT fr;
-    uint32_t i, load_us, prefetch_us, now = stk_now();
+    uint32_t i, load_ticks, prefetch_us, now = stk_now(), prev_dmaprod;
     stk_time_t timestamp[3];
+    struct drive *drv;
 
     for (i = 0; i < ARRAY_SIZE(drive); i++) {
-
-        if (drive[i].step.active) {
-            drive[i].step.settling = FALSE;
-            if (stk_diff(drive[i].step.start, now) < stk_ms(2))
+        drv = &drive[i];
+        if (drv->step.active) {
+            drv->step.settling = FALSE;
+            if (stk_diff(drv->step.start, now) < stk_ms(2))
                 continue;
             speaker_pulse(10);
-            drive[i].cyl += drive[i].step.inward ? 1 : -1;
+            drv->cyl += drv->step.inward ? 1 : -1;
             barrier(); /* update cyl /then/ clear active */
-            drive[i].step.active = FALSE;
-            drive[i].step.settling = TRUE;
-            if ((i == 0) && (drive[i].cyl == 0))
+            drv->step.active = FALSE;
+            drv->step.settling = TRUE;
+            if ((i == 0) && (drv->cyl == 0))
                 gpio_write_pin(gpio_out, pin_trk0, O_TRUE);
-        } else if (drive[i].step.settling) {
-            if (stk_diff(drive[i].step.start, now) < stk_ms(16))
+        } else if (drv->step.settling) {
+            if (stk_diff(drv->step.start, now) < stk_ms(16))
                 continue;
-            drive[i].step.settling = FALSE;
+            drv->step.settling = FALSE;
         }
     }
 
-    if (!drive[0].image) {
+    drv = &drive[0];
+
+    if (!drv->image) {
         struct image *im = &image;
-        fr = f_open(&im->fp, drive[0].filename, FA_READ);
+        fr = f_open(&im->fp, drv->filename, FA_READ);
         if (fr || !image_open(im))
             return -1;
-        drive[0].image = im;
-        im->cur_track = TRACKNR_INVALID;
+        drv->image = im;
+        image_stop_track(im);
     }
 
-    if (drive[0].image->cur_track == TRACKNR_INVALID)
-        image_seek_track(drive[0].image, drive[0].cyl*2 + drive[0].head);
+    if (drv->image->cur_track == TRACKNR_INVALID)
+        image_seek_track(drv->image, drv->cyl*2 + drv->head);
 
     timestamp[0] = stk_now();
 
+    prev_dmaprod = dmaprod;
+
     if (call_cancellable_fn(&floppy_cancellation, floppy_load_flux) == -1) {
-        drive[0].image->cur_track = TRACKNR_INVALID;
+        image_stop_track(drv->image);
         return 0;
+    }
+
+    if (index.next_time != ~0u) {
+        timer_set(&index.timer, index.next_time);
+        index.next_time = ~0u;
     }
 
     timestamp[1] = stk_now();
 
-    image_prefetch_data(drive[0].image);
+    image_prefetch_data(drv->image);
 
     timestamp[2] = stk_now();
 
-    load_us = stk_diff(timestamp[0],timestamp[1])/STK_MHZ;
+    /* 9MHz ticks per generated flux transition */
+    load_ticks = stk_diff(timestamp[0],timestamp[1]);
+    i = dmaprod - prev_dmaprod;
+    load_ticks = (i > 100 && dmaprod) ? load_ticks / i : 0;
+    /* Microseconds to prefetch data */
     prefetch_us = stk_diff(timestamp[1],timestamp[2])/STK_MHZ;
-    if ((load_us > max_load_us) || (prefetch_us > max_prefetch_us)) {
-        max_load_us = max_t(uint32_t, max_load_us, load_us);
+    /* If we have a new maximum, print it. */
+    if ((load_ticks > max_load_ticks) || (prefetch_us > max_prefetch_us)) {
+        max_load_ticks = max_t(uint32_t, max_load_ticks, load_ticks);
         max_prefetch_us = max_t(uint32_t, max_prefetch_us, prefetch_us);
-        printk("New max: %u %u\n", max_load_us, max_prefetch_us);
+        printk("New max: load_ticks=%u prefetch_us=%u\n",
+               max_load_ticks, max_prefetch_us);
     }
 
     return 0;
@@ -303,20 +366,22 @@ int floppy_handle(void)
 
 static void index_pulse(void *dat)
 {
-    drive[0].index.active ^= 1;
-    if (drive[0].index.active) {
+    index.active ^= 1;
+    if (index.active) {
+        index.prev_time = index.timer.deadline;
         gpio_write_pin(gpio_out, pin_index, O_TRUE);
-        index_timer.deadline = stk_diff(index_timer.deadline, stk_ms(2));
+        timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(2)));
     } else {
         gpio_write_pin(gpio_out, pin_index, O_FALSE);
-        index_timer.deadline = stk_diff(index_timer.deadline, stk_ms(198));
+        if (!rddat_active) /* timer will be set from input flux stream */
+            timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(200)));
     }
-    timer_set(&index_timer);
 }
 
 static void IRQ_input_changed(void)
 {
     uint16_t changed, idr, i;
+    struct drive *drv;
 
     changed = exti->pr;
     exti->pr = changed;
@@ -329,12 +394,13 @@ static void IRQ_input_changed(void)
     if (changed & idr & m(pin_step)) {
         bool_t step_inward = !(idr & m(pin_dir));
         for (i = 0; i < ARRAY_SIZE(drive); i++) {
-            if (!drive[i].sel || drive[i].step.active
-                || (drive[i].cyl == (step_inward ? 84 : 0)))
+            drv = &drive[i];
+            if (!drv->sel || drv->step.active
+                || (drv->cyl == (step_inward ? 84 : 0)))
                 continue;
-            drive[i].step.inward = step_inward;
-            drive[i].step.start = stk_now();
-            drive[i].step.active = TRUE;
+            drv->step.inward = step_inward;
+            drv->step.start = stk_now();
+            drv->step.active = TRUE;
             if (i == 0) {
                 gpio_write_pin(gpio_out, pin_trk0, O_FALSE);
                 rddat_stop();
@@ -345,7 +411,8 @@ static void IRQ_input_changed(void)
 
     if (changed & m(pin_side)) {
         for (i = 0; i < ARRAY_SIZE(drive); i++) {
-            drive[i].head = !(idr & m(pin_side));
+            drv = &drive[i];
+            drv->head = !(idr & m(pin_side));
             if (i == 0) {
                 rddat_stop();
                 cancel_call(&floppy_cancellation);

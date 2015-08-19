@@ -22,10 +22,6 @@ struct drive {
         bool_t inward;
         stk_time_t start;
     } step;
-    struct {
-        bool_t active;
-        stk_time_t time;
-    } index;
     struct image *image;
 };
 
@@ -60,6 +56,7 @@ struct image {
     /* Info about current track. */
     uint16_t cur_track;
     uint32_t tracklen_bc, cur_bc; /* Track length and cursor, in bitcells */
+    uint32_t cur_ticks; /* Offset from index, in 'ticks' */
 
     union {
         struct adf_image adf;

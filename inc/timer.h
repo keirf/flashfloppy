@@ -16,7 +16,9 @@ struct timer {
     struct timer *next;
 };
 
-void timer_set(struct timer *timer);
+void timer_init(struct timer *timer, void (*cb_fn)(void *), void *cb_dat);
+void timer_set(struct timer *timer, stk_time_t deadline);
+void timer_cancel(struct timer *timer);
 
 void timers_init(void);
 

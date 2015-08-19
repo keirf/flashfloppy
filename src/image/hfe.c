@@ -96,7 +96,7 @@ bool_t hfe_seek_track(struct image *im, uint8_t track)
     im->hfe.ticks_per_cell = ((sysclk_ms(DRIVE_MS_PER_REV) * 16u)
                               / im->tracklen_bc);
     im->hfe.ticks = 0;
-    im->cur_bc = 0;
+    im->cur_bc = im->cur_ticks = 0;
     im->cur_track = track;
 
     return TRUE;
@@ -132,7 +132,7 @@ uint16_t hfe_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
     while (im->cons != im->prod) {
         if (im->cur_bc >= im->tracklen_bc) {
             ASSERT(im->cur_bc == im->tracklen_bc);
-            im->cur_bc = 0;
+            im->cur_bc = im->cur_ticks = 0;
             /* Skip tail of current 256-byte block. */
             im->cons = (im->cons + 256*8-1) & ~(256*8-1);
         }
@@ -140,6 +140,7 @@ uint16_t hfe_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
         x = buf[(im->cons/8) % sizeof(im->buf)] >> y;
         im->cons += 8 - y;
         im->cur_bc += 8 - y;
+        im->cur_ticks += (8 - y) * ticks_per_cell;
         while (y < 8) {
             y++;
             ticks += ticks_per_cell;
@@ -156,6 +157,7 @@ uint16_t hfe_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
 out:
     im->cons -= 8 - y;
     im->cur_bc -= 8 - y;
+    im->cur_ticks -= (8 - y) * ticks_per_cell;
     im->hfe.ticks = ticks;
     return nr - todo;
 }
