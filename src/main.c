@@ -62,6 +62,17 @@ static void board_init(void)
     }
 }
 
+static void canary_init(void)
+{
+    _irq_stackbottom[0] = _thread_stackbottom[0] = 0xdeadbeef;
+}
+
+static void canary_check(void)
+{
+    ASSERT(_irq_stackbottom[0] == 0xdeadbeef);
+    ASSERT(_thread_stackbottom[0] == 0xdeadbeef);
+}
+
 int main(void)
 {
     FRESULT fr;
@@ -71,6 +82,8 @@ int main(void)
     if (_sdat != _ldat)
         memcpy(_sdat, _ldat, _edat-_sdat);
     memset(_sbss, 0, _ebss-_sbss);
+
+    canary_init();
 
     stm32_init();
     timers_init();
@@ -109,6 +122,7 @@ int main(void)
     for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
         do_tft();
         floppy_handle();
+        canary_check();
     }
 
     ASSERT(0);

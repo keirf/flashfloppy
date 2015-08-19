@@ -90,6 +90,10 @@ extern char _stext[], _etext[];
 extern char _sdat[], _edat[], _ldat[];
 extern char _sbss[], _ebss[];
 
+/* Stacks. */
+extern uint32_t _thread_stacktop[], _thread_stackbottom[];
+extern uint32_t _irq_stacktop[], _irq_stackbottom[];
+
 /*
  * Local variables:
  * mode: C

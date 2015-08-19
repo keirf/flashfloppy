@@ -45,8 +45,12 @@ SECTIONS
   .bss : {
     . = ALIGN(4);
     _sbss = .;
-    . = . + 1024;
-    _stacktop = .;
+    _irq_stackbottom = .;
+    . = . + 512;
+    _irq_stacktop = .;
+    _thread_stackbottom = .;
+    . = . + 512;
+    _thread_stacktop = .;
     *(.bss)
     *(.bss*)
     . = ALIGN(4);

@@ -6,7 +6,7 @@
 .global vector_table
 vector_table:
     /* Top of stack */
-    .word _stacktop
+    .word _thread_stacktop
 
     /* Exceptions (1-15) */
 #define E(x) .word x; .weak x; .thumb_set x, EXC_unused;
@@ -39,5 +39,4 @@ vector_table:
     .text
     .thumb_func
 EXC_unused:
-    mov r0, sp
     b   EXC_unexpected

@@ -9,8 +9,10 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-void EXC_unexpected(struct exception_frame *frame)
+void EXC_unexpected(void)
 {
+    struct exception_frame *frame =
+        (struct exception_frame *)read_special(psp);
     uint8_t exc = (uint8_t)read_special(psr);
     printk("Unexpected %s #%u at PC=%08x\n",
            (exc < 16) ? "Exception" : "IRQ",
@@ -21,6 +23,15 @@ void EXC_unexpected(struct exception_frame *frame)
 
 static void exception_init(void)
 {
+    uint32_t sp;
+
+    /* Switch to Process SP, and set up Main SP for IRQ/Exception context. */
+    sp = read_special(msp);
+    write_special(psp, sp);
+    write_special(control, 2); /* CONTROL.SPSEL=1 */
+    write_special(msp, _irq_stacktop);
+
+    /* Initialise interrupts and exceptions. */
     scb->vtor = (uint32_t)(unsigned long)vector_table;
     scb->ccr |= SCB_CCR_DIV_0_TRP | SCB_CCR_UNALIGN_TRP;
     scb->shcsr |= (SCB_SHCSR_USGFAULTENA |

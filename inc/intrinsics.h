@@ -24,6 +24,11 @@ struct exception_frame {
     __x;                                            \
 })
 
+#define write_special(reg,val) ({                   \
+    uint32_t __x = (uint32_t)(val);                 \
+    asm volatile ("msr "#reg",%0" :: "r" (__x) :);  \
+})
+
 #define IRQ_global_disable() asm volatile ("cpsid i" ::: "memory")
 #define IRQ_global_enable() asm volatile ("cpsie i" ::: "memory")
 
