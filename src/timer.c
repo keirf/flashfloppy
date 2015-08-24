@@ -27,9 +27,9 @@ void IRQ_25(void) __attribute__((alias("IRQ_timer")));
 
 static struct timer *head;
 
-static int32_t get_delta(stk_time_t now, stk_time_t deadline)
+int32_t stk_delta(stk_time_t a, stk_time_t b)
 {
-    int32_t delta = stk_diff(now, deadline);
+    int32_t delta = stk_diff(a, b);
     if (delta & (STK_MASK^(STK_MASK>>1)))
         delta = -((delta ^ STK_MASK) + 1);
     return delta;
@@ -92,9 +92,9 @@ void timer_set(struct timer *timer, stk_time_t deadline)
     timer->deadline = deadline;
 
     now = stk_now();
-    delta = get_delta(now, deadline);
+    delta = stk_delta(now, deadline);
     for (pprev = &head; (t = *pprev) != NULL; pprev = &t->next)
-        if (delta <= get_delta(now, t->deadline))
+        if (delta <= stk_delta(now, t->deadline))
             break;
     timer->next = *pprev;
     *pprev = timer;
@@ -129,7 +129,7 @@ static void IRQ_timer(void)
     tim->sr = 0;
 
     while ((t = head) != NULL) {
-        if ((delta = get_delta(stk_now(), t->deadline)) > SLACK_TICKS) {
+        if ((delta = stk_delta(stk_now(), t->deadline)) > SLACK_TICKS) {
             reprogram_timer(delta);
             break;
         }

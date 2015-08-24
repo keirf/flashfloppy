@@ -47,6 +47,11 @@ void IRQ_40(void) __attribute__((alias("IRQ_input_changed")));
 static struct drive drive[2];
 static struct image image;
 static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
+static enum {
+    DATA_seeking = 0,
+    DATA_syncing,
+    DATA_active
+} data_state;
 
 static struct {
     struct timer timer;
@@ -167,13 +172,12 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     dma1->ch7.cndtr = ARRAY_SIZE(dmabuf);
 }
 
-static bool_t rddat_active;
-
 static void rddat_stop(void)
 {
-    if (!rddat_active)
+    int prev_state = data_state;
+    data_state = DATA_seeking;
+    if (prev_state != DATA_active)
         return;
-    rddat_active = FALSE;
 
     /* Turn off the output pin */
     gpio_configure_pin(gpio_timer, pin_rdata, GPO_bus);
@@ -189,9 +193,9 @@ static void rddat_stop(void)
 
 static void rddat_start(void)
 {
-    if (rddat_active)
+    if (data_state == DATA_active)
         return;
-    rddat_active = TRUE;
+    data_state = DATA_active;
 
     /* Start DMA from circular buffer. */
     dma1->ch7.ccr = (DMA_CCR_PL_HIGH |
@@ -218,6 +222,54 @@ static void image_stop_track(struct image *im)
         timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(200)));
 }
 
+static void floppy_sync_flux(void)
+{
+    int32_t time_since_index, ticks;
+    uint32_t nr, dmacons;
+    struct drive *drv = &drive[0];
+
+    if (data_state == DATA_seeking) {
+        /* TODO: seek to correct place within track data stream */
+        data_state = DATA_syncing;
+        return;
+    }
+
+    nr = ARRAY_SIZE(dmabuf) - dmaprod - 1;
+    if (nr)
+        dmaprod += image_load_mfm(drv->image, &dmabuf[dmaprod], nr);
+
+    /* Have we caught up with free-running rotational position (plus slack)? */
+    time_since_index = stk_timesince(index.prev_time) + stk_ms(1);
+    time_since_index *= SYSCLK_MHZ/STK_MHZ;
+    ticks = drv->image->cur_ticks >> 4;
+    if (ticks < time_since_index) {
+        dmaprod = 0;
+        return;
+    }
+
+    /* We've caught up: discard flux samples which have already happened. */
+    dmacons = dmaprod;
+    while ((ticks > time_since_index) && dmacons)
+        ticks -= dmabuf[--dmacons];
+    dmaprod -= dmacons;
+    memmove(&dmabuf[0], &dmabuf[dmacons], dmaprod);
+
+    /* Ensure there's sufficient buffered data, and the heads are settled,
+     * before enabling output. */
+    if ((dmaprod >= (ARRAY_SIZE(dmabuf)/2)) && !drv->step.settling) {
+        ticks /= SYSCLK_MHZ/STK_MHZ;
+        time_since_index = stk_diff(index.prev_time, ticks);
+        ticks = stk_delta(stk_now(), time_since_index) - stk_us(1);
+        if (ticks < 0)
+            return;
+        delay_ticks(ticks);
+        ticks = stk_delta(stk_now(), time_since_index); /* XXX */
+        rddat_start();
+        data_state = DATA_active;
+        printk("Trk %u: sync_ticks=%d\n", drv->image->cur_track, ticks);
+    }
+}
+
 static uint32_t max_load_ticks, max_prefetch_us;
 
 static int floppy_load_flux(void)
@@ -230,6 +282,12 @@ static int floppy_load_flux(void)
     if (drv->step.active
         || (drv->cyl*2 + drv->head != drv->image->cur_track))
         return -1;
+
+    if (data_state != DATA_active) {
+        floppy_sync_flux();
+        if (data_state != DATA_active)
+            return 0;
+    }
 
     dmacons = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr;
 
@@ -272,15 +330,8 @@ static int floppy_load_flux(void)
         for (i = dmacons; i != dmaprod; i = (i+1) & (ARRAY_SIZE(dmabuf)-1))
             ticks += dmabuf[i];
         /* Calculate deadline for index timer. */
+        ticks /= SYSCLK_MHZ/STK_MHZ;
         index.next_time = stk_diff(now, ticks);
-    }
-
-    /* Ensure there's sufficient buffered data, and the heads are settled,
-     * before enabling output. */
-    if (!rddat_active && !drv->step.settling
-        && (dmaprod >= (ARRAY_SIZE(dmabuf)/2))) {
-        printk("Trk %u\n", drv->image->cur_track);
-        rddat_start();
     }
 
     return 0;
@@ -373,7 +424,7 @@ static void index_pulse(void *dat)
         timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(2)));
     } else {
         gpio_write_pin(gpio_out, pin_index, O_FALSE);
-        if (!rddat_active) /* timer will be set from input flux stream */
+        if (data_state != DATA_active) /* timer set from input flux stream */
             timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(200)));
     }
 }
