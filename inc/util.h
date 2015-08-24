@@ -40,11 +40,16 @@ typedef char bool_t;
 #define max_t(type,x,y) \
     ({ type __x = (x); type __y = (y); __x > __y ? __x: __y; })
 
+void filename_extension(const char *filename, char *extension, size_t size);
+
 void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
 
+int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
+char *strrchr(const char *s, int c);
+int tolower(int c);
 
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));
@@ -78,9 +83,6 @@ void backlight_set(uint8_t level);
 
 void touch_init(void);
 bool_t touch_get_xy(uint16_t *px, uint16_t *py);
-
-void floppy_init(const char *disk0_name, const char *disk1_name);
-int floppy_handle(void);
 
 extern uint8_t board_id;
 #define BRDREV_MM150 0

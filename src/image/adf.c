@@ -38,7 +38,7 @@ static uint32_t amigados_checksum(void *dat, unsigned int bytes)
     return csum;
 }
 
-bool_t adf_open(struct image *im)
+static bool_t adf_open(struct image *im)
 {
     if (f_size(&im->fp) != BYTES_PER_TRACK*TRACKS_PER_DISK)
         return FALSE;
@@ -48,7 +48,7 @@ bool_t adf_open(struct image *im)
     return TRUE;
 }
 
-bool_t adf_seek_track(struct image *im, uint8_t track)
+static bool_t adf_seek_track(struct image *im, uint8_t track)
 {
     /* TODO: Fake out unformatted tracks. */
     track = min_t(uint8_t, track, im->nr_tracks-1);
@@ -65,7 +65,7 @@ bool_t adf_seek_track(struct image *im, uint8_t track)
     return TRUE;
 }
 
-void adf_prefetch_data(struct image *im)
+static void adf_prefetch_data(struct image *im)
 {
     UINT nr;
     uint8_t *buf = (uint8_t *)im->buf;
@@ -82,7 +82,7 @@ void adf_prefetch_data(struct image *im)
         im->adf.trk_pos = 0;
 }
 
-uint16_t adf_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
+static uint16_t adf_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
     uint32_t ticks = im->adf.ticks, ticks_per_cell = TICKS_PER_CELL;
     uint32_t info, csum, i, x, y = 32, todo = nr, sector, sec_offset;
@@ -182,6 +182,13 @@ out:
     im->adf.ticks = ticks;
     return nr - todo;
 }
+
+struct image_handler adf_image_handler = {
+    .open = adf_open,
+    .seek_track = adf_seek_track,
+    .prefetch_data = adf_prefetch_data,
+    .load_flux = adf_load_flux
+};
 
 /*
  * Local variables:

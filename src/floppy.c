@@ -62,18 +62,6 @@ static void index_pulse(void *);
 
 static struct cancellation floppy_cancellation;
 
-#if 1
-#define image_open adf_open
-#define image_seek_track adf_seek_track
-#define image_prefetch_data adf_prefetch_data
-#define image_load_mfm adf_load_mfm
-#else
-#define image_open hfe_open
-#define image_seek_track hfe_seek_track
-#define image_prefetch_data hfe_prefetch_data
-#define image_load_mfm hfe_load_mfm
-#endif
-
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
 static void floppy_check(void)
@@ -236,7 +224,7 @@ static void floppy_sync_flux(void)
 
     nr = ARRAY_SIZE(dmabuf) - dmaprod - 1;
     if (nr)
-        dmaprod += image_load_mfm(drv->image, &dmabuf[dmaprod], nr);
+        dmaprod += image_load_flux(drv->image, &dmabuf[dmaprod], nr);
 
     /* Have we caught up with free-running rotational position (plus slack)? */
     time_since_index = stk_timesince(index.prev_time) + stk_ms(1);
@@ -304,7 +292,7 @@ static int floppy_load_flux(void)
     nr_to_cons = (dmacons - dmaprod - 1) & (ARRAY_SIZE(dmabuf) - 1);
     nr = min(nr_to_wrap, nr_to_cons);
     if (nr) {
-        dmaprod += image_load_mfm(drv->image, &dmabuf[dmaprod], nr);
+        dmaprod += image_load_flux(drv->image, &dmabuf[dmaprod], nr);
         dmaprod &= ARRAY_SIZE(dmabuf) - 1;
     }
 
@@ -339,7 +327,6 @@ static int floppy_load_flux(void)
 
 int floppy_handle(void)
 {
-    FRESULT fr;
     uint32_t i, load_ticks, prefetch_us, now = stk_now(), prev_dmaprod;
     stk_time_t timestamp[3];
     struct drive *drv;
@@ -367,12 +354,10 @@ int floppy_handle(void)
     drv = &drive[0];
 
     if (!drv->image) {
-        struct image *im = &image;
-        fr = f_open(&im->fp, drv->filename, FA_READ);
-        if (fr || !image_open(im))
+        if (!image_open(&image, drv->filename))
             return -1;
-        drv->image = im;
-        image_stop_track(im);
+        drv->image = &image;
+        image_stop_track(drv->image);
     }
 
     if (drv->image->cur_track == TRACKNR_INVALID)

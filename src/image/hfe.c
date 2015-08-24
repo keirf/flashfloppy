@@ -60,7 +60,7 @@ struct track_header {
     uint16_t len;
 };
 
-bool_t hfe_open(struct image *im)
+static bool_t hfe_open(struct image *im)
 {
     struct disk_header dhdr;
     UINT nr;
@@ -77,7 +77,7 @@ bool_t hfe_open(struct image *im)
     return TRUE;
 }
 
-bool_t hfe_seek_track(struct image *im, uint8_t track)
+static bool_t hfe_seek_track(struct image *im, uint8_t track)
 {
     struct track_header thdr;
     UINT nr;
@@ -102,7 +102,7 @@ bool_t hfe_seek_track(struct image *im, uint8_t track)
     return TRUE;
 }
 
-void hfe_prefetch_data(struct image *im)
+static void hfe_prefetch_data(struct image *im)
 {
     UINT nr;
     uint8_t *buf = (uint8_t *)im->buf;
@@ -123,7 +123,7 @@ void hfe_prefetch_data(struct image *im)
         im->hfe.trk_pos = 0;
 }
 
-uint16_t hfe_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr)
+static uint16_t hfe_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
     uint32_t ticks = im->hfe.ticks, ticks_per_cell = im->hfe.ticks_per_cell;
     uint32_t y = 8, todo = nr;
@@ -161,6 +161,13 @@ out:
     im->hfe.ticks = ticks;
     return nr - todo;
 }
+
+struct image_handler hfe_image_handler = {
+    .open = hfe_open,
+    .seek_track = hfe_seek_track,
+    .prefetch_data = hfe_prefetch_data,
+    .load_flux = hfe_load_flux
+};
 
 /*
  * Local variables:

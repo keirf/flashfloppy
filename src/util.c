@@ -9,6 +9,21 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+void filename_extension(const char *filename, char *extension, size_t size)
+{
+    const char *p;
+    unsigned int i;
+
+    extension[0] = '\0';
+    if ((p = strrchr(filename, '.')) == NULL)
+        return;
+
+    for (i = 0; i < (size-1); i++)
+        if ((extension[i] = tolower(p[i+1])) == '\0')
+            break;
+    extension[i] = '\0';
+}
+
 void *memset(void *s, int c, size_t n)
 {
     char *p = s;
@@ -39,14 +54,38 @@ void *memmove(void *dest, const void *src, size_t n)
     return dest;
 }
 
+int strcmp(const char *s1, const char *s2)
+{
+    return strncmp(s1, s2, ~0);
+}
+
 int strncmp(const char *s1, const char *s2, size_t n)
 {
     while (n--) {
-        int diff = *s1++ - *s2++;
-        if (diff)
+        int diff = *s1 - *s2;
+        if (diff || !*s1)
             return diff;
+        s1++; s2++;
     }
     return 0;
+}
+
+char *strrchr(const char *s, int c)
+{
+    char *p = NULL;
+    int d;
+    while ((d = *s)) {
+        if (d == c) p = (char *)s;
+        s++;
+    }
+    return p;
+}
+
+int tolower(int c)
+{
+    if ((c >= 'A') && (c <= 'Z'))
+        c += 'a' - 'A';
+    return c;
 }
 
 /*

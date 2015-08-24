@@ -42,6 +42,8 @@ struct hfe_image {
 struct image {
     struct drive *drive;
 
+    struct image_handler *handler;
+
     /* FatFS. */
     FIL fp;
     FRESULT fr;
@@ -66,15 +68,20 @@ struct image {
 
 #define TRACKNR_INVALID ((uint16_t)-1)
 
-bool_t adf_open(struct image *im);
-bool_t adf_seek_track(struct image *im, uint8_t track);
-void adf_prefetch_data(struct image *im);
-uint16_t adf_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr);
+struct image_handler {
+    bool_t (*open)(struct image *im);
+    bool_t (*seek_track)(struct image *im, uint8_t track);
+    void (*prefetch_data)(struct image *im);
+    uint16_t (*load_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
+};
 
-bool_t hfe_open(struct image *im);
-bool_t hfe_seek_track(struct image *im, uint8_t track);
-void hfe_prefetch_data(struct image *im);
-uint16_t hfe_load_mfm(struct image *im, uint16_t *tbuf, uint16_t nr);
+bool_t image_open(struct image *im, const char *name);
+bool_t image_seek_track(struct image *im, uint8_t track);
+void image_prefetch_data(struct image *im);
+uint16_t image_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
+
+void floppy_init(const char *disk0_name, const char *disk1_name);
+int floppy_handle(void);
 
 /*
  * Local variables:
