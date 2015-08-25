@@ -23,7 +23,7 @@ static void gen_mfm(struct image *im, unsigned int i, uint32_t y)
 {
     uint32_t x = im->adf.mfm[(i-1)&(ARRAY_SIZE(im->adf.mfm)-1)];
     y &= 0x55555555u; /* data bits */
-    x = (((x<<30)|(~y>>2))&~y) & 0x55555555u; /* clock bits */
+    x = ~((x<<30)|(y>>2)|y) & 0x55555555u; /* clock bits */
     im->adf.mfm[i] = y | (x<<1);
 }
 
