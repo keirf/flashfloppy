@@ -47,6 +47,14 @@ uint16_t image_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     return im->handler->load_flux(im, tbuf, nr);
 }
 
+uint32_t image_ticks_since_index(struct image *im)
+{
+    uint32_t ticks = im->cur_ticks - im->ticks_since_flux;
+    if ((int32_t)ticks < 0)
+        ticks += im->tracklen_ticks;
+    return ticks >> 4;
+}
+
 /*
  * Local variables:
  * mode: C

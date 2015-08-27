@@ -229,7 +229,7 @@ static void floppy_sync_flux(void)
     /* Have we caught up with free-running rotational position (plus slack)? */
     time_since_index = stk_timesince(index.prev_time) + stk_ms(1);
     time_since_index *= SYSCLK_MHZ/STK_MHZ;
-    ticks = drv->image->cur_ticks >> 4;
+    ticks = image_ticks_since_index(drv->image);
     if (ticks < time_since_index) {
         dmaprod = 0;
         return;
@@ -238,7 +238,7 @@ static void floppy_sync_flux(void)
     /* We've caught up: discard flux samples which have already happened. */
     dmacons = dmaprod;
     while ((ticks > time_since_index) && dmacons)
-        ticks -= dmabuf[--dmacons];
+        ticks -= dmabuf[--dmacons] + 1;
     dmaprod -= dmacons;
     memmove(&dmabuf[0], &dmabuf[dmacons], dmaprod);
 
@@ -286,7 +286,7 @@ static int floppy_load_flux(void)
         && (dmacons != dmacons_prev))
         printk("Buffer underrun! %x-%x-%x\n", dmacons_prev, dmaprod, dmacons);
 
-    ticks = drv->image->cur_ticks;
+    ticks = image_ticks_since_index(drv->image);
 
     nr_to_wrap = ARRAY_SIZE(dmabuf) - dmaprod;
     nr_to_cons = (dmacons - dmaprod - 1) & (ARRAY_SIZE(dmabuf) - 1);
@@ -299,7 +299,7 @@ static int floppy_load_flux(void)
     dmacons_prev = dmacons;
 
     /* Check if we have crossed the index mark. */
-    if (drv->image->cur_ticks < ticks) {
+    if (image_ticks_since_index(drv->image) < ticks) {
         /* Synchronise index pulse to the bitstream. */
         for (;;) {
             /* Snapshot current position in flux stream, including progress
@@ -313,10 +313,11 @@ static int floppy_load_flux(void)
                 break;
             dmacons_prev = dmacons;
         }
-        ticks -= drv->image->cur_ticks >> 4;
         /* Sum all flux timings in the DMA buffer. */
         for (i = dmacons; i != dmaprod; i = (i+1) & (ARRAY_SIZE(dmabuf)-1))
-            ticks += dmabuf[i];
+            ticks += dmabuf[i] + 1;
+        /* Subtract current flux offset beyond the index. */
+        ticks -= image_ticks_since_index(drv->image);
         /* Calculate deadline for index timer. */
         ticks /= SYSCLK_MHZ/STK_MHZ;
         index.next_time = stk_diff(now, ticks);

@@ -28,7 +28,6 @@ struct drive {
 struct adf_image {
     uint32_t trk_off;
     uint16_t trk_pos, trk_len;
-    uint32_t ticks;
     uint32_t mfm[16], mfm_cons;
 };
 
@@ -36,7 +35,7 @@ struct hfe_image {
     uint16_t tlut_base;
     uint16_t trk_off;
     uint16_t trk_pos, trk_len;
-    uint32_t ticks, ticks_per_cell;
+    uint32_t ticks_per_cell;
 };
 
 struct image {
@@ -58,7 +57,9 @@ struct image {
     /* Info about current track. */
     uint16_t cur_track;
     uint32_t tracklen_bc, cur_bc; /* Track length and cursor, in bitcells */
+    uint32_t tracklen_ticks; /* Timing of previous revolution, in 'ticks' */
     uint32_t cur_ticks; /* Offset from index, in 'ticks' */
+    uint32_t ticks_since_flux; /* Ticks since last flux sample/reversal */
 
     union {
         struct adf_image adf;
@@ -79,6 +80,7 @@ bool_t image_open(struct image *im, const char *name);
 bool_t image_seek_track(struct image *im, uint8_t track);
 void image_prefetch_data(struct image *im);
 uint16_t image_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
+uint32_t image_ticks_since_index(struct image *im);
 
 void floppy_init(const char *disk0_name, const char *disk1_name);
 int floppy_handle(void);

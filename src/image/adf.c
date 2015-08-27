@@ -58,7 +58,7 @@ static bool_t adf_seek_track(struct image *im, uint8_t track)
     im->adf.trk_len = BYTES_PER_TRACK;
     im->adf.mfm_cons = 512;
     im->tracklen_bc = TRACKLEN_BC;
-    im->adf.ticks = 0;
+    im->ticks_since_flux = 0;
     im->cur_bc = im->cur_ticks = 0;
     im->cur_track = track;
 
@@ -84,7 +84,7 @@ static void adf_prefetch_data(struct image *im)
 
 static uint16_t adf_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
-    uint32_t ticks = im->adf.ticks, ticks_per_cell = TICKS_PER_CELL;
+    uint32_t ticks = im->ticks_since_flux, ticks_per_cell = TICKS_PER_CELL;
     uint32_t info, csum, i, x, y = 32, todo = nr, sector, sec_offset;
 
     for (;;) {
@@ -108,8 +108,10 @@ static uint16_t adf_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             }
         }
 
+        ASSERT(y == 32);
         if (im->cur_bc >= im->tracklen_bc) {
             ASSERT(im->cur_bc == im->tracklen_bc);
+            im->tracklen_ticks = im->cur_ticks;
             im->cur_bc = im->cur_ticks = 0;
         }
 
@@ -179,7 +181,7 @@ out:
     im->adf.mfm_cons -= 32 - y;
     im->cur_bc -= 32 - y;
     im->cur_ticks -= (32 - y) * ticks_per_cell;
-    im->adf.ticks = ticks;
+    im->ticks_since_flux = ticks;
     return nr - todo;
 }
 

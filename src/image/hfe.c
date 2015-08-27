@@ -95,7 +95,7 @@ static bool_t hfe_seek_track(struct image *im, uint8_t track)
     im->tracklen_bc = im->hfe.trk_len * 8;
     im->hfe.ticks_per_cell = ((sysclk_ms(DRIVE_MS_PER_REV) * 16u)
                               / im->tracklen_bc);
-    im->hfe.ticks = 0;
+    im->ticks_since_flux = 0;
     im->cur_bc = im->cur_ticks = 0;
     im->cur_track = track;
 
@@ -125,13 +125,16 @@ static void hfe_prefetch_data(struct image *im)
 
 static uint16_t hfe_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
-    uint32_t ticks = im->hfe.ticks, ticks_per_cell = im->hfe.ticks_per_cell;
+    uint32_t ticks = im->ticks_since_flux;
+    uint32_t ticks_per_cell = im->hfe.ticks_per_cell;
     uint32_t y = 8, todo = nr;
     uint8_t x, *buf = (uint8_t *)im->buf;
 
     while (im->cons != im->prod) {
+        ASSERT(y == 8);
         if (im->cur_bc >= im->tracklen_bc) {
             ASSERT(im->cur_bc == im->tracklen_bc);
+            im->tracklen_ticks = im->cur_ticks;
             im->cur_bc = im->cur_ticks = 0;
             /* Skip tail of current 256-byte block. */
             im->cons = (im->cons + 256*8-1) & ~(256*8-1);
@@ -158,7 +161,7 @@ out:
     im->cons -= 8 - y;
     im->cur_bc -= 8 - y;
     im->cur_ticks -= (8 - y) * ticks_per_cell;
-    im->hfe.ticks = ticks;
+    im->ticks_since_flux = ticks;
     return nr - todo;
 }
 
