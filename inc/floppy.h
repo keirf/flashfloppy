@@ -38,6 +38,17 @@ struct hfe_image {
     uint32_t ticks_per_cell;
 };
 
+struct scp_image {
+    uint8_t nr_revs;        /* # revolutions per track in image file */
+    uint8_t pf_rev, ld_rev; /* Current prefetch/load revolution */
+    uint32_t ld_pos; /* Current load position */
+    uint32_t pf_pos; /* Prefetch position */
+    struct {
+        uint32_t dat_off;
+        uint32_t nr_dat;
+    } rev[5];
+};
+
 struct image {
     struct drive *drive;
 
@@ -64,6 +75,7 @@ struct image {
     union {
         struct adf_image adf;
         struct hfe_image hfe;
+        struct scp_image scp;
     };
 };
 
