@@ -93,6 +93,7 @@ static bool_t scp_seek_track(struct image *im, uint8_t track)
 
     im->scp.pf_rev = im->scp.ld_rev = 0;
     im->scp.pf_pos = im->scp.ld_pos = 0;
+    im->cons = im->prod = 0;
     im->ticks_since_flux = 0;
     im->cur_ticks = 0;
     im->cur_track = track;
@@ -102,8 +103,8 @@ static bool_t scp_seek_track(struct image *im, uint8_t track)
 
 static void scp_prefetch_data(struct image *im)
 {
-    UINT nr, nr_flux = im->scp.rev[im->scp.pf_rev].nr_dat;
-    uint8_t *buf = (uint8_t *)im->buf;
+    UINT _nr, nr, nr_flux = im->scp.rev[im->scp.pf_rev].nr_dat;
+    uint16_t *buf = (uint16_t *)im->buf;
 
     if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-512)/2)
         return;
@@ -111,7 +112,8 @@ static void scp_prefetch_data(struct image *im)
     f_lseek(&im->fp, im->scp.rev[im->scp.pf_rev].dat_off + im->scp.pf_pos*2);
     nr = min_t(UINT, 512, (nr_flux - im->scp.pf_pos) * 2);
     nr = min_t(UINT, nr, sizeof(im->buf) - ((im->prod*2) % sizeof(im->buf)));
-    f_read(&im->fp, &buf[im->prod*2 % sizeof(im->buf)], nr, &nr);
+    f_read(&im->fp, &buf[im->prod % (sizeof(im->buf)/2)], nr, &_nr);
+    ASSERT(nr == _nr);
     im->prod += nr/2;
     im->scp.pf_pos += nr/2;
     if (im->scp.pf_pos >= nr_flux) {
@@ -128,13 +130,14 @@ static uint16_t scp_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     uint16_t *buf = (uint16_t *)im->buf;
 
     while (im->cons != im->prod) {
-        if (im->scp.ld_pos++ == nr_flux) {
+        if (im->scp.ld_pos == nr_flux) {
             im->tracklen_ticks = im->cur_ticks;
             im->cur_ticks = 0;
             im->scp.ld_pos = 0;
             im->scp.ld_rev = (im->scp.ld_rev + 1) % ARRAY_SIZE(im->scp.rev);
             nr_flux = im->scp.rev[im->scp.ld_rev].nr_dat;
         }
+        im->scp.ld_pos++;
         x = be16toh(buf[im->cons++ % (sizeof(im->buf)/2)]) ?: 0x10000;
         x *= (FF_MHZ << 8) / SCP_MHZ;
         x >>= 8;
