@@ -38,7 +38,7 @@ int32_t stk_delta(stk_time_t a, stk_time_t b)
 static void reprogram_timer(int32_t delta)
 {
     tim->cr1 = TIM_CR1;
-    if (delta < 0x10000u) {
+    if (delta < 0x10000) {
         /* Fine-grained deadline (sub-microsecond accurate) */
         tim->psc = SYSCLK_MHZ/STK_MHZ-1;
         tim->arr = (delta <= SLACK_TICKS) ? 1 : delta-SLACK_TICKS;
