@@ -160,10 +160,16 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     dma1->ch7.cndtr = ARRAY_SIZE(dmabuf);
 }
 
+/* Called from IRQ context to stop the read stream. */
 static void rddat_stop(void)
 {
     int prev_state = data_state;
+
     data_state = DATA_seeking;
+
+    /* Reinitialise the circular buffer to empty. */
+    dmacons_prev = dmaprod = 0;
+
     if (prev_state != DATA_active)
         return;
 
@@ -174,16 +180,13 @@ static void rddat_stop(void)
     tim4->cr1 = 0;
     dma1->ch7.ccr = 0;
     dma1->ch7.cndtr = ARRAY_SIZE(dmabuf);
-
-    /* Reinitialise the circular buffer to empty. */
-    dmacons_prev = dmaprod = 0;
 }
 
+/* Called from cancellable context to start the read stream. */
 static void rddat_start(void)
 {
-    if (data_state == DATA_active)
-        return;
     data_state = DATA_active;
+    barrier(); /* ensure IRQ sees the flag before we act on it */
 
     /* Start DMA from circular buffer. */
     dma1->ch7.ccr = (DMA_CCR_PL_HIGH |
