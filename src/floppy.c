@@ -198,8 +198,8 @@ static void rddat_start(void)
                      DMA_CCR_EN);
 
     /* Start timer. */
-    tim4->arr = 1; /* 1 tick before first UEV */
-    tim4->cnt = 0;
+    tim4->egr = TIM_EGR_UG;
+    tim4->sr = 0; /* dummy write, gives hardware time to process EGR.UG=1 */
     tim4->cr1 = TIM_CR1_CEN;
 
     /* Enable output. */
