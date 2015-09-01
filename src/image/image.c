@@ -35,9 +35,10 @@ bool_t image_open(struct image *im, const char *name)
     return im->handler->open(im);
 }
 
-bool_t image_seek_track(struct image *im, uint8_t track)
+bool_t image_seek_track(struct image *im, uint8_t track,
+                        stk_time_t *ptime_after_index)
 {
-    return im->handler->seek_track(im, track);
+    return im->handler->seek_track(im, track, ptime_after_index);
 }
 
 void image_prefetch_data(struct image *im)

@@ -63,10 +63,12 @@ static bool_t scp_open(struct image *im)
     return TRUE;
 }
 
-static bool_t scp_seek_track(struct image *im, uint8_t track)
+static bool_t scp_seek_track(struct image *im, uint8_t track,
+                             stk_time_t *ptime_after_index)
 {
+    uint32_t ticks_after_index = *ptime_after_index;
     struct trk_header header;
-    uint32_t hdr_offset, i, j;
+    uint32_t hdr_offset, i, j, nr_flux;
     UINT nr;
 
     /* TODO: Fake out unformatted tracks. */
@@ -92,12 +94,22 @@ static bool_t scp_seek_track(struct image *im, uint8_t track)
     }
 
     im->scp.pf_rev = im->scp.ld_rev = 0;
-    im->scp.pf_pos = im->scp.ld_pos = 0;
-    im->cons = im->prod = 0;
     im->ticks_since_flux = 0;
-    im->cur_ticks = 0;
     im->cur_track = track;
 
+    im->cur_ticks = ticks_after_index*(16*SYSCLK_MHZ/STK_MHZ);
+
+    nr_flux = im->scp.rev[0].nr_dat;
+    im->scp.pf_pos = im->cur_ticks / ((sysclk_ms(DRIVE_MS_PER_REV) * 16)
+                                      / nr_flux);
+    if (im->scp.pf_pos >= nr_flux)
+        im->scp.pf_pos = 0;
+    im->scp.ld_pos = im->scp.pf_pos;
+
+    im->prod = im->cons = 0;
+    image_prefetch_data(im);
+
+    *ptime_after_index = ticks_after_index;
     return TRUE;
 }
 

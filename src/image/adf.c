@@ -48,20 +48,35 @@ static bool_t adf_open(struct image *im)
     return TRUE;
 }
 
-static bool_t adf_seek_track(struct image *im, uint8_t track)
+static bool_t adf_seek_track(struct image *im, uint8_t track,
+                             stk_time_t *ptime_after_index)
 {
+    uint32_t sector, ticks_after_index = *ptime_after_index;
+
     /* TODO: Fake out unformatted tracks. */
     track = min_t(uint8_t, track, im->nr_tracks-1);
 
     im->adf.trk_off = track * BYTES_PER_TRACK;
-    im->adf.trk_pos = im->prod = im->cons = 0;
     im->adf.trk_len = BYTES_PER_TRACK;
     im->adf.mfm_cons = 512;
     im->tracklen_bc = TRACKLEN_BC;
     im->ticks_since_flux = 0;
-    im->cur_bc = im->cur_ticks = 0;
     im->cur_track = track;
 
+    im->cur_bc = (ticks_after_index*(16*SYSCLK_MHZ/STK_MHZ)) / TICKS_PER_CELL;
+    im->cur_bc &= ~511;
+    if (im->cur_bc >= im->tracklen_bc)
+        im->cur_bc = 0;
+    im->cur_ticks = im->cur_bc * TICKS_PER_CELL;
+
+    ticks_after_index = im->cur_ticks / (16*SYSCLK_MHZ/STK_MHZ);
+
+    sector = (im->cur_bc - 1024) / (544*16);
+    im->adf.trk_pos = (sector < 11) ? sector * 512 : 0;
+    im->prod = im->cons = 0;
+    image_prefetch_data(im);
+
+    *ptime_after_index = ticks_after_index;
     return TRUE;
 }
 

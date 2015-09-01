@@ -47,9 +47,11 @@ void IRQ_40(void) __attribute__((alias("IRQ_input_changed")));
 static struct drive drive[2];
 static struct image image;
 static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
+static stk_time_t sync_time;
+/* data_state updated only in IRQ and cancellable contexts. */
 static enum {
-    DATA_seeking = 0,
-    DATA_syncing,
+    DATA_stopped = 0,
+    DATA_seeking,
     DATA_active
 } data_state;
 
@@ -165,7 +167,7 @@ static void rddat_stop(void)
 {
     int prev_state = data_state;
 
-    data_state = DATA_seeking;
+    data_state = DATA_stopped;
 
     /* Reinitialise the circular buffer to empty. */
     dmacons_prev = dmaprod = 0;
@@ -215,50 +217,26 @@ static void image_stop_track(struct image *im)
 
 static void floppy_sync_flux(void)
 {
-    int32_t time_since_index, ticks;
-    uint32_t nr, dmacons;
     struct drive *drv = &drive[0];
-
-    if (data_state == DATA_seeking) {
-        /* TODO: seek to correct place within track data stream */
-        data_state = DATA_syncing;
-        return;
-    }
+    int32_t ticks;
+    uint32_t nr;
 
     nr = ARRAY_SIZE(dmabuf) - dmaprod - 1;
     if (nr)
         dmaprod += image_load_flux(drv->image, &dmabuf[dmaprod], nr);
 
-    /* Have we caught up with free-running rotational position (plus slack)? */
-    time_since_index = stk_timesince(index.prev_time) + stk_ms(1);
-    time_since_index *= SYSCLK_MHZ/STK_MHZ;
-    ticks = image_ticks_since_index(drv->image);
-    if (ticks < time_since_index) {
-        dmaprod = 0;
+    if (dmaprod < ARRAY_SIZE(dmabuf)/2)
         return;
-    }
 
-    /* We've caught up: discard flux samples which have already happened. */
-    dmacons = dmaprod;
-    while ((ticks > time_since_index) && dmacons)
-        ticks -= dmabuf[--dmacons] + 1;
-    dmaprod -= dmacons;
-    memmove(&dmabuf[0], &dmabuf[dmacons], dmaprod);
+    ticks = stk_delta(stk_now(), sync_time) - stk_us(1);
+    if (ticks > stk_ms(5)) /* ages to wait; go do other work */
+        return;
 
-    /* Ensure there's sufficient buffered data, and the heads are settled,
-     * before enabling output. */
-    if ((dmaprod >= (ARRAY_SIZE(dmabuf)/2)) && !drv->step.settling) {
-        ticks /= SYSCLK_MHZ/STK_MHZ;
-        time_since_index = stk_diff(index.prev_time, ticks);
-        ticks = stk_delta(stk_now(), time_since_index) - stk_us(1);
-        if (ticks < 0)
-            return;
+    if (ticks > 0)
         delay_ticks(ticks);
-        ticks = stk_delta(stk_now(), time_since_index); /* XXX */
-        rddat_start();
-        data_state = DATA_active;
-        printk("Trk %u: sync_ticks=%d\n", drv->image->cur_track, ticks);
-    }
+    ticks = stk_delta(stk_now(), sync_time); /* XXX */
+    rddat_start();
+    printk("Trk %u: sync_ticks=%d\n", drv->image->cur_track, ticks);
 }
 
 static uint32_t max_load_ticks, max_prefetch_us;
@@ -270,11 +248,13 @@ static int floppy_load_flux(void)
     stk_time_t now;
     struct drive *drv = &drive[0];
 
-    if (drv->step.active
-        || (drv->cyl*2 + drv->head != drv->image->cur_track))
+    if (data_state == DATA_stopped) {
+        data_state = DATA_seeking;
+        /* caller seeks */
         return -1;
+    }
 
-    if (data_state != DATA_active) {
+    if (data_state == DATA_seeking) {
         floppy_sync_flux();
         if (data_state != DATA_active)
             return 0;
@@ -349,7 +329,7 @@ int floppy_handle(void)
             if ((i == 0) && (drv->cyl == 0))
                 gpio_write_pin(gpio_out, pin_trk0, O_TRUE);
         } else if (drv->step.settling) {
-            if (stk_diff(drv->step.start, now) < stk_ms(16))
+            if (stk_diff(drv->step.start, now) < stk_ms(DRIVE_SETTLE_MS))
                 continue;
             drv->step.settling = FALSE;
         }
@@ -364,8 +344,33 @@ int floppy_handle(void)
         image_stop_track(drv->image);
     }
 
-    if (drv->image->cur_track == TRACKNR_INVALID)
-        image_seek_track(drv->image, drv->cyl*2 + drv->head);
+    if (drv->image->cur_track == TRACKNR_INVALID) {
+        stk_time_t index_time = index.prev_time;
+        stk_time_t time_after_index = stk_timesince(index_time);
+        /* Allow 10ms from current rotational position to load new track */
+        int32_t delay = stk_ms(10);
+        /* Allow extra time if heads are settling. */
+        if (drv->step.settling) {
+            stk_time_t step_settle = stk_diff(drv->step.start,
+                                              stk_ms(DRIVE_SETTLE_MS));
+            int32_t delta = stk_delta(stk_now(), step_settle);
+            delay = max_t(int32_t, delta, delay);
+        }
+        /* Add delay to synchronisation point; handle index wrap. */
+        time_after_index += delay;
+        if (time_after_index > stk_ms(DRIVE_MS_PER_REV))
+            time_after_index -= stk_ms(DRIVE_MS_PER_REV);
+        /* Seek to the new track. */
+        image_seek_track(drv->image, drv->cyl*2 + drv->head,
+                         &time_after_index);
+        /* Check if the sync-up position wrapped at the index mark... */
+        sync_time = stk_timesince(index_time);
+        /* ...and synchronise to next index pulse if so. */
+        if (sync_time > (time_after_index + stk_ms(DRIVE_MS_PER_REV)/2))
+            time_after_index += stk_ms(DRIVE_MS_PER_REV);
+        /* Set the deadline. */
+        sync_time = stk_diff(index_time, time_after_index);
+    }
 
     timestamp[0] = stk_now();
 

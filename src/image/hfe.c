@@ -77,8 +77,10 @@ static bool_t hfe_open(struct image *im)
     return TRUE;
 }
 
-static bool_t hfe_seek_track(struct image *im, uint8_t track)
+static bool_t hfe_seek_track(struct image *im, uint8_t track,
+                             stk_time_t *ptime_after_index)
 {
+    uint32_t ticks_after_index = *ptime_after_index;
     struct track_header thdr;
     UINT nr;
 
@@ -90,15 +92,28 @@ static bool_t hfe_seek_track(struct image *im, uint8_t track)
         return FALSE;
 
     im->hfe.trk_off = le16toh(thdr.offset);
-    im->hfe.trk_pos = im->prod = im->cons = 0;
     im->hfe.trk_len = le16toh(thdr.len) / 2;
     im->tracklen_bc = im->hfe.trk_len * 8;
     im->hfe.ticks_per_cell = ((sysclk_ms(DRIVE_MS_PER_REV) * 16u)
                               / im->tracklen_bc);
     im->ticks_since_flux = 0;
-    im->cur_bc = im->cur_ticks = 0;
     im->cur_track = track;
 
+    im->cur_bc = ((ticks_after_index*(16*SYSCLK_MHZ/STK_MHZ))
+                  / im->hfe.ticks_per_cell);
+    im->cur_bc &= ~7;
+    if (im->cur_bc >= im->tracklen_bc)
+        im->cur_bc = 0;
+    im->cur_ticks = im->cur_bc * im->hfe.ticks_per_cell;
+
+    ticks_after_index = im->cur_ticks / (16*SYSCLK_MHZ/STK_MHZ);
+
+    im->hfe.trk_pos = (im->cur_bc/8) & ~255;
+    im->prod = im->cons = 0;
+    image_prefetch_data(im);
+    im->cons = im->cur_bc & 2047;
+
+    *ptime_after_index = ticks_after_index;
     return TRUE;
 }
 
