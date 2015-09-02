@@ -117,13 +117,24 @@ static void scp_prefetch_data(struct image *im)
 {
     UINT _nr, nr, nr_flux = im->scp.rev[im->scp.pf_rev].nr_dat;
     uint16_t *buf = (uint16_t *)im->buf;
+    uint32_t off;
 
-    if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-512)/2)
+    /* At least 2kB buffer space available to fill? */
+    if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-2048)/2)
         return;
 
-    f_lseek(&im->fp, im->scp.rev[im->scp.pf_rev].dat_off + im->scp.pf_pos*2);
-    nr = min_t(UINT, 512, (nr_flux - im->scp.pf_pos) * 2);
+    off = im->scp.rev[im->scp.pf_rev].dat_off + im->scp.pf_pos*2;
+    f_lseek(&im->fp, off);
+
+    /* Up to 2kB, further limited by end of buffer and end of stream. */
+    nr = min_t(UINT, 2048, (nr_flux - im->scp.pf_pos) * 2);
     nr = min_t(UINT, nr, sizeof(im->buf) - ((im->prod*2) % sizeof(im->buf)));
+    /* Partial sector is dealt with separately, so that following read is 
+     * aligned and can occur directly into the ring buffer (and also as 
+     * a multi-sector read at the flash device). */
+    if (off & 511)
+        nr = min_t(UINT, nr, (-off)&511);
+
     f_read(&im->fp, &buf[im->prod % (sizeof(im->buf)/2)], nr, &_nr);
     ASSERT(nr == _nr);
     im->prod += nr/2;

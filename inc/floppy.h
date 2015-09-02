@@ -63,7 +63,7 @@ struct image {
     uint16_t nr_tracks;
 
     /* Track buffer. */
-    uint32_t buf[1024/4];
+    uint32_t buf[4096/4];
     uint32_t prod, cons;
 
     /* Info about current track. */
