@@ -89,7 +89,8 @@
 
 #define BG_COL 0x0000u
 
-extern const char font8x8[128][8];
+extern const char font4x8[];
+extern const char font8x16[];
 
 static void spi_acquire(void)
 {
@@ -153,9 +154,9 @@ void fill_rect(
     spi_release();
 }
 
-static void draw_char(uint16_t x, uint16_t y, unsigned char c)
+static void draw_char_8x16(uint16_t x, uint16_t y, unsigned char c)
 {
-    uint8_t i, j, k;
+    uint8_t i, j;
 
     set_addr_window(x, y, x+7, y+15);
 
@@ -164,14 +165,14 @@ static void draw_char(uint16_t x, uint16_t y, unsigned char c)
     spi_16bit_frame(spi);
 
     for (j = 0; j < 16; j++) {
-        k = font8x8[c][j/2];
+        int8_t k = font8x16[c*16+j];
         for (i = 0; i < 8; i++) {
-            if (k & 1) {
+            if (k < 0) {
                 spi_xmit16(spi, 0xffff);
             } else {
                 spi_xmit16(spi, BG_COL);
             }
-            k >>= 1;
+            k <<= 1;
         }
     }
 
@@ -179,12 +180,48 @@ static void draw_char(uint16_t x, uint16_t y, unsigned char c)
     spi_release();
 }
 
-static void draw_string(uint16_t x, uint16_t y, char *str)
+static void draw_string_8x16(uint16_t x, uint16_t y, char *str)
 {
     while (*str) {
         char c = *str++;
-        draw_char(x, y, !(c & 0x80) ? c : 0);
+        draw_char_8x16(x, y, !(c & 0x80) ? c : 0);
         x += 8;
+    }
+}
+
+static void draw_char_4x8(uint16_t x, uint16_t y, unsigned char c)
+{
+    uint8_t i, j;
+
+    set_addr_window(x, y, x+3, y+7);
+
+    set_pin(PIN_DCRS, 1);
+    spi_acquire();
+    spi_16bit_frame(spi);
+
+    for (j = 0; j < 8; j++) {
+        int8_t k = font4x8[c*4+j/2];
+        if (j&1) k <<= 4; 
+        for (i = 0; i < 4; i++) {
+            if (k < 0) {
+                spi_xmit16(spi, 0xffff);
+            } else {
+                spi_xmit16(spi, BG_COL);
+            }
+            k <<= 1;
+        }
+    }
+
+    spi_8bit_frame(spi);
+    spi_release();
+}
+
+static void draw_string_4x8(uint16_t x, uint16_t y, char *str)
+{
+    while (*str) {
+        char c = *str++;
+        draw_char_4x8(x, y, !(c & 0x80) ? c : 0);
+        x += 4;
     }
 }
 
@@ -264,7 +301,13 @@ void tft_init(void)
     delay_ms(100); /* wait for screen to refresh to black */
 
     /* Example garbage. */
-    draw_string(0, 100, "New Zealand Story.ADF\x09\x89");
+    draw_string_8x16(0, 160, "New Zealand Story.ADF");
+    draw_string_8x16(0, 176, "New jeajand StorN.ADF");
+    draw_string_8x16(0, 192, "New Zealand Story.ADF");
+
+    draw_string_4x8(0, 130, "New Zealand Story.ADF");
+    draw_string_4x8(0, 138, "New jeajand StorN.ADF");
+    draw_string_4x8(0, 146, "New Zealand Story.ADF");
     fill_rect(20, 20, 20, 20, 0xf800);
 }
 
