@@ -349,6 +349,9 @@ int floppy_handle(void)
         stk_time_t time_after_index = stk_timesince(index_time);
         /* Allow 10ms from current rotational position to load new track */
         int32_t delay = stk_ms(10);
+        /* No data fetch while stepping. */
+        if (drv->step.active)
+            goto out;
         /* Allow extra time if heads are settling. */
         if (drv->step.settling) {
             stk_time_t step_settle = stk_diff(drv->step.start,
@@ -406,6 +409,7 @@ int floppy_handle(void)
                max_load_ticks, max_prefetch_us);
     }
 
+out:
     return 0;
 }
 
@@ -433,8 +437,8 @@ static void IRQ_input_changed(void)
 
     idr = gpio_in->idr;
 
-    drive[0].sel = !!(idr & m(pin_sel0));
-    drive[1].sel = !!(idr & m(pin_sel1));
+    drive[0].sel = !(idr & m(pin_sel0));
+    drive[1].sel = !(idr & m(pin_sel1));
 
     if (changed & idr & m(pin_step)) {
         bool_t step_inward = !(idr & m(pin_dir));
