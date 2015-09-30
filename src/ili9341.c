@@ -180,6 +180,7 @@ static void draw_char_8x16(uint16_t x, uint16_t y, unsigned char c)
     spi_release();
 }
 
+/* 16px vertical spacing works well. */
 static void draw_string_8x16(uint16_t x, uint16_t y, char *str)
 {
     while (*str) {
@@ -216,6 +217,7 @@ static void draw_char_4x8(uint16_t x, uint16_t y, unsigned char c)
     spi_release();
 }
 
+/* 10px vertical spacing works well. */
 static void draw_string_4x8(uint16_t x, uint16_t y, char *str)
 {
     while (*str) {
@@ -306,8 +308,8 @@ void tft_init(void)
     draw_string_8x16(0, 192, "New Zealand Story.ADF");
 
     draw_string_4x8(0, 130, "New Zealand Story.ADF");
-    draw_string_4x8(0, 138, "New jeajand StorN.ADF");
-    draw_string_4x8(0, 146, "New Zealand Story.ADF");
+    draw_string_4x8(0, 140, "New jeajand StorN.ADF");
+    draw_string_4x8(0, 150, "New Zealand Story.ADF");
     fill_rect(20, 20, 20, 20, 0xf800);
 }
 
