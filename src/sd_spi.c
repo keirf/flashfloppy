@@ -199,6 +199,34 @@ static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
     return ok;
 }
 
+static void dump_cid_info(void)
+{
+    uint8_t cid[16], crc;
+    uint16_t mo, yr;
+
+    printk("Card ID: ");
+
+    /* SEND_CID */
+    if ((send_cmd(CMD(10), 0) != 0) || !datablock_recv(cid, 16)) {
+        printk("unavailable\n");
+        goto out;
+    }
+
+    crc = (crc7(cid, 15) << 1) | 1;
+    yr = 2000 + (uint8_t)(cid[14]>>4) + (uint8_t)(cid[13]<<4);
+    mo = cid[14] & 15;
+    printk("MID=0x%02x OID='%c%c' "
+           "PNM='%c%c%c%c%c' PRV=%u.%u "
+           "PSN=0x%02x%02x%02x%02x MDT=%u/%u CRC=%s\n",
+           cid[0], cid[1], cid[2], cid[3], cid[4], cid[5], cid[6], cid[7],
+           (uint8_t)(cid[8]>>4), (uint8_t)(cid[8]<<4),
+           cid[9], cid[10], cid[11], cid[12], mo, yr,
+           (crc == cid[15]) ? "good" : "bad");
+
+out:
+    spi_release();
+}
+
 DSTATUS disk_initialize(BYTE pdrv)
 {
     uint32_t start, cr1;
@@ -303,6 +331,8 @@ out:
     if (!(status & STA_NOINIT)) {
         delay_us(10); /* XXX small delay here stops SPI getting stuck?? */
         spi->cr1 = cr1 | DEFAULT_SPEED_DIV;
+        printk("SD Card configured\n");
+        dump_cid_info();
     } else {
         /* Disable SPI. */
         spi->cr1 = 0;
@@ -314,7 +344,6 @@ out:
         gpio_configure_pin(gpiob, 15, GPI_pull_up); /* MOSI */
     }
 
-    printk("SD Card configured\n");
     return status;
 }
 
