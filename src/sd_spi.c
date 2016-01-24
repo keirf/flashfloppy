@@ -22,6 +22,12 @@
 #define SPI_PIN_SPEED _10MHz
 #endif
 
+#if 0
+#define TRC(f, a...) printk("SD: " f, ## a)
+#else
+#define TRC(f, a...) do { } while (0)
+#endif
+
 #define CMD(n)  (0x40 | (n))
 #define ACMD(n) (0xc0 | (n))
 
@@ -130,8 +136,10 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg)
 
         spi_acquire();
 
-        if ((res = wait_ready()) != 0xff)
+        if ((res = wait_ready()) != 0xff) {
+            TRC("CMD(0x%02x,0x%08x): not ready\n", cmd, arg);
             return 0xff;
+        }
 
         buf[0] = cmd & 0x7f;
         buf[1] = arg >> 24;
@@ -159,6 +167,7 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg)
         spi_release();
     }
 
+    TRC("SD CMD(0x%02x,0x%08x): res=0x%02x\n", cmd, arg, res);
     return res;
 }
 
@@ -277,8 +286,10 @@ DSTATUS disk_initialize(BYTE pdrv)
          * Get the 4-byte response and validate.  */
         for (i = rcv = 0; i < 4; i++)
             rcv = (rcv << 8) | spi_recv8(spi);
-        if ((rcv & 0x1ff) != 0x1aa)
+        if ((rcv & 0x1ff) != 0x1aa) {
+            TRC("Bad CMD8 response 0x%04x\n", rcv);
             goto out;
+        }
 
         /* Request SDHC/SDXC and start card initialisation. */
         start = stk_now();
@@ -293,8 +304,10 @@ DSTATUS disk_initialize(BYTE pdrv)
         rcv = spi_recv8(spi); /* Only care about first byte (bits 31:24) */
         for (i = 0; i < 3; i++)
             (void)spi_recv8(spi);
-        if (!(rcv & 0x80)) /* Bit 31: fail if card is still busy */
+        if (!(rcv & 0x80)) { /* Bit 31: fail if card is still busy */
+            TRC("OCR unexpected MSB 0x%02x\n", (uint8_t)rcv);
             goto out;
+        }
         cardtype = (rcv & 0x40) ? CT_SDHC : CT_SD2; /* Bit 30: SDHC? */
 
     } else {
