@@ -180,13 +180,13 @@ static void draw_char_8x16(uint16_t x, uint16_t y, unsigned char c)
     spi_release();
 }
 
-/* 16px vertical spacing works well. */
-static void draw_string_8x16(uint16_t x, uint16_t y, char *str)
+void draw_string_8x16(uint16_t x, uint16_t y, const char *str)
 {
-    while (*str) {
+    y *= 16; /* 16px vertical spacing works well. */
+    while (*str && (x < TFT_8x16_COLS)) {
         char c = *str++;
-        draw_char_8x16(x, y, !(c & 0x80) ? c : 0);
-        x += 8;
+        draw_char_8x16(x*8, y, !(c & 0x80) ? c : 0);
+        x++;
     }
 }
 
@@ -217,13 +217,13 @@ static void draw_char_4x8(uint16_t x, uint16_t y, unsigned char c)
     spi_release();
 }
 
-/* 10px vertical spacing works well. */
-static void draw_string_4x8(uint16_t x, uint16_t y, char *str)
+void draw_string_4x8(uint16_t x, uint16_t y, const char *str)
 {
-    while (*str) {
+    y *= 10; /* 10px vertical spacing works well. */
+    while (*str && (x < TFT_4x8_COLS)) {
         char c = *str++;
-        draw_char_4x8(x, y, !(c & 0x80) ? c : 0);
-        x += 4;
+        draw_char_4x8(x*4, y, !(c & 0x80) ? c : 0);
+        x++;
     }
 }
 
@@ -301,16 +301,6 @@ void tft_init(void)
     fill_rect(0, 0, 320, 240, BG_COL);
     writecommand(ILI9341_DISPON);
     delay_ms(100); /* wait for screen to refresh to black */
-
-    /* Example garbage. */
-    draw_string_8x16(0, 160, "New Zealand Story.ADF");
-    draw_string_8x16(0, 176, "New jeajand StorN.ADF");
-    draw_string_8x16(0, 192, "New Zealand Story.ADF");
-
-    draw_string_4x8(0, 130, "New Zealand Story.ADF");
-    draw_string_4x8(0, 140, "New jeajand StorN.ADF");
-    draw_string_4x8(0, 150, "New Zealand Story.ADF");
-    fill_rect(20, 20, 20, 20, 0xf800);
 }
 
 /*

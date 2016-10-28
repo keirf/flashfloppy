@@ -78,6 +78,13 @@ void speaker_pulse (uint8_t volume);
 void tft_init(void);
 void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c);
 
+#define TFT_8x16_COLS 40
+#define TFT_8x16_ROWS 15
+void draw_string_8x16(uint16_t x, uint16_t y, const char *str);
+#define TFT_4x8_COLS 80
+#define TFT_4x8_ROWS 24
+void draw_string_4x8(uint16_t x, uint16_t y, const char *str);
+
 void backlight_init(void);
 void backlight_set(uint8_t level);
 

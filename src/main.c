@@ -73,6 +73,33 @@ static void canary_check(void)
     ASSERT(_thread_stackbottom[0] == 0xdeadbeef);
 }
 
+static void list_dir(const char *dir)
+{
+    DIR dp;
+    FILINFO fp;
+    static char lfn[_MAX_LFN+1];
+    char *name;
+    unsigned int i;
+
+    fp.lfname = lfn;
+    fp.lfsize = sizeof(lfn);
+
+    ASSERT(!f_opendir(&dp, dir));
+
+    draw_string_8x16(0, 0, dir);
+
+    for (i = 1; i < TFT_8x16_ROWS; ) {
+        ASSERT(!f_readdir(&dp, &fp));
+        if (fp.fname[0] == '\0')
+            break;
+        name = *fp.lfname ? fp.lfname : fp.fname;
+        if (*name == '.')
+            continue;
+        draw_string_8x16(0, i++, name);
+    }
+    f_closedir(&dp);
+}
+
 int main(void)
 {
     FRESULT fr;
@@ -102,7 +129,9 @@ int main(void)
 
     floppy_init("nzs_crack.adf", NULL);
 
-    f_mount(&fatfs, "", 1);
+    ASSERT(!f_mount(&fatfs, "", 1));
+    list_dir("/");
+    
     fr = f_open(&file, "small", FA_READ);
     printk("File open %d\n", fr);
     if (fr == FR_OK) {
