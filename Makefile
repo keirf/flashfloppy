@@ -24,4 +24,4 @@ start:
 	sudo ~/stm32flash/stm32flash -b $(BAUD) -g $(FLASH) /dev/ttyUSB0
 
 serial:
-	sudo miniterm.py --baud=3000000 /dev/ttyUSB0
+	sudo miniterm.py /dev/ttyUSB0 3000000
