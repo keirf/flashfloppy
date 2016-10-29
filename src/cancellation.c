@@ -26,13 +26,31 @@ asm (
 
 void do_cancel(void);
 
+/* An exception context for cancel_call(), when initially called from Thread 
+ * context. */
+void EXC_sv_call(void) __attribute__((alias("EXC_do_cancel")));
+static struct cancellation *exc_cancel;
+static void EXC_do_cancel(void)
+{
+    cancel_call(exc_cancel);
+    exc_cancel = NULL;
+}
+
 void cancel_call(struct cancellation *c)
 {
     struct exception_frame *frame;
     uint32_t *new_frame;
 
+    /* Bail if the cancellable context is inactive/cancelled. */
     if (c->sp == NULL)
         return;
+
+    /* Switch to exception context if we are not there already. */
+    if (!in_exception()) {
+        exc_cancel = c;
+        sv_call(0);
+        ASSERT(0); /* unreachable */
+    }
 
     /* Modify return frame: Jump to exit of call_cancellable_fn() with
      * return code -1 and clean xPSR. */
