@@ -84,12 +84,12 @@ static void list_dir(const char *dir)
     fp.lfname = lfn;
     fp.lfsize = sizeof(lfn);
 
-    ASSERT(!f_opendir(&dp, dir));
+    F_opendir(&dp, dir);
 
     draw_string_8x16(0, 0, dir);
 
     for (i = 1; i < TFT_8x16_ROWS; ) {
-        ASSERT(!f_readdir(&dp, &fp));
+        F_readdir(&dp, &fp);
         if (fp.fname[0] == '\0')
             break;
         name = *fp.lfname ? fp.lfname : fp.fname;
@@ -97,14 +97,42 @@ static void list_dir(const char *dir)
             continue;
         draw_string_8x16(0, i++, name);
     }
-    f_closedir(&dp);
+    F_closedir(&dp);
+}
+
+int floppy_main(void)
+{
+    char buf[32];
+    UINT i, nr;
+
+    floppy_init("nzs_crack.adf", NULL);
+
+    list_dir("/");
+    
+    F_open(&file, "small", FA_READ);
+    for (;;) {
+        F_read(&file, buf, sizeof(buf), &nr);
+        if (nr == 0) {
+            printk("\nEOF\n");
+            break;
+        }
+        for (i = 0; i < nr; i++)
+            printk("%c", buf[i]);
+    }
+
+    i = usart1->dr; /* clear UART_SR_RXNE */    
+    for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
+        do_tft();
+        floppy_handle();
+        canary_check();
+    }
+
+    ASSERT(0);
+    return 0;
 }
 
 int main(void)
 {
-    FRESULT fr;
-    int i;
-
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
         memcpy(_sdat, _ldat, _edat-_sdat);
@@ -127,34 +155,20 @@ int main(void)
     backlight_set(8);
     touch_init();
 
-    floppy_init("nzs_crack.adf", NULL);
+    for (;;) {
 
-    ASSERT(!f_mount(&fatfs, "", 1));
-    list_dir("/");
-    
-    fr = f_open(&file, "small", FA_READ);
-    printk("File open %d\n", fr);
-    if (fr == FR_OK) {
-        char buf[32];
-        UINT i, nr;
-        while (f_read(&file, buf, sizeof(buf), &nr) == FR_OK) {
-            if (nr == 0) {
-                printk("\nEOF\n");
-                break;
+        bool_t mount_err = 0;
+        while (f_mount(&fatfs, "", 1) != FR_OK) {
+            if (!mount_err) {
+                mount_err = 1;
+                draw_string_8x16(2, 7, "* Please Insert Valid SD Card *");
             }
-            for (i = 0; i < nr; i++)
-                printk("%c", buf[i]);
         }
-    }
+        if (mount_err)
+            clear_screen();
 
-    i = usart1->dr; /* clear UART_SR_RXNE */    
-    for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
-        do_tft();
-        floppy_handle();
-        canary_check();
+        F_call_cancellable(floppy_main);
     }
-
-    ASSERT(0);
 
     return 0;
 }

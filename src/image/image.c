@@ -15,7 +15,6 @@ extern struct image_handler scp_image_handler;
 
 bool_t image_open(struct image *im, const char *name)
 {
-    FRESULT fr;
     char suffix[8];
 
     filename_extension(name, suffix, sizeof(suffix));
@@ -28,9 +27,7 @@ bool_t image_open(struct image *im, const char *name)
     else
         return FALSE;
 
-    fr = f_open(&im->fp, name, FA_READ);
-    if (fr)
-        return FALSE;
+    F_open(&im->fp, name, FA_READ);
     
     return im->handler->open(im);
 }

@@ -82,15 +82,14 @@ static bool_t adf_seek_track(struct image *im, uint8_t track,
 
 static void adf_prefetch_data(struct image *im)
 {
-    UINT nr;
+    const UINT nr = 512;
     uint8_t *buf = (uint8_t *)im->buf;
 
     if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-512)*8)
         return;
 
-    f_lseek(&im->fp, im->adf.trk_off + im->adf.trk_pos);
-    f_read(&im->fp, &buf[(im->prod/8) % sizeof(im->buf)], 512, &nr);
-    ASSERT(nr == 512);
+    F_lseek(&im->fp, im->adf.trk_off + im->adf.trk_pos);
+    F_read(&im->fp, &buf[(im->prod/8) % sizeof(im->buf)], nr, NULL);
     im->prod += nr * 8;
     im->adf.trk_pos += nr;
     if (im->adf.trk_pos >= im->adf.trk_len)

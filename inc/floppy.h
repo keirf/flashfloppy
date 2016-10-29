@@ -57,7 +57,6 @@ struct image {
 
     /* FatFS. */
     FIL fp;
-    FRESULT fr;
 
     /* Info about image as a whole. */
     uint16_t nr_tracks;

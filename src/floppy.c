@@ -100,6 +100,9 @@ static void floppy_check(void)
 
 void floppy_init(const char *disk0_name, const char *disk1_name)
 {
+    memset(&image, 0, sizeof(image));
+    memset(drive, 0, sizeof(drive));
+
     pin_index = (board_id == BRDREV_MM150) ? 2 : 4;
 
     drive[0].filename = disk0_name;

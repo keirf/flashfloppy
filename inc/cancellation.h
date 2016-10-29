@@ -13,6 +13,8 @@ struct cancellation {
     uint32_t *sp;
 };
 
+#define cancellation_is_active(c) ((c)->sp != NULL)
+
 /* Execute fn() in a wrapped cancellable environment. */
 int call_cancellable_fn(struct cancellation *c, int (*fn)(void));
 

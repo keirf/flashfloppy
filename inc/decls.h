@@ -24,6 +24,7 @@
 #include "timer.h"
 
 #include "../src/fatfs/ff.h"
+#include "fs.h"
 #include "floppy.h"
 
 /*

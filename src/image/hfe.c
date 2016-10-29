@@ -63,11 +63,9 @@ struct track_header {
 static bool_t hfe_open(struct image *im)
 {
     struct disk_header dhdr;
-    UINT nr;
 
-    im->fr = f_read(&im->fp, &dhdr, sizeof(dhdr), &nr);
-    if (im->fr
-        || strncmp(dhdr.sig, "HXCPICFE", sizeof(dhdr.sig))
+    F_read(&im->fp, &dhdr, sizeof(dhdr), NULL);
+    if (strncmp(dhdr.sig, "HXCPICFE", sizeof(dhdr.sig))
         || (dhdr.formatrevision != 0))
         return FALSE;
 
@@ -82,14 +80,12 @@ static bool_t hfe_seek_track(struct image *im, uint8_t track,
 {
     uint32_t ticks_after_index = *ptime_after_index;
     struct track_header thdr;
-    UINT nr;
 
     /* TODO: Fake out unformatted tracks. */
     track = min_t(uint8_t, track, im->nr_tracks-1);
 
-    if ((im->fr = f_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4))
-        || (im->fr = f_read(&im->fp, &thdr, sizeof(thdr), &nr)))
-        return FALSE;
+    F_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
+    F_read(&im->fp, &thdr, sizeof(thdr), NULL);
 
     im->hfe.trk_off = le16toh(thdr.offset);
     im->hfe.trk_len = le16toh(thdr.len) / 2;
@@ -119,19 +115,18 @@ static bool_t hfe_seek_track(struct image *im, uint8_t track,
 
 static void hfe_prefetch_data(struct image *im)
 {
-    UINT nr;
+    const UINT nr = 256;
     uint8_t *buf = (uint8_t *)im->buf;
 
     if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-256)*8)
         return;
 
-    f_lseek(&im->fp,
+    F_lseek(&im->fp,
             im->hfe.trk_off * 512
             + (im->cur_track & 1) * 256
             + ((im->hfe.trk_pos & ~255) << 1)
             + (im->hfe.trk_pos & 255));
-    f_read(&im->fp, &buf[(im->prod/8) % sizeof(im->buf)], 256, &nr);
-    ASSERT(nr == 256);
+    F_read(&im->fp, &buf[(im->prod/8) % sizeof(im->buf)], nr, NULL);
     im->prod += nr * 8;
     im->hfe.trk_pos += nr;
     if (im->hfe.trk_pos >= im->hfe.trk_len)

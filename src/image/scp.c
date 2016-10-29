@@ -39,10 +39,9 @@ struct trk_header {
 static bool_t scp_open(struct image *im)
 {
     struct scp_header header;
-    UINT nr;
 
-    im->fr = f_read(&im->fp, &header, sizeof(header), &nr);
-    if (im->fr || strncmp((char *)header.sig, "SCP", 3)) {
+    F_read(&im->fp, &header, sizeof(header), NULL);
+    if (strncmp((char *)header.sig, "SCP", 3)) {
         printk("Not a SCP file\n");
         return FALSE;
     }
@@ -69,20 +68,17 @@ static bool_t scp_seek_track(struct image *im, uint8_t track,
     uint32_t ticks_after_index = *ptime_after_index;
     struct trk_header header;
     uint32_t hdr_offset, i, j, nr_flux;
-    UINT nr;
 
     /* TODO: Fake out unformatted tracks. */
     track = min_t(uint8_t, track, im->nr_tracks-1);
 
     hdr_offset = 0x10 + track*4;
-    if ((im->fr = f_lseek(&im->fp, hdr_offset))
-        || (im->fr = f_read(&im->fp, &hdr_offset, 4, &nr)))
-        return FALSE;
+    F_lseek(&im->fp, hdr_offset);
+    F_read(&im->fp, &hdr_offset, 4, NULL);
 
     hdr_offset = le32toh(hdr_offset);
-    if ((im->fr = f_lseek(&im->fp, hdr_offset))
-        || (im->fr = f_read(&im->fp, &header, sizeof(header), &nr)))
-        return FALSE;
+    F_lseek(&im->fp, hdr_offset);
+    F_read(&im->fp, &header, sizeof(header), NULL);
 
     if (strncmp((char *)header.sig, "TRK", 3) || header.track != track)
         return FALSE;
@@ -115,7 +111,7 @@ static bool_t scp_seek_track(struct image *im, uint8_t track,
 
 static void scp_prefetch_data(struct image *im)
 {
-    UINT _nr, nr, nr_flux = im->scp.rev[im->scp.pf_rev].nr_dat;
+    UINT nr, nr_flux = im->scp.rev[im->scp.pf_rev].nr_dat;
     uint16_t *buf = (uint16_t *)im->buf;
     uint32_t off;
 
@@ -124,7 +120,7 @@ static void scp_prefetch_data(struct image *im)
         return;
 
     off = im->scp.rev[im->scp.pf_rev].dat_off + im->scp.pf_pos*2;
-    f_lseek(&im->fp, off);
+    F_lseek(&im->fp, off);
 
     /* Up to 2kB, further limited by end of buffer and end of stream. */
     nr = min_t(UINT, 2048, (nr_flux - im->scp.pf_pos) * 2);
@@ -135,8 +131,7 @@ static void scp_prefetch_data(struct image *im)
     if (off & 511)
         nr = min_t(UINT, nr, (-off)&511);
 
-    f_read(&im->fp, &buf[im->prod % (sizeof(im->buf)/2)], nr, &_nr);
-    ASSERT(nr == _nr);
+    F_read(&im->fp, &buf[im->prod % (sizeof(im->buf)/2)], nr, NULL);
     im->prod += nr/2;
     im->scp.pf_pos += nr/2;
     if (im->scp.pf_pos >= nr_flux) {

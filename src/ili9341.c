@@ -154,6 +154,11 @@ void fill_rect(
     spi_release();
 }
 
+void clear_screen(void)
+{
+    fill_rect(0, 0, 320, 240, BG_COL);
+}
+
 static void draw_char_8x16(uint16_t x, uint16_t y, unsigned char c)
 {
     uint8_t i, j;
@@ -298,7 +303,7 @@ void tft_init(void)
     delay_ms(5);
 
     /* Clear the display, then switch it on. */
-    fill_rect(0, 0, 320, 240, BG_COL);
+    clear_screen();
     writecommand(ILI9341_DISPON);
     delay_ms(100); /* wait for screen to refresh to black */
 }

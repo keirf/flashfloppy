@@ -77,6 +77,7 @@ void speaker_pulse (uint8_t volume);
 
 void tft_init(void);
 void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c);
+void clear_screen(void);
 
 #define TFT_8x16_COLS 40
 #define TFT_8x16_ROWS 15

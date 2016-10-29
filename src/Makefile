@@ -2,6 +2,7 @@ OBJS += cancellation.o
 OBJS += console.o
 OBJS += vectors.o
 OBJS += floppy.o
+OBJS += fs.o
 OBJS += backlight.o
 OBJS += ili9341.o
 OBJS += xpt2046.o
