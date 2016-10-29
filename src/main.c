@@ -168,6 +168,7 @@ int main(void)
             clear_screen();
 
         F_call_cancellable(floppy_main);
+        floppy_deinit();
     }
 
     return 0;

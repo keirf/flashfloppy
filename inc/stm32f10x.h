@@ -111,6 +111,8 @@ int32_t stk_delta(stk_time_t a, stk_time_t b);
 void gpio_configure_pin(GPIO gpio, unsigned int pin, unsigned int mode);
 #define gpio_write_pin(gpio, pin, level) \
     ((gpio)->bsrr = ((level) ? 0x1u : 0x10000u) << (pin))
+#define gpio_write_pins(gpio, mask, level) \
+    ((gpio)->bsrr = (uint32_t)(mask) << ((level) ? 0 : 16))
 #define gpio_read_pin(gpio, pin) (((gpio)->idr >> (pin)) & 1)
 
 /*

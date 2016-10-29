@@ -29,6 +29,7 @@
 #define gpio_out gpiob
 #define pin_dskchg  3
 static uint8_t pin_index; /* PB2 (MM150); PB4 (LC150) */
+static uint16_t gpio_out_mask;
 #define pin_trk0    5
 #define pin_wrprot 11
 #define pin_rdy    12
@@ -61,6 +62,10 @@ static struct {
     stk_time_t prev_time, next_time;
 } index;
 static void index_pulse(void *);
+
+static uint32_t max_load_ticks, max_prefetch_us;
+
+static void rddat_stop(void);
 
 static struct cancellation floppy_cancellation;
 
@@ -98,12 +103,42 @@ static void floppy_check(void)
 #define floppy_check() ((void)0)
 #endif
 
-void floppy_init(const char *disk0_name, const char *disk1_name)
+void floppy_deinit(void)
 {
+    ASSERT(!cancellation_is_active(&floppy_cancellation));
+
+    /* Initialised? Bail if not. */
+    if (!pin_index)
+        return;
+
+    /* Stop interrupt work. */
+    IRQx_disable(EXTI_IRQ);
+    timer_cancel(&index.timer);
+
+    /* Stop DMA/timer work. */
+    rddat_stop();
+
+    /* Quiesce outputs. */
+    gpio_write_pins(gpio_out, gpio_out_mask, O_FALSE);
+
+    /* Clear soft state. */
     memset(&image, 0, sizeof(image));
     memset(drive, 0, sizeof(drive));
+    memset(&index, 0, sizeof(index));
+    max_load_ticks = max_prefetch_us = 0;
+    pin_index = 0;
+    ASSERT(data_state == DATA_stopped);
+    ASSERT((dmacons_prev == 0) && (dmaprod == 0));
+}
 
+void floppy_init(const char *disk0_name, const char *disk1_name)
+{
     pin_index = (board_id == BRDREV_MM150) ? 2 : 4;
+    gpio_out_mask = ((1u << pin_dskchg)
+                     | (1u << pin_index)
+                     | (1u << pin_trk0)
+                     | (1u << pin_wrprot)
+                     | (1u << pin_rdy));
 
     drive[0].filename = disk0_name;
     drive[1].filename = disk1_name;
@@ -241,8 +276,6 @@ static void floppy_sync_flux(void)
     rddat_start();
     printk("Trk %u: sync_ticks=%d\n", drv->image->cur_track, ticks);
 }
-
-static uint32_t max_load_ticks, max_prefetch_us;
 
 static int floppy_load_flux(void)
 {
