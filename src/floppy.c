@@ -43,7 +43,6 @@ static uint16_t gpio_out_mask;
 /* EXTI[15:10]: IRQ 40 */
 void IRQ_40(void) __attribute__((alias("IRQ_input_changed")));
 #define EXTI_IRQ 40
-#define EXTI_IRQ_PRI 2 /* very high */
 
 static struct drive drive[2];
 static struct image image;
@@ -175,7 +174,7 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
         m(pin_step) | m(pin_sel0) | m(pin_sel1) | m(pin_wgate) | m(pin_side);
 
     /* Enable interrupts. */
-    IRQx_set_prio(EXTI_IRQ, EXTI_IRQ_PRI);
+    IRQx_set_prio(EXTI_IRQ, FLOPPY_IRQ_HI_PRI);
     IRQx_set_pending(EXTI_IRQ);
     IRQx_enable(EXTI_IRQ);
 

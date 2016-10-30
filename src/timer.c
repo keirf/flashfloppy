@@ -12,7 +12,6 @@
 /* TIM1_UP: IRQ 25. */
 void IRQ_25(void) __attribute__((alias("IRQ_timer")));
 #define TIMER_IRQ 25
-#define TIMER_IRQ_PRI 3
 
 #define tim tim1
 

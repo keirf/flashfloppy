@@ -37,6 +37,10 @@ static void exception_init(void)
     scb->shcsr |= (SCB_SHCSR_USGFAULTENA |
                    SCB_SHCSR_BUSFAULTENA |
                    SCB_SHCSR_MEMFAULTENA);
+
+    /* SVCall/PendSV exceptions have lowest priority. */
+    scb->shpr2 = 0xff<<24;
+    scb->shpr3 = 0xff<<16;
 }
 
 static void clock_init(void)
