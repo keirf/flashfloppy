@@ -37,6 +37,15 @@ struct exception_frame {
 #define IRQ_global_disable() asm volatile ("cpsid i" ::: "memory")
 #define IRQ_global_enable() asm volatile ("cpsie i" ::: "memory")
 
+/* Save/restore IRQ priority levels. */
+#define IRQ_save(newpri) ({                         \
+        uint8_t __newpri = (newpri)<<4;             \
+        uint8_t __oldpri = read_special(basepri);   \
+        if (!__oldpri || (__oldpri > __newpri))     \
+            write_special(basepri, __newpri);       \
+        __oldpri; })
+#define IRQ_restore(oldpri) write_special(basepri, (oldpri))
+
 static inline uint16_t _rev16(uint16_t x)
 {
     uint16_t result;

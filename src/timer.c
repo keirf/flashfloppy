@@ -83,8 +83,9 @@ void timer_set(struct timer *timer, stk_time_t deadline)
     struct timer *t, **pprev;
     stk_time_t now;
     int32_t delta;
+    uint32_t oldpri;
 
-    IRQx_disable(TIMER_IRQ);
+    oldpri = IRQ_save(TIMER_IRQ_PRI);
 
     _timer_cancel(timer);
 
@@ -101,14 +102,15 @@ void timer_set(struct timer *timer, stk_time_t deadline)
     if (head == timer)
         reprogram_timer(delta);
 
-    IRQx_enable(TIMER_IRQ);
+    IRQ_restore(oldpri);
 }
 
 void timer_cancel(struct timer *timer)
 {
-    IRQx_disable(TIMER_IRQ);
+    uint32_t oldpri;
+    oldpri = IRQ_save(TIMER_IRQ_PRI);
     _timer_cancel(timer);
-    IRQx_enable(TIMER_IRQ);
+    IRQ_restore(oldpri);
 }
 
 void timers_init(void)
