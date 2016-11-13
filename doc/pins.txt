@@ -32,7 +32,7 @@ USART1: (Rx:DMA1/5, Tx:DMA1/4)
 Speaker (switching NPN BJT):
 --------
 Timer3/x:
- PB1/Ch4: Speaker PWM [LC Tech; PB4/Ch1 on Maple Mini]
+ PB4/Ch1: Speaker PWM [PB1/Ch4 on LCTech]
 
 Floppy:
 -------
@@ -40,12 +40,12 @@ GPIn: (all must be 5v tolerant)
  PA8: DIR
  PA11: STEP
  PA12: SELA
- PA13: SELB
- PA14: WGATE
+ PA13: SELB [PB8 on Taobao]
+ PA14: WGATE [PB9 on Taobao]
  PA15: SIDE
 GPOut:
  PB3: CHNG
- PB4: INDEX [LC Tech; PB2 on Maple Mini]
+ PB4: INDEX [PB2 on MMini; PB1 on Taobao]
  PB5: TRK0
  PB11: WRPROT
  PB12: RDY
@@ -58,11 +58,19 @@ Unused:
 -------
 Set to ANALOG-INPUT to disable the Schmitt Trigger Input and eliminate
 parasitic switching load.
- PB1 [Maple Mini, LED (floats)]
- PB2 [LC Tech, BOOT1 (ext.pull)]
- PB8 [LC Tech, n/c (floats); Maple Mini, BOOT0/Button (ext.pull)]
- PB9 [LC Tech, n/c (floats); Maple Mini, USB DISConnect (ext.pull)]
- PC13-15 [LC Tech, n/c (floats); Maple Mini (ext.pull)]
+LCTech:
+ PB2: BOOT1 (ext.pull)
+ PB8-9: n/c (floats)
+ PC13-15: n/c (floats)
+MMini:
+ PB1: LED (floats)
+ PB8: BOOT0/Button (ext.pull)
+ PB9: USB DISConnect (ext.pull)
+ PC13-15: n/c (ext.pull)
+Taobao:
+ PA13-14: n/c (floats)
+ PB2: BOOT1 (ext.pull)
+ PC13-15: n/c (ext.pull)
 
 Floppy drive 34-pin Shugart(-ish) interface. For reference:
 -----------------------------------------------------------
