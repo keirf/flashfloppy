@@ -1,0 +1,19 @@
+REF         PART DESCRIPTION                   RS ORDER
+===         ================                   ========
+F1          Bourns MF-PSMF075X-2 (0805)        691-7516
+D1          LL4148 (MiniMELF, SOD-80)
+D2          NXP PTVS5V0P1UP (SOD-128)          791-9052
+            NXP PTVS5V0P1UTP (alternative)     791-9055
+C1-C2       0.1uF (0805)                       390-990
+C3          Vishay 293D106X9020B2TE3 (3528)    684-3904
+Q1          MMBT3904 (SOT23)
+Q2          MMBT3906 (SOT23)
+U1          "Taobao" Mini STM32 (DIP40) [*]
+U2-U3       74LS38 (SOIC14)
+R1          33R,1%,1/4W (1206)
+R3-R14      1K,5%,1/8W (0805)
+P5          TE/AMP 171826-4 4-pin header       680-1225
+
+[*] There are many variants of this Chinese design with informal names
+    such as Red Pill, Blue Pill, JC-66, etc. Most have a pullup
+    resistor on PA12: remove it or cut the connecting trace.

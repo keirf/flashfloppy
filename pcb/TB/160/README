@@ -1,0 +1,34 @@
+This project was designed using a development snapshot of KiCad.
+
+FF-TB160
+--------
+KiCad project for schematic and 10cmx5cm single-board layout.
+Can be opened in the KiCad project manager.
+
+FF-TB160-bom.txt
+----------------
+Bill of materials for the above design, excluding pin headers
+and socket strips.
+
+FF-TB160-panel
+--------------
+Two-up 10x10cm panelisation of the above layout, with cutouts
+and break-away mousebites. Should be opened directly in Pcbnew.
+
+Generating Gerbers
+------------------
+Nothing special to note here. Some of these options are important to
+follow, especially for the drill file.
+Options:
+ Plot footprint values
+ Plot footprint references
+ Exclude PCB edge layer from other layers
+Gerber Options:
+ Use Protel filename extensions
+ Format: 4.6
+Drill files:
+ Drill Units:    Inches
+ Zeros Format:   Suppress leading zeros
+ Precision:      2:4
+ Drill Options:  Minimal header
+ Drill Origin:   Absolute
