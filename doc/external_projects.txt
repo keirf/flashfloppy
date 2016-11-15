@@ -1,0 +1,22 @@
+External projects which may be of use to FlashFloppy (or are already
+integrated into FlashFloppy):
+
+FatFS:     FAT Filesystem
+           1-clause BSD license
+
+ILI9341:   ILI9341 display driver
+           MIT license plus Adafruit text
+
+mbed TLS:  crypto
+           Apache 2.0 license
+
+STSW-STM32046: F105/7, F2, F4 USB OTG Host & Device Library
+           ST Liberty v2 license
+           Allows to make copies and prepare derivative copies
+           of the source code. Derivative work must only run
+           on STM32 devices (not really a problem). Overall,
+           just about permissive enough and not many other
+           open USB libraries to choose from!
+
+STSW-STM32121: F10x, L1, F3 USB FS Device Library
+           ST Liberty v2 license (see above)
