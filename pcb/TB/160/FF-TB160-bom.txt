@@ -17,3 +17,6 @@ P5          TE/AMP 171826-4 4-pin header       680-1225
 [*] There are many variants of this Chinese design with informal names
     such as Red Pill, Blue Pill, JC-66, etc. Most have a pullup
     resistor on PA12: remove it or cut the connecting trace.
+    
+    For example on Blue Pill both R10 and R11 can be removed:
+    http://wiki.stm32duino.com/images/c/c1/Vcc-gnd.com-STM32F103C8-schematic.pdf
