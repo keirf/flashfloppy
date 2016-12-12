@@ -54,6 +54,8 @@ static void board_init(void)
     switch (board_id = id) {
     case BRDREV_MM150:
         break;
+    case BRDREV_TB160:
+        break;
     case BRDREV_LC150:
         break;
     default:

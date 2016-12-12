@@ -16,14 +16,16 @@
 #define GPO_bus GPO_pushpull(_2MHz,O_FALSE)
 #define AFO_bus AFO_pushpull(_2MHz)
 
-/* All gpio_in pins must be 5v tolerant. */
-#define gpio_in gpioa
-#define pin_dir     8
-#define pin_step   11
-#define pin_sel0   12
-#define pin_sel1   13
-#define pin_wgate  14
-#define pin_side   15
+/* NB. All input pins must be 5v tolerant. */
+/* Bitmap of current states of input pins. */
+static uint8_t input_pins;
+/* Offsets within the above bitmap. */
+#define inp_dir     0
+#define inp_step    3
+#define inp_sel0    4
+#define inp_sel1    5
+#define inp_wgate   6
+#define inp_side    7
 
 /* Outputs are buffered, thus do *not* need to be 5v tolerant. */
 #define gpio_out gpiob
@@ -68,15 +70,85 @@ static void rddat_stop(void);
 
 static struct cancellation floppy_cancellation;
 
+/* Updates the board-agnostic input_pins bitmask with current states of 
+ * input pins, and returns mask of pins which have changed state. */
+static uint8_t (*input_update)(void);
+
+/* Default input pins:
+ * DIR = PA8, STEP=PA11, SELA=PA12, SELB=PA13, WGATE=PA14, SIDE=PA15
+ */
+static uint8_t input_update_default(void)
+{
+    uint16_t pr;
+
+    pr = exti->pr;
+    exti->pr = pr;
+
+    input_pins = (gpioa->idr >> 8) & 0xf9;
+
+    return (pr >> 8) & 0xf8;
+}
+
+static void input_init_default(void)
+{
+    gpio_configure_pin(gpioa, 8+inp_sel0,  GPI_bus);
+    gpio_configure_pin(gpioa, 8+inp_sel1,  GPI_bus);
+    gpio_configure_pin(gpioa, 8+inp_dir,   GPI_bus);
+    gpio_configure_pin(gpioa, 8+inp_step,  GPI_bus);
+    gpio_configure_pin(gpioa, 8+inp_wgate, GPI_bus);
+    gpio_configure_pin(gpioa, 8+inp_side,  GPI_bus);
+
+    /* PA[15:0] -> EXT[15:0] */
+    afio->exticr1 = afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x0000;
+
+    exti->imr = exti->rtsr = exti->ftsr =
+        m(8+inp_step) | m(8+inp_sel0) | m(8+inp_sel1)
+        | m(8+inp_wgate) | m(8+inp_side);
+
+    input_update = input_update_default;
+}
+
+/* TB160 input pins as default except:
+ * SELB = PB8, WGATE = PB9.
+ */
+static uint8_t input_update_tb160(void)
+{
+    uint16_t pr;
+
+    pr = exti->pr;
+    exti->pr = pr;
+
+    input_pins = ((gpioa->idr >> 8) & 0x99) | ((gpiob->idr >> 3) & 0x60);
+
+    return ((pr >> 8) & 0x98) | ((pr >> 3) & 0x60);
+}
+
+static void input_init_tb160(void)
+{
+    gpio_configure_pin(gpioa, 8+inp_sel0,  GPI_bus);
+    gpio_configure_pin(gpiob, 3+inp_sel1,  GPI_bus);
+    gpio_configure_pin(gpioa, 8+inp_dir,   GPI_bus);
+    gpio_configure_pin(gpioa, 8+inp_step,  GPI_bus);
+    gpio_configure_pin(gpiob, 3+inp_wgate, GPI_bus);
+    gpio_configure_pin(gpioa, 8+inp_side,  GPI_bus);
+
+    /* PA[15:10,7:0] -> EXT[15:10,7:0], PB[9:8] -> EXT[9:8]. */
+    afio->exticr1 = afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x0000;
+    afio->exticr3 = 0x11;
+
+    exti->imr = exti->rtsr = exti->ftsr =
+        m(8+inp_step) | m(8+inp_sel0) | m(3+inp_sel1)
+        | m(3+inp_wgate) | m(8+inp_side);
+
+    input_update = input_update_tb160;
+}
+
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
 static void floppy_check(void)
 {
-    uint16_t i=0, mask, pin, prev_pin=0, idr, prev_idr;
+    uint16_t i=0, pin, prev_pin=0, inp, prev_inp=0;
 
-    mask = m(pin_dir) | m(pin_step) | m(pin_sel0)
-        | m(pin_sel1) | m(pin_wgate) | m(pin_side);
-    prev_idr = 0;
     for (;;) {
         switch (i++) {
         case 0: pin = pin_dskchg; break;
@@ -91,11 +163,12 @@ static void floppy_check(void)
         if (pin) gpio_write_pin(gpio_out, pin, 1);
         prev_pin = pin;
         delay_ms(50);
-        idr = gpio_in->idr & mask;
-        idr |= gpio_timer->idr & m(pin_wdata);
-        if (idr ^ prev_idr)
-            printk("IN: %04x->%04x\n", prev_idr, idr);
-        prev_idr = idr;
+        input_update();
+        inp = input_pins;
+        inp |= (gpio_timer->idr & m(pin_wdata)) >> 5; /* inp[1] */
+        if (inp ^ prev_inp)
+            printk("IN: %02x->%02x\n", prev_inp, inp);
+        prev_inp = inp;
     }
 }
 #else
@@ -132,7 +205,21 @@ void floppy_deinit(void)
 
 void floppy_init(const char *disk0_name, const char *disk1_name)
 {
-    pin_index = (board_id == BRDREV_MM150) ? 2 : 4;
+    switch (board_id) {
+    case BRDREV_LC150:
+        pin_index = 4;
+        input_init_default();
+        break;
+    case BRDREV_MM150:
+        pin_index = 2;
+        input_init_default();
+        break;
+    case BRDREV_TB160:
+        pin_index = 1;
+        input_init_tb160();
+        break;
+    }
+
     gpio_out_mask = ((1u << pin_dskchg)
                      | (1u << pin_index)
                      | (1u << pin_trk0)
@@ -142,13 +229,6 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     drive[0].filename = disk0_name;
     drive[1].filename = disk1_name;
     drive[0].cyl = drive[1].cyl = 1; /* XXX */
-
-    gpio_configure_pin(gpio_in, pin_sel0,  GPI_bus);
-    gpio_configure_pin(gpio_in, pin_sel1,  GPI_bus);
-    gpio_configure_pin(gpio_in, pin_dir,   GPI_bus);
-    gpio_configure_pin(gpio_in, pin_step,  GPI_bus);
-    gpio_configure_pin(gpio_in, pin_wgate, GPI_bus);
-    gpio_configure_pin(gpio_in, pin_side,  GPI_bus);
 
     gpio_configure_pin(gpio_out, pin_dskchg, GPO_bus);
     gpio_configure_pin(gpio_out, pin_index,  GPO_bus);
@@ -166,12 +246,6 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     index.next_time = ~0u;
     timer_init(&index.timer, index_pulse, NULL);
     timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(200)));
-
-    /* PA[15:0] -> EXT[15:0] */
-    afio->exticr1 = afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x0000;
-
-    exti->imr = exti->rtsr = exti->ftsr =
-        m(pin_step) | m(pin_sel0) | m(pin_sel1) | m(pin_wgate) | m(pin_side);
 
     /* Enable interrupts. */
     IRQx_set_prio(EXTI_IRQ, FLOPPY_IRQ_HI_PRI);
@@ -464,19 +538,18 @@ static void index_pulse(void *dat)
 
 static void IRQ_input_changed(void)
 {
-    uint16_t changed, idr, i;
+    uint8_t inp, changed;
+    uint16_t i;
     struct drive *drv;
 
-    changed = exti->pr;
-    exti->pr = changed;
+    changed = input_update();
+    inp = input_pins;
 
-    idr = gpio_in->idr;
+    drive[0].sel = !(inp & m(inp_sel0));
+    drive[1].sel = !(inp & m(inp_sel1));
 
-    drive[0].sel = !(idr & m(pin_sel0));
-    drive[1].sel = !(idr & m(pin_sel1));
-
-    if (changed & idr & m(pin_step)) {
-        bool_t step_inward = !(idr & m(pin_dir));
+    if (changed & inp & m(inp_step)) {
+        bool_t step_inward = !(inp & m(inp_dir));
         for (i = 0; i < ARRAY_SIZE(drive); i++) {
             drv = &drive[i];
             if (!drv->sel || drv->step.active
@@ -493,10 +566,10 @@ static void IRQ_input_changed(void)
         }
     }
 
-    if (changed & m(pin_side)) {
+    if (changed & m(inp_side)) {
         for (i = 0; i < ARRAY_SIZE(drive); i++) {
             drv = &drive[i];
-            drv->head = !(idr & m(pin_side));
+            drv->head = !(inp & m(inp_side));
             if (i == 0) {
                 rddat_stop();
                 cancel_call(&floppy_cancellation);

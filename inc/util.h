@@ -94,6 +94,7 @@ bool_t touch_get_xy(uint16_t *px, uint16_t *py);
 
 extern uint8_t board_id;
 #define BRDREV_MM150 0
+#define BRDREV_TB160 1
 #define BRDREV_LC150 7
 
 /* Text/data/BSS address ranges. */

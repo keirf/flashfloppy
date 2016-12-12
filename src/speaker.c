@@ -24,7 +24,7 @@
 
 void speaker_init(void)
 {
-    uint8_t pin_spk = (board_id == BRDREV_MM150) ? 4 : 1;
+    uint8_t pin_spk = (board_id == BRDREV_LC150) ? 1 : 4;
 
     /* PWM2 mode achieves a LOW-HIGH-LOW pulse in one-pulse mode, which is 
      * what we require to drive an NPN BJT with grounded emitter. */
@@ -48,7 +48,7 @@ void speaker_init(void)
 void speaker_pulse(uint8_t volume)
 {
     volatile uint32_t *pwm_ccr =
-        (board_id == BRDREV_MM150) ? &tim->ccr1 : &tim->ccr4;
+        (board_id == BRDREV_LC150) ? &tim->ccr4 : &tim->ccr1;
 
     /* Don't overlap pulses; limit the maximum frequency. */
     if (tim->cr1 & TIM_CR1_CEN)
