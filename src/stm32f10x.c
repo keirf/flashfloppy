@@ -77,14 +77,6 @@ static void clock_init(void)
     stk->ctrl = STK_CTRL_ENABLE;
 }
 
-static void gpio_init(GPIO gpio)
-{
-    /* Analog Input: disables Schmitt Trigger Inputs hence zero load for any 
-     * voltage at the input pin (and voltage build-up is clamped by protection 
-     * diodes even if the pin floats). */
-    gpio->crl = gpio->crh = 0;
-}
-
 static void peripheral_init(void)
 {
     /* Enable basic GPIO and AFIO clocks, and DMA. */
@@ -97,11 +89,6 @@ static void peripheral_init(void)
 
     /* Turn off serial-wire JTAG and reclaim the GPIOs. */
     afio->mapr = AFIO_MAPR_SWJ_CFG_DISABLED;
-
-    /* All pins in a stable state. */
-    gpio_init(gpioa);
-    gpio_init(gpiob);
-    gpio_init(gpioc);
 }
 
 void stm32_init(void)

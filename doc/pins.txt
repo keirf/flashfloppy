@@ -56,8 +56,8 @@ Timer4/1: (CC1:DMA1/1, UP:DMA1/7)
 
 Unused:
 -------
-Set to ANALOG-INPUT to disable the Schmitt Trigger Input and eliminate
-parasitic switching load.
+Set floating pins to ANALOG-INPUT to disable the Schmitt Trigger Input
+and eliminate parasitic switching load, or use input weak pull-up/down.
 LCTech:
  PB2: BOOT1 (ext.pull)
  PB8-9: n/c (floats)
