@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include "fatfs/diskio.h"
+#include "../fatfs/diskio.h"
 
 #if 1
 /* We can now switch to Default Speed (25MHz). Closest we can get is 36Mhz/2 = 

@@ -13,18 +13,24 @@ FLAGS += -Wstrict-prototypes -Wredundant-decls -Wnested-externs
 FLAGS += -fno-common -fno-exceptions -fno-strict-aliasing
 FLAGS += -mlittle-endian -mthumb -mcpu=cortex-m3 -mfloat-abi=soft
 
+FLAGS-$(gotek) += -DBUILD_GOTEK=1
+FLAGS-$(touch) += -DBUILD_TOUCH=1
+
 FLAGS += -MMD -MF .$(@F).d
 DEPS = .*.d
 
-CFLAGS += $(FLAGS) -include decls.h
-AFLAGS += $(FLAGS) -D__ASSEMBLY__
-LDFLAGS += $(FLAGS) -Wl,--gc-sections
+FLAGS += $(FLAGS-y)
+
+CFLAGS += $(CFLAGS-y) $(FLAGS) -include decls.h
+AFLAGS += $(AFLAGS-y) $(FLAGS) -D__ASSEMBLY__
+LDFLAGS += $(LDFLAGS-y) $(FLAGS) -Wl,--gc-sections
 
 RULES_MK := y
 
 include Makefile
 
-OBJS += $(patsubst %,%/build.o,$(SUBDIRS))
+SUBDIRS += $(SUBDIRS-y)
+OBJS += $(OBJS-y) $(patsubst %,%/build.o,$(SUBDIRS))
 
 # Force execution of pattern rules (for which PHONY cannot be directly used).
 .PHONY: FORCE
@@ -55,16 +61,19 @@ build.o: $(OBJS)
 %.elf: $(OBJS) %.ld Makefile
 	@echo LD $@
 	$(CC) $(LDFLAGS) -T$(*F).ld $(OBJS) -o $@
+	chmod a-x $@
 
 %.hex: %.elf
 	@echo OBJCOPY $@
 	$(OBJCOPY) -O ihex $< $@
+	chmod a-x $@
 
 %.bin: %.elf
 	@echo OBJCOPY $@
 	$(OBJCOPY) -O binary $< $@
+	chmod a-x $@
 
-clean:: $(addprefix _clean_,$(SUBDIRS))
+clean:: $(addprefix _clean_,$(SUBDIRS) $(SUBDIRS-n) $(SUBDIRS-))
 	rm -f *~ *.o *.elf *.hex *.bin *.ld $(DEPS)
 _clean_%: FORCE
 	$(MAKE) -f $(ROOT)/Rules.mk -C $* clean

@@ -26,6 +26,8 @@
 #include "../src/fatfs/ff.h"
 #include "fs.h"
 #include "floppy.h"
+#include "speaker.h"
+#include "touch_panel.h"
 
 /*
  * Local variables:

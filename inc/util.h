@@ -69,28 +69,13 @@ int printk(const char *format, ...)
 #define htobe16(x) _rev16(x)
 #define htobe32(x) _rev32(x)
 
+/* Serial console control */
 void console_init(void);
 void console_sync(void);
 
-void speaker_init(void);
-void speaker_pulse (uint8_t volume);
-
-void tft_init(void);
-void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c);
-void clear_screen(void);
-
-#define TFT_8x16_COLS 40
-#define TFT_8x16_ROWS 15
-void draw_string_8x16(uint16_t x, uint16_t y, const char *str);
-#define TFT_4x8_COLS 80
-#define TFT_4x8_ROWS 24
-void draw_string_4x8(uint16_t x, uint16_t y, const char *str);
-
-void backlight_init(void);
-void backlight_set(uint8_t level);
-
-void touch_init(void);
-bool_t touch_get_xy(uint16_t *px, uint16_t *py);
+/* Gotek: 3-digit 7-segment display */
+void led_7seg_init(void);
+void led_7seg_write_hex(unsigned int x);
 
 extern uint8_t board_id;
 #define BRDREV_MM150 0

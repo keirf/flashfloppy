@@ -7,3 +7,4 @@
 *.hex
 *.orig
 *.rej
+/flashfloppy_fw*
