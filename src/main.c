@@ -149,6 +149,11 @@ int floppy_main(void)
     return 0;
 }
 
+#ifdef BUILD_GOTEK
+void usbh_msc_init(void);
+void usbh_msc_process(void);
+#endif
+
 int main(void)
 {
     /* Relocate DATA. Initialise BSS. */
@@ -172,6 +177,14 @@ int main(void)
     tft_init();
     backlight_set(8);
     touch_init();
+
+#ifdef BUILD_GOTEK
+    led_7seg_init();
+    usbh_msc_init();
+    led_7seg_write_hex(0xdea);
+    for (;;)
+        usbh_msc_process();
+#endif
 
     for (;;) {
 
