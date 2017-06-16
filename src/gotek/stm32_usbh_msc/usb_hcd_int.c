@@ -29,9 +29,6 @@
 #include "usb_defines.h"
 #include "usb_hcd_int.h"
 
-/* XXX KAF: why?? */
-#pragma GCC optimize ("O0")
-
 static uint32_t USB_OTG_USBH_handle_sof_ISR(USB_OTG_CORE_HANDLE *pdev);
 static uint32_t USB_OTG_USBH_handle_port_ISR(USB_OTG_CORE_HANDLE *pdev);
 static uint32_t USB_OTG_USBH_handle_hc_ISR (USB_OTG_CORE_HANDLE *pdev);
@@ -202,8 +199,8 @@ static uint32_t USB_OTG_USBH_handle_Disconnect_ISR (USB_OTG_CORE_HANDLE *pdev)
 static uint32_t USB_OTG_USBH_handle_nptxfempty_ISR (USB_OTG_CORE_HANDLE *pdev)
 {
     USB_OTG_GINTMSK_TypeDef      intmsk;
-    USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
-    uint16_t                     len_words , len;
+    USB_OTG_HNPTXSTS_TypeDef     hnptxsts = { 0 };
+    uint16_t                     len_words, len;
 
     hnptxsts.d32 = USB_OTG_READ_REG32(&pdev->regs.GREGS->HNPTXSTS);
 
@@ -248,8 +245,8 @@ static uint32_t USB_OTG_USBH_handle_nptxfempty_ISR (USB_OTG_CORE_HANDLE *pdev)
 static uint32_t USB_OTG_USBH_handle_ptxfempty_ISR (USB_OTG_CORE_HANDLE *pdev)
 {
     USB_OTG_GINTMSK_TypeDef      intmsk;
-    USB_OTG_HPTXSTS_TypeDef      hptxsts;
-    uint16_t                     len_words , len;
+    USB_OTG_HPTXSTS_TypeDef      hptxsts = { 0 };
+    uint16_t                     len_words, len;
 
     hptxsts.d32 = USB_OTG_READ_REG32(&pdev->regs.HREGS->HPTXSTS);
 

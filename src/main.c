@@ -123,7 +123,9 @@ int floppy_main(void)
     char buf[32];
     UINT i, nr;
 
+#ifndef BUILD_GOTEK
     floppy_init("nzs_crack.adf", NULL);
+#endif
 
     list_dir("/");
     
@@ -141,18 +143,15 @@ int floppy_main(void)
     i = usart1->dr; /* clear UART_SR_RXNE */    
     for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
         do_tft();
+#ifndef BUILD_GOTEK
         floppy_handle();
+#endif
         canary_check();
     }
 
     ASSERT(0);
     return 0;
 }
-
-#ifdef BUILD_GOTEK
-void usbh_msc_init(void);
-void usbh_msc_process(void);
-#endif
 
 int main(void)
 {
@@ -178,18 +177,16 @@ int main(void)
     backlight_set(8);
     touch_init();
 
-#ifdef BUILD_GOTEK
     led_7seg_init();
-    usbh_msc_init();
     led_7seg_write_hex(0xdea);
-    for (;;)
-        usbh_msc_process();
-#endif
+
+    usbh_msc_init();
 
     for (;;) {
 
         bool_t mount_err = 0;
         while (f_mount(&fatfs, "", 1) != FR_OK) {
+            usbh_msc_process();
             if (!mount_err) {
                 mount_err = 1;
                 draw_string_8x16(2, 7, "* Please Insert Valid SD Card *");
@@ -199,7 +196,9 @@ int main(void)
             clear_screen();
 
         F_call_cancellable(floppy_main);
+#ifndef BUILD_GOTEK
         floppy_deinit();
+#endif
     }
 
     return 0;

@@ -41,11 +41,11 @@ mrproper: clean
 endif
 
 FLASH=0x8000000
-BAUD=921600
+BAUD=115200
 
-flash: all
+flash:
 	sudo ~/stm32flash/stm32flash -S $(FLASH) -g $(FLASH) \
-	-b $(BAUD) -v -w src/$(PROJ).hex /dev/ttyUSB0
+	-b $(BAUD) -w src/$(PROJ).hex /dev/ttyUSB0
 
 start:
 	sudo ~/stm32flash/stm32flash -b $(BAUD) -g $(FLASH) /dev/ttyUSB0

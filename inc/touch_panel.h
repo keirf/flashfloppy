@@ -45,9 +45,13 @@ static inline void fill_rect(
 static inline void clear_screen(void)
 {}
 static inline void draw_string_8x16(uint16_t x, uint16_t y, const char *str)
-{}
+{
+    printk("%s\n", str);
+}
 static inline void draw_string_4x8(uint16_t x, uint16_t y, const char *str)
-{}
+{
+    printk("%s\n", str);
+}
 
 static inline void backlight_init(void)
 {}

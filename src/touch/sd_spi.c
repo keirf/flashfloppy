@@ -362,7 +362,7 @@ out:
 
 DSTATUS disk_status (BYTE pdrv)
 {
-    return pdrv ? RES_PARERR : status;
+    return pdrv ? STA_NOINIT : status;
 }
 
 DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
@@ -416,7 +416,7 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)
 {
-    DRESULT res;
+    DRESULT res = RES_ERROR;
 
     printk("ioctl %d %d\n", pdrv, ctrl);
 

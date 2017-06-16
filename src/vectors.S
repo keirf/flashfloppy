@@ -39,4 +39,6 @@ vector_table:
     .text
     .thumb_func
 EXC_unused:
-    b   EXC_unexpected
+    push {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov  r0, sp
+    b    EXC_unexpected

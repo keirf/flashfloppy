@@ -9,15 +9,41 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-void EXC_unexpected(void)
+struct extra_exception_frame {
+    uint32_t r4, r5, r6, r7, r8, r9, r10, r11, lr;
+};
+
+void EXC_unexpected(struct extra_exception_frame *extra)
 {
-    struct exception_frame *frame =
-        (struct exception_frame *)read_special(psp);
+    struct exception_frame *frame;
     uint8_t exc = (uint8_t)read_special(psr);
-    printk("Unexpected %s #%u at PC=%08x\n",
+    uint32_t msp, psp;
+
+    if (extra->lr & 4) {
+        frame = (struct exception_frame *)read_special(psp);
+        psp = (uint32_t)(frame + 1);
+        msp = (uint32_t)(extra + 1);
+    } else {
+        frame = (struct exception_frame *)(extra + 1);
+        psp = read_special(psp);
+        msp = (uint32_t)(frame + 1);
+    }
+
+    printk("Unexpected %s #%u at PC=%08x (%s):\n",
            (exc < 16) ? "Exception" : "IRQ",
            (exc < 16) ? exc : exc - 16,
-           frame->pc);
+           frame->pc, (extra->lr & 8) ? "Thread" : "Handler");
+    printk(" r0:  %08x   r1:  %08x   r2:  %08x   r3:  %08x\n",
+           frame->r0, frame->r1, frame->r2, frame->r3);
+    printk(" r4:  %08x   r5:  %08x   r6:  %08x   r7:  %08x\n",
+           extra->r4, extra->r5, extra->r6, extra->r7);
+    printk(" r8:  %08x   r9:  %08x   r10: %08x   r11: %08x\n",
+           extra->r8, extra->r9, extra->r10, extra->r11);
+    printk(" r12: %08x   sp:  %08x   lr:  %08x   pc:  %08x\n",
+           frame->r12, (extra->lr & 4) ? psp : msp, frame->lr, frame->pc);
+    printk(" msp: %08x   psp: %08x   psr: %08x\n",
+           msp, psp, frame->psr);
+
     system_reset();
 }
 
@@ -33,7 +59,10 @@ static void exception_init(void)
 
     /* Initialise interrupts and exceptions. */
     scb->vtor = (uint32_t)(unsigned long)vector_table;
-    scb->ccr |= SCB_CCR_STKALIGN | SCB_CCR_DIV_0_TRP | SCB_CCR_UNALIGN_TRP;
+    scb->ccr |= SCB_CCR_STKALIGN | SCB_CCR_DIV_0_TRP;
+    /* GCC inlines memcpy() using full-word load/store regardless of buffer
+     * alignment. Hence it is unsafe to trap on unaligned accesses. */
+    /*scb->ccr |= SCB_CCR_UNALIGN_TRP;*/
     scb->shcsr |= (SCB_SHCSR_USGFAULTENA |
                    SCB_SHCSR_BUSFAULTENA |
                    SCB_SHCSR_MEMFAULTENA);

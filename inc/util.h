@@ -73,9 +73,19 @@ int printk(const char *format, ...)
 void console_init(void);
 void console_sync(void);
 
+#ifdef BUILD_GOTEK
 /* Gotek: 3-digit 7-segment display */
 void led_7seg_init(void);
 void led_7seg_write_hex(unsigned int x);
+/* Gotek: USB stack processing */
+void usbh_msc_init(void);
+void usbh_msc_process(void);
+#else
+static inline void led_7seg_init(void) {}
+static inline void led_7seg_write_hex(unsigned int x) {}
+static inline void usbh_msc_init(void) {}
+static inline void usbh_msc_process(void) {}
+#endif
 
 extern uint8_t board_id;
 #define BRDREV_MM150 0
