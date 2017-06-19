@@ -152,10 +152,6 @@ void led_7seg_init(void)
     gpio_configure_pin(gpiob, CLK_PIN, AFO_pushpull(_2MHz));
     afio->mapr |= AFIO_MAPR_TIM2_REMAP_PARTIAL_2;
 
-    /* Turn on the clocks. */
-    rcc->ahbenr |= RCC_AHBENR_DMA1EN;
-    rcc->apb1enr |= RCC_APB1ENR_TIM2EN;
-
     /* Clear IRQ line and then enable it. Peripherals pulse their interrupt
      * line when any ISR flag transitions to set. If we do not ensure the ISR
      * flag is initially cleared, we will never receive an interrupt. */

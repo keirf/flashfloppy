@@ -115,12 +115,15 @@ static void gpio_init(GPIO gpio)
 
 static void peripheral_init(void)
 {
-    /* Enable basic GPIO and AFIO clocks, and DMA. */
-    rcc->apb1enr = 0;
+    /* Enable basic GPIO and AFIO clocks, all timers, and DMA. */
+    rcc->apb1enr = (RCC_APB1ENR_TIM2EN |
+                    RCC_APB1ENR_TIM3EN |
+                    RCC_APB1ENR_TIM4EN);
     rcc->apb2enr = (RCC_APB2ENR_IOPAEN |
                     RCC_APB2ENR_IOPBEN |
                     RCC_APB2ENR_IOPCEN |
-                    RCC_APB2ENR_AFIOEN);
+                    RCC_APB2ENR_AFIOEN |
+                    RCC_APB2ENR_TIM1EN);
     rcc->ahbenr = RCC_AHBENR_DMA1EN;
 
     /* Turn off serial-wire JTAG and reclaim the GPIOs. */

@@ -14,6 +14,10 @@ int EXC_reset(void) __attribute__((alias("main")));
 FATFS fatfs;
 FIL file;
 
+uint8_t board_id;
+
+#ifdef BUILD_TOUCH
+
 static void do_tft(void)
 {
     uint16_t x, y;
@@ -29,8 +33,6 @@ static void do_tft(void)
     if (sy >= 240) sy=239;
     fill_rect(sx, sy, 2, 2, 0xf800);
 }
-
-uint8_t board_id;
 
 static void board_init(void)
 {
@@ -80,6 +82,39 @@ static void board_init(void)
     }
 }
 
+#elif BUILD_GOTEK
+
+static inline void do_tft(void) {}
+
+static void gpio_pull_up_pins(GPIO gpio, uint16_t mask)
+{
+    unsigned int i;
+    for (i = 0; i < 16; i++) {
+        if (mask & 1)
+            gpio_configure_pin(gpio, i, GPI_pull_up);
+        mask >>= 1;
+    }
+}
+
+static void board_init(void)
+{
+    board_id = BRDREV_Gotek;
+
+    /* Pull up all currently unused and possibly-floating pins. */
+    /* Skip PA0-1,8 (floppy inputs), PA9-10 (serial console). */
+    gpio_pull_up_pins(gpioa, ~0x0703);
+    /* Skip PB0,4,9 (floppy inputs). */
+    gpio_pull_up_pins(gpiob, ~0x0211);
+    /* Don't skip any PCx pins. */
+    gpio_pull_up_pins(gpioc, ~0x0000);
+}
+
+#else /* !BUILD_TOUCH && !BUILD_GOTEK */
+
+#error "Must define BUILD_GOTEK or BUILD_TOUCH"
+
+#endif
+
 static void canary_init(void)
 {
     _irq_stackbottom[0] = _thread_stackbottom[0] = 0xdeadbeef;
@@ -123,9 +158,7 @@ int floppy_main(void)
     char buf[32];
     UINT i, nr;
 
-#ifndef BUILD_GOTEK
     floppy_init("nzs_crack.adf", NULL);
-#endif
 
     list_dir("/");
     
@@ -143,9 +176,7 @@ int floppy_main(void)
     i = usart1->dr; /* clear UART_SR_RXNE */    
     for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
         do_tft();
-#ifndef BUILD_GOTEK
         floppy_handle();
-#endif
         canary_check();
     }
 
@@ -196,9 +227,7 @@ int main(void)
             clear_screen();
 
         F_call_cancellable(floppy_main);
-#ifndef BUILD_GOTEK
         floppy_deinit();
-#endif
     }
 
     return 0;

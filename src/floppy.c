@@ -9,17 +9,25 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define O_FALSE 0
-#define O_TRUE  1
-
 #define GPI_bus GPI_floating
 #define GPO_bus GPO_pushpull(_2MHz,O_FALSE)
 #define AFO_bus AFO_pushpull(_2MHz)
 
+static uint8_t initialised;
+
 /* NB. All input pins must be 5v tolerant. */
 /* Bitmap of current states of input pins. */
 static uint8_t input_pins;
-/* Offsets within the above bitmap. */
+
+/* Mask of output pins within @gpio_out. */
+static uint16_t gpio_out_mask;
+
+#if BUILD_TOUCH
+
+#define O_FALSE 0
+#define O_TRUE  1
+
+/* Offsets within the input_pins bitmap. */
 #define inp_dir     0
 #define inp_step    3
 #define inp_sel0    4
@@ -31,7 +39,6 @@ static uint8_t input_pins;
 #define gpio_out gpiob
 #define pin_dskchg  3
 static uint8_t pin_index; /* PB2 (MM150); PB4 (LC150) */
-static uint16_t gpio_out_mask;
 #define pin_trk0    5
 #define pin_wrprot 11
 #define pin_rdy    12
@@ -39,6 +46,37 @@ static uint16_t gpio_out_mask;
 #define gpio_timer gpiob
 #define pin_wdata   6 /* must be 5v tolerant */
 #define pin_rdata   7
+#define dma_rdata   (dma1->ch7)
+#define tim_rdata   (tim4)
+
+#elif BUILD_GOTEK
+
+#define O_FALSE 1
+#define O_TRUE  0
+
+/* Offsets within the input_pins bitmap. */
+#define inp_dir     0
+#define inp_step    2
+#define inp_sel0    1
+#define inp_sel1    3
+#define inp_wgate   7
+#define inp_side    4
+
+/* Outputs. */
+#define gpio_out gpiob
+#define pin_dskchg  7
+#define pin_index   8
+#define pin_trk0    6
+#define pin_wrprot  5
+#define pin_rdy     3
+
+#define gpio_timer gpioa
+#define pin_wdata   8
+#define pin_rdata   7
+#define dma_rdata   (dma1->ch3)
+#define tim_rdata   (tim3)
+
+#endif /* BUILD_GOTEK */
 
 #define m(pin) (1u<<(pin))
 
@@ -69,6 +107,8 @@ static uint32_t max_load_ticks, max_prefetch_us;
 static void rddat_stop(void);
 
 static struct cancellation floppy_cancellation;
+
+#if BUILD_TOUCH
 
 /* Updates the board-agnostic input_pins bitmask with current states of 
  * input pins, and returns mask of pins which have changed state. */
@@ -133,8 +173,8 @@ static void input_init_tb160(void)
     gpio_configure_pin(gpioa, 8+inp_side,  GPI_bus);
 
     /* PA[15:10,7:0] -> EXT[15:10,7:0], PB[9:8] -> EXT[9:8]. */
-    afio->exticr1 = afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x0000;
-    afio->exticr3 = 0x11;
+    afio->exticr1 = afio->exticr2 = afio->exticr4 = 0x0000;
+    afio->exticr3 = 0x0011;
 
     exti->imr = exti->rtsr = exti->ftsr =
         m(8+inp_step) | m(8+inp_sel0) | m(3+inp_sel1)
@@ -143,31 +183,72 @@ static void input_init_tb160(void)
     input_update = input_update_tb160;
 }
 
+#else /* BUILD_GOTEK */
+
+/* Input pins:
+ * DIR = PB0, STEP=PA1, SELA=PA0, SELB=n/a, WGATE=PB9, SIDE=PB4
+ */
+static uint8_t input_update(void)
+{
+    uint16_t pr, in_a, in_b;
+
+    pr = exti->pr;
+    exti->pr = pr;
+
+    in_a = gpioa->idr;
+    in_b = gpiob->idr;
+    input_pins = ((in_a << 1) & 0x06) | ((in_b >> 2) & 0x80) | (in_b & 0x11);
+
+    return ((pr << 1) & 0x06) | ((pr >> 2) & 0x80) | (pr & 0x10);
+}
+
+static void input_init_gotek(void)
+{
+    gpio_configure_pin(gpiob, 0, GPI_bus);
+    gpio_configure_pin(gpioa, 1, GPI_bus);
+    gpio_configure_pin(gpioa, 0, GPI_bus);
+    gpio_configure_pin(gpiob, 9, GPI_bus);
+    gpio_configure_pin(gpiob, 4, GPI_bus);
+
+    /* PB[15:2] -> EXT[15:2], PA[1:0] -> EXT[1:0] */
+    afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x1111;
+    afio->exticr1 = 0x1100;
+
+    exti->imr = exti->rtsr = exti->ftsr = m(9) | m(4) | m(1) | m(0);
+}
+
+#endif /* BUILD_GOTEK */
+
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
 static void floppy_check(void)
 {
     uint16_t i=0, pin, prev_pin=0, inp, prev_inp=0;
+    uint8_t changed;
+    volatile struct gpio *gpio, *prev_gpio = NULL;
 
     for (;;) {
+        gpio = gpio_out;
         switch (i++) {
         case 0: pin = pin_dskchg; break;
         case 1: pin = pin_index; break;
         case 2: pin = pin_trk0; break;
         case 3: pin = pin_wrprot; break;
-        case 4: pin = pin_rdata; break;
+        case 4: pin = pin_rdata; gpio = gpio_timer; break;
         case 5: pin = pin_rdy; break;
         default: pin = 0; i = 0; break;
         }
-        if (prev_pin) gpio_write_pin(gpio_out, prev_pin, 0);
-        if (pin) gpio_write_pin(gpio_out, pin, 1);
+        if (prev_pin) gpio_write_pin(prev_gpio, prev_pin, O_FALSE);
+        if (pin) gpio_write_pin(gpio, pin, O_TRUE);
         prev_pin = pin;
+        prev_gpio = gpio;
         delay_ms(50);
-        input_update();
+        changed = input_update();
         inp = input_pins;
-        inp |= (gpio_timer->idr & m(pin_wdata)) >> 5; /* inp[1] */
-        if (inp ^ prev_inp)
-            printk("IN: %02x->%02x\n", prev_inp, inp);
+        /* Stash wdata in inp[1] (Touch) or inp[3] (Gotek). */
+        inp |= (gpio_timer->idr & m(pin_wdata)) >> 5;
+        if ((inp ^ prev_inp) || changed)
+            printk("IN: %02x->%02x (%02x)\n", prev_inp, inp, changed);
         prev_inp = inp;
     }
 }
@@ -180,7 +261,7 @@ void floppy_deinit(void)
     ASSERT(!cancellation_is_active(&floppy_cancellation));
 
     /* Initialised? Bail if not. */
-    if (!pin_index)
+    if (!initialised)
         return;
 
     /* Stop interrupt work. */
@@ -198,13 +279,14 @@ void floppy_deinit(void)
     memset(drive, 0, sizeof(drive));
     memset(&index, 0, sizeof(index));
     max_load_ticks = max_prefetch_us = 0;
-    pin_index = 0;
+    initialised = FALSE;
     ASSERT(data_state == DATA_stopped);
     ASSERT((dmacons_prev == 0) && (dmaprod == 0));
 }
 
 void floppy_init(const char *disk0_name, const char *disk1_name)
 {
+#if BUILD_TOUCH
     switch (board_id) {
     case BRDREV_LC150:
         pin_index = 4;
@@ -219,6 +301,9 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
         input_init_tb160();
         break;
     }
+#else
+    input_init_gotek();
+#endif
 
     gpio_out_mask = ((1u << pin_dskchg)
                      | (1u << pin_index)
@@ -236,7 +321,6 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     gpio_configure_pin(gpio_out, pin_wrprot, GPO_bus);
     gpio_configure_pin(gpio_out, pin_rdy,    GPO_bus);
 
-    rcc->apb1enr |= RCC_APB1ENR_TIM4EN;
     gpio_configure_pin(gpio_timer, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_timer, pin_rdata, GPO_bus);
 
@@ -259,18 +343,20 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
      * O_FALSE until the counter reloads. By changing the ARR via DMA we alter
      * the time between (fixed-width) O_TRUE pulses, mimicking floppy drive 
      * timings. */
-    tim4->psc = 0;
-    tim4->ccer = TIM_CCER_CC2E;
-    tim4->ccmr1 = (TIM_CCMR1_CC2S(TIM_CCS_OUTPUT) |
-                   TIM_CCMR1_OC2M(TIM_OCM_PWM1));
-    tim4->ccr2 = sysclk_ns(400);
-    tim4->dier = TIM_DIER_UDE;
-    tim4->cr2 = 0;
+    tim_rdata->psc = 0;
+    tim_rdata->ccer = TIM_CCER_CC2E;
+    tim_rdata->ccmr1 = (TIM_CCMR1_CC2S(TIM_CCS_OUTPUT) |
+                        TIM_CCMR1_OC2M(TIM_OCM_PWM1));
+    tim_rdata->ccr2 = sysclk_ns(400);
+    tim_rdata->dier = TIM_DIER_UDE;
+    tim_rdata->cr2 = 0;
 
-    /* DMA setup: From a circular buffer into Timer 4's ARR. */
-    dma1->ch7.cpar = (uint32_t)(unsigned long)&tim4->arr;
-    dma1->ch7.cmar = (uint32_t)(unsigned long)dmabuf;
-    dma1->ch7.cndtr = ARRAY_SIZE(dmabuf);
+    /* DMA setup: From a circular buffer into read-data timer's ARR. */
+    dma_rdata.cpar = (uint32_t)(unsigned long)&tim_rdata->arr;
+    dma_rdata.cmar = (uint32_t)(unsigned long)dmabuf;
+    dma_rdata.cndtr = ARRAY_SIZE(dmabuf);
+
+    initialised = TRUE;
 }
 
 /* Called from IRQ context to stop the read stream. */
@@ -290,9 +376,9 @@ static void rddat_stop(void)
     gpio_configure_pin(gpio_timer, pin_rdata, GPO_bus);
 
     /* Turn off timer and DMA. */
-    tim4->cr1 = 0;
-    dma1->ch7.ccr = 0;
-    dma1->ch7.cndtr = ARRAY_SIZE(dmabuf);
+    tim_rdata->cr1 = 0;
+    dma_rdata.ccr = 0;
+    dma_rdata.cndtr = ARRAY_SIZE(dmabuf);
 }
 
 /* Called from cancellable context to start the read stream. */
@@ -302,7 +388,7 @@ static void rddat_start(void)
     barrier(); /* ensure IRQ sees the flag before we act on it */
 
     /* Start DMA from circular buffer. */
-    dma1->ch7.ccr = (DMA_CCR_PL_HIGH |
+    dma_rdata.ccr = (DMA_CCR_PL_HIGH |
                      DMA_CCR_MSIZE_16BIT |
                      DMA_CCR_PSIZE_16BIT |
                      DMA_CCR_MINC |
@@ -311,9 +397,9 @@ static void rddat_start(void)
                      DMA_CCR_EN);
 
     /* Start timer. */
-    tim4->egr = TIM_EGR_UG;
-    tim4->sr = 0; /* dummy write, gives hardware time to process EGR.UG=1 */
-    tim4->cr1 = TIM_CR1_CEN;
+    tim_rdata->egr = TIM_EGR_UG;
+    tim_rdata->sr = 0; /* dummy write, gives h/w time to process EGR.UG=1 */
+    tim_rdata->cr1 = TIM_CR1_CEN;
 
     /* Enable output. */
     gpio_configure_pin(gpio_timer, pin_rdata, AFO_bus);
@@ -369,7 +455,7 @@ static int floppy_load_flux(void)
             return 0;
     }
 
-    dmacons = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr;
+    dmacons = ARRAY_SIZE(dmabuf) - dma_rdata.cndtr;
 
     /* Check for DMA catching up with the producer index (underrun). */
     if (((dmacons < dmacons_prev)
@@ -397,8 +483,10 @@ static int floppy_load_flux(void)
             /* Snapshot current position in flux stream, including progress
              * through current timer sample. */
             now = stk_now();
-            ticks = tim4->arr - tim4->cnt; /* Ticks left in current sample */
-            dmacons = ARRAY_SIZE(dmabuf) - dma1->ch7.cndtr; /* Next sample */
+            /* Ticks left in current sample. */
+            ticks = tim_rdata->arr - tim_rdata->cnt;
+            /* Index of next sample. */
+            dmacons = ARRAY_SIZE(dmabuf) - dma_rdata.cndtr;
             /* If another sample was loaded meanwhile, try again for a 
              * consistent snapshot. */
             if (dmacons == dmacons_prev)

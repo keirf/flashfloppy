@@ -1,76 +1,129 @@
-TFT LCD:
---------
-GPIn:
- PB0: T_IRQ (XPT2046 PENIRQ)
-GPOut:
- PA0: T_CS  (XPT2046 CS)
- PA1: DC/RS (ILI9341 Data/Command Select)
- PA2: RESET (ILI9341 Reset)
- PA3: TFTCS (ILI9341 CS)
-Timer2/3:
- PB10: LED Backlight PWM (5v tolerant; see further details below)
-SPI1: (Rx:DMA1/2, Tx:DMA1/3)
- PA5: CK
- PA6: MISO
- PA7: MOSI
+TOUCH + GOTEK PINS
+******************
 
-SD CARD:
---------
+Floppy:
+-------
+ Touch                                  Gotek
+ -----                                  -----
+GPIn: (all must be 5v tolerant, *=not)
+ PA8   DIR                              PB0*
+ PA11  STEP                             PA1*
+ PA12  SELA                             PA0*
+ PA13  SELB [PB8:Taobao]                n/a
+ PA14  WGATE [PB9:Taobao]               PB9
+ PA15  SIDE                             PB4
 GPOut:
- PA4: CS
-SPI2: (Rx:DMA1/4, Tx:DMA1/5)
- PB13: CK
- PB14: MISO
- PB15: MOSI
+ PB3   CHNG                             PB7
+ PB4   INDEX [PB2:MMini; PB1:Taobao]    PB8
+ PB5   TRK0                             PB6
+ PB11  WRPROT                           PB5
+ PB12  RDY                              PB3
+TimerOut:
+ PB7   RDATA (Timer4/2, UP:DMA1/7)      PA7 (Timer3/2, UP:DMA1/3)
+TimerIn: (must be 5v tolerant)
+ PB6   WDATA (Timer4/1, CC1:DMA1/1)     PA8 (Timer1/1, CC1:DMA1/2)
 
 Debug Console:
 --------------
 USART1: (Rx:DMA1/5, Tx:DMA1/4)
- PA9: TX
- PA10: RX
+ PA9   TX
+ PA10  RX
+
+
+GOTEK-ONLY PINS
+***************
+
+Jumpers & Switches:
+-------------------
+All are OFF=floating, ON=ground. Must be pulled up.
+GPIn:
+ PC6   JUMPER_JA
+ PA2   JUMPER_JB
+ PB1   JUMPER_JC
+ PC8   BT_LEFT
+ PC7   BT_RIGHT
+ PC10  J7_PIN1
+ PC11  J7_PIN2
+ PA14  JTCK_SWCLK
+
+LED Display:
+------------
+Custom I2C-like protocol.
+TimerOut:
+ PB10  DISP_DAT (Timer2/3, UP:DMA1/2)
+ PB11  DISP_CLK (Timer2/4)
+
+Serial Flash:
+-------------
+If unused, pull all high.
+GPOut:
+ PB12  CS
+SPI2: (Rx:DMA1/4, Tx:DMA1/5)
+ PB13  CK
+ PB14  MISO
+ PB15  MOSI
+
+USB:
+----
+Pull the GPIOs high, they are disconnected on USB setup anyway.
+ PA11  USB_DM
+ PA12  USB_DP
+
+TOUCH-ONLY PINS
+***************
+
+TFT LCD:
+--------
+GPIn:
+ PB0  T_IRQ (XPT2046 PENIRQ)
+GPOut:
+ PA0  T_CS  (XPT2046 CS)
+ PA1  DC/RS (ILI9341 Data/Command Select)
+ PA2  RESET (ILI9341 Reset)
+ PA3  TFTCS (ILI9341 CS)
+Timer2/3:
+ PB10  LED Backlight PWM (5v tolerant; see further details below)
+SPI1: (Rx:DMA1/2, Tx:DMA1/3)
+ PA5  CK
+ PA6  MISO
+ PA7  MOSI
+
+SD Card:
+--------
+GPOut:
+ PA4  CS
+SPI2: (Rx:DMA1/4, Tx:DMA1/5)
+ PB13  CK
+ PB14  MISO
+ PB15  MOSI
 
 Speaker (switching NPN BJT):
---------
+----------------------------
 Timer3/x:
- PB4/Ch1: Speaker PWM [PB1/Ch4 on LCTech]
+ PB4/Ch1  Speaker PWM [PB1/Ch4 on LCTech]
 
-Floppy:
--------
-GPIn: (all must be 5v tolerant)
- PA8: DIR
- PA11: STEP
- PA12: SELA
- PA13: SELB [PB8 on Taobao]
- PA14: WGATE [PB9 on Taobao]
- PA15: SIDE
-GPOut:
- PB3: CHNG
- PB4: INDEX [PB2 on MMini; PB1 on Taobao]
- PB5: TRK0
- PB11: WRPROT
- PB12: RDY
-Timer4/2: (CC2:DMA1/4, UP:DMA1/7)
- PB7: RDATA
-Timer4/1: (CC1:DMA1/1, UP:DMA1/7)
- PB6: WDATA (must be 5v tolerant)
 
-Unused:
--------
+UNUSED PINS
+***********
 Set floating pins to ANALOG-INPUT to disable the Schmitt Trigger Input
 and eliminate parasitic switching load, or use input weak pull-up/down.
 LCTech:
- PB2: BOOT1 (ext.pull)
- PB8-9: n/c (floats)
- PC13-15: n/c (floats)
+ PB2            BOOT1 (ext.pull)
+ PB8-9          n/c   (floats)
+ PC13-15        n/c   (floats)
 MMini:
- PB1: LED (floats)
- PB8: BOOT0/Button (ext.pull)
- PB9: USB DISConnect (ext.pull)
- PC13-15: n/c (ext.pull)
+ PB1            LED   (floats)
+ PB8            BOOT0/Button (ext.pull)
+ PB9            USB DISConnect (ext.pull)
+ PC13-15        n/c   (ext.pull)
 Taobao:
- PA13-14: n/c (floats)
- PB2: BOOT1 (ext.pull)
- PC13-15: n/c (ext.pull)
+ PA13-14        n/c   (floats)
+ PB2            BOOT1 (ext.pull)
+ PC13-15        n/c   (ext.pull)
+Gotek:
+ PA3-6,13,15    n/c   (floats) -- pull high
+ PB2            n/c   (floats) -- pull high
+ PC0-5,9,12-15  n/c   (floats) -- pull high
 
 Floppy drive 34-pin Shugart(-ish) interface. For reference:
 -----------------------------------------------------------

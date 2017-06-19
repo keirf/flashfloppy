@@ -28,7 +28,6 @@ void speaker_init(void)
 
     /* PWM2 mode achieves a LOW-HIGH-LOW pulse in one-pulse mode, which is 
      * what we require to drive an NPN BJT with grounded emitter. */
-    rcc->apb1enr |= RCC_APB1ENR_TIM3EN;
     tim->psc = SYSCLK_MHZ/TICK_MHZ - 1;
     tim->arr = ARR;
     tim->ccer = TIM_CCER_CC1E|TIM_CCER_CC4E;

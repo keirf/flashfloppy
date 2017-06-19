@@ -21,7 +21,6 @@ void backlight_init(void)
 {
     /* Set up timer, switch backlight off. 
      * We switch a PNP transistor so PWM output is active low. */
-    rcc->apb1enr |= RCC_APB1ENR_TIM2EN;
     tim->arr = 999; /* count 0-999 inclusive */
     tim->psc = SYSCLK_MHZ - 1; /* tick at 1MHz */
     tim->ccer = TIM_CCER_CC3E;
