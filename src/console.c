@@ -67,15 +67,26 @@ static void IRQ_dma1_ch4_tc(void)
 int vprintk(const char *format, va_list ap)
 {
     static char str[128];
-    char *p;
+    char *p, c;
     int n;
 
     IRQ_global_disable();
 
     n = vsnprintf(str, sizeof(str), format, ap);
 
-    for (p = str; *p && ((prod-cons) != sizeof(ring)); p++)
-        ring[MASK(prod++)] = *p;
+    p = str;
+    while (((c = *p++) != '\0') && ((prod-cons) != (sizeof(ring) - 1))) {
+        switch (c) {
+        case '\r': /* CR: ignore as we generate our own CR/LF */
+            break;
+        case '\n': /* LF: convert to CR/LF (usual terminal behaviour) */
+            ring[MASK(prod++)] = '\r';
+            /* fall through */
+        default:
+            ring[MASK(prod++)] = c;
+            break;
+        }
+    }
 
     kick_tx();
 
