@@ -49,7 +49,7 @@ SECTIONS
     . = . + 512;
     _irq_stacktop = .;
     _thread_stackbottom = .;
-    . = . + 512;
+    . = . + 1024;
     _thread_stacktop = .;
     *(.bss)
     *(.bss*)
