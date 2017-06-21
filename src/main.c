@@ -90,8 +90,7 @@ int floppy_main(void)
             printk("%c", buf[i]);
     }
 
-    i = usart1->dr; /* clear UART_SR_RXNE */    
-    for (i = 0; !(usart1->sr & USART_SR_RXNE); i++) {
+    for (;;) {
         do_tft();
         floppy_handle();
         canary_check();
@@ -114,6 +113,7 @@ int main(void)
     timers_init();
 
     console_init();
+    console_crash_on_input();
     delay_ms(250); /* XXX printk debug delay */
 
     board_init();
