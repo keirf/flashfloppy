@@ -49,6 +49,8 @@ static uint8_t pin_index; /* PB2 (MM150); PB4 (LC150) */
 #define dma_rdata   (dma1->ch7)
 #define tim_rdata   (tim4)
 
+#define NR_DRIVES 2
+
 #elif BUILD_GOTEK
 
 #define O_FALSE 1
@@ -58,7 +60,6 @@ static uint8_t pin_index; /* PB2 (MM150); PB4 (LC150) */
 #define inp_dir     0
 #define inp_step    2
 #define inp_sel0    1
-#define inp_sel1    3
 #define inp_wgate   7
 #define inp_side    4
 
@@ -76,6 +77,8 @@ static uint8_t pin_index; /* PB2 (MM150); PB4 (LC150) */
 #define dma_rdata   (dma1->ch3)
 #define tim_rdata   (tim3)
 
+#define NR_DRIVES 1
+
 #endif /* BUILD_GOTEK */
 
 #define m(pin) (1u<<(pin))
@@ -90,7 +93,7 @@ void IRQ_23(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI9_5 */
 void IRQ_40(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI15_10 */
 static const uint8_t exti_irqs[] = { 6, 7, 8, 9, 10, 23, 40 };
 
-static struct drive drive[2];
+static struct drive drive[NR_DRIVES];
 static struct image image;
 static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
 static stk_time_t sync_time;
@@ -192,7 +195,7 @@ static void input_init_tb160(void)
 #else /* BUILD_GOTEK */
 
 /* Input pins:
- * DIR = PB0, STEP=PA1, SELA=PA0, SELB=n/a, WGATE=PB9, SIDE=PB4
+ * DIR = PB0, STEP=PA1, SELA=PA0, WGATE=PB9, SIDE=PB4
  */
 static uint8_t input_update(void)
 {
@@ -293,7 +296,7 @@ void floppy_deinit(void)
     ASSERT((dmacons_prev == 0) && (dmaprod == 0));
 }
 
-void floppy_init(const char *disk0_name, const char *disk1_name)
+void floppy_init(const char *disk0_name)
 {
     unsigned int i;
 
@@ -322,9 +325,9 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
                      | (1u << pin_wrprot)
                      | (1u << pin_rdy));
 
+    for (i = 0; i < NR_DRIVES; i++)
+        drive[i].cyl = 1; /* XXX */
     drive[0].filename = disk0_name;
-    drive[1].filename = disk1_name;
-    drive[0].cyl = drive[1].cyl = 1; /* XXX */
 
     gpio_configure_pin(gpio_out, pin_dskchg, GPO_bus);
     gpio_configure_pin(gpio_out, pin_index,  GPO_bus);
@@ -525,7 +528,7 @@ int floppy_handle(void)
     stk_time_t timestamp[3];
     struct drive *drv;
 
-    for (i = 0; i < ARRAY_SIZE(drive); i++) {
+    for (i = 0; i < NR_DRIVES; i++) {
         drv = &drive[i];
         if (drv->step.active) {
             drv->step.settling = FALSE;
@@ -647,11 +650,13 @@ static void IRQ_input_changed(void)
     inp = input_pins;
 
     drive[0].sel = !(inp & m(inp_sel0));
+#if BUILD_TOUCH
     drive[1].sel = !(inp & m(inp_sel1));
+#endif
 
     if (changed & inp & m(inp_step)) {
         bool_t step_inward = !(inp & m(inp_dir));
-        for (i = 0; i < ARRAY_SIZE(drive); i++) {
+        for (i = 0; i < NR_DRIVES; i++) {
             drv = &drive[i];
             if (!drv->sel || drv->step.active
                 || (drv->cyl == (step_inward ? 84 : 0)))
@@ -668,7 +673,7 @@ static void IRQ_input_changed(void)
     }
 
     if (changed & m(inp_side)) {
-        for (i = 0; i < ARRAY_SIZE(drive); i++) {
+        for (i = 0; i < NR_DRIVES; i++) {
             drv = &drive[i];
             drv->head = !(inp & m(inp_side));
             if (i == 0) {

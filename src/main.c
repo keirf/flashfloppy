@@ -158,7 +158,7 @@ int floppy_main(void)
     char buf[32];
     UINT i, nr;
 
-    floppy_init("nzs_crack.adf", NULL);
+    floppy_init("nzs_crack.adf");
 
     list_dir("/");
     
