@@ -162,7 +162,7 @@ void floppy_init(const char *disk0_name)
     index.prev_time = stk_now();
     index.next_time = ~0u;
     timer_init(&index.timer, index_pulse, NULL);
-    timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(200)));
+    timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
 
     /* Enable interrupts. */
     for (i = 0; i < ARRAY_SIZE(exti_irqs); i++) {
@@ -244,7 +244,7 @@ static void image_stop_track(struct image *im)
 {
     im->cur_track = TRACKNR_INVALID;
     if (!index.active)
-        timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(200)));
+        timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
 }
 
 static void floppy_sync_flux(void)
@@ -335,7 +335,7 @@ static int floppy_load_flux(void)
         ticks -= image_ticks_since_index(drv->image);
         /* Calculate deadline for index timer. */
         ticks /= SYSCLK_MHZ/STK_MHZ;
-        index.next_time = stk_diff(now, ticks);
+        index.next_time = stk_add(now, ticks);
     }
 
     return 0;
@@ -386,8 +386,8 @@ int floppy_handle(void)
             goto out;
         /* Allow extra time if heads are settling. */
         if (drv->step.settling) {
-            stk_time_t step_settle = stk_diff(drv->step.start,
-                                              stk_ms(DRIVE_SETTLE_MS));
+            stk_time_t step_settle = stk_add(drv->step.start,
+                                             stk_ms(DRIVE_SETTLE_MS));
             int32_t delta = stk_delta(stk_now(), step_settle);
             delay = max_t(int32_t, delta, delay);
         }
@@ -404,7 +404,7 @@ int floppy_handle(void)
         if (sync_time > (time_after_index + stk_ms(DRIVE_MS_PER_REV)/2))
             time_after_index += stk_ms(DRIVE_MS_PER_REV);
         /* Set the deadline. */
-        sync_time = stk_diff(index_time, time_after_index);
+        sync_time = stk_add(index_time, time_after_index);
     }
 
     timestamp[0] = stk_now();
@@ -451,11 +451,11 @@ static void index_pulse(void *dat)
     if (index.active) {
         index.prev_time = index.timer.deadline;
         gpio_write_pin(gpio_out, pin_index, O_TRUE);
-        timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(2)));
+        timer_set(&index.timer, stk_add(index.prev_time, stk_ms(2)));
     } else {
         gpio_write_pin(gpio_out, pin_index, O_FALSE);
         if (data_state != DATA_active) /* timer set from input flux stream */
-            timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(200)));
+            timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
     }
 }
 
