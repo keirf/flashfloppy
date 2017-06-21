@@ -72,6 +72,7 @@ int printk(const char *format, ...)
 /* Serial console control */
 void console_init(void);
 void console_sync(void);
+void console_crash_on_input(void);
 
 #ifdef BUILD_GOTEK
 

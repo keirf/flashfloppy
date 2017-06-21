@@ -14,6 +14,8 @@
 #define DMA1_CH4_IRQ 14
 void IRQ_14(void) __attribute__((alias("IRQ_dma1_ch4_tc")));
 
+#define USART1_IRQ 37
+
 /* We stage serial output in a ring buffer. DMA occurs from the ring buffer;
  * the consumer index being updated each time a DMA sequence completes. */
 static char ring[2048];
@@ -143,6 +145,16 @@ void console_init(void)
     dma1->ifcr = DMA_IFCR_CTCIF4;
     IRQx_set_prio(DMA1_CH4_IRQ, CONSOLE_IRQ_PRI);
     IRQx_enable(DMA1_CH4_IRQ);
+}
+
+/* Debug helper: if we get stuck somewhere, calling this beforehand will cause 
+ * any serial input to cause a crash dump of the stuck context. */
+void console_crash_on_input(void)
+{
+    (void)usart1->dr; /* clear UART_SR_RXNE */
+    usart1->cr1 |= USART_CR1_RXNEIE;
+    IRQx_set_prio(USART1_IRQ, CONSOLE_IRQ_PRI);
+    IRQx_enable(USART1_IRQ);
 }
 
 /*
