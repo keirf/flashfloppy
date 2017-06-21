@@ -80,9 +80,15 @@ static uint8_t pin_index; /* PB2 (MM150); PB4 (LC150) */
 
 #define m(pin) (1u<<(pin))
 
-/* EXTI[15:10]: IRQ 40 */
-void IRQ_40(void) __attribute__((alias("IRQ_input_changed")));
-#define EXTI_IRQ 40
+/* Bind all EXTI IRQs */
+void IRQ_6(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI0 */
+void IRQ_7(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI1 */
+void IRQ_8(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI2 */
+void IRQ_9(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI3 */
+void IRQ_10(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI4 */
+void IRQ_23(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI9_5 */
+void IRQ_40(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI15_10 */
+static const uint8_t exti_irqs[] = { 6, 7, 8, 9, 10, 23, 40 };
 
 static struct drive drive[2];
 static struct image image;
@@ -258,6 +264,8 @@ static void floppy_check(void)
 
 void floppy_deinit(void)
 {
+    unsigned int i;
+
     ASSERT(!cancellation_is_active(&floppy_cancellation));
 
     /* Initialised? Bail if not. */
@@ -265,7 +273,8 @@ void floppy_deinit(void)
         return;
 
     /* Stop interrupt work. */
-    IRQx_disable(EXTI_IRQ);
+    for (i = 0; i < ARRAY_SIZE(exti_irqs); i++)
+        IRQx_disable(exti_irqs[i]);
     timer_cancel(&index.timer);
 
     /* Stop DMA/timer work. */
@@ -286,6 +295,8 @@ void floppy_deinit(void)
 
 void floppy_init(const char *disk0_name, const char *disk1_name)
 {
+    unsigned int i;
+
 #if BUILD_TOUCH
     switch (board_id) {
     case BRDREV_LC150:
@@ -332,9 +343,11 @@ void floppy_init(const char *disk0_name, const char *disk1_name)
     timer_set(&index.timer, stk_diff(index.prev_time, stk_ms(200)));
 
     /* Enable interrupts. */
-    IRQx_set_prio(EXTI_IRQ, FLOPPY_IRQ_HI_PRI);
-    IRQx_set_pending(EXTI_IRQ);
-    IRQx_enable(EXTI_IRQ);
+    for (i = 0; i < ARRAY_SIZE(exti_irqs); i++) {
+        IRQx_set_prio(exti_irqs[i], FLOPPY_IRQ_HI_PRI);
+        IRQx_set_pending(exti_irqs[i]);
+        IRQx_enable(exti_irqs[i]);
+    }
 
     /* Timer setup:
      * The counter is incremented at full SYSCLK rate. 
