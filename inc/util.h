@@ -69,6 +69,9 @@ int printk(const char *format, ...)
 #define htobe16(x) _rev16(x)
 #define htobe32(x) _rev32(x)
 
+/* Board-specific callouts */
+void board_init(void);
+
 /* Serial console control */
 void console_init(void);
 void console_sync(void);

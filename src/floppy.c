@@ -22,66 +22,13 @@ static uint8_t input_pins;
 /* Mask of output pins within @gpio_out. */
 static uint16_t gpio_out_mask;
 
-#if BUILD_TOUCH
-
-#define O_FALSE 0
-#define O_TRUE  1
-
-/* Offsets within the input_pins bitmap. */
-#define inp_dir     0
-#define inp_step    3
-#define inp_sel0    4
-#define inp_sel1    5
-#define inp_wgate   6
-#define inp_side    7
-
-/* Outputs are buffered, thus do *not* need to be 5v tolerant. */
-#define gpio_out gpiob
-#define pin_dskchg  3
-static uint8_t pin_index; /* PB2 (MM150); PB4 (LC150) */
-#define pin_trk0    5
-#define pin_wrprot 11
-#define pin_rdy    12
-
-#define gpio_timer gpiob
-#define pin_wdata   6 /* must be 5v tolerant */
-#define pin_rdata   7
-#define dma_rdata   (dma1->ch7)
-#define tim_rdata   (tim4)
-
-#define NR_DRIVES 2
-
-#elif BUILD_GOTEK
-
-#define O_FALSE 1
-#define O_TRUE  0
-
-/* Offsets within the input_pins bitmap. */
-#define inp_dir     0
-#define inp_step    2
-#define inp_sel0    1
-#define inp_wgate   7
-#define inp_side    4
-
-/* Outputs. */
-#define gpio_out gpiob
-#define pin_dskchg  7
-#define pin_index   8
-#define pin_trk0    6
-#define pin_wrprot  5
-#define pin_rdy     3
-
-#define gpio_timer gpioa
-#define pin_wdata   8
-#define pin_rdata   7
-#define dma_rdata   (dma1->ch3)
-#define tim_rdata   (tim3)
-
-#define NR_DRIVES 1
-
-#endif /* BUILD_GOTEK */
-
 #define m(pin) (1u<<(pin))
+
+#if BUILD_TOUCH
+#include "touch/floppy.c"
+#elif BUILD_GOTEK
+#include "gotek/floppy.c"
+#endif
 
 /* Bind all EXTI IRQs */
 void IRQ_6(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI0 */
@@ -116,117 +63,6 @@ static uint32_t max_load_ticks, max_prefetch_us;
 static void rddat_stop(void);
 
 static struct cancellation floppy_cancellation;
-
-#if BUILD_TOUCH
-
-/* Updates the board-agnostic input_pins bitmask with current states of 
- * input pins, and returns mask of pins which have changed state. */
-static uint8_t (*input_update)(void);
-
-/* Default input pins:
- * DIR = PA8, STEP=PA11, SELA=PA12, SELB=PA13, WGATE=PA14, SIDE=PA15
- */
-static uint8_t input_update_default(void)
-{
-    uint16_t pr;
-
-    pr = exti->pr;
-    exti->pr = pr;
-
-    input_pins = (gpioa->idr >> 8) & 0xf9;
-
-    return (pr >> 8) & 0xf8;
-}
-
-static void input_init_default(void)
-{
-    gpio_configure_pin(gpioa, 8+inp_sel0,  GPI_bus);
-    gpio_configure_pin(gpioa, 8+inp_sel1,  GPI_bus);
-    gpio_configure_pin(gpioa, 8+inp_dir,   GPI_bus);
-    gpio_configure_pin(gpioa, 8+inp_step,  GPI_bus);
-    gpio_configure_pin(gpioa, 8+inp_wgate, GPI_bus);
-    gpio_configure_pin(gpioa, 8+inp_side,  GPI_bus);
-
-    /* PA[15:0] -> EXT[15:0] */
-    afio->exticr1 = afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x0000;
-
-    exti->imr = exti->rtsr = exti->ftsr =
-        m(8+inp_step) | m(8+inp_sel0) | m(8+inp_sel1)
-        | m(8+inp_wgate) | m(8+inp_side);
-
-    input_update = input_update_default;
-}
-
-/* TB160 input pins as default except:
- * SELB = PB8, WGATE = PB9.
- */
-static uint8_t input_update_tb160(void)
-{
-    uint16_t pr;
-
-    pr = exti->pr;
-    exti->pr = pr;
-
-    input_pins = ((gpioa->idr >> 8) & 0x99) | ((gpiob->idr >> 3) & 0x60);
-
-    return ((pr >> 8) & 0x98) | ((pr >> 3) & 0x60);
-}
-
-static void input_init_tb160(void)
-{
-    gpio_configure_pin(gpioa, 8+inp_sel0,  GPI_bus);
-    gpio_configure_pin(gpiob, 3+inp_sel1,  GPI_bus);
-    gpio_configure_pin(gpioa, 8+inp_dir,   GPI_bus);
-    gpio_configure_pin(gpioa, 8+inp_step,  GPI_bus);
-    gpio_configure_pin(gpiob, 3+inp_wgate, GPI_bus);
-    gpio_configure_pin(gpioa, 8+inp_side,  GPI_bus);
-
-    /* PA[15:10,7:0] -> EXT[15:10,7:0], PB[9:8] -> EXT[9:8]. */
-    afio->exticr1 = afio->exticr2 = afio->exticr4 = 0x0000;
-    afio->exticr3 = 0x0011;
-
-    exti->imr = exti->rtsr = exti->ftsr =
-        m(8+inp_step) | m(8+inp_sel0) | m(3+inp_sel1)
-        | m(3+inp_wgate) | m(8+inp_side);
-
-    input_update = input_update_tb160;
-}
-
-#else /* BUILD_GOTEK */
-
-/* Input pins:
- * DIR = PB0, STEP=PA1, SELA=PA0, WGATE=PB9, SIDE=PB4
- */
-static uint8_t input_update(void)
-{
-    uint16_t pr, in_a, in_b;
-
-    pr = exti->pr;
-    exti->pr = pr;
-
-    in_a = gpioa->idr;
-    in_b = gpiob->idr;
-    input_pins = ((in_a << 1) & 0x06) | ((in_b >> 2) & 0x80) | (in_b & 0x11);
-
-    return ((pr << 1) & 0x06) | ((pr >> 2) & 0x80) | (pr & 0x10);
-}
-
-static void input_init_gotek(void)
-{
-    gpio_configure_pin(gpiob, 0, GPI_bus);
-    gpio_configure_pin(gpioa, 1, GPI_bus);
-    gpio_configure_pin(gpioa, 0, GPI_bus);
-    gpio_configure_pin(gpiob, 9, GPI_bus);
-    gpio_configure_pin(gpiob, 4, GPI_bus);
-
-    /* PB[15:2] -> EXT[15:2], PA[1:0] -> EXT[1:0] */
-    afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x1111;
-    afio->exticr1 = 0x1100;
-
-    exti->imr = exti->rtsr = exti->ftsr = m(9) | m(4) | m(1) | m(0);
-}
-
-#endif /* BUILD_GOTEK */
 
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
@@ -300,24 +136,7 @@ void floppy_init(const char *disk0_name)
 {
     unsigned int i;
 
-#if BUILD_TOUCH
-    switch (board_id) {
-    case BRDREV_LC150:
-        pin_index = 4;
-        input_init_default();
-        break;
-    case BRDREV_MM150:
-        pin_index = 2;
-        input_init_default();
-        break;
-    case BRDREV_TB160:
-        pin_index = 1;
-        input_init_tb160();
-        break;
-    }
-#else
-    input_init_gotek();
-#endif
+    board_floppy_init();
 
     gpio_out_mask = ((1u << pin_dskchg)
                      | (1u << pin_index)
@@ -650,7 +469,7 @@ static void IRQ_input_changed(void)
     inp = input_pins;
 
     drive[0].sel = !(inp & m(inp_sel0));
-#if BUILD_TOUCH
+#if NR_DRIVES > 1
     drive[1].sel = !(inp & m(inp_sel1));
 #endif
 
