@@ -26,6 +26,7 @@ static void USBH_USR_Init(void)
 static void USBH_USR_DeInit(void)
 {
     printk("> %s\n", __FUNCTION__);
+    msc_device_connected = FALSE;
 }
 
 static void USBH_USR_DeviceAttached(void)
@@ -41,6 +42,7 @@ static void USBH_USR_ResetDevice(void)
 static void USBH_USR_DeviceDisconnected (void)
 {
     printk("> %s\n", __FUNCTION__);
+    msc_device_connected = FALSE;
 }
 
 static void USBH_USR_OverCurrentDetected (void)
