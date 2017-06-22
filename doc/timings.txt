@@ -8,3 +8,107 @@ Citizen Z1DE-58A (a generic HD PC drive):
   - TRK0 immediately deasserted
   - TRK0 asserted after 3ms
   - RDDAT asserted after 18ms
+
+USB MSC Speed:
+--------------
+Conclusion: small streaming reads, whole track writes
+
+Generic 16GB stick:
+Sequential create (8MB total, 8kB block size):
+  Min: 13737us Max: 548904us Mean: 15302us
+  Histo: 10-19ms:1006 20-29ms:11 30-39ms:4 50-59ms:1 300-399ms:1 500-599ms:1 >50ms: 0.29%
+Sequential 512-byte reads (8MB total):
+  Min: 1237us Max: 8078us Mean: 1299us
+  Histo: 0-9ms:16384 >50ms: 0.00%
+Random 512-byte reads (8MB total):
+  Min: 1248us Max: 9117us Mean: 4806us
+  Histo: 0-9ms:16384 >50ms: 0.00%
+Clustered Random 512-byte reads (8MB total):
+  Min: 1241us Max: 15424us Mean: 1873us
+  Histo: 0-9ms:16034 10-19ms:350 >50ms: 0.00%
+Sequential 8192-byte reads (8MB total):
+  Min: 11238us Max: 12678us Mean: 11304us
+  Histo: 10-19ms:1024 >50ms: 0.00%
+Random 8192-byte reads (8MB total):
+  Min: 11241us Max: 19081us Mean: 14778us
+  Histo: 10-19ms:1024 >50ms: 0.00%
+Sequential 512-byte writes (8MB total):
+  Min: 1999us Max: 517467us Mean: 4326us
+  Histo: 0-9ms:16240 10-19ms:2 20-29ms:21 30-39ms:23 40-49ms:24 50-59ms:26 60-69ms:5 70-79ms:12 100-199ms:6 200-299ms:8 300-399ms:9 400-499ms:7 500-599ms:1 >50ms: 0.45%
+Random 512-byte writes (8MB total):
+  Min: 2301us Max: 522088us Mean: 9377us
+  Histo: 0-9ms:14706 10-19ms:1575 20-29ms:2 30-39ms:2 40-49ms:3 50-59ms:1 60-69ms:1 70-79ms:1 100-199ms:2 200-299ms:18 300-399ms:37 400-499ms:22 500-599ms:14 >50ms: 0.58%
+Clustered Random 512-byte writes (8MB total):
+  Min: 1991us Max: 516439us Mean: 5090us
+  Histo: 0-9ms:15674 10-19ms:580 20-29ms:5 30-39ms:21 40-49ms:17 50-59ms:22 60-69ms:14 70-79ms:12 80-89ms:5 100-199ms:2 200-299ms:8 300-399ms:13 400-499ms:7 500-599ms:4 >50ms: 0.53%
+Sequential 8192-byte writes (8MB total):
+  Min: 12656us Max: 527039us Mean: 15227us
+  Histo: 10-19ms:1020 60-69ms:1 80-89ms:1 300-399ms:1 500-599ms:1 >50ms: 0.39%
+Random 8192-byte writes (8MB total):
+  Min: 12764us Max: 490012us Mean: 20460us
+  Histo: 10-19ms:828 20-29ms:188 100-199ms:1 300-399ms:3 400-499ms:4 >50ms: 0.78%
+Delayed Sequential 512-byte writes (8MB total):
+  Min: 1989us Max: 517106us Mean: 4406us
+  Histo: 0-9ms:16235 10-19ms:1 20-29ms:16 30-39ms:28 40-49ms:19 50-59ms:30 60-69ms:5 70-79ms:15 100-199ms:10 200-299ms:8 300-399ms:9 400-499ms:2 500-599ms:6 >50ms: 0.51%
+Delayed Random 512-byte writes (8MB total):
+  Min: 2294us Max: 522077us Mean: 9141us
+  Histo: 0-9ms:15118 10-19ms:1163 20-29ms:3 40-49ms:1 60-69ms:2 70-79ms:2 100-199ms:18 200-299ms:8 300-399ms:39 400-499ms:9 500-599ms:21 >50ms: 0.60%
+Delayed Clustered Random 512-byte writes (8MB total):
+  Min: 1990us Max: 522410us Mean: 5116us
+  Histo: 0-9ms:15685 10-19ms:563 20-29ms:6 30-39ms:25 40-49ms:14 50-59ms:20 60-69ms:17 70-79ms:11 80-89ms:3 100-199ms:8 200-299ms:6 300-399ms:16 400-499ms:5 500-599ms:5 >50ms: 0.55%
+Delayed Sequential 8192-byte writes (8MB total):
+  Min: 11208us Max: 528445us Mean: 15053us
+  Histo: 10-19ms:1021 50-59ms:1 300-399ms:1 500-599ms:1 >50ms: 0.29%
+Delayed Random 8192-byte writes (8MB total):
+  Min: 12694us Max: 529498us Mean: 20255us
+  Histo: 10-19ms:853 20-29ms:163 70-79ms:1 300-399ms:4 400-499ms:1 500-599ms:2 >50ms: 0.78%
+
+Lexar 32GB USB3.0 stick:
+Sequential create (8MB total, 8kB block size):
+  Min: 9865us Max: 27785us Mean: 10029us
+  Histo: 0-9ms:1011 10-19ms:7 20-29ms:6 >50ms: 0.00%
+Sequential 512-byte reads (8MB total):
+  Min: 779us Max: 9250us Mean: 819us
+  Histo: 0-9ms:16384 >50ms: 0.00%
+Random 512-byte reads (8MB total):
+  Min: 827us Max: 3920us Mean: 2619us
+  Histo: 0-9ms:16384 >50ms: 0.00%
+Clustered Random 512-byte reads (8MB total):
+  Min: 782us Max: 6101us Mean: 1333us
+  Histo: 0-9ms:16384 >50ms: 0.00%
+Sequential 8192-byte reads (8MB total):
+  Min: 10803us Max: 12244us Mean: 10841us
+  Histo: 10-19ms:1024 >50ms: 0.00%
+Random 8192-byte reads (8MB total):
+  Min: 10836us Max: 13893us Mean: 12573us
+  Histo: 10-19ms:1024 >50ms: 0.00%
+Sequential 512-byte writes (8MB total):
+  Min: 693us Max: 4359us Mean: 715us
+  Histo: 0-9ms:16384 >50ms: 0.00%
+Random 512-byte writes (8MB total):
+  Min: 698us Max: 842070us Mean: 10395us
+  Histo: 0-9ms:15932 10-19ms:37 20-29ms:16 30-39ms:14 40-49ms:59 60-69ms:2 100-199ms:15 200-299ms:201 300-399ms:58 400-499ms:30 500-599ms:20 >50ms: 1.98%
+Clustered Random 512-byte writes (8MB total):
+  Min: 696us Max: 513361us Mean: 1698us
+  Histo: 0-9ms:16339 10-19ms:10 20-29ms:1 30-39ms:3 40-49ms:8 200-299ms:12 300-399ms:4 400-499ms:6 500-599ms:1 >50ms: 0.14%
+Sequential 8192-byte writes (8MB total):
+  Min: 9865us Max: 13217us Mean: 9942us
+  Histo: 0-9ms:1017 10-19ms:7 >50ms: 0.00%
+Random 8192-byte writes (8MB total):
+  Min: 9915us Max: 513587us Mean: 18883us
+  Histo: 0-9ms:1 10-19ms:999 20-29ms:1 30-39ms:2 40-49ms:2 50-59ms:3 200-299ms:7 300-399ms:5 400-499ms:2 500-599ms:2 >50ms: 1.85%
+Delayed Sequential 512-byte writes (8MB total):
+  Min: 693us Max: 3783us Mean: 715us
+  Histo: 0-9ms:16384 >50ms: 0.00%
+Delayed Random 512-byte writes (8MB total):
+  Min: 698us Max: 841854us Mean: 10316us
+  Histo: 0-9ms:15952 10-19ms:35 20-29ms:12 30-39ms:11 40-49ms:60 50-59ms:1 100-199ms:13 200-299ms:190 300-399ms:53 400-499ms:32 500-599ms:25 >50ms: 1.91%
+Delayed Clustered Random 512-byte writes (8MB total):
+  Min: 696us Max: 511709us Mean: 1695us
+  Histo: 0-9ms:16339 10-19ms:10 20-29ms:1 30-39ms:3 40-49ms:8 200-299ms:12 300-399ms:4 400-499ms:6 500-599ms:1 >50ms: 0.14%
+Delayed Sequential 8192-byte writes (8MB total):
+  Min: 9863us Max: 13216us Mean: 9940us
+  Histo: 0-9ms:1017 10-19ms:7 >50ms: 0.00%
+Delayed Random 8192-byte writes (8MB total):
+  Min: 9924us Max: 512928us Mean: 18882us
+  Histo: 0-9ms:1 10-19ms:998 20-29ms:2 30-39ms:2 40-49ms:2 50-59ms:3 200-299ms:7 300-399ms:5 400-499ms:2 500-599ms:2 >50ms: 1.85%
