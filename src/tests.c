@@ -71,20 +71,20 @@ static void stats_print(struct stats *stats)
  * Monotonic microsecond-resolution time
  */
 
-static struct {
+static struct time {
     struct timer timer;
     volatile stk_time_t stk_stamp;
     volatile uint32_t sys_us_stamp;
-} time;
+} *time;
 
 static uint32_t _time_now(stk_time_t _stk_now)
 {
     uint32_t stk_stamp, sys_us_stamp;
 
     do {
-        stk_stamp = time.stk_stamp;
-        sys_us_stamp = time.sys_us_stamp;
-    } while (stk_stamp != time.stk_stamp);
+        stk_stamp = time->stk_stamp;
+        sys_us_stamp = time->sys_us_stamp;
+    } while (stk_stamp != time->stk_stamp);
 
     return sys_us_stamp + stk_diff(stk_stamp, _stk_now) / STK_MHZ;
 }
@@ -98,17 +98,18 @@ static void time_fn(void *unused)
 {
     stk_time_t stk_stamp = stk_now();
     uint32_t sys_us_stamp = _time_now(stk_stamp);
-    time.sys_us_stamp = sys_us_stamp;
-    time.stk_stamp = stk_stamp;
-    timer_set(&time.timer,
-              stk_add(time.timer.deadline, stk_ms(500)));
+    time->sys_us_stamp = sys_us_stamp;
+    time->stk_stamp = stk_stamp;
+    timer_set(&time->timer,
+              stk_add(time->timer.deadline, stk_ms(500)));
 }
 
 static void time_init(void)
 {
-    memset(&time, 0, sizeof(time));
-    timer_init(&time.timer, time_fn, NULL);
-    timer_set(&time.timer, stk_add(stk_now(), stk_ms(500)));
+    time = arena_alloc(sizeof(*time));
+    memset(time, 0, sizeof(*time));
+    timer_init(&time->timer, time_fn, NULL);
+    timer_set(&time->timer, stk_add(stk_now(), stk_ms(500)));
 }
 
 /*
@@ -210,10 +211,14 @@ static void speed_subtests(FIL *fp, struct stats *stats,
 
 void speed_tests(void)
 {
-    static char buf[8192];
-    struct stats stats;
+    static char *buf;
+    struct stats *stats;
     unsigned int i;
     uint32_t t[2];
+
+    arena_init();
+    stats = arena_alloc(sizeof(*stats));
+    buf = arena_alloc(8192);
 
     time_init();
 
@@ -222,23 +227,23 @@ void speed_tests(void)
 
     F_open(&file, "speed_test", FA_READ|FA_WRITE|FA_CREATE_ALWAYS);
 
-    stats_init(&stats);
+    stats_init(stats);
     t[0] = time_now();
     for (i = 0; i < TEST_SZ / sizeof(buf); i++) {
         F_write(&file, buf, sizeof(buf), NULL);
         t[1] = time_now();
-        stats_update(&stats, t[1]-t[0]);
+        stats_update(stats, t[1]-t[0]);
         t[0] = t[1];
     }
     printk("Sequential create (%uMB total, 8kB block size):\n", TEST_MB);
-    stats_print(&stats);
+    stats_print(stats);
 
-    speed_subtests(&file, &stats, buf, sizeof(buf), 0, 0, 512);
-    speed_subtests(&file, &stats, buf, sizeof(buf), 0, 0, sizeof(buf));
-    speed_subtests(&file, &stats, buf, sizeof(buf), 1, 0, 512);
-    speed_subtests(&file, &stats, buf, sizeof(buf), 1, 0, sizeof(buf));
-    speed_subtests(&file, &stats, buf, sizeof(buf), 1, 1, 512);
-    speed_subtests(&file, &stats, buf, sizeof(buf), 1, 1, sizeof(buf));
+    speed_subtests(&file, stats, buf, sizeof(buf), 0, 0, 512);
+    speed_subtests(&file, stats, buf, sizeof(buf), 0, 0, sizeof(buf));
+    speed_subtests(&file, stats, buf, sizeof(buf), 1, 0, 512);
+    speed_subtests(&file, stats, buf, sizeof(buf), 1, 0, sizeof(buf));
+    speed_subtests(&file, stats, buf, sizeof(buf), 1, 1, 512);
+    speed_subtests(&file, stats, buf, sizeof(buf), 1, 1, sizeof(buf));
 
     F_close(&file);
     F_unlink("speed_test");
@@ -248,9 +253,9 @@ void speed_tests(void)
 
 void speed_tests_cancel(void)
 {
-    if (time.timer.cb_fn != NULL)
-        timer_cancel(&time.timer);
-    memset(&time, 0, sizeof(time));
+    if (time && time->timer.cb_fn != NULL)
+        timer_cancel(&time->timer);
+    time = NULL;
 }
 
 /*

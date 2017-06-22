@@ -40,9 +40,10 @@ void IRQ_23(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI9_5 */
 void IRQ_40(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI15_10 */
 static const uint8_t exti_irqs[] = { 6, 7, 8, 9, 10, 23, 40 };
 
+#define DMABUF_ENTRIES 2048
 static struct drive drive[NR_DRIVES];
 static struct image image;
-static uint16_t dmabuf[2048], dmaprod, dmacons_prev;
+static uint16_t *dmabuf, dmaprod, dmacons_prev;
 static stk_time_t sync_time;
 /* data_state updated only in IRQ and cancellable contexts. */
 static enum {
@@ -136,6 +137,8 @@ void floppy_init(const char *disk0_name)
 {
     unsigned int i;
 
+    arena_init();
+
     board_floppy_init();
 
     gpio_out_mask = ((1u << pin_dskchg)
@@ -187,9 +190,10 @@ void floppy_init(const char *disk0_name)
     tim_rdata->cr2 = 0;
 
     /* DMA setup: From a circular buffer into read-data timer's ARR. */
+    dmabuf = arena_alloc(DMABUF_ENTRIES * sizeof(*dmabuf));
     dma_rdata.cpar = (uint32_t)(unsigned long)&tim_rdata->arr;
     dma_rdata.cmar = (uint32_t)(unsigned long)dmabuf;
-    dma_rdata.cndtr = ARRAY_SIZE(dmabuf);
+    dma_rdata.cndtr = DMABUF_ENTRIES;
 
     initialised = TRUE;
 }
@@ -213,7 +217,7 @@ static void rddat_stop(void)
     /* Turn off timer and DMA. */
     tim_rdata->cr1 = 0;
     dma_rdata.ccr = 0;
-    dma_rdata.cndtr = ARRAY_SIZE(dmabuf);
+    dma_rdata.cndtr = DMABUF_ENTRIES;
 }
 
 /* Called from cancellable context to start the read stream. */
@@ -253,11 +257,11 @@ static void floppy_sync_flux(void)
     int32_t ticks;
     uint32_t nr;
 
-    nr = ARRAY_SIZE(dmabuf) - dmaprod - 1;
+    nr = DMABUF_ENTRIES - dmaprod - 1;
     if (nr)
         dmaprod += image_load_flux(drv->image, &dmabuf[dmaprod], nr);
 
-    if (dmaprod < ARRAY_SIZE(dmabuf)/2)
+    if (dmaprod < DMABUF_ENTRIES/2)
         return;
 
     ticks = stk_delta(stk_now(), sync_time) - stk_us(1);
@@ -290,7 +294,7 @@ static int floppy_load_flux(void)
             return 0;
     }
 
-    dmacons = ARRAY_SIZE(dmabuf) - dma_rdata.cndtr;
+    dmacons = DMABUF_ENTRIES - dma_rdata.cndtr;
 
     /* Check for DMA catching up with the producer index (underrun). */
     if (((dmacons < dmacons_prev)
@@ -301,12 +305,12 @@ static int floppy_load_flux(void)
 
     ticks = image_ticks_since_index(drv->image);
 
-    nr_to_wrap = ARRAY_SIZE(dmabuf) - dmaprod;
-    nr_to_cons = (dmacons - dmaprod - 1) & (ARRAY_SIZE(dmabuf) - 1);
+    nr_to_wrap = DMABUF_ENTRIES - dmaprod;
+    nr_to_cons = (dmacons - dmaprod - 1) & (DMABUF_ENTRIES - 1);
     nr = min(nr_to_wrap, nr_to_cons);
     if (nr) {
         dmaprod += image_load_flux(drv->image, &dmabuf[dmaprod], nr);
-        dmaprod &= ARRAY_SIZE(dmabuf) - 1;
+        dmaprod &= DMABUF_ENTRIES - 1;
     }
 
     dmacons_prev = dmacons;
@@ -321,7 +325,7 @@ static int floppy_load_flux(void)
             /* Ticks left in current sample. */
             ticks = tim_rdata->arr - tim_rdata->cnt;
             /* Index of next sample. */
-            dmacons = ARRAY_SIZE(dmabuf) - dma_rdata.cndtr;
+            dmacons = DMABUF_ENTRIES - dma_rdata.cndtr;
             /* If another sample was loaded meanwhile, try again for a 
              * consistent snapshot. */
             if (dmacons == dmacons_prev)
@@ -329,7 +333,7 @@ static int floppy_load_flux(void)
             dmacons_prev = dmacons;
         }
         /* Sum all flux timings in the DMA buffer. */
-        for (i = dmacons; i != dmaprod; i = (i+1) & (ARRAY_SIZE(dmabuf)-1))
+        for (i = dmacons; i != dmaprod; i = (i+1) & (DMABUF_ENTRIES-1))
             ticks += dmabuf[i] + 1;
         /* Subtract current flux offset beyond the index. */
         ticks -= image_ticks_since_index(drv->image);

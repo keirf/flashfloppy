@@ -69,6 +69,12 @@ int printk(const char *format, ...)
 #define htobe16(x) _rev16(x)
 #define htobe32(x) _rev32(x)
 
+/* Arena-based memory allocation */
+void *arena_alloc(uint32_t sz);
+uint32_t arena_total(void);
+uint32_t arena_avail(void);
+void arena_init(void);
+
 /* Board-specific callouts */
 void board_init(void);
 

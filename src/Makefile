@@ -1,3 +1,4 @@
+OBJS += arena.o
 OBJS += cancellation.o
 OBJS += console.o
 OBJS += vectors.o

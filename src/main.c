@@ -149,6 +149,7 @@ int main(void)
         if (mount_err)
             clear_screen();
 
+        arena_init();
         F_call_cancellable(floppy_main);
         floppy_cancel();
         speed_tests_cancel();

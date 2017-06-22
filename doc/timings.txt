@@ -9,6 +9,15 @@ Citizen Z1DE-58A (a generic HD PC drive):
   - TRK0 asserted after 3ms
   - RDDAT asserted after 18ms
 
+HxC Gotek Timings:
+------------------
+1. RDY is always asserted, regardless of whether a disk is inserted,
+USB inserted, disk being swapped, etc etc
+2. RDY is ungated in ~0.45us
+3. All signals gated in ~0.75us
+4. Other signals (TRK0 tested) ungated in ~0.95us
+Timing precision is ~0.05us
+
 USB MSC Speed:
 --------------
 Conclusion: small streaming reads, whole track writes
