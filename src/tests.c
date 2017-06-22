@@ -132,6 +132,7 @@ static uint32_t random(uint32_t *rnd)
 
 #define TEST_MB 8
 #define TEST_SZ (TEST_MB*1024*1024)
+#define BUF_SZ 8192
 static void speed_subtests(FIL *fp, struct stats *stats,
                            char *buf, unsigned int bufsz,
                            int do_write, int do_delay, unsigned int blksz)
@@ -218,19 +219,19 @@ void speed_tests(void)
 
     arena_init();
     stats = arena_alloc(sizeof(*stats));
-    buf = arena_alloc(8192);
+    buf = arena_alloc(BUF_SZ);
 
     time_init();
 
-    for (i = 0; i < sizeof(buf); i++)
+    for (i = 0; i < BUF_SZ; i++)
         buf[i] = i;
 
     F_open(&file, "speed_test", FA_READ|FA_WRITE|FA_CREATE_ALWAYS);
 
     stats_init(stats);
     t[0] = time_now();
-    for (i = 0; i < TEST_SZ / sizeof(buf); i++) {
-        F_write(&file, buf, sizeof(buf), NULL);
+    for (i = 0; i < TEST_SZ / BUF_SZ; i++) {
+        F_write(&file, buf, BUF_SZ, NULL);
         t[1] = time_now();
         stats_update(stats, t[1]-t[0]);
         t[0] = t[1];
@@ -238,12 +239,12 @@ void speed_tests(void)
     printk("Sequential create (%uMB total, 8kB block size):\n", TEST_MB);
     stats_print(stats);
 
-    speed_subtests(&file, stats, buf, sizeof(buf), 0, 0, 512);
-    speed_subtests(&file, stats, buf, sizeof(buf), 0, 0, sizeof(buf));
-    speed_subtests(&file, stats, buf, sizeof(buf), 1, 0, 512);
-    speed_subtests(&file, stats, buf, sizeof(buf), 1, 0, sizeof(buf));
-    speed_subtests(&file, stats, buf, sizeof(buf), 1, 1, 512);
-    speed_subtests(&file, stats, buf, sizeof(buf), 1, 1, sizeof(buf));
+    speed_subtests(&file, stats, buf, BUF_SZ, 0, 0, 512);
+    speed_subtests(&file, stats, buf, BUF_SZ, 0, 0, BUF_SZ);
+    speed_subtests(&file, stats, buf, BUF_SZ, 1, 0, 512);
+    speed_subtests(&file, stats, buf, BUF_SZ, 1, 0, BUF_SZ);
+    speed_subtests(&file, stats, buf, BUF_SZ, 1, 1, 512);
+    speed_subtests(&file, stats, buf, BUF_SZ, 1, 1, BUF_SZ);
 
     F_close(&file);
     F_unlink("speed_test");

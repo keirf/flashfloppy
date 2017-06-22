@@ -18,6 +18,57 @@ USB inserted, disk being swapped, etc etc
 4. Other signals (TRK0 tested) ungated in ~0.95us
 Timing precision is ~0.05us
 
+SDHC Speed:
+-----------
+Conclusion: small streaming reads, whole track writes
+Kingston Class 4 8GB:
+Sequential create (8MB total, 8kB block size):
+  Min: 4445us Max: 74767us Mean: 6131us
+  Histo: 0-9ms:1012 10-19ms:7 50-59ms:1 60-69ms:3 70-79ms:1 >50ms: 0.48%
+Sequential 512-byte reads (8MB total):
+  Min: 798us Max: 5512us Mean: 883us
+  Histo: 0-9ms:16384 >50ms: 0.00%
+Random 512-byte reads (8MB total):
+  Min: 853us Max: 3278us Mean: 1645us
+  Histo: 0-9ms:16384 >50ms: 0.00%
+Clustered Random 512-byte reads (8MB total):
+  Min: 833us Max: 4191us Mean: 1002us
+  Histo: 0-9ms:16384 >50ms: 0.00%
+Sequential 8192-byte reads (8MB total):
+  Min: 8047us Max: 9007us Mean: 8134us
+  Histo: 0-9ms:1024 >50ms: 0.00%
+Random 8192-byte reads (8MB total):
+  Min: 8100us Max: 10245us Mean: 8869us
+  Histo: 0-9ms:973 10-19ms:51 >50ms: 0.00%
+Sequential 512-byte writes (8MB total):
+  Min: 255us Max: 266601us Mean: 2382us
+  Histo: 0-9ms:16291 30-39ms:4 40-49ms:4 50-59ms:11 60-69ms:13 70-79ms:10 80-89ms:8 90-99ms:11 100-199ms:30 200-299ms:2 >50ms: 0.51%
+Random 512-byte writes (8MB total):
+  Min: 1721us Max: 192655us Mean: 2938us
+  Histo: 0-9ms:16295 10-19ms:20 20-29ms:21 30-39ms:15 40-49ms:9 50-59ms:15 60-69ms:5 70-79ms:2 80-89ms:1 100-199ms:1 >50ms: 0.14%
+Clustered Random 512-byte writes (8MB total):
+  Min: 803us Max: 257291us Mean: 2310us
+  Histo: 0-9ms:16304 10-19ms:1 30-39ms:2 40-49ms:6 50-59ms:10 60-69ms:18 70-79ms:12 80-89ms:14 90-99ms:7 100-199ms:9 200-299ms:1 >50ms: 0.43%
+Sequential 8192-byte writes (8MB total):
+  Min: 4460us Max: 64237us Mean: 5778us
+  Histo: 0-9ms:1020 30-39ms:1 50-59ms:1 60-69ms:2 >50ms: 0.29%
+Random 8192-byte writes (8MB total):
+  Min: 4460us Max: 199727us Mean: 6843us
+  Histo: 0-9ms:1008 10-19ms:9 20-29ms:5 30-39ms:1 100-199ms:1 >50ms: 0.09%
+Delayed Sequential 512-byte writes (8MB total):
+  Min: 258us Max: 177273us Mean: 2088us
+  Histo: 0-9ms:16306 20-29ms:3 30-39ms:4 40-49ms:6 50-59ms:17 60-69ms:18 70-79ms:12 90-99ms:2 100-199ms:16 >50ms: 0.39%
+Delayed Random 512-byte writes (8MB total):
+  Min: 261us Max: 204901us Mean: 2782us
+  Histo: 0-9ms:16304 10-19ms:21 20-29ms:31 30-39ms:19 50-59ms:6 60-69ms:2 200-299ms:1 >50ms: 0.05%
+Delayed Clustered Random 512-byte writes (8MB total):
+  Min: 262us Max: 253241us Mean: 2122us
+  Histo: 0-9ms:16316 10-19ms:1 20-29ms:1 40-49ms:6 50-59ms:18 60-69ms:17 70-79ms:15 80-89ms:5 100-199ms:4 200-299ms:1 >50ms: 0.36%
+Delayed Sequential 8192-byte writes (8MB total):
+  Min: 4392us Max: 245190us Mean: 5197us
+  Histo: 0-9ms:1019 20-29ms:1 40-49ms:1 60-69ms:1 80-89ms:1 200-299ms:1 >50ms: 0.29%
+
+
 USB MSC Speed:
 --------------
 Conclusion: small streaming reads, whole track writes
