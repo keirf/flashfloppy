@@ -179,7 +179,7 @@ void floppy_init(const char *disk0_name)
      * the time between (fixed-width) O_TRUE pulses, mimicking floppy drive 
      * timings. */
     tim_rdata->psc = 0;
-    tim_rdata->ccer = TIM_CCER_CC2E;
+    tim_rdata->ccer = TIM_CCER_CC2E | ((O_TRUE==0) ? TIM_CCER_CC2P : 0);
     tim_rdata->ccmr1 = (TIM_CCMR1_CC2S(TIM_CCS_OUTPUT) |
                         TIM_CCMR1_OC2M(TIM_OCM_PWM1));
     tim_rdata->ccr2 = sysclk_ns(400);
