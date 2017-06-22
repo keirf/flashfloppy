@@ -208,6 +208,43 @@ static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
     return ok;
 }
 
+static bool_t datablock_xmit(const BYTE *buff, uint8_t token)
+{
+    uint8_t res, wc = 0;
+
+    if ((res = wait_ready()) != 0xff)
+        return FALSE;
+
+    /* Send the token. */
+    spi_xmit8(spi, token);
+
+    /* If token is Stop Transmission, we're done. */
+    if (token == 0xfd)
+        return TRUE;
+
+    spi_16bit_frame(spi);
+
+    spi->crcpr = 0x1021; /* CRC-CCITT */
+    spi->cr1 |= SPI_CR1_CRCEN;
+
+    /* Send the data. */
+    do {
+        uint16_t w = (uint16_t)*buff++ << 8;
+        w |= *buff++;
+        spi_xmit16(spi, w);
+    } while (--wc);
+
+    /* Send the CRC. */
+    spi_quiesce(spi);
+    spi_xmit16(spi, spi->txcrcr);
+    spi->cr1 &= ~SPI_CR1_CRCEN;
+
+    spi_8bit_frame(spi);
+
+    /* Check Data Response token: Data accepted? */
+    return (spi_recv8(spi) & 0x1f) == 0x05;
+}
+
 static void dump_cid_info(void)
 {
     uint8_t cid[16], crc;
@@ -403,6 +440,10 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
 {
+    uint8_t retry = 0;
+    UINT todo;
+    const BYTE *p;
+
     if (pdrv || !count)
         return RES_PARERR;
     if (status & STA_NOINIT)
@@ -411,7 +452,38 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
     if (!(cardtype & CT_BLOCK))
         sector <<= 9;
 
-    return RES_PARERR;
+    do {
+        todo = count;
+        p = buff;
+
+        if (count == 1) {
+            /* WRITE_BLOCK */
+            if (send_cmd(CMD(24), sector) != 0)
+                continue;
+            /* Write 1 block */
+            if (datablock_xmit(p, 0xfe))
+                todo--;
+        } else {
+            /* SET_WR_BLK_ERASE_COUNT */
+            if ((cardtype & (CT_SD1|CT_SD2))
+                && (send_cmd(ACMD(23), count) != 0))
+                continue;
+            /* WRITE_MULTIPLE_BLOCK */
+            if (send_cmd(CMD(25), sector) != 0)
+                continue;
+            /* Write <count> blocks */
+            while (datablock_xmit(p, 0xfc) && --todo)
+                p += 512;
+            /* Stop Transmission token */
+            if (!datablock_xmit(NULL, 0xfd))
+                todo = 1; /* error */
+        }
+
+        spi_release();
+
+    } while (todo && (++retry < 3));
+
+    return todo ? RES_ERROR : RES_OK;
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)
