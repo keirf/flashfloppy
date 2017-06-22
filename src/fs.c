@@ -52,18 +52,23 @@ void F_read(FIL *fp, void *buff, UINT btr, UINT *br)
 {
     UINT _br;
     FRESULT fr = f_read(fp, buff, btr, &_br);
-    if (br == NULL) {
-        if (_br < btr)
-            memset((char *)buff + _br, 0, btr - _br);
-    } else {
+    if (br != NULL) {
         *br = _br;
+    } else if (_br < btr) {
+        memset((char *)buff + _br, 0, btr - _br);
     }
     handle_fr(fr);
 }
 
 void F_write(FIL *fp, const void *buff, UINT btw, UINT *bw)
 {
-    FRESULT fr = f_write(fp, buff, btw, bw);
+    UINT _bw;
+    FRESULT fr = f_write(fp, buff, btw, &_bw);
+    if (bw != NULL) {
+        *bw = _bw;
+    } else if (_bw < btw) {
+        fr = FR_DISK_FULL;
+    }
     handle_fr(fr);
 }
 
@@ -88,6 +93,12 @@ void F_closedir(DIR *dp)
 void F_readdir(DIR *dp, FILINFO *fno)
 {
     FRESULT fr = f_readdir(dp, fno);
+    handle_fr(fr);
+}
+
+void F_unlink(const TCHAR *path)
+{
+    FRESULT fr = f_unlink(path);
     handle_fr(fr);
 }
 
