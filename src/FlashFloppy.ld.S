@@ -1,6 +1,14 @@
 ENTRY(vector_table)
 
-#if 1
+#if BUILD_GOTEK
+MEMORY
+{
+  FLASH (rx)      : ORIGIN = 0x08000000, LENGTH = 128K
+  RAM (rwx)       : ORIGIN = 0x20000000, LENGTH = 64K
+}
+REGION_ALIAS("RO", FLASH);
+REGION_ALIAS("RW", RAM);
+#elif BUILD_TOUCH
 MEMORY
 {
   FLASH (rx)      : ORIGIN = 0x08000000, LENGTH = 64K

@@ -101,7 +101,7 @@ static void floppy_check(void)
 #define floppy_check() ((void)0)
 #endif
 
-void floppy_deinit(void)
+void floppy_cancel(void)
 {
     unsigned int i;
 

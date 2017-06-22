@@ -97,7 +97,7 @@ uint16_t image_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
 uint32_t image_ticks_since_index(struct image *im);
 
 void floppy_init(const char *disk0_name);
-void floppy_deinit(void);
+void floppy_cancel(void);
 int floppy_handle(void);
 
 /*

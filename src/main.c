@@ -16,6 +16,10 @@ FIL file;
 
 uint8_t board_id;
 
+void speed_tests(void) __attribute__((weak, alias("dummy_fn")));
+void speed_tests_cancel(void) __attribute__((weak, alias("dummy_fn")));
+static void dummy_fn(void) {}
+
 static void do_tft(void)
 {
     uint16_t x, y;
@@ -75,8 +79,6 @@ int floppy_main(void)
     char buf[32];
     UINT i, nr;
 
-    floppy_init("nzs_crack.adf");
-
     list_dir("/");
     
     F_open(&file, "small", FA_READ);
@@ -89,6 +91,10 @@ int floppy_main(void)
         for (i = 0; i < nr; i++)
             printk("%c", buf[i]);
     }
+
+    speed_tests();
+
+    floppy_init("nzs_crack.adf");
 
     for (;;) {
         do_tft();
@@ -144,7 +150,8 @@ int main(void)
             clear_screen();
 
         F_call_cancellable(floppy_main);
-        floppy_deinit();
+        floppy_cancel();
+        speed_tests_cancel();
     }
 
     return 0;
