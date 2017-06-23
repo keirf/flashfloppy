@@ -30,6 +30,8 @@ static uint8_t pin_index; /* differs across board revisions */
 
 #define gpio_timer gpiob
 #define pin_wdata   6 /* must be 5v tolerant */
+#define dma_wdata   (dma1->ch1)
+#define tim_wdata   (tim4)
 #define pin_rdata   7
 #define dma_rdata   (dma1->ch7)
 #define tim_rdata   (tim4)

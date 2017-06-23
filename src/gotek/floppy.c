@@ -29,6 +29,8 @@
 
 #define gpio_timer gpioa
 #define pin_wdata   8
+#define dma_wdata   (dma1->ch2)
+#define tim_wdata   (tim1)
 #define pin_rdata   7
 #define dma_rdata   (dma1->ch3)
 #define tim_rdata   (tim3)
