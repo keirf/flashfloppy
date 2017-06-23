@@ -9,6 +9,13 @@ Citizen Z1DE-58A (a generic HD PC drive):
   - TRK0 asserted after 3ms
   - RDDAT asserted after 18ms
 
+Cortex-M3 STM32F1xx Timings:
+----------------------------
+Times assume 72MHz clock (14ns cycle time)
+ldr Rt,[Rn,#x] = 1cy,14ns memory; 3cy,42ns gpio
+irq entry = 12cy,167ns
+irq exit = 10cy,139ns
+
 HxC Gotek Timings:
 ------------------
 1. RDY is always asserted, regardless of whether a disk is inserted,
