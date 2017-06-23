@@ -133,7 +133,7 @@ static uint32_t random(uint32_t *rnd)
 #define BUF_SZ 8192
 static void speed_subtests(FIL *fp, struct stats *stats,
                            char *buf, unsigned int bufsz,
-                           int do_write, int do_delay, unsigned int blksz)
+                           int do_write, unsigned int blksz)
 {
     unsigned int i, j;
     uint32_t t[2], rnd = 0x12345678;
@@ -149,13 +149,8 @@ static void speed_subtests(FIL *fp, struct stats *stats,
         t[1] = time_now();
         stats_update(stats, t[1]-t[0]);
         t[0] = t[1];
-        if (do_delay && !(~i&((bufsz/blksz)-1))) {
-            delay_ms(200);
-            t[0] = time_now();
-        }
     }
-    printk("%sSequential %u-byte %ss (%uMB total):\n",
-           do_delay ? "Delayed " : "",
+    printk("Sequential %u-byte %ss (%uMB total):\n",
            blksz, do_write ? "write" : "read", TEST_MB);
     stats_print(stats);
 
@@ -170,13 +165,8 @@ static void speed_subtests(FIL *fp, struct stats *stats,
         t[1] = time_now();
         stats_update(stats, t[1]-t[0]);
         t[0] = t[1];
-        if (do_delay && !(~i&((bufsz/blksz)-1))) {
-            delay_ms(200);
-            t[0] = time_now();
-        }
     }
-    printk("%sRandom %u-byte %ss (%uMB total):\n",
-           do_delay ? "Delayed " : "",
+    printk("Random %u-byte %ss (%uMB total):\n",
            blksz, do_write ? "write" : "read", TEST_MB);
     stats_print(stats);
     
@@ -197,13 +187,8 @@ static void speed_subtests(FIL *fp, struct stats *stats,
             stats_update(stats, t[1]-t[0]);
             t[0] = t[1];
         }
-        if (do_delay) {
-            delay_ms(200);
-            t[0] = time_now();
-        }
     }
-    printk("%sClustered Random %u-byte %ss (%uMB total):\n",
-           do_delay ? "Delayed " : "",
+    printk("Clustered Random %u-byte %ss (%uMB total):\n",
            blksz, do_write ? "write" : "read", TEST_MB);
     stats_print(stats);
 }
@@ -240,12 +225,10 @@ void speed_tests(void)
     printk("Sequential create (%uMB total, 8kB block size):\n", TEST_MB);
     stats_print(stats);
 
-    speed_subtests(file, stats, buf, BUF_SZ, 0, 0, 512);
-    speed_subtests(file, stats, buf, BUF_SZ, 0, 0, BUF_SZ);
-    speed_subtests(file, stats, buf, BUF_SZ, 1, 0, 512);
-    speed_subtests(file, stats, buf, BUF_SZ, 1, 0, BUF_SZ);
-    speed_subtests(file, stats, buf, BUF_SZ, 1, 1, 512);
-    speed_subtests(file, stats, buf, BUF_SZ, 1, 1, BUF_SZ);
+    speed_subtests(file, stats, buf, BUF_SZ, 0, 512);
+    speed_subtests(file, stats, buf, BUF_SZ, 0, BUF_SZ);
+    speed_subtests(file, stats, buf, BUF_SZ, 1, 512);
+    speed_subtests(file, stats, buf, BUF_SZ, 1, BUF_SZ);
 
     F_close(file);
     F_unlink("speed_test");
