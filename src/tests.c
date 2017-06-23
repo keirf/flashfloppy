@@ -9,8 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-extern FIL file;
-
 /*
  * Stats accumulation and pretty printing
  */
@@ -212,26 +210,29 @@ static void speed_subtests(FIL *fp, struct stats *stats,
 
 void speed_tests(void)
 {
-    static char *buf;
+    FIL *file;
+    char *buf;
     struct stats *stats;
     unsigned int i;
     uint32_t t[2];
 
     arena_init();
+    
     stats = arena_alloc(sizeof(*stats));
     buf = arena_alloc(BUF_SZ);
+    file = arena_alloc(sizeof(*file));
 
     time_init();
 
     for (i = 0; i < BUF_SZ; i++)
         buf[i] = i;
 
-    F_open(&file, "speed_test", FA_READ|FA_WRITE|FA_CREATE_ALWAYS);
+    F_open(file, "speed_test", FA_READ|FA_WRITE|FA_CREATE_ALWAYS);
 
     stats_init(stats);
     t[0] = time_now();
     for (i = 0; i < TEST_SZ / BUF_SZ; i++) {
-        F_write(&file, buf, BUF_SZ, NULL);
+        F_write(file, buf, BUF_SZ, NULL);
         t[1] = time_now();
         stats_update(stats, t[1]-t[0]);
         t[0] = t[1];
@@ -239,14 +240,14 @@ void speed_tests(void)
     printk("Sequential create (%uMB total, 8kB block size):\n", TEST_MB);
     stats_print(stats);
 
-    speed_subtests(&file, stats, buf, BUF_SZ, 0, 0, 512);
-    speed_subtests(&file, stats, buf, BUF_SZ, 0, 0, BUF_SZ);
-    speed_subtests(&file, stats, buf, BUF_SZ, 1, 0, 512);
-    speed_subtests(&file, stats, buf, BUF_SZ, 1, 0, BUF_SZ);
-    speed_subtests(&file, stats, buf, BUF_SZ, 1, 1, 512);
-    speed_subtests(&file, stats, buf, BUF_SZ, 1, 1, BUF_SZ);
+    speed_subtests(file, stats, buf, BUF_SZ, 0, 0, 512);
+    speed_subtests(file, stats, buf, BUF_SZ, 0, 0, BUF_SZ);
+    speed_subtests(file, stats, buf, BUF_SZ, 1, 0, 512);
+    speed_subtests(file, stats, buf, BUF_SZ, 1, 0, BUF_SZ);
+    speed_subtests(file, stats, buf, BUF_SZ, 1, 1, 512);
+    speed_subtests(file, stats, buf, BUF_SZ, 1, 1, BUF_SZ);
 
-    F_close(&file);
+    F_close(file);
     F_unlink("speed_test");
 
     speed_tests_cancel();

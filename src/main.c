@@ -11,8 +11,13 @@
 
 int EXC_reset(void) __attribute__((alias("main")));
 
-FATFS fatfs;
-FIL file;
+static FATFS fatfs;
+static struct {
+    FIL file;
+    DIR dp;
+    FILINFO fp;
+    char lfn[_MAX_LFN+1];
+} *fs;
 
 uint8_t board_id;
 
@@ -49,29 +54,23 @@ static void canary_check(void)
 
 static void list_dir(const char *dir)
 {
-    DIR dp;
-    FILINFO fp;
-    static char lfn[_MAX_LFN+1];
     char *name;
     unsigned int i;
 
-    fp.lfname = lfn;
-    fp.lfsize = sizeof(lfn);
-
-    F_opendir(&dp, dir);
+    F_opendir(&fs->dp, dir);
 
     draw_string_8x16(0, 0, dir);
 
     for (i = 1; i < TFT_8x16_ROWS; ) {
-        F_readdir(&dp, &fp);
-        if (fp.fname[0] == '\0')
+        F_readdir(&fs->dp, &fs->fp);
+        if (fs->fp.fname[0] == '\0')
             break;
-        name = *fp.lfname ? fp.lfname : fp.fname;
+        name = *fs->fp.lfname ? fs->fp.lfname : fs->fp.fname;
         if (*name == '.')
             continue;
         draw_string_8x16(0, i++, name);
     }
-    F_closedir(&dp);
+    F_closedir(&fs->dp);
 }
 
 int floppy_main(void)
@@ -79,11 +78,16 @@ int floppy_main(void)
     char buf[32];
     UINT i, nr;
 
+    arena_init();
+    fs = arena_alloc(sizeof(*fs));
+    fs->fp.lfname = fs->lfn;
+    fs->fp.lfsize = sizeof(fs->lfn);
+
     list_dir("/");
-    
-    F_open(&file, "small", FA_READ);
+
+    F_open(&fs->file, "small", FA_READ);
     for (;;) {
-        F_read(&file, buf, sizeof(buf), &nr);
+        F_read(&fs->file, buf, sizeof(buf), &nr);
         if (nr == 0) {
             printk("\nEOF\n");
             break;
@@ -91,6 +95,9 @@ int floppy_main(void)
         for (i = 0; i < nr; i++)
             printk("%c", buf[i]);
     }
+    F_close(&fs->file);
+
+    fs = NULL;
 
     speed_tests();
 
