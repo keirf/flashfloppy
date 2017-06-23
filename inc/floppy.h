@@ -51,8 +51,6 @@ struct scp_image {
 };
 
 struct image {
-    struct drive *drive;
-
     struct image_handler *handler;
 
     /* FatFS. */
