@@ -15,6 +15,8 @@ struct exception_frame {
 
 #define illegal() asm volatile (".short 0xde00");
 
+#define dsb() asm volatile("dsb" ::: "memory")
+#define isb() asm volatile("isb" ::: "memory")
 #define barrier() asm volatile ("" ::: "memory")
 #define cpu_relax() asm volatile ("nop" ::: "memory")
 
