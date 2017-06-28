@@ -155,8 +155,8 @@ void led_7seg_init(void)
     /* Clear IRQ line and then enable it. Peripherals pulse their interrupt
      * line when any ISR flag transitions to set. If we do not ensure the ISR
      * flag is initially cleared, we will never receive an interrupt. */
-    dma1->ifcr = DMA_IFCR_CTCIF2;
-    IRQx_set_prio(LED_IRQ, 15); /* lowest */
+    dma1->ifcr = DMA_IFCR_CGIF(2);
+    IRQx_set_prio(LED_IRQ, LED_7SEG_PRI);
     IRQx_clear_pending(LED_IRQ);
     IRQx_enable(LED_IRQ);
 
@@ -224,7 +224,7 @@ static void IRQ_led_7seg(void)
     tim2->CLK_CCR = 0; /* CLK output locked HIGH */
     tim2->dier = 0; /* disable dma requests */
     dma1->ch2.ccr = 0;
-    dma1->ifcr = DMA_IFCR_CTCIF2;
+    dma1->ifcr = DMA_IFCR_CGIF(2);
 
     /* An update must have been in progress. */
     ASSERT(_flags & FLG_UPDATING);

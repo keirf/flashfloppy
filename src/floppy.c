@@ -38,32 +38,48 @@ void IRQ_23(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI9_5 */
 void IRQ_40(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI15_10 */
 static const uint8_t exti_irqs[] = { 6, 7, 8, 9, 10, 23, 40 };
 
+/* A DMA buffer for running a timer associated with a floppy-data I/O pin. */
+struct dma_ring {
+    /* Current state of DMA: */
+    /*  DMA_inactive: No activity, buffer is empty. */
+#define DMA_inactive 0 /* -> {starting, active} */
+    /*  DMA_starting: Buffer is filling, DMA+timer not yet active. */
+#define DMA_starting 1 /* -> {active, stopping} */
+    /*  DMA_active: DMA is active, timer is operational. */
+#define DMA_active   2 /* -> {stopping} */
+    /*  DMA_stopping: DMA+timer halted, buffer waiting to be cleared. */
+#define DMA_stopping 3 /* -> {inactive} */
+    volatile uint8_t state;
+    /* IRQ handler sets this if the prefetch queue runs dry. */
+    volatile uint8_t kick_dma_irq;
+    /* Indexes into the buf[] ring buffer. */
+    uint16_t prod, cons;
+    /* {inactive, starting} -> {active} must happen within this cancellation. 
+     * This allows it to be cancelled from the EXTI ISR if inputs change. */
+    struct cancellation startup_cancellation;
+    /* DMA ring buffer of timer values (ARR or CCRx). */
+    uint16_t buf[1024];
+};
+
+/* DMA buffers are permanently allocated while a disk image is loaded, allowing 
+ * independent and concurrent management of the RDATA/WDATA pins. */
+static struct dma_ring *dma_rd; /* RDATA DMA buffer */
+static struct dma_ring *dma_wr; /* WDATA DMA buffer */
+
 static struct drive drive[NR_DRIVES];
 static struct image *image;
-static struct {
-    uint16_t buf[2048];
-    uint16_t prod, cons;
-} *dma;
 static stk_time_t sync_time;
-/* data_state updated only in IRQ and cancellable contexts. */
-static enum {
-    DATA_stopped = 0,
-    DATA_seeking,
-    DATA_active
-} data_state;
 
 static struct {
     struct timer timer;
     bool_t active;
-    stk_time_t prev_time, next_time;
+    stk_time_t prev_time;
 } index;
 static void index_pulse(void *);
 
 static uint32_t max_load_ticks, max_prefetch_us;
 
-static void rddat_stop(void);
-
-static struct cancellation floppy_cancellation;
+static void rdata_stop(void);
 
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
@@ -80,7 +96,7 @@ static void floppy_check(void)
         case 1: pin = pin_index; break;
         case 2: pin = pin_trk0; break;
         case 3: pin = pin_wrprot; break;
-        case 4: pin = pin_rdata; gpio = gpio_timer; break;
+        case 4: pin = pin_rdata; gpio = gpio_data; break;
         case 5: pin = pin_rdy; break;
         default: pin = 0; i = 0; break;
         }
@@ -92,7 +108,7 @@ static void floppy_check(void)
         changed = input_update();
         inp = input_pins;
         /* Stash wdata in inp[1] (Touch) or inp[3] (Gotek). */
-        inp |= (gpio_timer->idr & m(pin_wdata)) >> 5;
+        inp |= (gpio_data->idr & m(pin_wdata)) >> 5;
         if ((inp ^ prev_inp) || changed)
             printk("IN: %02x->%02x (%02x)\n", prev_inp, inp, changed);
         prev_inp = inp;
@@ -106,10 +122,8 @@ void floppy_cancel(void)
 {
     unsigned int i;
 
-    ASSERT(!cancellation_is_active(&floppy_cancellation));
-
     /* Initialised? Bail if not. */
-    if (!dma)
+    if (!dma_rd)
         return;
 
     /* Stop interrupt work. */
@@ -118,7 +132,7 @@ void floppy_cancel(void)
     timer_cancel(&index.timer);
 
     /* Stop DMA/timer work. */
-    rddat_stop();
+    rdata_stop();
 
     /* Quiesce outputs. */
     gpio_write_pins(gpio_out, gpio_out_mask, O_FALSE);
@@ -127,10 +141,15 @@ void floppy_cancel(void)
     memset(drive, 0, sizeof(drive));
     memset(&index, 0, sizeof(index));
     max_load_ticks = max_prefetch_us = 0;
-    ASSERT(data_state == DATA_stopped);
-    ASSERT((dma->cons == 0) && (dma->prod == 0));
     image = NULL;
-    dma = NULL;
+    dma_rd = dma_wr = NULL;
+}
+
+static struct dma_ring *dma_ring_alloc(void)
+{
+    struct dma_ring *dma = arena_alloc(sizeof(*dma));
+    memset(dma, 0, offsetof(struct dma_ring, buf));
+    return dma;
 }
 
 void floppy_init(const char *disk0_name)
@@ -139,8 +158,8 @@ void floppy_init(const char *disk0_name)
 
     arena_init();
 
-    dma = arena_alloc(sizeof(*dma));
-    dma->cons = dma->prod = 0;
+    dma_rd = dma_ring_alloc();
+    dma_wr = dma_ring_alloc();
 
     image = arena_alloc(sizeof(*image));
     memset(image, 0, sizeof(*image));
@@ -163,13 +182,12 @@ void floppy_init(const char *disk0_name)
     gpio_configure_pin(gpio_out, pin_wrprot, GPO_bus);
     gpio_configure_pin(gpio_out, pin_rdy,    GPO_bus);
 
-    gpio_configure_pin(gpio_timer, pin_wdata, GPI_bus);
-    gpio_configure_pin(gpio_timer, pin_rdata, GPO_bus);
+    gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
+    gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
     floppy_check();
 
     index.prev_time = stk_now();
-    index.next_time = ~0u;
     timer_init(&index.timer, index_pulse, NULL);
     timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
 
@@ -179,6 +197,9 @@ void floppy_init(const char *disk0_name)
         IRQx_set_pending(exti_irqs[i]);
         IRQx_enable(exti_irqs[i]);
     }
+    dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch);
+    IRQx_set_prio(dma_rdata_irq, RDATA_IRQ_PRI);
+    IRQx_enable(dma_rdata_irq);
 
     /* Timer setup:
      * The counter is incremented at full SYSCLK rate. 
@@ -197,36 +218,39 @@ void floppy_init(const char *disk0_name)
 
     /* DMA setup: From a circular buffer into read-data timer's ARR. */
     dma_rdata.cpar = (uint32_t)(unsigned long)&tim_rdata->arr;
-    dma_rdata.cmar = (uint32_t)(unsigned long)dma->buf;
-    dma_rdata.cndtr = ARRAY_SIZE(dma->buf);
+    dma_rdata.cmar = (uint32_t)(unsigned long)dma_rd->buf;
+    dma_rdata.cndtr = ARRAY_SIZE(dma_rd->buf);
 }
 
 /* Called from IRQ context to stop the read stream. */
-static void rddat_stop(void)
+static void rdata_stop(void)
 {
-    int prev_state = data_state;
+    uint8_t prev_state = dma_rd->state;
 
-    data_state = DATA_stopped;
+    /* Already inactive? Nothing to do. */
+    if (prev_state == DMA_inactive)
+        return;
 
-    /* Reinitialise the circular buffer to empty. */
-    dma->cons = dma->prod = 0;
+    /* Ok we're now stopping DMA activity. */
+    dma_rd->state = DMA_stopping;
 
-    if (prev_state != DATA_active)
+    /* If DMA was not yet active, don't need to touch peripherals. */
+    if (prev_state != DMA_active)
         return;
 
     /* Turn off the output pin */
-    gpio_configure_pin(gpio_timer, pin_rdata, GPO_bus);
+    gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
     /* Turn off timer and DMA. */
     tim_rdata->cr1 = 0;
     dma_rdata.ccr = 0;
-    dma_rdata.cndtr = ARRAY_SIZE(dma->buf);
+    dma_rdata.cndtr = ARRAY_SIZE(dma_rd->buf);
 }
 
-/* Called from cancellable context to start the read stream. */
-static void rddat_start(void)
+/* Called from Thread context to start the read stream. */
+static int rdata_start(void)
 {
-    data_state = DATA_active;
+    dma_rd->state = DMA_active;
     barrier(); /* ensure IRQ sees the flag before we act on it */
 
     /* Start DMA from circular buffer. */
@@ -236,6 +260,8 @@ static void rddat_start(void)
                      DMA_CCR_MINC |
                      DMA_CCR_CIRC |
                      DMA_CCR_DIR_M2P |
+                     DMA_CCR_HTIE |
+                     DMA_CCR_TCIE |
                      DMA_CCR_EN);
 
     /* Start timer. */
@@ -244,7 +270,9 @@ static void rddat_start(void)
     tim_rdata->cr1 = TIM_CR1_CEN;
 
     /* Enable output. */
-    gpio_configure_pin(gpio_timer, pin_rdata, AFO_bus);
+    gpio_configure_pin(gpio_data, pin_rdata, AFO_bus);
+
+    return 0;
 }
 
 static void image_stop_track(struct image *im)
@@ -260,11 +288,12 @@ static void floppy_sync_flux(void)
     int32_t ticks;
     uint32_t nr;
 
-    nr = ARRAY_SIZE(dma->buf) - dma->prod - 1;
+    nr = ARRAY_SIZE(dma_rd->buf) - dma_rd->prod - 1;
     if (nr)
-        dma->prod += image_load_flux(drv->image, &dma->buf[dma->prod], nr);
+        dma_rd->prod += image_load_flux(
+            drv->image, &dma_rd->buf[dma_rd->prod], nr);
 
-    if (dma->prod < ARRAY_SIZE(dma->buf)/2)
+    if (dma_rd->prod < ARRAY_SIZE(dma_rd->buf)/2)
         return;
 
     ticks = stk_delta(stk_now(), sync_time) - stk_us(1);
@@ -274,78 +303,8 @@ static void floppy_sync_flux(void)
     if (ticks > 0)
         delay_ticks(ticks);
     ticks = stk_delta(stk_now(), sync_time); /* XXX */
-    rddat_start();
+    call_cancellable_fn(&dma_rd->startup_cancellation, rdata_start);
     printk("Trk %u: sync_ticks=%d\n", drv->image->cur_track, ticks);
-}
-
-static int floppy_load_flux(void)
-{
-    uint32_t ticks, i;
-    uint16_t nr_to_wrap, nr_to_cons, nr, dmacons;
-    stk_time_t now;
-    struct drive *drv = &drive[0];
-
-    if (data_state == DATA_stopped) {
-        data_state = DATA_seeking;
-        /* caller seeks */
-        return -1;
-    }
-
-    if (data_state == DATA_seeking) {
-        floppy_sync_flux();
-        if (data_state != DATA_active)
-            return 0;
-    }
-
-    dmacons = ARRAY_SIZE(dma->buf) - dma_rdata.cndtr;
-
-    /* Check for DMA catching up with the producer index (underrun). */
-    if (((dmacons < dma->cons)
-         ? (dma->prod >= dma->cons) || (dma->prod < dmacons)
-         : (dma->prod >= dma->cons) && (dma->prod < dmacons))
-        && (dmacons != dma->cons))
-        printk("Buffer underrun! %x-%x-%x\n", dma->cons, dma->prod, dmacons);
-
-    ticks = image_ticks_since_index(drv->image);
-
-    nr_to_wrap = ARRAY_SIZE(dma->buf) - dma->prod;
-    nr_to_cons = (dmacons - dma->prod - 1) & (ARRAY_SIZE(dma->buf) - 1);
-    nr = min(nr_to_wrap, nr_to_cons);
-    if (nr) {
-        dma->prod += image_load_flux(drv->image, &dma->buf[dma->prod], nr);
-        dma->prod &= ARRAY_SIZE(dma->buf) - 1;
-    }
-
-    dma->cons = dmacons;
-
-    /* Check if we have crossed the index mark. */
-    if (image_ticks_since_index(drv->image) < ticks) {
-        /* Synchronise index pulse to the bitstream. */
-        for (;;) {
-            /* Snapshot current position in flux stream, including progress
-             * through current timer sample. */
-            now = stk_now();
-            /* Ticks left in current sample. */
-            ticks = tim_rdata->arr - tim_rdata->cnt;
-            /* Index of next sample. */
-            dmacons = ARRAY_SIZE(dma->buf) - dma_rdata.cndtr;
-            /* If another sample was loaded meanwhile, try again for a 
-             * consistent snapshot. */
-            if (dmacons == dma->cons)
-                break;
-            dma->cons = dmacons;
-        }
-        /* Sum all flux timings in the DMA buffer. */
-        for (i = dmacons; i != dma->prod; i = (i+1) & (ARRAY_SIZE(dma->buf)-1))
-            ticks += dma->buf[i] + 1;
-        /* Subtract current flux offset beyond the index. */
-        ticks -= image_ticks_since_index(drv->image);
-        /* Calculate deadline for index timer. */
-        ticks /= SYSCLK_MHZ/STK_MHZ;
-        index.next_time = stk_add(now, ticks);
-    }
-
-    return 0;
 }
 
 int floppy_handle(void)
@@ -416,28 +375,37 @@ int floppy_handle(void)
 
     timestamp[0] = stk_now();
 
-    prev_dmaprod = dma->prod;
+    prev_dmaprod = dma_rd->prod;
 
-    if (call_cancellable_fn(&floppy_cancellation, floppy_load_flux) == -1) {
+    switch (dma_rd->state) {
+    case DMA_inactive:
+        dma_rd->state = DMA_starting;
         image_stop_track(drv->image);
         return 0;
-    }
-
-    if (index.next_time != ~0u) {
-        timer_set(&index.timer, index.next_time);
-        index.next_time = ~0u;
+    case DMA_starting:
+        floppy_sync_flux();
+        break;
+    case DMA_stopping:
+        dma_rd->state = DMA_inactive;
+        /* Reinitialise the circular buffer to empty. */
+        dma_rd->cons = dma_rd->prod = 0;
+        break;
+    case DMA_active:
+        /* nothing */
+        break;
     }
 
     timestamp[1] = stk_now();
-
-    image_prefetch_data(drv->image);
-
+    if (image_prefetch_data(drv->image) && dma_rd->kick_dma_irq) {
+        dma_rd->kick_dma_irq = FALSE;
+        IRQx_set_pending(dma_rdata_irq);
+    }
     timestamp[2] = stk_now();
 
     /* 9MHz ticks per generated flux transition */
     load_ticks = stk_diff(timestamp[0],timestamp[1]);
-    i = dma->prod - prev_dmaprod;
-    load_ticks = (i > 100 && dma->prod) ? load_ticks / i : 0;
+    i = dma_rd->prod - prev_dmaprod;
+    load_ticks = (i > 100 && dma_rd->prod) ? load_ticks / i : 0;
     /* Microseconds to prefetch data */
     prefetch_us = stk_diff(timestamp[1],timestamp[2])/STK_MHZ;
     /* If we have a new maximum, print it. */
@@ -461,7 +429,7 @@ static void index_pulse(void *dat)
         timer_set(&index.timer, stk_add(index.prev_time, stk_ms(2)));
     } else {
         gpio_write_pin(gpio_out, pin_index, O_FALSE);
-        if (data_state != DATA_active) /* timer set from input flux stream */
+        if (dma_rd->state != DMA_active) /* timer set from input flux stream */
             timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
     }
 }
@@ -492,8 +460,8 @@ static void IRQ_input_changed(void)
             drv->step.active = TRUE;
             if (i == 0) {
                 gpio_write_pin(gpio_out, pin_trk0, O_FALSE);
-                rddat_stop();
-                cancel_call(&floppy_cancellation);
+                rdata_stop();
+                cancel_call(&dma_rd->startup_cancellation);
             }
         }
     }
@@ -503,11 +471,89 @@ static void IRQ_input_changed(void)
             drv = &drive[i];
             drv->head = !(inp & m(inp_side));
             if (i == 0) {
-                rddat_stop();
-                cancel_call(&floppy_cancellation);
+                rdata_stop();
+                cancel_call(&dma_rd->startup_cancellation);
             }
         }
     }
+}
+
+static void IRQ_rdata_dma(void)
+{
+    const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
+    uint32_t prev_ticks_since_index, ticks, i;
+    uint16_t nr_to_wrap, nr_to_cons, nr, dmacons, done;
+    stk_time_t now;
+    struct drive *drv = &drive[0];
+
+    /* Clear DMA peripheral interrupts. */
+    dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch);
+
+    /* If we happen to be called in the wrong state, just bail. */
+    if (dma_rd->state != DMA_active)
+        return;
+
+    /* Find out where the DMA engine's consumer index has got to. */
+    dmacons = ARRAY_SIZE(dma_rd->buf) - dma_rdata.cndtr;
+
+    /* Check for DMA catching up with the producer index (underrun). */
+    if (((dmacons < dma_rd->cons)
+         ? (dma_rd->prod >= dma_rd->cons) || (dma_rd->prod < dmacons)
+         : (dma_rd->prod >= dma_rd->cons) && (dma_rd->prod < dmacons))
+        && (dmacons != dma_rd->cons))
+        printk("Buffer underrun! %x-%x-%x\n",
+               dma_rd->cons, dma_rd->prod, dmacons);
+
+    dma_rd->cons = dmacons;
+
+    /* Find largest contiguous stretch of ring buffer we can fill. */
+    nr_to_wrap = ARRAY_SIZE(dma_rd->buf) - dma_rd->prod;
+    nr_to_cons = (dmacons - dma_rd->prod - 1) & buf_mask;
+    nr = min(nr_to_wrap, nr_to_cons);
+    if (nr == 0) /* Buffer already full? Then bail. */
+        return;
+
+    /* Now attempt to fill the contiguous stretch with flux data calculated 
+     * from prefetched image data. */
+    prev_ticks_since_index = image_ticks_since_index(drv->image);
+    dma_rd->prod += done = image_load_flux(
+        drv->image, &dma_rd->buf[dma_rd->prod], nr);
+    dma_rd->prod &= buf_mask;
+    if (done != nr) {
+        /* Prefetch buffer ran dry: kick us when more data is available. */
+        dma_rd->kick_dma_irq = TRUE;
+    } else if (nr != nr_to_cons) {
+        /* We didn't fill the ring: re-enter this ISR to do more work. */
+        IRQx_set_pending(dma_rdata_irq);
+    }
+
+    /* Check if we have crossed the index mark. If not, we're done. */
+    if (image_ticks_since_index(drv->image) >= prev_ticks_since_index)
+        return;
+
+    /* We crossed the index mark: Synchronise index pulse to the bitstream. */
+    for (;;) {
+        /* Snapshot current position in flux stream, including progress through
+         * current timer sample. */
+        now = stk_now();
+        /* Ticks left in current sample. */
+        ticks = tim_rdata->arr - tim_rdata->cnt;
+        /* Index of next sample. */
+        dmacons = ARRAY_SIZE(dma_rd->buf) - dma_rdata.cndtr;
+        /* If another sample was loaded meanwhile, try again for a consistent
+         * snapshot. */
+        if (dmacons == dma_rd->cons)
+            break;
+        dma_rd->cons = dmacons;
+    }
+    /* Sum all flux timings in the DMA buffer. */
+    for (i = dmacons; i != dma_rd->prod; i = (i+1) & buf_mask)
+        ticks += dma_rd->buf[i] + 1;
+    /* Subtract current flux offset beyond the index. */
+    ticks -= image_ticks_since_index(drv->image);
+    /* Calculate deadline for index timer. */
+    ticks /= SYSCLK_MHZ/STK_MHZ;
+    timer_set(&index.timer, stk_add(now, ticks));
 }
 
 /*

@@ -26,7 +26,7 @@ void USB_OTG_BSP_Init(USB_OTG_CORE_HANDLE *pdev)
 
 void USB_OTG_BSP_EnableInterrupt(USB_OTG_CORE_HANDLE *pdev)
 {
-    IRQx_set_prio(USB_IRQ, 14); /* low-ish */
+    IRQx_set_prio(USB_IRQ, USB_IRQ_PRI);
     IRQx_enable(USB_IRQ);
 }
 

@@ -83,14 +83,14 @@ struct image_handler {
     bool_t (*open)(struct image *im);
     bool_t (*seek_track)(struct image *im, uint8_t track,
                          stk_time_t *ptime_after_index);
-    void (*prefetch_data)(struct image *im);
+    bool_t (*prefetch_data)(struct image *im);
     uint16_t (*load_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
 };
 
 bool_t image_open(struct image *im, const char *name);
 bool_t image_seek_track(struct image *im, uint8_t track,
                         stk_time_t *ptime_after_index);
-void image_prefetch_data(struct image *im);
+bool_t image_prefetch_data(struct image *im);
 uint16_t image_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
 uint32_t image_ticks_since_index(struct image *im);
 

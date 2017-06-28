@@ -109,7 +109,7 @@ static bool_t scp_seek_track(struct image *im, uint8_t track,
     return TRUE;
 }
 
-static void scp_prefetch_data(struct image *im)
+static bool_t scp_prefetch_data(struct image *im)
 {
     UINT nr, nr_flux = im->scp.rev[im->scp.pf_rev].nr_dat;
     uint16_t *buf = (uint16_t *)im->buf;
@@ -117,7 +117,7 @@ static void scp_prefetch_data(struct image *im)
 
     /* At least 2kB buffer space available to fill? */
     if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-2048)/2)
-        return;
+        return FALSE;
 
     off = im->scp.rev[im->scp.pf_rev].dat_off + im->scp.pf_pos*2;
     F_lseek(&im->fp, off);
@@ -139,6 +139,8 @@ static void scp_prefetch_data(struct image *im)
         im->scp.pf_pos = 0;
         im->scp.pf_rev = (im->scp.pf_rev + 1) % ARRAY_SIZE(im->scp.rev);
     }
+
+    return TRUE;
 }
 
 static uint16_t scp_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)

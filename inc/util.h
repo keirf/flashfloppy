@@ -124,9 +124,13 @@ extern uint32_t _irq_stacktop[], _irq_stackbottom[];
 
 /* IRQ priorities, 0 (highest) to 15 (lowest). */
 #define FLOPPY_IRQ_HI_PRI     1
-#define TIMER_IRQ_PRI         8
-#define FLOPPY_IRQ_LO_PRI    13
-#define CONSOLE_IRQ_PRI      14
+#define TIMER_IRQ_PRI         4
+#define WDATA_IRQ_PRI         7
+#define RDATA_IRQ_PRI         8
+#define FLOPPY_IRQ_LO_PRI     9
+#define USB_IRQ_PRI          10
+#define LED_7SEG_PRI         14
+#define CONSOLE_IRQ_PRI      15
 
 /*
  * Local variables:

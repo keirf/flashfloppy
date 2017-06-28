@@ -113,13 +113,13 @@ static bool_t hfe_seek_track(struct image *im, uint8_t track,
     return TRUE;
 }
 
-static void hfe_prefetch_data(struct image *im)
+static bool_t hfe_prefetch_data(struct image *im)
 {
     const UINT nr = 256;
     uint8_t *buf = (uint8_t *)im->buf;
 
     if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-256)*8)
-        return;
+        return FALSE;
 
     F_lseek(&im->fp,
             im->hfe.trk_off * 512
@@ -131,6 +131,8 @@ static void hfe_prefetch_data(struct image *im)
     im->hfe.trk_pos += nr;
     if (im->hfe.trk_pos >= im->hfe.trk_len)
         im->hfe.trk_pos = 0;
+
+    return TRUE;
 }
 
 static uint16_t hfe_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)

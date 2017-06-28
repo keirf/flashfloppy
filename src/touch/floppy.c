@@ -28,13 +28,20 @@ static uint8_t pin_index; /* differs across board revisions */
 #define pin_wrprot 11
 #define pin_rdy    12
 
-#define gpio_timer gpiob
+#define gpio_data gpiob
+
 #define pin_wdata   6 /* must be 5v tolerant */
-#define dma_wdata   (dma1->ch1)
 #define tim_wdata   (tim4)
+#define dma_wdata   (dma1->ch1)
+#define dma_wdata_ch 1
+#define dma_wdata_irq 11
+
 #define pin_rdata   7
-#define dma_rdata   (dma1->ch7)
 #define tim_rdata   (tim4)
+#define dma_rdata   (dma1->ch7)
+#define dma_rdata_ch 7
+#define dma_rdata_irq 17
+void IRQ_17(void) __attribute__((alias("IRQ_rdata_dma")));
 
 #define NR_DRIVES 2
 

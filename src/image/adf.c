@@ -80,13 +80,13 @@ static bool_t adf_seek_track(struct image *im, uint8_t track,
     return TRUE;
 }
 
-static void adf_prefetch_data(struct image *im)
+static bool_t adf_prefetch_data(struct image *im)
 {
     const UINT nr = 512;
     uint8_t *buf = (uint8_t *)im->buf;
 
     if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-512)*8)
-        return;
+        return FALSE;
 
     F_lseek(&im->fp, im->adf.trk_off + im->adf.trk_pos);
     F_read(&im->fp, &buf[(im->prod/8) % sizeof(im->buf)], nr, NULL);
@@ -94,6 +94,8 @@ static void adf_prefetch_data(struct image *im)
     im->adf.trk_pos += nr;
     if (im->adf.trk_pos >= im->adf.trk_len)
         im->adf.trk_pos = 0;
+
+    return TRUE;
 }
 
 static uint16_t adf_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)

@@ -27,13 +27,20 @@
 #define pin_wrprot  5
 #define pin_rdy     3
 
-#define gpio_timer gpioa
+#define gpio_data gpioa
+
 #define pin_wdata   8
-#define dma_wdata   (dma1->ch2)
 #define tim_wdata   (tim1)
+#define dma_wdata   (dma1->ch2)
+#define dma_wdata_ch 2
+#define dma_wdata_irq 12
+
 #define pin_rdata   7
-#define dma_rdata   (dma1->ch3)
 #define tim_rdata   (tim3)
+#define dma_rdata   (dma1->ch3)
+#define dma_rdata_ch 3
+#define dma_rdata_irq 13
+void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
 
 #define NR_DRIVES 1
 

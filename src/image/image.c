@@ -38,7 +38,7 @@ bool_t image_seek_track(struct image *im, uint8_t track,
     return im->handler->seek_track(im, track, ptime_after_index);
 }
 
-void image_prefetch_data(struct image *im)
+bool_t image_prefetch_data(struct image *im)
 {
     return im->handler->prefetch_data(im);
 }

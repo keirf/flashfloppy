@@ -56,7 +56,7 @@ static void IRQ_dma1_ch4_tc(void)
 {
     /* Clear the DMA controller. */
     dma1->ch4.ccr = 0;
-    dma1->ifcr = DMA_IFCR_CTCIF4;
+    dma1->ifcr = DMA_IFCR_CGIF(4);
 
     /* Update ring state. */
     cons += dma_sz;
@@ -142,7 +142,7 @@ void console_init(void)
 
     /* Initialise DMA1 channel 4 and its completion interrupt. */
     dma1->ch4.cpar = (uint32_t)(unsigned long)&usart1->dr;
-    dma1->ifcr = DMA_IFCR_CTCIF4;
+    dma1->ifcr = DMA_IFCR_CGIF(4);
     IRQx_set_prio(DMA1_CH4_IRQ, CONSOLE_IRQ_PRI);
     IRQx_enable(DMA1_CH4_IRQ);
 }
