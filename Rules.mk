@@ -12,6 +12,7 @@ FLAGS += -Wall -Werror -Wno-format -Wdeclaration-after-statement
 FLAGS += -Wstrict-prototypes -Wredundant-decls -Wnested-externs
 FLAGS += -fno-common -fno-exceptions -fno-strict-aliasing
 FLAGS += -mlittle-endian -mthumb -mcpu=cortex-m3 -mfloat-abi=soft
+FLAGS += -Wno-unused-value
 
 FLAGS-$(gotek) += -DBUILD_GOTEK=1
 FLAGS-$(touch) += -DBUILD_TOUCH=1

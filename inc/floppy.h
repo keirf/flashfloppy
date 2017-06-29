@@ -13,19 +13,6 @@
 #define DRIVE_MS_PER_REV (60000u/DRIVE_RPM)
 #define DRIVE_SETTLE_MS 12
 
-struct drive {
-    const char *filename;
-    uint8_t cyl, head;
-    bool_t sel;
-    struct {
-        bool_t active;
-        bool_t settling;
-        bool_t inward;
-        stk_time_t start;
-    } step;
-    struct image *image;
-};
-
 struct adf_image {
     uint32_t trk_off;
     uint16_t trk_pos, trk_len;
@@ -77,8 +64,6 @@ struct image {
     };
 };
 
-#define TRACKNR_INVALID ((uint16_t)-1)
-
 struct image_handler {
     bool_t (*open)(struct image *im);
     bool_t (*seek_track)(
@@ -101,9 +86,10 @@ uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
 /* Rotational position of last-generated flux (SYSCLK ticks past index). */
 uint32_t image_ticks_since_index(struct image *im);
 
-void floppy_init(const char *disk0_name);
+void floppy_init(void);
+void floppy_insert(unsigned int unit, const char *image_name);
 void floppy_cancel(void);
-int floppy_handle(void);
+void floppy_handle(void);
 
 /*
  * Local variables:

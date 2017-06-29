@@ -101,7 +101,7 @@ int floppy_main(void)
 
     speed_tests();
 
-    floppy_init("nzs_crack.adf");
+    floppy_insert(0, "nzs_crack.adf");
 
     for (;;) {
         do_tft();
@@ -142,6 +142,8 @@ int main(void)
     led_7seg_write_hex(0xdea);
 
     usbh_msc_init();
+
+    floppy_init();
 
     for (;;) {
 

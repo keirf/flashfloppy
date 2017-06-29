@@ -38,6 +38,11 @@ void IRQ_23(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI9_5 */
 void IRQ_40(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI15_10 */
 static const uint8_t exti_irqs[] = { 6, 7, 8, 9, 10, 23, 40 };
 
+/* A soft IRQ for handling step pulses. */
+static void drive_step_timer(void *_drv);
+void IRQ_43(void) __attribute__((alias("IRQ_step")));
+#define STEP_IRQ 43
+
 /* A DMA buffer for running a timer associated with a floppy-data I/O pin. */
 struct dma_ring {
     /* Current state of DMA: */
@@ -66,7 +71,28 @@ struct dma_ring {
 static struct dma_ring *dma_rd; /* RDATA DMA buffer */
 static struct dma_ring *dma_wr; /* WDATA DMA buffer */
 
-static struct drive drive[NR_DRIVES];
+/* Statically-allocated floppy drive state. Tracks head movements and 
+ * side changes at all times, even when the drive is empty. */
+static struct drive {
+    const char *filename;
+    uint8_t cyl, head;
+    bool_t sel;
+    struct {
+        bool_t started; /* set by hi-irq, cleared by lo-irq */
+        bool_t active;  /* set by hi-irq, cleared by step.timer */
+        bool_t settling; /* set by timer, cleared by timer or hi-irq */
+#define STEP_started  1 /* started by hi-pri IRQ */
+#define STEP_latched  2 /* latched by lo-pri IRQ */
+#define STEP_active   (STEP_started | STEP_latched)
+#define STEP_settling 4 /* handled by step.timer */
+        uint8_t state;
+        bool_t inward;
+        stk_time_t start;
+        struct timer timer;
+    } step;
+    struct image *image;
+} drive[NR_DRIVES];
+
 static struct image *image;
 static stk_time_t sync_time;
 
@@ -120,26 +146,23 @@ static void floppy_check(void)
 
 void floppy_cancel(void)
 {
-    unsigned int i;
-
     /* Initialised? Bail if not. */
     if (!dma_rd)
         return;
 
-    /* Stop interrupt work. */
-    for (i = 0; i < ARRAY_SIZE(exti_irqs); i++)
-        IRQx_disable(exti_irqs[i]);
-    timer_cancel(&index.timer);
-
     /* Stop DMA/timer work. */
+    IRQx_disable(dma_rdata_irq);
+    timer_cancel(&index.timer);
     rdata_stop();
 
-    /* Quiesce outputs. */
-    gpio_write_pins(gpio_out, gpio_out_mask, O_FALSE);
+    /* Set outputs for empty drive. */
+    index.active = FALSE;
+    gpio_write_pins(gpio_out, m(pin_index) | m(pin_rdy), O_FALSE);
+//    gpio_write_pins(gpio_out, m(pin_dskchg), O_TRUE);
 
     /* Clear soft state. */
-    memset(drive, 0, sizeof(drive));
-    memset(&index, 0, sizeof(index));
+    drive->image = NULL;
+    drive->filename = NULL;
     max_read_us = 0;
     image = NULL;
     dma_rd = dma_wr = NULL;
@@ -152,29 +175,22 @@ static struct dma_ring *dma_ring_alloc(void)
     return dma;
 }
 
-void floppy_init(const char *disk0_name)
+void floppy_init(void)
 {
     unsigned int i;
 
-    arena_init();
-
-    dma_rd = dma_ring_alloc();
-    dma_wr = dma_ring_alloc();
-
-    image = arena_alloc(sizeof(*image));
-    memset(image, 0, sizeof(*image));
-
     board_floppy_init();
 
-    gpio_out_mask = ((1u << pin_dskchg)
-                     | (1u << pin_index)
-                     | (1u << pin_trk0)
-                     | (1u << pin_wrprot)
-                     | (1u << pin_rdy));
+    gpio_out_mask = (m(pin_dskchg)
+                     | m(pin_index)
+                     | m(pin_trk0)
+                     | m(pin_wrprot)
+                     | m(pin_rdy));
 
-    for (i = 0; i < NR_DRIVES; i++)
+    for (i = 0; i < NR_DRIVES; i++) {
         drive[i].cyl = 1; /* XXX */
-    drive[0].filename = disk0_name;
+        timer_init(&drive[i].step.timer, drive_step_timer, &drive[i]);
+    }
 
     gpio_configure_pin(gpio_out, pin_dskchg, GPO_bus);
     gpio_configure_pin(gpio_out, pin_index,  GPO_bus);
@@ -187,16 +203,34 @@ void floppy_init(const char *disk0_name)
 
     floppy_check();
 
-    index.prev_time = stk_now();
-    timer_init(&index.timer, index_pulse, NULL);
-    timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
-
-    /* Enable interrupts. */
+    /* Enable physical interface interrupts. */
     for (i = 0; i < ARRAY_SIZE(exti_irqs); i++) {
         IRQx_set_prio(exti_irqs[i], FLOPPY_IRQ_HI_PRI);
         IRQx_set_pending(exti_irqs[i]);
         IRQx_enable(exti_irqs[i]);
     }
+    IRQx_set_prio(STEP_IRQ, FLOPPY_IRQ_LO_PRI);
+    IRQx_enable(STEP_IRQ);
+
+    timer_init(&index.timer, index_pulse, NULL);
+}
+
+void floppy_insert(unsigned int unit, const char *image_name)
+{
+    arena_init();
+
+    dma_rd = dma_ring_alloc();
+    dma_wr = dma_ring_alloc();
+
+    image = arena_alloc(sizeof(*image));
+    memset(image, 0, sizeof(*image));
+
+    drive[unit].filename = image_name;
+
+    index.prev_time = stk_now();
+    timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
+
+    /* Enable DMA interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch);
     IRQx_set_prio(dma_rdata_irq, RDATA_IRQ_PRI);
     IRQx_enable(dma_rdata_irq);
@@ -247,9 +281,13 @@ static void rdata_stop(void)
     dma_rdata.cndtr = ARRAY_SIZE(dma_rd->buf);
 }
 
-/* Called from Thread context to start the read stream. */
+/* Called from a cancellable context to start the read stream. */
 static int rdata_start(void)
 {
+    /* Did we race cancellation? Then bail. */
+    if (dma_rd->state == DMA_stopping)
+        return 0;
+
     dma_rd->state = DMA_active;
     barrier(); /* ensure IRQ sees the flag before we act on it */
 
@@ -273,13 +311,6 @@ static int rdata_start(void)
     gpio_configure_pin(gpio_data, pin_rdata, AFO_bus);
 
     return 0;
-}
-
-static void image_stop_track(struct image *im)
-{
-    im->cur_track = TRACKNR_INVALID;
-    if (!index.active)
-        timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
 }
 
 static void floppy_sync_flux(void)
@@ -307,56 +338,57 @@ static void floppy_sync_flux(void)
     printk("Trk %u: sync_ticks=%d\n", drv->image->cur_track, ticks);
 }
 
-int floppy_handle(void)
+static void floppy_read_data(struct drive *drv)
 {
-    uint32_t i, read_us, now = stk_now();
+    uint32_t read_us;
     stk_time_t timestamp;
-    struct drive *drv;
 
-    for (i = 0; i < NR_DRIVES; i++) {
-        drv = &drive[i];
-        if (drv->step.active) {
-            drv->step.settling = FALSE;
-            if (stk_diff(drv->step.start, now) < stk_ms(2))
-                continue;
-            speaker_pulse(10);
-            drv->cyl += drv->step.inward ? 1 : -1;
-            barrier(); /* update cyl /then/ clear active */
-            drv->step.active = FALSE;
-            drv->step.settling = TRUE;
-            if ((i == 0) && (drv->cyl == 0))
-                gpio_write_pin(gpio_out, pin_trk0, O_TRUE);
-        } else if (drv->step.settling) {
-            if (stk_diff(drv->step.start, now) < stk_ms(DRIVE_SETTLE_MS))
-                continue;
-            drv->step.settling = FALSE;
-        }
+    /* Read some track data if there is buffer space. */
+    timestamp = stk_now();
+    if (image_read_track(drv->image) && dma_rd->kick_dma_irq) {
+        /* We buffered some more data and the DMA handler requested a kick. */
+        dma_rd->kick_dma_irq = FALSE;
+        IRQx_set_pending(dma_rdata_irq);
     }
 
-    drv = &drive[0];
+    /* Log maximum time taken to read track data, in microseconds. */
+    read_us = stk_diff(timestamp, stk_now()) / STK_MHZ;
+    if (read_us > max_read_us) {
+        max_read_us = max_t(uint32_t, max_read_us, read_us);
+        printk("New max: read_us=%u\n", max_read_us);
+    }
+}
+
+void floppy_handle(void)
+{
+    struct drive *drv = &drive[0];
 
     if (!drv->image) {
         if (!image_open(image, drv->filename))
-            return -1;
+            return;
         drv->image = image;
-        image_stop_track(drv->image);
+        dma_rd->state = DMA_stopping;
     }
 
-    if (drv->image->cur_track == TRACKNR_INVALID) {
+    switch (dma_rd->state) {
+
+    case DMA_inactive: {
         stk_time_t index_time, read_start_pos;
+        unsigned int track;
         bool_t wrapped;
         /* Allow 10ms from current rotational position to load new track */
         int32_t delay = stk_ms(10);
-        /* No data fetch while stepping. */
-        if (drv->step.active)
-            goto out;
         /* Allow extra time if heads are settling. */
-        if (drv->step.settling) {
+        if (drv->step.state & STEP_settling) {
             stk_time_t step_settle = stk_add(drv->step.start,
                                              stk_ms(DRIVE_SETTLE_MS));
             int32_t delta = stk_delta(stk_now(), step_settle);
             delay = max_t(int32_t, delta, delay);
         }
+        /* No data fetch while stepping. */
+        barrier(); /* check STEP_settling /then/ check STEP_active */
+        if (drv->step.state & STEP_active)
+            break;
         /* Work out where in new track to start reading data from. */
         index_time = index.prev_time;
         read_start_pos = stk_timesince(index_time) + delay;
@@ -364,49 +396,41 @@ int floppy_handle(void)
         if (wrapped)
             read_start_pos -= stk_ms(DRIVE_MS_PER_REV);
         /* Seek to the new track. */
+        track = drv->cyl*2 + drv->head;
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
-        image_seek_track(drv->image, drv->cyl*2 + drv->head, &read_start_pos);
+        image_seek_track(drv->image, track, &read_start_pos);
         read_start_pos /= SYSCLK_MHZ/STK_MHZ;
         /* Set the deadline. */
         if (wrapped)
             read_start_pos += stk_ms(DRIVE_MS_PER_REV);
         sync_time = stk_add(index_time, read_start_pos);
+        /* Change state /then/ check for race against step or side change. */
+        dma_rd->state = DMA_starting;
+        barrier();
+        if ((drv->step.state & STEP_active)
+            || (track != (drv->cyl*2 + drv->head)))
+            dma_rd->state = DMA_stopping;
+        break;
     }
 
-    switch (dma_rd->state) {
-    case DMA_inactive:
-        dma_rd->state = DMA_starting;
-        image_stop_track(drv->image);
-        return 0;
     case DMA_starting:
+        floppy_read_data(drv);
         floppy_sync_flux();
         break;
+
+    case DMA_active:
+        floppy_read_data(drv);
+        break;
+
     case DMA_stopping:
         dma_rd->state = DMA_inactive;
         /* Reinitialise the circular buffer to empty. */
         dma_rd->cons = dma_rd->prod = 0;
+        /* Free-running index timer. */
+        if (!index.active)
+            timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
         break;
-    case DMA_active:
-        /* nothing */
-        break;
     }
-
-    timestamp = stk_now();
-    if (image_read_track(drv->image) && dma_rd->kick_dma_irq) {
-        dma_rd->kick_dma_irq = FALSE;
-        IRQx_set_pending(dma_rdata_irq);
-    }
-
-    /* Microseconds to read data. */
-    read_us = stk_diff(timestamp, stk_now()) / STK_MHZ;
-    /* If we have a new maximum, print it. */
-    if (read_us > max_read_us) {
-        max_read_us = max_t(uint32_t, max_read_us, read_us);
-        printk("New max: read_us=%u\n", max_read_us);
-    }
-
-out:
-    return 0;
 }
 
 static void index_pulse(void *dat)
@@ -441,17 +465,20 @@ static void IRQ_input_changed(void)
         bool_t step_inward = !(inp & m(inp_dir));
         for (i = 0; i < NR_DRIVES; i++) {
             drv = &drive[i];
-            if (!drv->sel || drv->step.active
+            if (!drv->sel || (drv->step.state & STEP_active)
                 || (drv->cyl == (step_inward ? 84 : 0)))
                 continue;
             drv->step.inward = step_inward;
             drv->step.start = stk_now();
-            drv->step.active = TRUE;
+            drv->step.state = STEP_started;
             if (i == 0) {
                 gpio_write_pin(gpio_out, pin_trk0, O_FALSE);
-                rdata_stop();
-                cancel_call(&dma_rd->startup_cancellation);
+                if (dma_rd != NULL) {
+                    rdata_stop();
+                    cancel_call(&dma_rd->startup_cancellation);
+                }
             }
+            IRQx_set_pending(STEP_IRQ);
         }
     }
 
@@ -459,10 +486,50 @@ static void IRQ_input_changed(void)
         for (i = 0; i < NR_DRIVES; i++) {
             drv = &drive[i];
             drv->head = !(inp & m(inp_side));
-            if (i == 0) {
+            if ((i == 0) && (dma_rd != NULL)) {
                 rdata_stop();
                 cancel_call(&dma_rd->startup_cancellation);
             }
+        }
+    }
+}
+
+static void drive_step_timer(void *_drv)
+{
+    struct drive *drv = _drv;
+
+    switch (drv->step.state) {
+    case STEP_started:
+        /* nothing to do, IRQ_step() needs to reset our deadline */
+        break;
+    case STEP_latched:
+        speaker_pulse(10);
+        drv->cyl += drv->step.inward ? 1 : -1;
+        timer_set(&drv->step.timer, stk_add(drv->step.start, DRIVE_SETTLE_MS));
+        if ((drv == &drive[0]) && (drv->cyl == 0))
+            gpio_write_pin(gpio_out, pin_trk0, O_TRUE);
+        /* New state last, as that lets hi-pri IRQ start another step. */
+        barrier();
+        drv->step.state = STEP_settling;
+        break;
+    case STEP_settling:
+        /* Can race transition to STEP_started. */
+        cmpxchg(&drv->step.state, STEP_settling, 0);
+        break;
+    }
+}
+
+static void IRQ_step(void)
+{
+    unsigned int i;
+    struct drive *drv;
+
+    for (i = 0; i < NR_DRIVES; i++) {
+        drv = &drive[i];
+        if (drv->step.state == STEP_started) {
+            timer_cancel(&drv->step.timer);
+            drv->step.state = STEP_latched;
+            timer_set(&drv->step.timer, stk_add(drv->step.start, stk_ms(2)));
         }
     }
 }
