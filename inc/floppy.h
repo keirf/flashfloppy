@@ -81,17 +81,24 @@ struct image {
 
 struct image_handler {
     bool_t (*open)(struct image *im);
-    bool_t (*seek_track)(struct image *im, uint8_t track,
-                         stk_time_t *ptime_after_index);
+    bool_t (*seek_track)(
+        struct image *im, uint8_t track, stk_time_t *start_pos);
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
 };
 
+/* Open specified image file on mass storage device. */
 bool_t image_open(struct image *im, const char *name);
-bool_t image_seek_track(struct image *im, uint8_t track,
-                        stk_time_t *ptime_after_index);
+/* Seek to given track and start reading track data at specified rotational 
+ * position (specified as number of SYSCLK ticks past the index mark). 
+ * Returns TRUE if track successfully loaded, else FALSE. */
+bool_t image_seek_track(
+    struct image *im, uint8_t track, stk_time_t *start_pos);
+/* Read track data into memory. Returns TRUE if any new data was read. */
 bool_t image_read_track(struct image *im);
+/* Generate flux timings for the RDATA timer and output pin. */
 uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
+/* Rotational position of last-generated flux (SYSCLK ticks past index). */
 uint32_t image_ticks_since_index(struct image *im);
 
 void floppy_init(const char *disk0_name);

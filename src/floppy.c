@@ -343,8 +343,8 @@ int floppy_handle(void)
     }
 
     if (drv->image->cur_track == TRACKNR_INVALID) {
-        stk_time_t index_time = index.prev_time;
-        stk_time_t time_after_index = stk_timesince(index_time);
+        stk_time_t index_time, read_start_pos;
+        bool_t wrapped;
         /* Allow 10ms from current rotational position to load new track */
         int32_t delay = stk_ms(10);
         /* No data fetch while stepping. */
@@ -357,20 +357,20 @@ int floppy_handle(void)
             int32_t delta = stk_delta(stk_now(), step_settle);
             delay = max_t(int32_t, delta, delay);
         }
-        /* Add delay to synchronisation point; handle index wrap. */
-        time_after_index += delay;
-        if (time_after_index > stk_ms(DRIVE_MS_PER_REV))
-            time_after_index -= stk_ms(DRIVE_MS_PER_REV);
+        /* Work out where in new track to start reading data from. */
+        index_time = index.prev_time;
+        read_start_pos = stk_timesince(index_time) + delay;
+        wrapped = (read_start_pos > stk_ms(DRIVE_MS_PER_REV));
+        if (wrapped)
+            read_start_pos -= stk_ms(DRIVE_MS_PER_REV);
         /* Seek to the new track. */
-        image_seek_track(drv->image, drv->cyl*2 + drv->head,
-                         &time_after_index);
-        /* Check if the sync-up position wrapped at the index mark... */
-        sync_time = stk_timesince(index_time);
-        /* ...and synchronise to next index pulse if so. */
-        if (sync_time > (time_after_index + stk_ms(DRIVE_MS_PER_REV)/2))
-            time_after_index += stk_ms(DRIVE_MS_PER_REV);
+        read_start_pos *= SYSCLK_MHZ/STK_MHZ;
+        image_seek_track(drv->image, drv->cyl*2 + drv->head, &read_start_pos);
+        read_start_pos /= SYSCLK_MHZ/STK_MHZ;
         /* Set the deadline. */
-        sync_time = stk_add(index_time, time_after_index);
+        if (wrapped)
+            read_start_pos += stk_ms(DRIVE_MS_PER_REV);
+        sync_time = stk_add(index_time, read_start_pos);
     }
 
     switch (dma_rd->state) {
