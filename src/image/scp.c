@@ -103,13 +103,13 @@ static bool_t scp_seek_track(struct image *im, uint8_t track,
     im->scp.ld_pos = im->scp.pf_pos;
 
     im->prod = im->cons = 0;
-    image_prefetch_data(im);
+    image_read_track(im);
 
     *ptime_after_index = ticks_after_index;
     return TRUE;
 }
 
-static bool_t scp_prefetch_data(struct image *im)
+static bool_t scp_read_track(struct image *im)
 {
     UINT nr, nr_flux = im->scp.rev[im->scp.pf_rev].nr_dat;
     uint16_t *buf = (uint16_t *)im->buf;
@@ -143,7 +143,7 @@ static bool_t scp_prefetch_data(struct image *im)
     return TRUE;
 }
 
-static uint16_t scp_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
+static uint16_t scp_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
     uint32_t x, ticks = im->ticks_since_flux, todo = nr;
     uint32_t nr_flux = im->scp.rev[im->scp.ld_rev].nr_dat;
@@ -179,8 +179,8 @@ out:
 struct image_handler scp_image_handler = {
     .open = scp_open,
     .seek_track = scp_seek_track,
-    .prefetch_data = scp_prefetch_data,
-    .load_flux = scp_load_flux
+    .read_track = scp_read_track,
+    .rdata_flux = scp_rdata_flux
 };
 
 /*

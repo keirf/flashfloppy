@@ -50,7 +50,7 @@ struct dma_ring {
     /*  DMA_stopping: DMA+timer halted, buffer waiting to be cleared. */
 #define DMA_stopping 3 /* -> {inactive} */
     volatile uint8_t state;
-    /* IRQ handler sets this if the prefetch queue runs dry. */
+    /* IRQ handler sets this if the read buffer runs dry. */
     volatile uint8_t kick_dma_irq;
     /* Indexes into the buf[] ring buffer. */
     uint16_t prod, cons;
@@ -77,7 +77,7 @@ static struct {
 } index;
 static void index_pulse(void *);
 
-static uint32_t max_load_ticks, max_prefetch_us;
+static uint32_t max_read_us;
 
 static void rdata_stop(void);
 
@@ -140,7 +140,7 @@ void floppy_cancel(void)
     /* Clear soft state. */
     memset(drive, 0, sizeof(drive));
     memset(&index, 0, sizeof(index));
-    max_load_ticks = max_prefetch_us = 0;
+    max_read_us = 0;
     image = NULL;
     dma_rd = dma_wr = NULL;
 }
@@ -290,7 +290,7 @@ static void floppy_sync_flux(void)
 
     nr = ARRAY_SIZE(dma_rd->buf) - dma_rd->prod - 1;
     if (nr)
-        dma_rd->prod += image_load_flux(
+        dma_rd->prod += image_rdata_flux(
             drv->image, &dma_rd->buf[dma_rd->prod], nr);
 
     if (dma_rd->prod < ARRAY_SIZE(dma_rd->buf)/2)
@@ -309,8 +309,8 @@ static void floppy_sync_flux(void)
 
 int floppy_handle(void)
 {
-    uint32_t i, load_ticks, prefetch_us, now = stk_now(), prev_dmaprod;
-    stk_time_t timestamp[3];
+    uint32_t i, read_us, now = stk_now();
+    stk_time_t timestamp;
     struct drive *drv;
 
     for (i = 0; i < NR_DRIVES; i++) {
@@ -373,10 +373,6 @@ int floppy_handle(void)
         sync_time = stk_add(index_time, time_after_index);
     }
 
-    timestamp[0] = stk_now();
-
-    prev_dmaprod = dma_rd->prod;
-
     switch (dma_rd->state) {
     case DMA_inactive:
         dma_rd->state = DMA_starting;
@@ -395,25 +391,18 @@ int floppy_handle(void)
         break;
     }
 
-    timestamp[1] = stk_now();
-    if (image_prefetch_data(drv->image) && dma_rd->kick_dma_irq) {
+    timestamp = stk_now();
+    if (image_read_track(drv->image) && dma_rd->kick_dma_irq) {
         dma_rd->kick_dma_irq = FALSE;
         IRQx_set_pending(dma_rdata_irq);
     }
-    timestamp[2] = stk_now();
 
-    /* 9MHz ticks per generated flux transition */
-    load_ticks = stk_diff(timestamp[0],timestamp[1]);
-    i = dma_rd->prod - prev_dmaprod;
-    load_ticks = (i > 100 && dma_rd->prod) ? load_ticks / i : 0;
-    /* Microseconds to prefetch data */
-    prefetch_us = stk_diff(timestamp[1],timestamp[2])/STK_MHZ;
+    /* Microseconds to read data. */
+    read_us = stk_diff(timestamp, stk_now()) / STK_MHZ;
     /* If we have a new maximum, print it. */
-    if ((load_ticks > max_load_ticks) || (prefetch_us > max_prefetch_us)) {
-        max_load_ticks = max_t(uint32_t, max_load_ticks, load_ticks);
-        max_prefetch_us = max_t(uint32_t, max_prefetch_us, prefetch_us);
-        printk("New max: load_ticks=%u prefetch_us=%u\n",
-               max_load_ticks, max_prefetch_us);
+    if (read_us > max_read_us) {
+        max_read_us = max_t(uint32_t, max_read_us, read_us);
+        printk("New max: read_us=%u\n", max_read_us);
     }
 
 out:
@@ -514,13 +503,13 @@ static void IRQ_rdata_dma(void)
         return;
 
     /* Now attempt to fill the contiguous stretch with flux data calculated 
-     * from prefetched image data. */
+     * from buffered image data. */
     prev_ticks_since_index = image_ticks_since_index(drv->image);
-    dma_rd->prod += done = image_load_flux(
+    dma_rd->prod += done = image_rdata_flux(
         drv->image, &dma_rd->buf[dma_rd->prod], nr);
     dma_rd->prod &= buf_mask;
     if (done != nr) {
-        /* Prefetch buffer ran dry: kick us when more data is available. */
+        /* Read buffer ran dry: kick us when more data is available. */
         dma_rd->kick_dma_irq = TRUE;
     } else if (nr != nr_to_cons) {
         /* We didn't fill the ring: re-enter this ISR to do more work. */

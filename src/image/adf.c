@@ -74,13 +74,13 @@ static bool_t adf_seek_track(struct image *im, uint8_t track,
     sector = (im->cur_bc - 1024) / (544*16);
     im->adf.trk_pos = (sector < 11) ? sector * 512 : 0;
     im->prod = im->cons = 0;
-    image_prefetch_data(im);
+    image_read_track(im);
 
     *ptime_after_index = ticks_after_index;
     return TRUE;
 }
 
-static bool_t adf_prefetch_data(struct image *im)
+static bool_t adf_read_track(struct image *im)
 {
     const UINT nr = 512;
     uint8_t *buf = (uint8_t *)im->buf;
@@ -98,7 +98,7 @@ static bool_t adf_prefetch_data(struct image *im)
     return TRUE;
 }
 
-static uint16_t adf_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
+static uint16_t adf_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
     uint32_t ticks = im->ticks_since_flux, ticks_per_cell = TICKS_PER_CELL;
     uint32_t info, csum, i, x, y = 32, todo = nr, sector, sec_offset;
@@ -204,8 +204,8 @@ out:
 struct image_handler adf_image_handler = {
     .open = adf_open,
     .seek_track = adf_seek_track,
-    .prefetch_data = adf_prefetch_data,
-    .load_flux = adf_load_flux
+    .read_track = adf_read_track,
+    .rdata_flux = adf_rdata_flux
 };
 
 /*

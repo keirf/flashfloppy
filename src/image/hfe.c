@@ -106,14 +106,14 @@ static bool_t hfe_seek_track(struct image *im, uint8_t track,
 
     im->hfe.trk_pos = (im->cur_bc/8) & ~255;
     im->prod = im->cons = 0;
-    image_prefetch_data(im);
+    image_read_track(im);
     im->cons = im->cur_bc & 2047;
 
     *ptime_after_index = ticks_after_index;
     return TRUE;
 }
 
-static bool_t hfe_prefetch_data(struct image *im)
+static bool_t hfe_read_track(struct image *im)
 {
     const UINT nr = 256;
     uint8_t *buf = (uint8_t *)im->buf;
@@ -135,7 +135,7 @@ static bool_t hfe_prefetch_data(struct image *im)
     return TRUE;
 }
 
-static uint16_t hfe_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
+static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
     uint32_t ticks = im->ticks_since_flux;
     uint32_t ticks_per_cell = im->hfe.ticks_per_cell;
@@ -180,8 +180,8 @@ out:
 struct image_handler hfe_image_handler = {
     .open = hfe_open,
     .seek_track = hfe_seek_track,
-    .prefetch_data = hfe_prefetch_data,
-    .load_flux = hfe_load_flux
+    .read_track = hfe_read_track,
+    .rdata_flux = hfe_rdata_flux
 };
 
 /*

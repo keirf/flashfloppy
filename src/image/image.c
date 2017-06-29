@@ -38,14 +38,14 @@ bool_t image_seek_track(struct image *im, uint8_t track,
     return im->handler->seek_track(im, track, ptime_after_index);
 }
 
-bool_t image_prefetch_data(struct image *im)
+bool_t image_read_track(struct image *im)
 {
-    return im->handler->prefetch_data(im);
+    return im->handler->read_track(im);
 }
 
-uint16_t image_load_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
+uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
-    return im->handler->load_flux(im, tbuf, nr);
+    return im->handler->rdata_flux(im, tbuf, nr);
 }
 
 uint32_t image_ticks_since_index(struct image *im)
