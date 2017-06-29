@@ -65,7 +65,7 @@ static bool_t scp_open(struct image *im)
 static bool_t scp_seek_track(
     struct image *im, uint8_t track, stk_time_t *start_pos)
 {
-    uint32_t ticks_after_index = *start_pos;
+    uint32_t sys_ticks = *start_pos;
     struct trk_header header;
     uint32_t hdr_offset, i, j, nr_flux;
 
@@ -93,7 +93,7 @@ static bool_t scp_seek_track(
     im->ticks_since_flux = 0;
     im->cur_track = track;
 
-    im->cur_ticks = ticks_after_index * 16;
+    im->cur_ticks = sys_ticks * 16;
 
     nr_flux = im->scp.rev[0].nr_dat;
     im->scp.pf_pos = im->cur_ticks / ((sysclk_ms(DRIVE_MS_PER_REV) * 16)
@@ -105,7 +105,6 @@ static bool_t scp_seek_track(
     im->prod = im->cons = 0;
     image_read_track(im);
 
-    *start_pos = ticks_after_index;
     return TRUE;
 }
 

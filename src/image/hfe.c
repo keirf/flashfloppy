@@ -78,7 +78,7 @@ static bool_t hfe_open(struct image *im)
 static bool_t hfe_seek_track(
     struct image *im, uint8_t track, stk_time_t *start_pos)
 {
-    uint32_t ticks_after_index = *start_pos;
+    uint32_t sys_ticks = *start_pos;
     struct track_header thdr;
 
     /* TODO: Fake out unformatted tracks. */
@@ -95,20 +95,20 @@ static bool_t hfe_seek_track(
     im->ticks_since_flux = 0;
     im->cur_track = track;
 
-    im->cur_bc = (ticks_after_index * 16) / im->hfe.ticks_per_cell;
+    im->cur_bc = (sys_ticks * 16) / im->hfe.ticks_per_cell;
     im->cur_bc &= ~7;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
     im->cur_ticks = im->cur_bc * im->hfe.ticks_per_cell;
 
-    ticks_after_index = im->cur_ticks / 16;
+    sys_ticks = im->cur_ticks / 16;
 
     im->hfe.trk_pos = (im->cur_bc/8) & ~255;
     im->prod = im->cons = 0;
     image_read_track(im);
     im->cons = im->cur_bc & 2047;
 
-    *start_pos = ticks_after_index;
+    *start_pos = sys_ticks;
     return TRUE;
 }
 
