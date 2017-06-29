@@ -98,7 +98,7 @@ int32_t stk_delta(stk_time_t a, stk_time_t b);
 } while (0)
 #define IRQx_disable(x) do {                    \
     nvic->icer[(x)>>5] = 1u<<((x)&31);          \
-    dsb(); isb(); /* flush the pipeline */      \
+    cpu_sync();                                 \
 } while (0)
 #define IRQx_is_enabled(x) ((nvic->iser[(x)>>5]>>((x)&31))&1)
 #define IRQx_set_pending(x) (nvic->ispr[(x)>>5] = 1u<<((x)&31))

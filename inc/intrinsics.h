@@ -15,9 +15,8 @@ struct exception_frame {
 
 #define illegal() asm volatile (".short 0xde00");
 
-#define dsb() asm volatile("dsb" ::: "memory")
-#define isb() asm volatile("isb" ::: "memory")
 #define barrier() asm volatile ("" ::: "memory")
+#define cpu_sync() asm volatile("dsb; isb" ::: "memory")
 #define cpu_relax() asm volatile ("nop" ::: "memory")
 
 #define sv_call(imm) asm volatile ( "svc %0" : : "i" (imm) )
@@ -36,16 +35,28 @@ struct exception_frame {
 /* CONTROL[1] == 0 => running on Master Stack (Exception Handler mode). */
 #define in_exception() (!(read_special(control) & 2))
 
+#define global_disable_exceptions() \
+    asm volatile ("cpsid f; cpsid i" ::: "memory")
+#define global_enable_exceptions() \
+    asm volatile ("cpsie f; cpsie i" ::: "memory")
+
+/* NB. IRQ disable via CPSID/MSR is self-synchronising. No barrier needed. */
 #define IRQ_global_disable() asm volatile ("cpsid i" ::: "memory")
 #define IRQ_global_enable() asm volatile ("cpsie i" ::: "memory")
 
-/* Save/restore IRQ priority levels. */
+/* Save/restore IRQ priority levels. 
+ * NB. IRQ disable via MSR is self-synchronising. I have confirmed this on 
+ * Cortex-M3: any pending IRQs are handled before they are disabled by 
+ * a BASEPRI update. Hence no barrier is needed here. */
 #define IRQ_save(newpri) ({                         \
         uint8_t __newpri = (newpri)<<4;             \
         uint8_t __oldpri = read_special(basepri);   \
         if (!__oldpri || (__oldpri > __newpri))     \
             write_special(basepri, __newpri);       \
         __oldpri; })
+/* NB. Same as CPSIE, any pending IRQ enabled by this BASEPRI update may 
+ * execute a couple of instructions after the MSR instruction. This has been
+ * confirmed on Cortex-M3. */
 #define IRQ_restore(oldpri) write_special(basepri, (oldpri))
 
 static inline uint16_t _rev16(uint16_t x)
