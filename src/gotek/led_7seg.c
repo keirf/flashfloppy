@@ -28,7 +28,8 @@
 
 /* Command completion is DMA1 channel 2: IRQ 12. */
 #define LED_IRQ 12
-void IRQ_12(void) __attribute__((alias("IRQ_led_7seg")));
+/*void IRQ_12(void) __attribute__((alias("IRQ_led_7seg")));*/
+static void IRQ_led_7seg(void);
 
 static const uint8_t digits[] = {
     0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, /* 0-7 */
@@ -152,14 +153,6 @@ void led_7seg_init(void)
     gpio_configure_pin(gpiob, CLK_PIN, AFO_pushpull(_2MHz));
     afio->mapr |= AFIO_MAPR_TIM2_REMAP_PARTIAL_2;
 
-    /* Clear IRQ line and then enable it. Peripherals pulse their interrupt
-     * line when any ISR flag transitions to set. If we do not ensure the ISR
-     * flag is initially cleared, we will never receive an interrupt. */
-    dma1->ifcr = DMA_IFCR_CGIF(2);
-    IRQx_set_prio(LED_IRQ, LED_7SEG_PRI);
-    IRQx_clear_pending(LED_IRQ);
-    IRQx_enable(LED_IRQ);
-
     /* Timer setup. 
      * The counter is incremented every 10us, and counts 0 to 3 before 
      * reloading (i.e. reloads every 40us). 
@@ -180,9 +173,9 @@ void led_7seg_init(void)
      * CLK output will never result in truncated clock cycles at the output. */
     tim2->arr = 3;               /* Count 0 to 3, then reload */
     tim2->psc = SYSCLK_MHZ * 10; /* 10us per tick */
-    tim2->ccer = TIM_CCER_CC3E | TIM_CCER_CC4E;
     tim2->ccmr2 = (TIM_CCMR2_CC3S(TIM_CCS_OUTPUT) |
                    TIM_CCMR2_OC3M(TIM_OCM_FORCE_HIGH));
+    tim2->ccer = TIM_CCER_CC3E | TIM_CCER_CC4E;
     /* Initialise the CCRs immediately, before we set preload flags. */
     tim2->CLK_CCR = 0; /* locked HIGH; set to 2 to enable 50% duty cycle */
     tim2->DAT_CCR = 4; /* locked HIGH; updated by dma */
@@ -195,9 +188,8 @@ void led_7seg_init(void)
     tim2->cr2 = tim2->dier = 0;
     tim2->cr1 = TIM_CR1_CEN;
 
-    /* DMA setup: issues writes from a pre-filled buffer to the DAT CCR. */
-    dma1->ch2.cpar = (uint32_t)(unsigned long)&tim2->DAT_CCR;
-    dma1->ch2.cmar = (uint32_t)(unsigned long)dmabuf;
+    /* Set up DMA. */
+    led_7seg_resume();
 
     dma_prep();
 
@@ -212,6 +204,36 @@ void led_7seg_init(void)
     stop();
 
     dma_issue();
+}
+
+/* We must get out of the way before starting floppy code, as we contend 
+ * for the same DMA channel. */
+void led_7seg_suspend(void)
+{
+    /* Wait for in-flight updates to complete (via IRQ). */
+    while (flags != 0)
+        cpu_relax();
+    /* No more interrupts. */
+    IRQx_disable(LED_IRQ);
+}
+
+/* Re-enables DMA after floppy code has exited. */
+void led_7seg_resume(void)
+{
+    /* Set the IRQ handler. */
+    _IRQ_dma1_ch2 = IRQ_led_7seg;
+
+    /* Clear IRQ line and then enable it. Peripherals pulse their interrupt
+     * line when any ISR flag transitions to set. If we do not ensure the ISR
+     * flag is initially cleared, we will never receive an interrupt. */
+    dma1->ifcr = DMA_IFCR_CGIF(2);
+    IRQx_set_prio(LED_IRQ, LED_7SEG_PRI);
+    IRQx_clear_pending(LED_IRQ);
+    IRQx_enable(LED_IRQ);
+
+    /* DMA setup: issues writes from a pre-filled buffer to the DAT CCR. */
+    dma1->ch2.cpar = (uint32_t)(unsigned long)&tim2->DAT_CCR;
+    dma1->ch2.cmar = (uint32_t)(unsigned long)dmabuf;
 }
 
 static void IRQ_led_7seg(void)

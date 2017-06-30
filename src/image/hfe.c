@@ -78,6 +78,7 @@ static bool_t hfe_open(struct image *im)
 static bool_t hfe_seek_track(
     struct image *im, uint8_t track, stk_time_t *start_pos)
 {
+    struct image_buf *rd = &im->bufs.read_data;
     uint32_t sys_ticks = *start_pos;
     struct track_header thdr;
 
@@ -104,9 +105,9 @@ static bool_t hfe_seek_track(
     sys_ticks = im->cur_ticks / 16;
 
     im->hfe.trk_pos = (im->cur_bc/8) & ~255;
-    im->prod = im->cons = 0;
+    rd->prod = rd->cons = 0;
     image_read_track(im);
-    im->cons = im->cur_bc & 2047;
+    rd->cons = im->cur_bc & 2047;
 
     *start_pos = sys_ticks;
     return TRUE;
@@ -115,9 +116,11 @@ static bool_t hfe_seek_track(
 static bool_t hfe_read_track(struct image *im)
 {
     const UINT nr = 256;
-    uint8_t *buf = (uint8_t *)im->buf;
+    struct image_buf *rd = &im->bufs.read_data;
+    uint8_t *buf = rd->p;
+    unsigned int buflen = rd->len & ~511;
 
-    if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-256)*8)
+    if ((uint32_t)(rd->prod - rd->cons) > (buflen-256)*8)
         return FALSE;
 
     F_lseek(&im->fp,
@@ -125,8 +128,8 @@ static bool_t hfe_read_track(struct image *im)
             + (im->cur_track & 1) * 256
             + ((im->hfe.trk_pos & ~255) << 1)
             + (im->hfe.trk_pos & 255));
-    F_read(&im->fp, &buf[(im->prod/8) % sizeof(im->buf)], nr, NULL);
-    im->prod += nr * 8;
+    F_read(&im->fp, &buf[(rd->prod/8) % buflen], nr, NULL);
+    rd->prod += nr * 8;
     im->hfe.trk_pos += nr;
     if (im->hfe.trk_pos >= im->hfe.trk_len)
         im->hfe.trk_pos = 0;
@@ -136,23 +139,25 @@ static bool_t hfe_read_track(struct image *im)
 
 static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
+    struct image_buf *rd = &im->bufs.read_data;
     uint32_t ticks = im->ticks_since_flux;
     uint32_t ticks_per_cell = im->hfe.ticks_per_cell;
     uint32_t y = 8, todo = nr;
-    uint8_t x, *buf = (uint8_t *)im->buf;
+    uint8_t x, *buf = rd->p;
+    unsigned int buflen = rd->len & ~511;
 
-    while (im->cons != im->prod) {
+    while (rd->cons != rd->prod) {
         ASSERT(y == 8);
         if (im->cur_bc >= im->tracklen_bc) {
             ASSERT(im->cur_bc == im->tracklen_bc);
             im->tracklen_ticks = im->cur_ticks;
             im->cur_bc = im->cur_ticks = 0;
             /* Skip tail of current 256-byte block. */
-            im->cons = (im->cons + 256*8-1) & ~(256*8-1);
+            rd->cons = (rd->cons + 256*8-1) & ~(256*8-1);
         }
-        y = im->cons % 8;
-        x = buf[(im->cons/8) % sizeof(im->buf)] >> y;
-        im->cons += 8 - y;
+        y = rd->cons % 8;
+        x = buf[(rd->cons/8) % buflen] >> y;
+        rd->cons += 8 - y;
         im->cur_bc += 8 - y;
         im->cur_ticks += (8 - y) * ticks_per_cell;
         while (y < 8) {
@@ -169,7 +174,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     }
 
 out:
-    im->cons -= 8 - y;
+    rd->cons -= 8 - y;
     im->cur_bc -= 8 - y;
     im->cur_ticks -= (8 - y) * ticks_per_cell;
     im->ticks_since_flux = ticks;

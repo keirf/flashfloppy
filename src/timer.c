@@ -9,11 +9,21 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#if BUILD_TOUCH
+
 /* TIM1_UP: IRQ 25. */
 void IRQ_25(void) __attribute__((alias("IRQ_timer")));
 #define TIMER_IRQ 25
-
 #define tim tim1
+
+#elif BUILD_GOTEK
+
+/* TIM4: IRQ 30. */
+void IRQ_30(void) __attribute__((alias("IRQ_timer")));
+#define TIMER_IRQ 30
+#define tim tim4
+
+#endif
 
 /* IRQ only on counter overflow, one-time enable. */
 #define TIM_CR1 (TIM_CR1_URS | TIM_CR1_OPM)
@@ -115,7 +125,6 @@ void timer_cancel(struct timer *timer)
 
 void timers_init(void)
 {
-    rcc->apb2enr |= RCC_APB2ENR_TIM1EN;
     tim->cr2 = 0;
     tim->dier = TIM_DIER_UIE;
     IRQx_set_prio(TIMER_IRQ, TIMER_IRQ_PRI);

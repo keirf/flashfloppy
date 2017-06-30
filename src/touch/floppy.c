@@ -35,6 +35,7 @@ static uint8_t pin_index; /* differs across board revisions */
 #define dma_wdata   (dma1->ch1)
 #define dma_wdata_ch 1
 #define dma_wdata_irq 11
+void IRQ_11(void) __attribute__((alias("IRQ_wdata_dma")));
 
 #define pin_rdata   7
 #define tim_rdata   (tim4)

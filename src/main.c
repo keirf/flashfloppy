@@ -115,6 +115,8 @@ int floppy_main(void)
 
 int main(void)
 {
+    unsigned int i;
+
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
         memcpy(_sdat, _ldat, _edat-_sdat);
@@ -139,15 +141,17 @@ int main(void)
     touch_init();
 
     led_7seg_init();
-    led_7seg_write_hex(0xdea);
 
     usbh_msc_init();
 
     floppy_init();
 
-    for (;;) {
+    for (i = 0; ; i++) {
 
         bool_t mount_err = 0;
+
+        led_7seg_write_hex(i);
+
         while (f_mount(&fatfs, "", 1) != FR_OK) {
             usbh_msc_process();
             if (!mount_err) {
@@ -158,10 +162,12 @@ int main(void)
         if (mount_err)
             clear_screen();
 
+        led_7seg_suspend();
         arena_init();
         F_call_cancellable(floppy_main);
         floppy_cancel();
         speed_tests_cancel();
+        led_7seg_resume();
     }
 
     return 0;

@@ -87,10 +87,16 @@ void console_init(void);
 void console_sync(void);
 void console_crash_on_input(void);
 
+
 #ifdef BUILD_GOTEK
+
+/* Gotek: DMA1 Ch2 is overloaded, IRQ needs switching. */
+extern void (*_IRQ_dma1_ch2)(void);
 
 /* Gotek: 3-digit 7-segment display */
 void led_7seg_init(void);
+void led_7seg_suspend(void);
+void led_7seg_resume(void);
 void led_7seg_write_hex(unsigned int x);
 
 /* Gotek: USB stack processing */
@@ -100,6 +106,8 @@ void usbh_msc_process(void);
 #else /* !BUILD_GOTEK */
 
 static inline void led_7seg_init(void) {}
+static inline void led_7seg_suspend(void) {}
+static inline void led_7seg_resume(void) {}
 static inline void led_7seg_write_hex(unsigned int x) {}
 
 static inline void usbh_msc_init(void) {}
@@ -121,6 +129,9 @@ extern char _sbss[], _ebss[];
 /* Stacks. */
 extern uint32_t _thread_stacktop[], _thread_stackbottom[];
 extern uint32_t _irq_stacktop[], _irq_stackbottom[];
+
+/* Default exception handler. */
+void EXC_unused(void);
 
 /* IRQ priorities, 0 (highest) to 15 (lowest). */
 #define FLOPPY_IRQ_HI_PRI     1

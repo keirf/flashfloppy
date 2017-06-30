@@ -9,6 +9,14 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+void IRQ_12(void) __attribute__((alias("IRQ_dma1_ch2")));
+
+void (*_IRQ_dma1_ch2)(void) = EXC_unused;
+static void IRQ_dma1_ch2(void)
+{
+    (*_IRQ_dma1_ch2)();
+}
+
 static void gpio_pull_up_pins(GPIO gpio, uint16_t mask)
 {
     unsigned int i;

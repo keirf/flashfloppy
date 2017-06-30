@@ -51,6 +51,7 @@ static bool_t adf_open(struct image *im)
 static bool_t adf_seek_track(
     struct image *im, uint8_t track, stk_time_t *start_pos)
 {
+    struct image_buf *rd = &im->bufs.read_data;
     uint32_t sector, sys_ticks = *start_pos;
 
     /* TODO: Fake out unformatted tracks. */
@@ -73,7 +74,7 @@ static bool_t adf_seek_track(
 
     sector = (im->cur_bc - 1024) / (544*16);
     im->adf.trk_pos = (sector < 11) ? sector * 512 : 0;
-    im->prod = im->cons = 0;
+    rd->prod = rd->cons = 0;
     image_read_track(im);
 
     *start_pos = sys_ticks;
@@ -83,14 +84,16 @@ static bool_t adf_seek_track(
 static bool_t adf_read_track(struct image *im)
 {
     const UINT nr = 512;
-    uint8_t *buf = (uint8_t *)im->buf;
+    struct image_buf *rd = &im->bufs.read_data;
+    uint8_t *buf = rd->p;
+    unsigned int buflen = rd->len & ~511;
 
-    if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-512)*8)
+    if ((uint32_t)(rd->prod - rd->cons) > (buflen-512)*8)
         return FALSE;
 
     F_lseek(&im->fp, im->adf.trk_off + im->adf.trk_pos);
-    F_read(&im->fp, &buf[(im->prod/8) % sizeof(im->buf)], nr, NULL);
-    im->prod += nr * 8;
+    F_read(&im->fp, &buf[(rd->prod/8) % buflen], nr, NULL);
+    rd->prod += nr * 8;
     im->adf.trk_pos += nr;
     if (im->adf.trk_pos >= im->adf.trk_len)
         im->adf.trk_pos = 0;
@@ -102,6 +105,7 @@ static uint16_t adf_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
     uint32_t ticks = im->ticks_since_flux, ticks_per_cell = TICKS_PER_CELL;
     uint32_t info, csum, i, x, y = 32, todo = nr, sector, sec_offset;
+    struct image_buf *rd = &im->bufs.read_data;
 
     for (;;) {
         /* Convert pre-generated MFM into flux timings. */
@@ -132,7 +136,7 @@ static uint16_t adf_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
         }
 
         /* We need more MFM: ensure we have buffered data to convert. */
-        if (im->cons == im->prod)
+        if (rd->cons == rd->prod)
             goto out;
         im->adf.mfm_cons = 0;
 
@@ -155,6 +159,9 @@ static uint16_t adf_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             }
         } else if (sec_offset == 0) {
             /* Sector header */
+            unsigned int buflen = rd->len & ~511;
+            uint32_t *dat = rd->p;
+            dat += (rd->cons/32) % (buflen/4);
             /* sector gap */
             gen_mfm(im, 0, 0);
             /* sync */
@@ -174,22 +181,24 @@ static uint16_t adf_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             gen_mfm(im, 12, 0);
             gen_mfm(im, 13, odd(csum));
             /* data checksum */
-            csum = amigados_checksum(
-                &im->buf[(im->cons/32) % ARRAY_SIZE(im->buf)], 512);
+            csum = amigados_checksum(dat, 512);
             gen_mfm(im, 14, 0);
             gen_mfm(im, 15, odd(csum));
         } else {
             /* Sector data */
+            unsigned int buflen = rd->len & ~511;
+            uint32_t *dat = rd->p;
             sec_offset -= 512;
+            dat += (rd->cons/32) % (buflen/4);
+            dat += (sec_offset & 0xfff) / 32;
             for (i = 0; i < 16; i++) {
-                x = im->buf[((im->cons + (sec_offset & 0xfff)) / 32 + i)
-                            % ARRAY_SIZE(im->buf)];
+                x = *dat++;
                 if (!(sec_offset & 0x1000)) x >>= 1; /* even then odd */
                 gen_mfm(im, i, be32toh(x));
             }
             /* Finished with this sector's data? Then mark it consumed. */
             if ((sec_offset + 512) == 8192)
-                im->cons += 512*8;
+                rd->cons += 512*8;
         }
     }
 

@@ -65,6 +65,7 @@ static bool_t scp_open(struct image *im)
 static bool_t scp_seek_track(
     struct image *im, uint8_t track, stk_time_t *start_pos)
 {
+    struct image_buf *rd = &im->bufs.read_data;
     uint32_t sys_ticks = *start_pos;
     struct trk_header header;
     uint32_t hdr_offset, i, j, nr_flux;
@@ -102,7 +103,7 @@ static bool_t scp_seek_track(
         im->scp.pf_pos = 0;
     im->scp.ld_pos = im->scp.pf_pos;
 
-    im->prod = im->cons = 0;
+    rd->prod = rd->cons = 0;
     image_read_track(im);
 
     return TRUE;
@@ -110,12 +111,14 @@ static bool_t scp_seek_track(
 
 static bool_t scp_read_track(struct image *im)
 {
+    struct image_buf *rd = &im->bufs.read_data;
     UINT nr, nr_flux = im->scp.rev[im->scp.pf_rev].nr_dat;
-    uint16_t *buf = (uint16_t *)im->buf;
+    uint16_t *buf = im->bufs.read_data.p;
+    unsigned int buflen = im->bufs.read_data.len & ~511;
     uint32_t off;
 
     /* At least 2kB buffer space available to fill? */
-    if ((uint32_t)(im->prod - im->cons) > (sizeof(im->buf)-2048)/2)
+    if ((uint32_t)(rd->prod - rd->cons) > (buflen-2048)/2)
         return FALSE;
 
     off = im->scp.rev[im->scp.pf_rev].dat_off + im->scp.pf_pos*2;
@@ -123,15 +126,15 @@ static bool_t scp_read_track(struct image *im)
 
     /* Up to 2kB, further limited by end of buffer and end of stream. */
     nr = min_t(UINT, 2048, (nr_flux - im->scp.pf_pos) * 2);
-    nr = min_t(UINT, nr, sizeof(im->buf) - ((im->prod*2) % sizeof(im->buf)));
+    nr = min_t(UINT, nr, buflen - ((rd->prod*2) % buflen));
     /* Partial sector is dealt with separately, so that following read is 
      * aligned and can occur directly into the ring buffer (and also as 
      * a multi-sector read at the flash device). */
     if (off & 511)
         nr = min_t(UINT, nr, (-off)&511);
 
-    F_read(&im->fp, &buf[im->prod % (sizeof(im->buf)/2)], nr, NULL);
-    im->prod += nr/2;
+    F_read(&im->fp, &buf[rd->prod % (buflen/2)], nr, NULL);
+    rd->prod += nr/2;
     im->scp.pf_pos += nr/2;
     if (im->scp.pf_pos >= nr_flux) {
         ASSERT(im->scp.pf_pos == nr_flux);
@@ -144,11 +147,13 @@ static bool_t scp_read_track(struct image *im)
 
 static uint16_t scp_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
+    struct image_buf *rd = &im->bufs.read_data;
     uint32_t x, ticks = im->ticks_since_flux, todo = nr;
     uint32_t nr_flux = im->scp.rev[im->scp.ld_rev].nr_dat;
-    uint16_t *buf = (uint16_t *)im->buf;
+    uint16_t *buf = im->bufs.read_data.p;
+    unsigned int buflen = im->bufs.read_data.len & ~511;
 
-    while (im->cons != im->prod) {
+    while (rd->cons != rd->prod) {
         if (im->scp.ld_pos == nr_flux) {
             im->tracklen_ticks = im->cur_ticks;
             im->cur_ticks = 0;
@@ -157,7 +162,7 @@ static uint16_t scp_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             nr_flux = im->scp.rev[im->scp.ld_rev].nr_dat;
         }
         im->scp.ld_pos++;
-        x = be16toh(buf[im->cons++ % (sizeof(im->buf)/2)]) ?: 0x10000;
+        x = be16toh(buf[rd->cons++ % (buflen/2)]) ?: 0x10000;
         x *= (FF_MHZ << 8) / SCP_MHZ;
         x >>= 8;
         if (x >= 0x10000)

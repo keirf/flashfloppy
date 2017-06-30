@@ -23,9 +23,9 @@ void backlight_init(void)
      * We switch a PNP transistor so PWM output is active low. */
     tim->arr = 999; /* count 0-999 inclusive */
     tim->psc = SYSCLK_MHZ - 1; /* tick at 1MHz */
-    tim->ccer = TIM_CCER_CC3E;
     tim->ccmr2 = (TIM_CCMR2_CC3S(TIM_CCS_OUTPUT) |
                   TIM_CCMR2_OC3M(TIM_OCM_PWM2)); /* PWM2: low then high */
+    tim->ccer = TIM_CCER_CC3E;
     tim->PWM_CCR = tim->cr2 = tim->dier = 0;
     tim->cr1 = TIM_CR1_CEN;
 

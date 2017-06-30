@@ -26,7 +26,7 @@ void *arena_alloc(uint32_t sz)
 {
     void *p = heap_p;
     heap_p += (sz + 3) & ~3;
-    ASSERT(heap_p < heap_top);
+    ASSERT(heap_p <= heap_top);
     return p;
 }
 

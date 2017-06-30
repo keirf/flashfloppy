@@ -16,6 +16,11 @@ extern struct image_handler scp_image_handler;
 bool_t image_open(struct image *im, const char *name)
 {
     char suffix[8];
+    struct image_bufs bufs = im->bufs;
+
+    /* Reinitialise image structure, except for static buffers. */
+    memset(im, 0, sizeof(*im));
+    im->bufs = bufs;
 
     filename_extension(name, suffix, sizeof(suffix));
     if (!strcmp(suffix, "adf"))

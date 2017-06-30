@@ -30,11 +30,11 @@ void speaker_init(void)
      * what we require to drive an NPN BJT with grounded emitter. */
     tim->psc = SYSCLK_MHZ/TICK_MHZ - 1;
     tim->arr = ARR;
-    tim->ccer = TIM_CCER_CC1E|TIM_CCER_CC4E;
     tim->ccmr1 = (TIM_CCMR1_CC1S(TIM_CCS_OUTPUT) |
                   TIM_CCMR1_OC1M(TIM_OCM_PWM2)); /* PWM2: low then high */
     tim->ccmr2 = (TIM_CCMR2_CC4S(TIM_CCS_OUTPUT) |
                   TIM_CCMR2_OC4M(TIM_OCM_PWM2)); /* PWM2: low then high */
+    tim->ccer = TIM_CCER_CC1E|TIM_CCER_CC4E;
     tim->cr2 = tim->dier = 0;
     speaker_pulse(0); /* ensures output LOW */
 

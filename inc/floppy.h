@@ -12,6 +12,7 @@
 #define DRIVE_RPM 300u
 #define DRIVE_MS_PER_REV (60000u/DRIVE_RPM)
 #define DRIVE_SETTLE_MS 12
+#define WRITE_TRACK_BITCELLS 100000
 
 struct adf_image {
     uint32_t trk_off;
@@ -37,6 +38,21 @@ struct scp_image {
     } rev[5];
 };
 
+struct image_buf {
+    void *p;
+    uint32_t len;
+    uint32_t prod, cons;
+};
+
+struct image_bufs {
+    /* Buffer space for a whole track of raw MFM. */
+    struct image_buf write_mfm;
+    /* Staging area for writeout to mass storage. */
+    struct image_buf write_data;
+    /* Read buffer for track data to be used for generating flux pattern. */
+    struct image_buf read_data;
+};
+
 struct image {
     struct image_handler *handler;
 
@@ -46,9 +62,8 @@ struct image {
     /* Info about image as a whole. */
     uint16_t nr_tracks;
 
-    /* Track buffer. */
-    uint32_t buf[4096/4];
-    uint32_t prod, cons;
+    /* Data buffers. */
+    struct image_bufs bufs;
 
     /* Info about current track. */
     uint16_t cur_track;

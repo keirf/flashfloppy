@@ -45,20 +45,29 @@ void IRQ_43(void) __attribute__((alias("IRQ_step")));
 
 /* A DMA buffer for running a timer associated with a floppy-data I/O pin. */
 struct dma_ring {
-    /* Current state of DMA: */
-    /*  DMA_inactive: No activity, buffer is empty. */
+    /* Current state of DMA (RDATA): 
+     *  DMA_inactive: No activity, buffer is empty. 
+     *  DMA_starting: Buffer is filling, DMA+timer not yet active.
+     *  DMA_active: DMA is active, timer is operational. 
+     *  DMA_stopping: DMA+timer halted, buffer waiting to be cleared. 
+     * Current state of DMA (WDATA): 
+     *  DMA_inactive: No activity, flux ring and MFM buffer are empty. 
+     *  DMA_starting: Flux ring and MFM buffer are filling, DMA+timer active.
+     *  DMA_active: Writeback processing is active (to mass storage).
+     *  DMA_stopping: DMA+timer halted, buffers waiting to be cleared. */
 #define DMA_inactive 0 /* -> {starting, active} */
-    /*  DMA_starting: Buffer is filling, DMA+timer not yet active. */
 #define DMA_starting 1 /* -> {active, stopping} */
-    /*  DMA_active: DMA is active, timer is operational. */
 #define DMA_active   2 /* -> {stopping} */
-    /*  DMA_stopping: DMA+timer halted, buffer waiting to be cleared. */
 #define DMA_stopping 3 /* -> {inactive} */
     volatile uint8_t state;
     /* IRQ handler sets this if the read buffer runs dry. */
     volatile uint8_t kick_dma_irq;
     /* Indexes into the buf[] ring buffer. */
-    uint16_t prod, cons;
+    uint16_t cons;
+    union {
+        uint16_t prod; /* dma_rd: our producer index for flux samples */
+        uint16_t prev_sample; /* dma_wr: previous CCRx sample value */
+    };
     /* {inactive, starting} -> {active} must happen within this cancellation. 
      * This allows it to be cancelled from the EXTI ISR if inputs change. */
     struct cancellation startup_cancellation;
@@ -106,6 +115,7 @@ static void index_pulse(void *);
 static uint32_t max_read_us;
 
 static void rdata_stop(void);
+static void wdata_stop(void);
 
 #if 0
 /* List changes at floppy inputs and sequentially activate outputs. */
@@ -146,14 +156,18 @@ static void floppy_check(void)
 
 void floppy_cancel(void)
 {
+    unsigned int i;
+
     /* Initialised? Bail if not. */
     if (!dma_rd)
         return;
 
     /* Stop DMA/timer work. */
     IRQx_disable(dma_rdata_irq);
+    IRQx_disable(dma_wdata_irq);
     timer_cancel(&index.timer);
     rdata_stop();
+    wdata_stop();
 
     /* Set outputs for empty drive. */
     index.active = FALSE;
@@ -161,8 +175,10 @@ void floppy_cancel(void)
 //    gpio_write_pins(gpio_out, m(pin_dskchg), O_TRUE);
 
     /* Clear soft state. */
-    drive->image = NULL;
-    drive->filename = NULL;
+    for (i = 0; i < NR_DRIVES; i++) {
+        drive[i].image = NULL;
+        drive[i].filename = NULL;
+    }
     max_read_us = 0;
     image = NULL;
     dma_rd = dma_wr = NULL;
@@ -225,35 +241,125 @@ void floppy_insert(unsigned int unit, const char *image_name)
     image = arena_alloc(sizeof(*image));
     memset(image, 0, sizeof(*image));
 
+    /* Must buffer a full track of MFM to write out to mass storage. */
+    image->bufs.write_mfm.len = WRITE_TRACK_BITCELLS / 8;
+    image->bufs.write_mfm.p = arena_alloc(image->bufs.write_mfm.len);
+
+    /* Any remaining space is used for staging writes to mass storage, for 
+     * example when format conversion is required and it is not possible to 
+     * do this in place within the write_mfm buffer. */
+    image->bufs.write_data.len = arena_avail();
+    image->bufs.write_data.p = arena_alloc(image->bufs.write_data.len);
+
+    /* Finally the read staging buffer can overlap with the write buffers
+     * *except* that we must be able to start processing write flux while
+     * read-data is still processing (eg. in-flight mass storage io). Thus the
+     * first 4kB of the write_mfm buffer is dedicated to the write pipeline:
+     * even at HD data rate (1us/bitcell) this is good for 32ms before
+     * colliding with read buffers. This is more than enough time for read
+     * processing to complete. */
+    image->bufs.read_data.len =
+        image->bufs.write_data.len + image->bufs.write_mfm.len - 4096;
+    image->bufs.read_data.p = image->bufs.write_mfm.p + 4096;
+
     drive[unit].filename = image_name;
 
     index.prev_time = stk_now();
     timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
 
     /* Enable DMA interrupts. */
-    dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch);
+#if BUILD_GOTEK /* DMA channel shared with led_7seg */
+    _IRQ_dma1_ch2 = IRQ_wdata_dma;
+#endif
+    dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch) | DMA_IFCR_CGIF(dma_wdata_ch);
     IRQx_set_prio(dma_rdata_irq, RDATA_IRQ_PRI);
+    IRQx_set_prio(dma_wdata_irq, WDATA_IRQ_PRI);
     IRQx_enable(dma_rdata_irq);
+    IRQx_enable(dma_wdata_irq);
 
-    /* Timer setup:
+    /* RDATA Timer setup:
      * The counter is incremented at full SYSCLK rate. 
      *  
-     * Ch.2 (RDDATA) is in PWM mode 1. It outputs O_TRUE for 400ns and then 
+     * Ch.2 (RDATA) is in PWM mode 1. It outputs O_TRUE for 400ns and then 
      * O_FALSE until the counter reloads. By changing the ARR via DMA we alter
      * the time between (fixed-width) O_TRUE pulses, mimicking floppy drive 
      * timings. */
     tim_rdata->psc = 0;
-    tim_rdata->ccer = TIM_CCER_CC2E | ((O_TRUE==0) ? TIM_CCER_CC2P : 0);
     tim_rdata->ccmr1 = (TIM_CCMR1_CC2S(TIM_CCS_OUTPUT) |
                         TIM_CCMR1_OC2M(TIM_OCM_PWM1));
+    tim_rdata->ccer = TIM_CCER_CC2E | ((O_TRUE==0) ? TIM_CCER_CC2P : 0);
     tim_rdata->ccr2 = sysclk_ns(400);
     tim_rdata->dier = TIM_DIER_UDE;
     tim_rdata->cr2 = 0;
 
-    /* DMA setup: From a circular buffer into read-data timer's ARR. */
+    /* DMA setup: From a circular buffer into the RDATA Timer's ARR. */
     dma_rdata.cpar = (uint32_t)(unsigned long)&tim_rdata->arr;
     dma_rdata.cmar = (uint32_t)(unsigned long)dma_rd->buf;
     dma_rdata.cndtr = ARRAY_SIZE(dma_rd->buf);
+
+    /* WDATA Timer setup: 
+     * The counter runs from 0x0000-0xFFFF inclusive at full SYSCLK rate.
+     *  
+     * Ch.1 (WDATA) is in Input Capture mode, sampling on every clock and with
+     * no input prescaling or filtering. Samples are captured on the falling 
+     * edge of the input (CCxP=1). DMA is used to copy the sample into a ring
+     * buffer for batch processing in the DMA-completion ISR. */
+    tim_wdata->psc = 0;
+    tim_wdata->arr = 0xffff;
+    tim_wdata->ccmr1 = (TIM_CCMR1_CC1S(TIM_CCS_INPUT_TI1) |
+                        TIM_CCMR1_OC1M(TIM_OCM_PWM1));
+    tim_wdata->dier = TIM_DIER_CC1DE;
+    tim_wdata->cr2 = 0;
+
+    /* DMA setup: From the WDATA Timer's CCRx into a circular buffer. */
+    dma_wdata.cpar = (uint32_t)(unsigned long)&tim_wdata->ccr1;
+    dma_wdata.cmar = (uint32_t)(unsigned long)dma_wr->buf;
+}
+
+/* Called from IRQ context to stop the write stream. */
+static void wdata_stop(void)
+{
+    uint8_t prev_state = dma_wr->state;
+
+    /* Already inactive? Nothing to do. */
+    if ((prev_state == DMA_inactive) || (prev_state == DMA_stopping))
+        return;
+
+    /* Ok we're now stopping DMA activity. */
+    dma_wr->state = DMA_stopping;
+
+    /* Turn off timer and DMA. */
+    tim_wdata->ccer = 0;
+    tim_wdata->cr1 = 0;
+    dma_wdata.ccr = 0;
+
+    /* Drain out the DMA buffer. */
+    IRQx_set_pending(dma_wdata_irq);
+}
+
+static void wdata_start(void)
+{
+    if (dma_wr->state != DMA_inactive)
+        return;
+    dma_wr->state = DMA_starting;
+
+    /* Start DMA to circular buffer. */
+    dma_wdata.cndtr = ARRAY_SIZE(dma_wr->buf);
+    dma_wdata.ccr = (DMA_CCR_PL_HIGH |
+                     DMA_CCR_MSIZE_16BIT |
+                     DMA_CCR_PSIZE_16BIT |
+                     DMA_CCR_MINC |
+                     DMA_CCR_CIRC |
+                     DMA_CCR_DIR_P2M |
+                     DMA_CCR_HTIE |
+                     DMA_CCR_TCIE |
+                     DMA_CCR_EN);
+
+    /* Start timer. */
+    tim_wdata->ccer = TIM_CCER_CC1E | TIM_CCER_CC1P;
+    tim_wdata->egr = TIM_EGR_UG;
+    tim_wdata->sr = 0; /* dummy write, gives h/w time to process EGR.UG=1 */
+    tim_wdata->cr1 = TIM_CR1_CEN;
 }
 
 /* Called from IRQ context to stop the read stream. */
@@ -359,17 +465,8 @@ static void floppy_read_data(struct drive *drv)
     }
 }
 
-void floppy_handle(void)
+static void dma_rd_handle(struct drive *drv)
 {
-    struct drive *drv = &drive[0];
-
-    if (!drv->image) {
-        if (!image_open(image, drv->filename))
-            return;
-        drv->image = image;
-        dma_rd->state = DMA_stopping;
-    }
-
     switch (dma_rd->state) {
 
     case DMA_inactive: {
@@ -433,6 +530,49 @@ void floppy_handle(void)
     }
 }
 
+void floppy_handle(void)
+{
+    struct drive *drv = &drive[0];
+
+    if (!drv->image) {
+        if (!image_open(image, drv->filename))
+            return;
+        drv->image = image;
+        dma_rd->state = DMA_stopping;
+    }
+
+    switch (dma_wr->state) {
+    case DMA_inactive:
+        dma_rd_handle(drv);
+        break;
+    case DMA_starting:
+        if (dma_rd->state != DMA_inactive) {
+            ASSERT(dma_rd->state == DMA_stopping);
+            dma_rd_handle(drv);
+            ASSERT(dma_rd->state == DMA_inactive);
+        }
+        /* May race wdata_stop(). */
+        cmpxchg(&dma_wr->state, DMA_starting, DMA_active);
+        break;
+    case DMA_active:
+        break;
+    case DMA_stopping: {
+        /* Wait for the flux ring to drain out into the MFM buffer. */
+        uint16_t prod = ARRAY_SIZE(dma_wr->buf) - dma_wdata.cndtr;
+        if (dma_wr->cons != prod)
+            break;
+        /* Clear the flux ring. */
+        printk("XX %u\n", image->bufs.write_mfm.prod);
+        dma_wr->cons = 0;
+        dma_wr->prev_sample = 0;
+        image->bufs.write_mfm.prod = 0;
+        barrier(); /* allow reactivation of write /last/ */
+        dma_wr->state = DMA_inactive;
+        break;
+    }
+    }
+}
+
 static void index_pulse(void *dat)
 {
     index.active ^= 1;
@@ -488,6 +628,22 @@ static void IRQ_input_changed(void)
             drv->head = !(inp & m(inp_side));
             if ((i == 0) && (dma_rd != NULL)) {
                 rdata_stop();
+                cancel_call(&dma_rd->startup_cancellation);
+            }
+        }
+    }
+
+    if ((changed & m(inp_wgate)) && (dma_wr != NULL)) {
+        for (i = 0; i < NR_DRIVES; i++) {
+            if (!drv->sel)
+                continue;
+            if (i != 0)
+                continue;
+            if (inp & m(inp_wgate)) {
+                wdata_stop();
+            } else {
+                rdata_stop();
+                wdata_start();
                 cancel_call(&dma_rd->startup_cancellation);
             }
         }
@@ -557,7 +713,7 @@ static void IRQ_rdata_dma(void)
          ? (dma_rd->prod >= dma_rd->cons) || (dma_rd->prod < dmacons)
          : (dma_rd->prod >= dma_rd->cons) && (dma_rd->prod < dmacons))
         && (dmacons != dma_rd->cons))
-        printk("Buffer underrun! %x-%x-%x\n",
+        printk("RDATA underrun! %x-%x-%x\n",
                dma_rd->cons, dma_rd->prod, dmacons);
 
     dma_rd->cons = dmacons;
@@ -610,6 +766,55 @@ static void IRQ_rdata_dma(void)
     /* Calculate deadline for index timer. */
     ticks /= SYSCLK_MHZ/STK_MHZ;
     timer_set(&index.timer, stk_add(now, ticks));
+}
+
+static void IRQ_wdata_dma(void)
+{
+    const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
+    uint16_t cons, prod, prev, curr, next;
+    uint32_t mfm, mfmprod;
+    static uint32_t data;
+
+    /* Clear DMA peripheral interrupts. */
+    dma1->ifcr = DMA_IFCR_CGIF(dma_wdata_ch);
+
+    /* If we happen to be called in the wrong state, just bail. */
+    if (dma_wr->state == DMA_inactive)
+        return;
+
+    /* Find out where the DMA engine's producer index has got to. */
+    prod = ARRAY_SIZE(dma_wr->buf) - dma_wdata.cndtr;
+
+    /* Process the flux timings into the MFM raw buffer. */
+    prev = dma_wr->prev_sample;
+    mfmprod = image->bufs.write_mfm.prod;
+    mfm = ((uint32_t *)image->bufs.write_mfm.p)[
+        (mfmprod/32)%(image->bufs.write_mfm.len/4)];
+    for (cons = dma_wr->cons; cons != prod; cons = (cons+1) & buf_mask) {
+        next = dma_wr->buf[cons];
+        curr = next - prev;
+        prev = next;
+        while (curr > 3*SYSCLK_MHZ) {
+            data <<= 1;
+            curr -= 2*SYSCLK_MHZ;
+            mfmprod++;
+            if (!(mfmprod&31)) {
+                ((uint32_t *)image->bufs.write_mfm.p)[
+                    (mfmprod/32)%(image->bufs.write_mfm.len/4)] = mfm;
+            }
+        }
+        data = (data << 1) | 1;
+        mfmprod++;
+        if (!(mfmprod&31)) {
+            ((uint32_t *)image->bufs.write_mfm.p)[
+                (mfmprod/32)%(image->bufs.write_mfm.len/4)] = mfm;
+        }
+    }
+
+    /* Save our progress for next time. */
+    image->bufs.write_mfm.prod = mfmprod;
+    dma_wr->cons = cons;
+    dma_wr->prev_sample = prev;
 }
 
 /*
