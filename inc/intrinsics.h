@@ -94,8 +94,8 @@ static always_inline unsigned long __cmpxchg(
     case 1:
         do {
             asm volatile("    ldrexb %1,[%2]      \n"
-                         "    mov    %0,#0        \n"
-                         "    teq    %1,%3        \n"
+                         "    movs   %0,#0        \n"
+                         "    cmp    %1,%3        \n"
                          "    it     eq           \n"
                          "    strexbeq %0,%4,[%2] \n"
                          : "=&r" (res), "=&r" (oldval)
@@ -106,8 +106,8 @@ static always_inline unsigned long __cmpxchg(
     case 2:
         do {
             asm volatile("    ldrexh %1,[%2]      \n"
-                         "    mov    %0,#0        \n"
-                         "    teq    %1,%3        \n"
+                         "    movs   %0,#0        \n"
+                         "    cmp    %1,%3        \n"
                          "    it     eq           \n"
                          "    strexheq %0,%4,[%2] \n"
                          : "=&r" (res), "=&r" (oldval)
@@ -118,8 +118,8 @@ static always_inline unsigned long __cmpxchg(
     case 4:
         do {
             asm volatile("    ldrex  %1,[%2]      \n"
-                         "    mov    %0,#0        \n"
-                         "    teq    %1,%3        \n"
+                         "    movs   %0,#0        \n"
+                         "    cmp    %1,%3        \n"
                          "    it     eq           \n"
                          "    strexeq %0,%4,[%2]  \n"
                          : "=&r" (res), "=&r" (oldval)

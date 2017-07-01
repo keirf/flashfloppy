@@ -17,7 +17,7 @@ asm (
     "    str     sp, [r0]\n" /* c->sp = PSP */
     "    blx     r1\n"       /* (*fn)() */
     "    ldr     r2, [sp]\n"
-    "    mov     r1, #0\n"
+    "    movs    r1, #0\n"
     "    str     r1, [r2]\n" /* c->sp = NULL */
     "do_cancel:\n"
     "    add     sp, #4\n"
