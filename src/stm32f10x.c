@@ -49,13 +49,17 @@ void EXC_unexpected(struct extra_exception_frame *extra)
 
 static void exception_init(void)
 {
-    uint32_t sp;
-    unsigned int i;
+    /* Initialise and switch to Process SP. Explicit asm as must be
+     * atomic wrt updates to SP. We can't guarantee that in C. */
+    asm volatile (
+        "    mrs  r1,msp     \n"
+        "    msr  psp,r1     \n" /* Set up Process SP    */
+        "    movs r1,%0      \n"
+        "    msr  control,r1 \n" /* Switch to Process SP */
+        "    isb             \n" /* Flush the pipeline   */
+        :: "i" (CONTROL_SPSEL) : "r1" );
 
-    /* Switch to Process SP, and set up Main SP for IRQ/Exception context. */
-    sp = read_special(msp);
-    write_special(psp, sp);
-    write_special(control, 2); /* CONTROL.SPSEL=1 */
+    /* Set up Main SP for IRQ/Exception context. */
     write_special(msp, _irq_stacktop);
 
     /* Initialise interrupts and exceptions. */
@@ -67,12 +71,6 @@ static void exception_init(void)
     scb->shcsr |= (SCB_SHCSR_USGFAULTENA |
                    SCB_SHCSR_BUSFAULTENA |
                    SCB_SHCSR_MEMFAULTENA);
-
-    /* Disable and clear pending status of all interrupts. */
-    for (i = 0; i < 8; i++) {
-        nvic->icer[i] = 0xffffffff;
-        nvic->icpr[i] = 0xffffffff;
-    }
 
     /* SVCall/PendSV exceptions have lowest priority. */
     scb->shpr2 = 0xff<<24;
@@ -144,14 +142,10 @@ static void peripheral_init(void)
 
 void stm32_init(void)
 {
-    global_disable_exceptions();
-
     exception_init();
     clock_init();
     peripheral_init();
-
     cpu_sync();
-    global_enable_exceptions();
 }
 
 void delay_ticks(unsigned int ticks)

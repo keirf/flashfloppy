@@ -35,7 +35,8 @@ struct exception_frame {
 })
 
 /* CONTROL[1] == 0 => running on Master Stack (Exception Handler mode). */
-#define in_exception() (!(read_special(control) & 2))
+#define CONTROL_SPSEL 2
+#define in_exception() (!(read_special(control) & CONTROL_SPSEL))
 
 #define global_disable_exceptions() \
     asm volatile ("cpsid f; cpsid i" ::: "memory")
