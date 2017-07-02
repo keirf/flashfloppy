@@ -562,7 +562,6 @@ void floppy_handle(void)
         if (dma_wr->cons != prod)
             break;
         /* Clear the flux ring. */
-        printk("XX %u\n", image->bufs.write_mfm.prod);
         dma_wr->cons = 0;
         dma_wr->prev_sample = 0;
         image->bufs.write_mfm.prod = 0;
@@ -772,8 +771,7 @@ static void IRQ_wdata_dma(void)
 {
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
     uint16_t cons, prod, prev, curr, next;
-    uint32_t mfm, mfmprod;
-    static uint32_t data;
+    uint32_t mfm, mfmprod, syncword = image->handler->syncword;
 
     /* Clear DMA peripheral interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_wdata_ch);
@@ -795,17 +793,19 @@ static void IRQ_wdata_dma(void)
         curr = next - prev;
         prev = next;
         while (curr > 3*SYSCLK_MHZ) {
-            data <<= 1;
+            mfm <<= 1;
             curr -= 2*SYSCLK_MHZ;
             mfmprod++;
-            if (!(mfmprod&31)) {
+            if (!(mfmprod&31) || (mfm == syncword)) {
+                mfmprod &= ~31;
                 ((uint32_t *)image->bufs.write_mfm.p)[
                     (mfmprod/32)%(image->bufs.write_mfm.len/4)] = mfm;
             }
         }
-        data = (data << 1) | 1;
+        mfm = (mfm << 1) | 1;
         mfmprod++;
-        if (!(mfmprod&31)) {
+        if (!(mfmprod&31) || (mfm == syncword)) {
+            mfmprod &= ~31;
             ((uint32_t *)image->bufs.write_mfm.p)[
                 (mfmprod/32)%(image->bufs.write_mfm.len/4)] = mfm;
         }

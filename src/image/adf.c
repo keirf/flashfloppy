@@ -210,11 +210,12 @@ out:
     return nr - todo;
 }
 
-struct image_handler adf_image_handler = {
+const struct image_handler adf_image_handler = {
     .open = adf_open,
     .seek_track = adf_seek_track,
     .read_track = adf_read_track,
-    .rdata_flux = adf_rdata_flux
+    .rdata_flux = adf_rdata_flux,
+    .syncword = 0x44894489
 };
 
 /*

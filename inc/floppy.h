@@ -54,7 +54,7 @@ struct image_bufs {
 };
 
 struct image {
-    struct image_handler *handler;
+    const struct image_handler *handler;
 
     /* FatFS. */
     FIL fp;
@@ -85,6 +85,7 @@ struct image_handler {
         struct image *im, uint8_t track, stk_time_t *start_pos);
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
+    uint32_t syncword;
 };
 
 /* Open specified image file on mass storage device. */

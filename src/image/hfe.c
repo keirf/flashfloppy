@@ -181,11 +181,12 @@ out:
     return nr - todo;
 }
 
-struct image_handler hfe_image_handler = {
+const struct image_handler hfe_image_handler = {
     .open = hfe_open,
     .seek_track = hfe_seek_track,
     .read_track = hfe_read_track,
-    .rdata_flux = hfe_rdata_flux
+    .rdata_flux = hfe_rdata_flux,
+    .syncword = 0xffffffff
 };
 
 /*

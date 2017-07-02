@@ -180,11 +180,12 @@ out:
     return nr - todo;
 }
 
-struct image_handler scp_image_handler = {
+const struct image_handler scp_image_handler = {
     .open = scp_open,
     .seek_track = scp_seek_track,
     .read_track = scp_read_track,
-    .rdata_flux = scp_rdata_flux
+    .rdata_flux = scp_rdata_flux,
+    .syncword = 0xffffffff
 };
 
 /*
