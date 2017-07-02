@@ -539,6 +539,8 @@ void floppy_handle(void)
             return;
         drv->image = image;
         dma_rd->state = DMA_stopping;
+        gpio_write_pin(gpio_out, pin_wrprot,
+                       !image->handler->write_track ? O_TRUE : O_FALSE);
     }
 
     switch (dma_wr->state) {
@@ -555,15 +557,21 @@ void floppy_handle(void)
         cmpxchg(&dma_wr->state, DMA_starting, DMA_active);
         break;
     case DMA_active:
+        image_write_track(drv->image);
         break;
     case DMA_stopping: {
-        /* Wait for the flux ring to drain out into the MFM buffer. */
+        /* Wait for the flux ring to drain out into the MFM buffer. 
+         * Write data to mass storage meanwhile. */
         uint16_t prod = ARRAY_SIZE(dma_wr->buf) - dma_wdata.cndtr;
-        if (dma_wr->cons != prod)
+        uint16_t cons = dma_wr->cons;
+        barrier(); /* take dma indexes /then/ process data tail */
+        image_write_track(drv->image);
+        if (cons != prod)
             break;
         /* Clear the flux ring. */
         dma_wr->cons = 0;
         dma_wr->prev_sample = 0;
+        image->bufs.write_mfm.cons = 0;
         image->bufs.write_mfm.prod = 0;
         barrier(); /* allow reactivation of write /last/ */
         dma_wr->state = DMA_inactive;
@@ -634,7 +642,7 @@ static void IRQ_input_changed(void)
 
     if ((changed & m(inp_wgate)) && (dma_wr != NULL)) {
         for (i = 0; i < NR_DRIVES; i++) {
-            if (!drv->sel)
+            if (!drv->sel || !drv->image->handler->write_track)
                 continue;
             if (i != 0)
                 continue;
@@ -771,7 +779,9 @@ static void IRQ_wdata_dma(void)
 {
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
     uint16_t cons, prod, prev, curr, next;
-    uint32_t mfm, mfmprod, syncword = image->handler->syncword;
+    uint32_t mfm = 0, mfmprod, syncword = image->handler->syncword;
+    uint32_t *mfmbuf = image->bufs.write_mfm.p;
+    unsigned int mfmbuflen = image->bufs.write_mfm.len / 4;
 
     /* Clear DMA peripheral interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_wdata_ch);
@@ -786,32 +796,30 @@ static void IRQ_wdata_dma(void)
     /* Process the flux timings into the MFM raw buffer. */
     prev = dma_wr->prev_sample;
     mfmprod = image->bufs.write_mfm.prod;
-    mfm = ((uint32_t *)image->bufs.write_mfm.p)[
-        (mfmprod/32)%(image->bufs.write_mfm.len/4)];
+    if (mfmprod & 31)
+        mfm = be32toh(mfmbuf[(mfmprod / 32) % mfmbuflen]) >> (-mfmprod&31);
     for (cons = dma_wr->cons; cons != prod; cons = (cons+1) & buf_mask) {
         next = dma_wr->buf[cons];
         curr = next - prev;
         prev = next;
         while (curr > 3*SYSCLK_MHZ) {
-            mfm <<= 1;
             curr -= 2*SYSCLK_MHZ;
+            mfm <<= 1;
             mfmprod++;
-            if (!(mfmprod&31) || (mfm == syncword)) {
-                mfmprod &= ~31;
-                ((uint32_t *)image->bufs.write_mfm.p)[
-                    (mfmprod/32)%(image->bufs.write_mfm.len/4)] = mfm;
-            }
+            if (!(mfmprod&31))
+                mfmbuf[((mfmprod-1) / 32) % mfmbuflen] = htobe32(mfm);
         }
         mfm = (mfm << 1) | 1;
         mfmprod++;
-        if (!(mfmprod&31) || (mfm == syncword)) {
+        if (mfm == syncword)
             mfmprod &= ~31;
-            ((uint32_t *)image->bufs.write_mfm.p)[
-                (mfmprod/32)%(image->bufs.write_mfm.len/4)] = mfm;
-        }
+        if (!(mfmprod&31))
+            mfmbuf[((mfmprod-1) / 32) % mfmbuflen] = htobe32(mfm);
     }
 
     /* Save our progress for next time. */
+    if (mfmprod & 31)
+        mfmbuf[(mfmprod / 32) % mfmbuflen] = htobe32(mfm << (-mfmprod&31));
     image->bufs.write_mfm.prod = mfmprod;
     dma_wr->cons = cons;
     dma_wr->prev_sample = prev;

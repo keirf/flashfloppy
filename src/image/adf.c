@@ -210,11 +210,63 @@ out:
     return nr - todo;
 }
 
+static void adf_write_track(struct image *im)
+{
+    struct image_buf *wr = &im->bufs.write_mfm;
+    uint32_t *buf = wr->p;
+    unsigned int buflen = wr->len / 4;
+    uint32_t c = wr->cons / 32, p = wr->prod / 32;
+    uint32_t info, data, csum;
+    unsigned int i;
+
+    while ((p - c) >= (542/2)) {
+        if (be32toh(buf[c++ % buflen]) != 0x44894489)
+            continue;
+        /* info word */
+        info = (buf[c++ % buflen] & 0x55555555) << 1;
+        info |= buf[c++ % buflen] & 0x55555555;
+        /* label */
+        csum = info ^ (info >> 1);
+        for (i = 0; i < 8; i++)
+            csum ^= buf[c++ % buflen];
+        csum &= 0x55555555;
+        /* header checksum */
+        csum ^= (buf[c++ % buflen] & 0x55555555) << 1;
+        csum ^= buf[c++ % buflen] & 0x55555555;
+        info = be32toh(info);
+        csum = be32toh(csum);
+        if (((info>>16) != ((0xff<<8) | im->cur_track))
+            || ((uint8_t)(info>>8) >= 11)
+            || (csum != 0)) {
+            printk("Bad header: info=%08x csum=%08x\n", info, csum);
+            continue;
+        }
+        /* data checksum */
+        csum = (buf[c++ % buflen] & 0x55555555) << 1;
+        csum |= buf[c++ % buflen] & 0x55555555;
+        /* data */
+        data = 0;
+        for (i = 0; i < 256; i++)
+            data ^= buf[c++ % buflen];
+        csum ^= data & 0x55555555;
+        csum = be32toh(csum);
+        if (csum != 0) {
+            printk("Bad data: csum=%08x\n", csum);
+            continue;
+        }
+        printk("Good sector: Trk=%u Sec=%u\n",
+               (uint8_t)(info>>16), (uint8_t)(info>>8));
+    }
+
+    wr->cons = c * 32;
+}
+
 const struct image_handler adf_image_handler = {
     .open = adf_open,
     .seek_track = adf_seek_track,
     .read_track = adf_read_track,
     .rdata_flux = adf_rdata_flux,
+    .write_track = adf_write_track,
     .syncword = 0x44894489
 };
 

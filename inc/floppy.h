@@ -85,6 +85,7 @@ struct image_handler {
         struct image *im, uint8_t track, stk_time_t *start_pos);
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
+    void (*write_track)(struct image *im);
     uint32_t syncword;
 };
 
@@ -99,6 +100,8 @@ bool_t image_seek_track(
 bool_t image_read_track(struct image *im);
 /* Generate flux timings for the RDATA timer and output pin. */
 uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
+/* Write track data from memory to mass storage. */
+void image_write_track(struct image *im);
 /* Rotational position of last-generated flux (SYSCLK ticks past index). */
 uint32_t image_ticks_since_index(struct image *im);
 
