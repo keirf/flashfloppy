@@ -66,7 +66,7 @@ static bool_t scp_seek_track(
     struct image *im, uint8_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    uint32_t sys_ticks = *start_pos;
+    uint32_t sys_ticks = start_pos ? *start_pos : 0;
     struct trk_header header;
     uint32_t hdr_offset, i, j, nr_flux;
 
@@ -104,7 +104,9 @@ static bool_t scp_seek_track(
     im->scp.ld_pos = im->scp.pf_pos;
 
     rd->prod = rd->cons = 0;
-    image_read_track(im);
+
+    if (start_pos)
+        image_read_track(im);
 
     return TRUE;
 }

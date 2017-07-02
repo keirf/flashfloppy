@@ -17,6 +17,7 @@ bool_t image_open(struct image *im, const char *name)
 {
     char suffix[8];
     struct image_bufs bufs = im->bufs;
+    BYTE mode;
 
     /* Reinitialise image structure, except for static buffers. */
     memset(im, 0, sizeof(*im));
@@ -32,7 +33,10 @@ bool_t image_open(struct image *im, const char *name)
     else
         return FALSE;
 
-    F_open(&im->fp, name, FA_READ);
+    mode = FA_READ | FA_OPEN_EXISTING;
+    if (im->handler->write_track != NULL)
+        mode |= FA_WRITE;
+    F_open(&im->fp, name, mode);
     
     return im->handler->open(im);
 }
@@ -40,6 +44,12 @@ bool_t image_open(struct image *im, const char *name)
 bool_t image_seek_track(
     struct image *im, uint8_t track, stk_time_t *start_pos)
 {
+    /* If we are already seeked to this track and we are not interested in 
+     * a particular rotational position (ie. we are writing) then we have 
+     * nothing to do. */
+    if ((start_pos == NULL) && (track == im->cur_track))
+        return TRUE;
+
     return im->handler->seek_track(im, track, start_pos);
 }
 

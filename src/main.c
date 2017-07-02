@@ -116,6 +116,7 @@ int floppy_main(void)
 int main(void)
 {
     unsigned int i;
+    FRESULT fres;
 
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
@@ -164,10 +165,11 @@ int main(void)
 
         led_7seg_suspend();
         arena_init();
-        F_call_cancellable(floppy_main);
+        fres = F_call_cancellable(floppy_main);
         floppy_cancel();
         speed_tests_cancel();
         led_7seg_resume();
+        printk("FATFS RETURN CODE: %u\n", fres);
     }
 
     return 0;

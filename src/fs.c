@@ -66,9 +66,15 @@ void F_write(FIL *fp, const void *buff, UINT btw, UINT *bw)
     FRESULT fr = f_write(fp, buff, btw, &_bw);
     if (bw != NULL) {
         *bw = _bw;
-    } else if (_bw < btw) {
+    } else if ((fr == FR_OK) && (_bw < btw)) {
         fr = FR_DISK_FULL;
     }
+    handle_fr(fr);
+}
+
+void F_sync(FIL *fp)
+{
+    FRESULT fr = f_sync(fp);
     handle_fr(fr);
 }
 

@@ -91,17 +91,26 @@ struct image_handler {
 
 /* Open specified image file on mass storage device. */
 bool_t image_open(struct image *im, const char *name);
-/* Seek to given track and start reading track data at specified rotational 
- * position (specified as number of SYSCLK ticks past the index mark). 
+
+/* Seek to given track and start reading track data at specified rotational
+ * position (specified as number of SYSCLK ticks past the index mark).
+ * 
+ * If start_pos is NULL then the caller is in write mode and thus is not
+ * interested in fetching data from a particular rotational position.
+ * 
  * Returns TRUE if track successfully loaded, else FALSE. */
 bool_t image_seek_track(
     struct image *im, uint8_t track, stk_time_t *start_pos);
+
 /* Read track data into memory. Returns TRUE if any new data was read. */
 bool_t image_read_track(struct image *im);
+
 /* Generate flux timings for the RDATA timer and output pin. */
 uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
+
 /* Write track data from memory to mass storage. */
 void image_write_track(struct image *im);
+
 /* Rotational position of last-generated flux (SYSCLK ticks past index). */
 uint32_t image_ticks_since_index(struct image *im);
 

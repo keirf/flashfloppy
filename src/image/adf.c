@@ -52,7 +52,7 @@ static bool_t adf_seek_track(
     struct image *im, uint8_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    uint32_t sector, sys_ticks = *start_pos;
+    uint32_t sector, sys_ticks = start_pos ? *start_pos : 0;
 
     /* TODO: Fake out unformatted tracks. */
     track = min_t(uint8_t, track, im->nr_tracks-1);
@@ -75,9 +75,12 @@ static bool_t adf_seek_track(
     sector = (im->cur_bc - 1024) / (544*16);
     im->adf.trk_pos = (sector < 11) ? sector * 512 : 0;
     rd->prod = rd->cons = 0;
-    image_read_track(im);
 
-    *start_pos = sys_ticks;
+    if (start_pos) {
+        image_read_track(im);
+        *start_pos = sys_ticks;
+    }
+
     return TRUE;
 }
 
@@ -215,47 +218,67 @@ static void adf_write_track(struct image *im)
     struct image_buf *wr = &im->bufs.write_mfm;
     uint32_t *buf = wr->p;
     unsigned int buflen = wr->len / 4;
+    uint32_t *w, *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 32, p = wr->prod / 32;
-    uint32_t info, data, csum;
-    unsigned int i;
+    uint32_t info, dsum, csum;
+    unsigned int i, sect;
 
     while ((p - c) >= (542/2)) {
+
+        /* Scan for sync word. */
         if (be32toh(buf[c++ % buflen]) != 0x44894489)
             continue;
-        /* info word */
+
+        /* Info word (format,track,sect,sect_to_gap). */
         info = (buf[c++ % buflen] & 0x55555555) << 1;
         info |= buf[c++ % buflen] & 0x55555555;
-        /* label */
         csum = info ^ (info >> 1);
+        info = be32toh(info);
+        sect = (uint8_t)(info >> 8);
+
+        /* Label area. Scan for header checksum only. */
         for (i = 0; i < 8; i++)
             csum ^= buf[c++ % buflen];
         csum &= 0x55555555;
-        /* header checksum */
+
+        /* Header checksum. */
         csum ^= (buf[c++ % buflen] & 0x55555555) << 1;
         csum ^= buf[c++ % buflen] & 0x55555555;
-        info = be32toh(info);
         csum = be32toh(csum);
+
+        /* Check the info word and header checksum.  */
         if (((info>>16) != ((0xff<<8) | im->cur_track))
-            || ((uint8_t)(info>>8) >= 11)
-            || (csum != 0)) {
+            || (sect >= 11) || (csum != 0)) {
             printk("Bad header: info=%08x csum=%08x\n", info, csum);
             continue;
         }
-        /* data checksum */
+
+        /* Data checksum. */
         csum = (buf[c++ % buflen] & 0x55555555) << 1;
         csum |= buf[c++ % buflen] & 0x55555555;
-        /* data */
-        data = 0;
-        for (i = 0; i < 256; i++)
-            data ^= buf[c++ % buflen];
-        csum ^= data & 0x55555555;
-        csum = be32toh(csum);
+
+        /* Data area. Decode to a write buffer and keep a running checksum. */
+        dsum = 0;
+        w = wrbuf;
+        for (i = dsum = 0; i < 128; i++) {
+            uint32_t o = buf[(c + 128) % buflen] & 0x55555555;
+            uint32_t e = buf[c++ % buflen] & 0x55555555;
+            dsum ^= o ^ e;
+            *w++ = (e << 1) | o;
+        }
+        c += 128;
+
+        /* Validate the data checksum. */
+        csum = be32toh(csum ^ dsum);
         if (csum != 0) {
             printk("Bad data: csum=%08x\n", csum);
             continue;
         }
-        printk("Good sector: Trk=%u Sec=%u\n",
-               (uint8_t)(info>>16), (uint8_t)(info>>8));
+
+        /* All good: write out to mass storage. */
+        printk("Good sector: Trk=%u Sec=%u\n", (uint8_t)(info>>16), sect);
+        F_lseek(&im->fp, im->adf.trk_off + sect*512);
+        F_write(&im->fp, wrbuf, 512, NULL);
     }
 
     wr->cons = c * 32;

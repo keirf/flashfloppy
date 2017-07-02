@@ -544,21 +544,31 @@ void floppy_handle(void)
     }
 
     switch (dma_wr->state) {
+
     case DMA_inactive:
         dma_rd_handle(drv);
         break;
-    case DMA_starting:
+
+    case DMA_starting: {
+        unsigned int track;
+        /* Bail out of read mode. */
         if (dma_rd->state != DMA_inactive) {
             ASSERT(dma_rd->state == DMA_stopping);
             dma_rd_handle(drv);
             ASSERT(dma_rd->state == DMA_inactive);
         }
+        /* Make sure we're on the correct track. */
+        track = drv->cyl*2 + drv->head;
+        image_seek_track(drv->image, track, NULL);
         /* May race wdata_stop(). */
         cmpxchg(&dma_wr->state, DMA_starting, DMA_active);
         break;
+    }
+
     case DMA_active:
         image_write_track(drv->image);
         break;
+
     case DMA_stopping: {
         /* Wait for the flux ring to drain out into the MFM buffer. 
          * Write data to mass storage meanwhile. */
@@ -568,12 +578,13 @@ void floppy_handle(void)
         image_write_track(drv->image);
         if (cons != prod)
             break;
-        /* Clear the flux ring. */
+        /* Clear the flux ring, flush dirty buffers. */
         dma_wr->cons = 0;
         dma_wr->prev_sample = 0;
         image->bufs.write_mfm.cons = 0;
         image->bufs.write_mfm.prod = 0;
-        barrier(); /* allow reactivation of write /last/ */
+        F_sync(&drv->image->fp);
+        barrier(); /* allow reactivation of write path /last/ */
         dma_wr->state = DMA_inactive;
         break;
     }

@@ -79,7 +79,7 @@ static bool_t hfe_seek_track(
     struct image *im, uint8_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    uint32_t sys_ticks = *start_pos;
+    uint32_t sys_ticks = start_pos ? *start_pos : 0;
     struct track_header thdr;
 
     /* TODO: Fake out unformatted tracks. */
@@ -106,10 +106,13 @@ static bool_t hfe_seek_track(
 
     im->hfe.trk_pos = (im->cur_bc/8) & ~255;
     rd->prod = rd->cons = 0;
-    image_read_track(im);
-    rd->cons = im->cur_bc & 2047;
 
-    *start_pos = sys_ticks;
+    if (start_pos) {
+        image_read_track(im);
+        rd->cons = im->cur_bc & 2047;
+        *start_pos = sys_ticks;
+    }
+
     return TRUE;
 }
 

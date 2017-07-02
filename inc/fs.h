@@ -16,6 +16,7 @@ void F_open(FIL *fp, const TCHAR *path, BYTE mode);
 void F_close(FIL *fp);
 void F_read(FIL *fp, void *buff, UINT btr, UINT *br);
 void F_write(FIL *fp, const void *buff, UINT btw, UINT *bw);
+void F_sync(FIL *fp);
 void F_lseek(FIL *fp, DWORD ofs);
 void F_opendir(DIR *dp, const TCHAR *path);
 void F_closedir(DIR *dp);
@@ -24,7 +25,6 @@ void F_unlink(const TCHAR *path);
 
 #if 0
 FRESULT f_truncate(FIL *fp);
-FRESULT f_sync(FIL *fp);
 FRESULT f_findfirst(DIR *dp, FILINFO *fno, const TCHAR *path, const TCHAR *pattern);
 FRESULT f_findnext(DIR *dp, FILINFO *fno);
 FRESULT f_mkdir(const TCHAR *path);
