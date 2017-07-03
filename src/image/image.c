@@ -63,9 +63,9 @@ uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     return im->handler->rdata_flux(im, tbuf, nr);
 }
 
-void image_write_track(struct image *im)
+void image_write_track(struct image *im, bool_t flush)
 {
-    im->handler->write_track(im);
+    im->handler->write_track(im, flush);
 }
 
 uint32_t image_ticks_since_index(struct image *im)

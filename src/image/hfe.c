@@ -184,11 +184,108 @@ out:
     return nr - todo;
 }
 
+static void hfe_write_track(struct image *im, bool_t flush)
+{
+    struct image_buf *wr = &im->bufs.write_mfm;
+    uint8_t *buf = wr->p;
+    unsigned int buflen = wr->len;
+    uint8_t *w, *wrbuf = im->bufs.write_data.p;
+    uint32_t base = (im->write_start*(16/8)) / im->hfe.ticks_per_cell;
+    uint32_t i, c = wr->cons / 8, p = wr->prod / 8;
+    stk_time_t t;
+
+    /* Even when we can buffer the whole track in memory, it still performs
+     * better to then write out sectors as they're dirtied. Otherwise we
+     * suffer 30ms+ of latency as the track buffer is written out. */
+    const bool_t write_whole_track = 0;
+
+    if (!im->bufs.write_data.prod) {
+        /* How many bytes is the full track data? */
+        im->bufs.write_data.prod = ((im->hfe.trk_len * 2) + 511) & ~511;
+        if (im->bufs.write_data.prod > im->bufs.write_data.len) {
+            /* It doesn't fit in our staging buffer. Write block at a time. */
+            im->bufs.write_data.prod = 256;
+        } else {
+            /* Whole track fits in our buffer! Stream it in immediately. */
+            t = stk_now();
+            printk("Read whole track %u... ", im->cur_track);
+            F_lseek(&im->fp, im->hfe.trk_off * 512);
+            F_read(&im->fp, wrbuf, im->bufs.write_data.prod, NULL);
+            F_lseek(&im->fp, im->hfe.trk_off * 512);
+            printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+        }
+    }
+
+    for (;;) {
+
+        uint32_t off = (c + base) % im->hfe.trk_len;
+        UINT nr;
+
+        /* All bytes remaining in the MFM buffer. */
+        nr = p - c;
+        /* Limit to end of current 256-byte HFE block. */
+        nr = min_t(UINT, nr, 256 - (off & 255));
+        /* Limit to end of HFE track. */
+        nr = min_t(UINT, nr, im->hfe.trk_len - off);
+
+        /* Bail if no bytes to write, or if we could batch some more. */
+        if ((nr == 0) || ((nr == (p - c)) && !flush))
+            break;
+
+        if (im->bufs.write_data.prod == 256) {
+
+            /* Encode into a 256-byte area in our staging buffer. */
+            w = wrbuf;
+            for (i = 0; i < nr; i++)
+                *w++ = _rbit32(buf[c++ % buflen]) >> 24;
+
+            /* Write it back to mass storage straight away. */
+            t = stk_now();
+            printk("Write %u-%u (%u)... ", off, off+nr-1, nr);
+            F_lseek(&im->fp,
+                    im->hfe.trk_off * 512
+                    + (im->cur_track & 1) * 256
+                    + ((off & ~255) << 1) + (off & 255));
+            F_write(&im->fp, wrbuf, nr, NULL);
+            printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+
+        } else {
+
+            /* Encode into the whole-track buffer for later write-out. */
+            w = wrbuf
+                + (im->cur_track & 1) * 256
+                + ((off & ~255) << 1) + (off & 255);
+            for (i = 0; i < nr; i++)
+                *w++ = _rbit32(buf[c++ % buflen]) >> 24;
+
+            if (!write_whole_track) {
+                w = wrbuf + ((off & ~255) << 1);
+                t = stk_now();
+                printk("Write %u-%u (%u)... ", off, off+nr-1, nr);
+                F_lseek(&im->fp, im->hfe.trk_off * 512 + ((off & ~255) << 1));
+                F_write(&im->fp, w, 512, NULL);
+                printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+            }
+        }
+    }
+
+    wr->cons = c * 8;
+
+    if (flush && write_whole_track) {
+        /* Whole track mode: flush dirty buffer in one go. */
+        t = stk_now();
+        printk("Write whole track %u... ", im->cur_track);
+        F_write(&im->fp, wrbuf, im->bufs.write_data.prod, NULL);
+        printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+    }
+}
+
 const struct image_handler hfe_image_handler = {
     .open = hfe_open,
     .seek_track = hfe_seek_track,
     .read_track = hfe_read_track,
     .rdata_flux = hfe_rdata_flux,
+    .write_track = hfe_write_track,
     .syncword = 0xffffffff
 };
 

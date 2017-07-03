@@ -213,7 +213,7 @@ out:
     return nr - todo;
 }
 
-static void adf_write_track(struct image *im)
+static void adf_write_track(struct image *im, bool_t flush)
 {
     struct image_buf *wr = &im->bufs.write_mfm;
     uint32_t *buf = wr->p;
@@ -222,6 +222,7 @@ static void adf_write_track(struct image *im)
     uint32_t c = wr->cons / 32, p = wr->prod / 32;
     uint32_t info, dsum, csum;
     unsigned int i, sect;
+    stk_time_t t;
 
     while ((p - c) >= (542/2)) {
 
@@ -276,9 +277,11 @@ static void adf_write_track(struct image *im)
         }
 
         /* All good: write out to mass storage. */
-        printk("Good sector: Trk=%u Sec=%u\n", (uint8_t)(info>>16), sect);
+        t = stk_now();
+        printk("Write %u/%u... ", (uint8_t)(info>>16), sect);
         F_lseek(&im->fp, im->adf.trk_off + sect*512);
         F_write(&im->fp, wrbuf, 512, NULL);
+        printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
     }
 
     wr->cons = c * 32;

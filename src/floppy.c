@@ -339,8 +339,12 @@ static void wdata_stop(void)
 
 static void wdata_start(void)
 {
-    if (dma_wr->state != DMA_inactive)
+    uint32_t start_pos;
+
+    if (dma_wr->state != DMA_inactive) {
+        printk("*** Missed write\n");
         return;
+    }
     dma_wr->state = DMA_starting;
 
     /* Start DMA to circular buffer. */
@@ -360,6 +364,13 @@ static void wdata_start(void)
     tim_wdata->egr = TIM_EGR_UG;
     tim_wdata->sr = 0; /* dummy write, gives h/w time to process EGR.UG=1 */
     tim_wdata->cr1 = TIM_CR1_CEN;
+
+    /* Find rotational start position of the write, in systicks since index. */
+    start_pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
+    start_pos %= stk_ms(DRIVE_MS_PER_REV);
+    start_pos *= SYSCLK_MHZ / STK_MHZ;
+    image->write_start = start_pos;
+    printk("Write start %u us\n", start_pos / SYSCLK_MHZ);
 }
 
 /* Called from IRQ context to stop the read stream. */
@@ -505,7 +516,8 @@ static void dma_rd_handle(struct drive *drv)
         dma_rd->state = DMA_starting;
         barrier();
         if ((drv->step.state & STEP_active)
-            || (track != (drv->cyl*2 + drv->head)))
+            || (track != (drv->cyl*2 + drv->head))
+            || (dma_wr->state != DMA_inactive))
             dma_rd->state = DMA_stopping;
         break;
     }
@@ -566,7 +578,7 @@ void floppy_handle(void)
     }
 
     case DMA_active:
-        image_write_track(drv->image);
+        image_write_track(drv->image, FALSE);
         break;
 
     case DMA_stopping: {
@@ -575,14 +587,14 @@ void floppy_handle(void)
         uint16_t prod = ARRAY_SIZE(dma_wr->buf) - dma_wdata.cndtr;
         uint16_t cons = dma_wr->cons;
         barrier(); /* take dma indexes /then/ process data tail */
-        image_write_track(drv->image);
+        image_write_track(drv->image, cons == prod);
         if (cons != prod)
             break;
         /* Clear the flux ring, flush dirty buffers. */
         dma_wr->cons = 0;
         dma_wr->prev_sample = 0;
-        image->bufs.write_mfm.cons = 0;
-        image->bufs.write_mfm.prod = 0;
+        image->bufs.write_mfm.cons = image->bufs.write_data.cons = 0;
+        image->bufs.write_mfm.prod = image->bufs.write_data.prod = 0;
         F_sync(&drv->image->fp);
         barrier(); /* allow reactivation of write path /last/ */
         dma_wr->state = DMA_inactive;

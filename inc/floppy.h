@@ -71,6 +71,7 @@ struct image {
     uint32_t tracklen_ticks; /* Timing of previous revolution, in 'ticks' */
     uint32_t cur_ticks; /* Offset from index, in 'ticks' */
     uint32_t ticks_since_flux; /* Ticks since last flux sample/reversal */
+    uint32_t write_start; /* Ticks past index when current write started */
 
     union {
         struct adf_image adf;
@@ -85,7 +86,7 @@ struct image_handler {
         struct image *im, uint8_t track, stk_time_t *start_pos);
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
-    void (*write_track)(struct image *im);
+    void (*write_track)(struct image *im, bool_t flush);
     uint32_t syncword;
 };
 
@@ -108,8 +109,9 @@ bool_t image_read_track(struct image *im);
 /* Generate flux timings for the RDATA timer and output pin. */
 uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
 
-/* Write track data from memory to mass storage. */
-void image_write_track(struct image *im);
+/* Write track data from memory to mass storage. If flush is TRUE then all 
+ * remaining data must be written to mass storage. */
+void image_write_track(struct image *im, bool_t flush);
 
 /* Rotational position of last-generated flux (SYSCLK ticks past index). */
 uint32_t image_ticks_since_index(struct image *im);
