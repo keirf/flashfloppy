@@ -268,9 +268,6 @@ void floppy_insert(unsigned int unit, const char *image_name)
     timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
 
     /* Enable DMA interrupts. */
-#if BUILD_GOTEK /* DMA channel shared with led_7seg */
-    _IRQ_dma1_ch2 = IRQ_wdata_dma;
-#endif
     dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch) | DMA_IFCR_CGIF(dma_wdata_ch);
     IRQx_set_prio(dma_rdata_irq, RDATA_IRQ_PRI);
     IRQx_set_prio(dma_wdata_irq, WDATA_IRQ_PRI);

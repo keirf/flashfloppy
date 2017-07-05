@@ -54,6 +54,9 @@ int tolower(int c);
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));
 
+int snprintf(char *str, size_t size, const char *format, ...)
+    __attribute__ ((format (printf, 3, 4)));
+
 int vprintk(const char *format, va_list ap)
     __attribute__ ((format (printf, 1, 0)));
 
@@ -90,14 +93,9 @@ void console_crash_on_input(void);
 
 #ifdef BUILD_GOTEK
 
-/* Gotek: DMA1 Ch2 is overloaded, IRQ needs switching. */
-extern void (*_IRQ_dma1_ch2)(void);
-
 /* Gotek: 3-digit 7-segment display */
 void led_7seg_init(void);
-void led_7seg_suspend(void);
-void led_7seg_resume(void);
-void led_7seg_write_hex(unsigned int x);
+void led_7seg_write(const char *p);
 
 /* Gotek: USB stack processing */
 void usbh_msc_init(void);

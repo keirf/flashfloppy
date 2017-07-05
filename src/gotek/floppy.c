@@ -34,8 +34,7 @@
 #define dma_wdata   (dma1->ch2)
 #define dma_wdata_ch 2
 #define dma_wdata_irq 12
-/*void IRQ_12(void) __attribute__((alias("IRQ_wdata_dma")));*/
-static void IRQ_wdata_dma(void);
+void IRQ_12(void) __attribute__((alias("IRQ_wdata_dma")));
 
 #define pin_rdata   7
 #define tim_rdata   (tim3)

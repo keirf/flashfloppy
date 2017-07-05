@@ -150,8 +150,10 @@ int main(void)
     for (i = 0; ; i++) {
 
         bool_t mount_err = 0;
+        char msg[4];
 
-        led_7seg_write_hex(i);
+        snprintf(msg, sizeof(msg), "%03u", i);
+        led_7seg_write(msg);
 
         while (f_mount(&fatfs, "", 1) != FR_OK) {
             usbh_msc_process();
@@ -163,12 +165,10 @@ int main(void)
         if (mount_err)
             clear_screen();
 
-        led_7seg_suspend();
         arena_init();
         fres = F_call_cancellable(floppy_main);
         floppy_cancel();
         speed_tests_cancel();
-        led_7seg_resume();
         printk("FATFS RETURN CODE: %u\n", fres);
     }
 
