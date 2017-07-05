@@ -1,7 +1,7 @@
 
 PROJ = FlashFloppy
 
-SUBDIRS += src
+SUBDIRS += src bootloader
 
 .PHONY: all clean flash start serial
 
@@ -9,8 +9,14 @@ ifneq ($(RULES_MK),y)
 export ROOT := $(CURDIR)
 all:
 	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
+	$(MAKE) -C bootloader -f $(ROOT)/Rules.mk \
+	Bootloader.elf Bootloader.bin Bootloader.hex
+	srec_cat bootloader/Bootloader.hex -Intel src/$(PROJ).hex -Intel \
+	-o FF.hex -Intel
+	python ./scripts/mk_update.py src/$(PROJ).bin FF.upd
 
 clean:
+	rm -f *.hex *.upd
 	$(MAKE) -f $(ROOT)/Rules.mk $@
 
 gotek: export gotek=y
@@ -24,14 +30,16 @@ dist:
 	mkdir -p flashfloppy_fw
 	$(MAKE) clean
 	$(MAKE) gotek
-	cp -a src/FlashFloppy.bin flashfloppy_fw/FF_Gotek.bin
-	cp -a src/FlashFloppy.hex flashfloppy_fw/FF_Gotek.hex
+	cp -a FF.upd flashfloppy_fw/FF_Gotek.upd
+	cp -a FF.hex flashfloppy_fw/FF_Gotek.hex
 	cp -a src/FlashFloppy.elf flashfloppy_fw/FF_Gotek.elf
+	cp -a bootloader/Bootloader.elf flashfloppy_fw/Bootloader_Gotek.elf
 	$(MAKE) clean
 	$(MAKE) touch
-	cp -a src/FlashFloppy.bin flashfloppy_fw/FF_Touch.bin
-	cp -a src/FlashFloppy.hex flashfloppy_fw/FF_Touch.hex
+	cp -a FF.upd flashfloppy_fw/FF_Touch.upd
+	cp -a FF.hex flashfloppy_fw/FF_Touch.hex
 	cp -a src/FlashFloppy.elf flashfloppy_fw/FF_Touch.elf
+	cp -a bootloader/Bootloader.elf flashfloppy_fw/Bootloader_Touch.elf
 	$(MAKE) clean
 	zip -r flashfloppy_fw flashfloppy_fw
 
@@ -40,15 +48,13 @@ mrproper: clean
 
 endif
 
-FLASH=0x8000000
 BAUD=115200
 
 flash:
-	sudo ~/stm32flash/stm32flash -S $(FLASH) -g $(FLASH) \
-	-b $(BAUD) -w src/$(PROJ).hex /dev/ttyUSB0
+	sudo stm32flash -b $(BAUD) -w FF.hex /dev/ttyUSB0
 
 start:
-	sudo ~/stm32flash/stm32flash -b $(BAUD) -g $(FLASH) /dev/ttyUSB0
+	sudo stm32flash -b $(BAUD) -g 0 /dev/ttyUSB0
 
 serial:
 	sudo miniterm.py /dev/ttyUSB0 3000000

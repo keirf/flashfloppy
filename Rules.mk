@@ -74,6 +74,14 @@ build.o: $(OBJS)
 	$(OBJCOPY) -O binary $< $@
 	chmod a-x $@
 
+%.o: $(RPATH)/%.c Makefile
+	@echo CC $@
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: $(RPATH)/%.S Makefile
+	@echo AS $@
+	$(CC) $(AFLAGS) -c $< -o $@
+
 clean:: $(addprefix _clean_,$(SUBDIRS) $(SUBDIRS-n) $(SUBDIRS-))
 	rm -f *~ *.o *.elf *.hex *.bin *.ld $(DEPS)
 _clean_%: FORCE

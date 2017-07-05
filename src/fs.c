@@ -108,6 +108,13 @@ void F_unlink(const TCHAR *path)
     handle_fr(fr);
 }
 
+void F_findfirst(DIR *dp, FILINFO *fno, const TCHAR *path,
+                 const TCHAR *pattern)
+{
+    FRESULT fr = f_findfirst(dp, fno, path, pattern);
+    handle_fr(fr);
+}
+
 /*
  * Local variables:
  * mode: C

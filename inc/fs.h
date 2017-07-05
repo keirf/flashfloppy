@@ -22,10 +22,11 @@ void F_opendir(DIR *dp, const TCHAR *path);
 void F_closedir(DIR *dp);
 void F_readdir(DIR *dp, FILINFO *fno);
 void F_unlink(const TCHAR *path);
+void F_findfirst(DIR *dp, FILINFO *fno, const TCHAR *path,
+                 const TCHAR *pattern);
 
 #if 0
 FRESULT f_truncate(FIL *fp);
-FRESULT f_findfirst(DIR *dp, FILINFO *fno, const TCHAR *path, const TCHAR *pattern);
 FRESULT f_findnext(DIR *dp, FILINFO *fno);
 FRESULT f_mkdir(const TCHAR *path);
 FRESULT f_rename(const TCHAR *path_old, const TCHAR *path_new);

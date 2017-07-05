@@ -121,6 +121,22 @@ struct flash {
 #define FLASH_ACR_HLFCYA     (1u<< 3)
 #define FLASH_ACR_LATENCY(w) ((w)<<0) /* wait states */
 
+#define FLASH_SR_EOP         (1u<< 5)
+#define FLASH_SR_WRPRTERR    (1u<< 4)
+#define FLASH_SR_PGERR       (1u<< 2)
+#define FLASH_SR_BSY         (1u<< 0)
+
+#define FLASH_CR_EOPIE       (1u<<12)
+#define FLASH_CR_ERRIE       (1u<<10)
+#define FLASH_CR_OPTWRE      (1u<< 9)
+#define FLASH_CR_LOCK        (1u<< 7)
+#define FLASH_CR_STRT        (1u<< 6)
+#define FLASH_CR_OPTER       (1u<< 5)
+#define FLASH_CR_OPTPG       (1u<< 4)
+#define FLASH_CR_MER         (1u<< 2)
+#define FLASH_CR_PER         (1u<< 1)
+#define FLASH_CR_PG          (1u<< 0)
+
 #define FLASH_BASE 0x40022000
 
 /* Power control */
