@@ -62,8 +62,24 @@ Random 8192-byte writes (8MB total):
   Min: 4460us Max: 199727us Mean: 6843us
   Histo: 0-9ms:1008 10-19ms:9 20-29ms:5 30-39ms:1 100-199ms:1 >50ms: 0.09%
 
-USB MSC Speed:
---------------
+BEST USB STICKS:
+----------------
+Lexar 32GB USB3.0 Jump Drive S75 (05DC:A205 "Lexar JumpDrive"):
+HFE Write: 33ms track read, 850us write-blk, 6ms seek+write-blk
+           Very predictable performance, does not miss any SCP track writes
+HFE Whole Track Writes: 40-100ms track read, 60-90ms track write
+           Somewhat erratic, misses Supercard Pro track writes
+ADF write: Very predictable, 850us-3ms write-blk
+
+Lexar 32GB USB3.0 Jump Drive S45 (05DC:A82D "Lexar USB Flash Drive"):
+HFE Write: 35ms track read, 950us blk-write, 5ms seek+write-blk
+           Very predictable performance, does not miss any SCP track writes
+HFE Whole Track Writes: 33ms track read, 31ms track write
+           Very predictable, does not miss any SCP writes
+ADF Write: Very predictable, 850us-2ms write-blk
+
+THE REST OF USB:
+----------------
 Generic 16GB stick (058F:6366 "Generic Flash Card Reader/Writer"):
 HFE Write: 35ms track read, ~4ms write-blk, ~7ms seek+write-blk
            Occasional 40-70ms+ write-blk, misses Supercard Pro track writes
@@ -71,17 +87,28 @@ HFE Whole Track Writes: 35ms track read, 45ms track writes
            Occasional 200ms+ writes, misses SCP track writes
 ADF Write: Occasional 200ms+ writes
 
-Lexar 32GB USB3.0 stick (05DC:A205 "Lexar JumpDrive"):
-HFE Write: 33ms track read, 850us write-blk, 6ms seek+write-blk
-           Very predictable performance, does not miss any SCP track writes
-HFE Whole Track Writes: 40-100ms track read, 60-90ms track write
-           Somewhat erratic, misses Supercard Pro track writes
-ADF write: Very predictable, 850us-3ms write-blk
+Kingston 16GB DataTraveler G4 (0951:1666 "Kingston DataTraveler 3.0"):
+HFE Write: 37ms track read, 900us write-blk, 10ms seek+write-blk
+           Occasional 140ms+ write-blk, misses SCP writes
+HFE Whole Track Writes: 34ms read, 34ms write, occasional 150ms+ writes
+ADF Write: 2-4ms write-blk, occasional 120ms+ write-blk
 
 SanDisk 32GB Ultra Fit USB3.0 (0781:5583 "SanDisk Ultra Fit"):
-XXX Doesn't always finish enumeration!
 HFE Write: 40ms track read, 3ms write-blk, 6ms seek+write-blk
            Occasional 200ms+ first write-blk after track read, misses SCP writes
 HFE Whole Track Writes: 40 ms track read, 40ms track write
            Very predictable, does not miss any SCP writes
 ADF Write: 3ms write-blk, very predictable
+
+SanDisk 16GB Cruzer Switch USB2 (0781:5572 "SanDisk Cruzer Switch"):
+HFE Write: 35ms track read, 3ms write-blk, 6ms seek+write-blk
+           Occasional stretches of 10ms-90ms write-blk, misses SCP writes
+HFE Whole Track Writes: 34ms read, 34ms write, occasional 190ms+ writes
+ADF Write: Occasional 70ms+ writes
+
+Toshiba 16GB TransMemory U202 USB2.0 (0930:6544 "Toshiba TransMemory"):
+HFE Write: 40ms track-read, 850us-3ms write-blk, 7ms seek+write-blk
+           Occasional 80ms+ write-blk
+HFE Whole Track Writes: 34ms read, 34ms write, occasional 100ms+ writes
+ADF Write: 1-2ms write-blk, occasional 70ms+ write-blk
+
