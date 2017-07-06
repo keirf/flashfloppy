@@ -104,9 +104,7 @@ void usbh_msc_process(void);
 #else /* !BUILD_GOTEK */
 
 static inline void led_7seg_init(void) {}
-static inline void led_7seg_suspend(void) {}
-static inline void led_7seg_resume(void) {}
-static inline void led_7seg_write_hex(unsigned int x) {}
+static inline void led_7seg_write(const char *p) {}
 
 static inline void usbh_msc_init(void) {}
 static inline void usbh_msc_process(void) {}
