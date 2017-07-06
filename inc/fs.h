@@ -24,10 +24,10 @@ void F_readdir(DIR *dp, FILINFO *fno);
 void F_unlink(const TCHAR *path);
 void F_findfirst(DIR *dp, FILINFO *fno, const TCHAR *path,
                  const TCHAR *pattern);
+void F_findnext(DIR *dp, FILINFO *fno);
 
 #if 0
 FRESULT f_truncate(FIL *fp);
-FRESULT f_findnext(DIR *dp, FILINFO *fno);
 FRESULT f_mkdir(const TCHAR *path);
 FRESULT f_rename(const TCHAR *path_old, const TCHAR *path_new);
 FRESULT f_stat(const TCHAR *path, FILINFO *fno);

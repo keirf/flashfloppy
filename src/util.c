@@ -81,6 +81,15 @@ char *strrchr(const char *s, int c)
     return p;
 }
 
+char *strcpy(char *dest, const char *src)
+{
+    char *p = dest;
+    const char *q = src;
+    while ((*p++ = *q++) != '\0')
+        continue;
+    return dest;
+}
+
 int tolower(int c)
 {
     if ((c >= 'A') && (c <= 'Z'))

@@ -115,6 +115,12 @@ void F_findfirst(DIR *dp, FILINFO *fno, const TCHAR *path,
     handle_fr(fr);
 }
 
+void F_findnext(DIR *dp, FILINFO *fno)
+{
+    FRESULT fr = f_findnext(dp, fno);
+    handle_fr(fr);
+}
+
 /*
  * Local variables:
  * mode: C

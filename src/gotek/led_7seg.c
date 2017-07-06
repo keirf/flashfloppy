@@ -105,6 +105,23 @@ static void stop(void)
     delay_us(CYCLE/4);
 }
 
+static void send_cmd(uint8_t cmd)
+{
+    bool_t fail = TRUE;
+    int retry;
+
+    for (retry = 0; fail && (retry < 3); retry++) {
+        start();
+        fail = write(cmd);
+        stop();
+    }
+}
+
+void led_7seg_display_setting(bool_t enable)
+{
+    send_cmd(enable ? 0x88 + BRIGHTNESS : 0x80);
+}
+
 void led_7seg_write(const char *p)
 {
     bool_t fail = TRUE;
@@ -137,23 +154,17 @@ void led_7seg_write(const char *p)
 
 void led_7seg_init(void)
 {
-    bool_t fail = TRUE;
-    int retry;
-
     set_dat(HIGH);
     set_clk(HIGH);
 
-    for (retry = 0; fail && (retry < 3); retry++) {
-        /* Data command: write registers, auto-increment address. */
-        start();
-        fail = write(0x40);
-        stop();
+    /* Data command: write registers, auto-increment address. */
+    send_cmd(0x40);
 
-        /* Display control: brightness. */
-        start();
-        fail |= write(0x88 + BRIGHTNESS);
-        stop();
-    }
+    /* Clear the registers. */
+    led_7seg_write("    ");
+
+    /* Display control: brightness. */
+    send_cmd(0x88 + BRIGHTNESS);
 }
 
 /*

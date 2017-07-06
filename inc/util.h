@@ -49,6 +49,7 @@ void *memmove(void *dest, const void *src, size_t n);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strrchr(const char *s, int c);
+char *strcpy(char *dest, const char *src);
 int tolower(int c);
 
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
@@ -96,6 +97,7 @@ void console_crash_on_input(void);
 /* Gotek: 3-digit 7-segment display */
 void led_7seg_init(void);
 void led_7seg_write(const char *p);
+void led_7seg_display_setting(bool_t enable);
 
 /* Gotek: USB stack processing */
 void usbh_msc_init(void);
@@ -105,6 +107,7 @@ void usbh_msc_process(void);
 
 static inline void led_7seg_init(void) {}
 static inline void led_7seg_write(const char *p) {}
+static inline void led_7seg_display_setting(bool_t enable) {}
 
 static inline void usbh_msc_init(void) {}
 static inline void usbh_msc_process(void) {}

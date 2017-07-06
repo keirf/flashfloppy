@@ -3,6 +3,11 @@
  * 
  * USB-flash update bootloader for main firmware.
  * 
+ * Procedure:
+ *  - Press both Gotek buttons to start the update process.
+ *  - Requires a USB flash drive containing exactly one update file
+ *    named "FF_Gotek*.upd" (* = wildcard).
+ * 
  * Status messages:
  *  uPd -> Waiting for buttons to release
  *  uSb -> Waiting for USB stack
@@ -13,10 +18,14 @@
  * 
  * Error messages:
  *  E01 -> No update file found
- *  E02 -> Update file is invalid (bad signature or size)
- *  E03 -> Update file is corrupt (bad CRC)
- *  E04 -> Flash error (bad CRC on verify)
+ *  E02 -> More than one update file found
+ *  E03 -> Update file is invalid (bad signature or size)
+ *  E04 -> Update file is corrupt (bad CRC)
+ *  E05 -> Flash error (bad CRC on verify)
  *  Fxx -> FatFS error (probably bad filesystem)
+ * 
+ * Errors flash on the display once per second. Press both Gotek buttons
+ * to dismiss the error and retry the update.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -46,15 +55,16 @@ int EXC_reset(void) __attribute__((alias("main")));
 
 /* FatFS */
 static FATFS fatfs;
-static FIL file;
-static DIR dp;
-static FILINFO fno;
-static char lfn[_MAX_LFN+1];
 
-/* Update state and buffers. */
-static uint8_t buf[2048];
+/* Shared state. regarding update progress/failure. */
 static bool_t old_firmware_erased;
-static enum { FC_no_file = 1, FC_bad_file, FC_bad_crc, FC_bad_prg } fail_code;
+static enum {
+    FC_no_file = 1, /* no update file */
+    FC_multiple_files, /* multiple update files */
+    FC_bad_file, /* bad signature or size */
+    FC_bad_crc, /* bad file crc */
+    FC_bad_prg
+} fail_code;
 
 uint8_t board_id;
 
@@ -76,8 +86,24 @@ static void erase_old_firmware(void)
         fpec_page_erase(p);
 }
 
+static void msg_display(const char *p)
+{
+    printk("[%s]\n", p);
+    led_7seg_write(p);
+}
+
 int update(void)
 {
+    /* FatFS state, local to this function, but off stack. */
+    static FIL file;
+    static DIR dp;
+    static FILINFO fno;
+    static char lfn[_MAX_LFN+1];
+    static char update_fname[_MAX_LFN+1];
+
+    /* Our file buffer. Again, off stack. */
+    static uint8_t buf[2048];
+
     uint32_t p;
     uint16_t footer[2], crc;
     UINT i, nr;
@@ -87,31 +113,46 @@ int update(void)
     fno.lfname = lfn;
     fno.lfsize = sizeof(lfn);
 
-    fail_code = FC_no_file;
+    /* Find the update file, confirming that it exists and there is no 
+     * ambiguity (ie. we don't allow multiple update files). */
     F_findfirst(&dp, &fno, "", "ff_gotek*.upd");
     name = *fno.lfname ? fno.lfname : fno.fname;
-    if (!*name)
+    if (!*name) {
+        fail_code = FC_no_file;
         goto fail;
+    }
+    strcpy(update_fname, name);
+    printk("Found update \"%s\"\n", update_fname);
+    F_findnext(&dp, &fno);
+    name = *fno.lfname ? fno.lfname : fno.fname;
+    if (*name) {
+        printk("** Error: found another file \"%s\"\n", name);
+        fail_code = FC_multiple_files;
+        goto fail;
+    }
     F_closedir(&dp);
 
     /* Open and sanity-check the file. */
-    fail_code = FC_bad_file;
-    led_7seg_write(" RD");
-    F_open(fp, name, FA_READ);
+    msg_display(" RD");
+    F_open(fp, update_fname, FA_READ);
     /* Check size. */
-    if ((f_size(fp) < 1024) /* too small */
-        || (f_size(fp) > (FIRMWARE_END-FIRMWARE_START)) /* too large */
-        || (f_size(fp) & 1)) /* odd size */
+    fail_code = ((f_size(fp) < 1024)
+                 || (f_size(fp) > (FIRMWARE_END-FIRMWARE_START))
+                 || (f_size(fp) & 3))
+        ? FC_bad_file : 0;
+    printk("%u bytes: %s\n", f_size(fp), fail_code ? "BAD" : "OK");
+    if (fail_code)
         goto fail;
+    /* Check signature in footer. */
     F_lseek(fp, f_size(fp) - sizeof(footer));
     F_read(fp, footer, sizeof(footer), NULL);
-    /* Check signature mark. */
-    if (be16toh(footer[0]) != 0x4659) /* "FY" */
+    if (be16toh(footer[0]) != 0x4659/* "FY" */) {
+        fail_code = FC_bad_file;
         goto fail;
+    }
 
     /* Check the CRC-CCITT. */
-    fail_code = FC_bad_crc;
-    led_7seg_write("CRC");
+    msg_display("CRC");
     crc = 0xffff;
     F_lseek(fp, 0);
     for (i = 0; !f_eof(fp); i++) {
@@ -119,17 +160,19 @@ int update(void)
         F_read(&file, buf, nr, NULL);
         crc = crc16_ccitt(buf, nr, crc);
     }
-    if (crc != 0)
+    if (crc != 0) {
+        fail_code = FC_bad_crc;
         goto fail;
+    }
 
     /* Erase the old firmware. */
-    led_7seg_write("ERA");
+    msg_display("ERA");
     fpec_init();
     erase_old_firmware();
     old_firmware_erased = TRUE;
 
     /* Program the new firmware. */
-    led_7seg_write("PRG");
+    msg_display("PRG");
     crc = 0xffff;
     F_lseek(fp, 0);
     p = FIRMWARE_START;
@@ -141,11 +184,12 @@ int update(void)
     }
 
     /* Verify the new firmware (CRC-CCITT). */
-    fail_code = FC_bad_prg;
     p = FIRMWARE_START;
     crc = crc16_ccitt((void *)p, f_size(fp), 0xffff);
-    if (crc)
+    if (crc) {
+        fail_code = FC_bad_prg;
         goto fail;
+    }
 
     /* All done! */
     fail_code = 0;
@@ -155,15 +199,23 @@ fail:
     return 0;
 }
 
+static struct timer blink_timer;
+static void blink_display(void *unused)
+{
+    static int i;
+    led_7seg_display_setting(i++&1);
+    timer_set(&blink_timer, stk_add(blink_timer.deadline, stk_ms(500)));
+}
+
 /* Wait for both buttons to be pressed (LOW) or not pressed (HIGH). Perform 
- * debouncing by sampling the buttons every 10ms and checking for same state 
+ * debouncing by sampling the buttons every 5ms and checking for same state 
  * over 16 consecutive samples. */
 static void wait_buttons(uint8_t level)
 {
     uint16_t x = 0;
 
     do {
-        delay_ms(10);
+        delay_ms(5);
         x <<= 1;
         x |= ((gpio_read_pin(gpioc, 8) == level) &&
               (gpio_read_pin(gpioc, 7) == level));
@@ -217,13 +269,13 @@ int main(void)
     usbh_msc_init();
     crc16_gentable();
 
-    led_7seg_write("UPD");
+    msg_display("UPD");
 
     /* Wait for buttons to be released. */
     wait_buttons(HIGH);
 
     /* Wait for a filesystem. */
-    led_7seg_write("USB");
+    msg_display("USB");
     while (f_mount(&fatfs, "", 1) != FR_OK) {
         usbh_msc_process();
         canary_check();
@@ -235,16 +287,21 @@ int main(void)
     /* Check for errors and report them on display. */
     if (fres) {
         snprintf(msg, sizeof(msg), "F%02u", fres);
-        led_7seg_write(msg);
+        msg_display(msg);
     } else if (fail_code) {
         snprintf(msg, sizeof(msg), "E%02u", fail_code);
-        led_7seg_write(msg);
+        msg_display(msg);
     } else {
         /* All done. Reset. */
         ASSERT(!fail_code);
-        led_7seg_write("   ");
+        printk("Success!\n");
+        led_7seg_display_setting(FALSE);
         system_reset();
     }
+
+    /* Flash the display on error. */
+    timer_init(&blink_timer, blink_display, NULL);
+    timer_set(&blink_timer, stk_add(stk_now(), stk_ms(500)));
 
     /* If we had modified flash, fully erase the main firmware area. */
     if (old_firmware_erased)
@@ -252,6 +309,10 @@ int main(void)
 
     /* Wait for buttons to be pressed, so user sees error message. */
     wait_buttons(LOW);
+
+    /* Clear the display. */
+    timer_cancel(&blink_timer);
+    led_7seg_display_setting(FALSE);
 
     /* All done. Reset. */
     system_reset();
