@@ -74,7 +74,7 @@ void USBH_MSC_HandleBOTXfer (USB_OTG_CORE_HANDLE *pdev ,USBH_HOST *phost)
     static uint32_t remainingDataLength;
     static uint8_t *datapointer , *datapointer_prev;
     static uint8_t error_direction;
-    static uint16_t time;
+    static struct USB_OTG_BSP_Timer timer;
     USBH_Status status;
 
     URB_STATE URB_Status = URB_IDLE;
@@ -167,7 +167,7 @@ void USBH_MSC_HandleBOTXfer (USB_OTG_CORE_HANDLE *pdev ,USBH_HOST *phost)
             {
                 BOTStallErrorCount = 0;
                 USBH_MSC_BOTXferParam.BOTStateBkp = USBH_MSC_BOT_DATAIN_STATE;
-                time = HCD_GetCurrentFrame(pdev);
+                USB_OTG_BSP_InitTimer(&timer, DATA_STAGE_TIMEOUT);
 
                 if(remainingDataLength > MSC_Machine.MSBulkInEpSize)
                 {
@@ -229,7 +229,7 @@ void USBH_MSC_HandleBOTXfer (USB_OTG_CORE_HANDLE *pdev ,USBH_HOST *phost)
                     USBH_MSC_BOTXferParam.BOTXferStatus = USBH_MSC_PHASE_ERROR;
                 }
             }
-            else if ((HCD_GetCurrentFrame(pdev) - time) > DATA_STAGE_TIMEOUT)
+            else if (USB_OTG_BSP_TimerFired(&timer))
             {
                 /* 5-second timeout. Fail immediately. */
                 printk("MSC_DATAIN 5s timeout\n");
@@ -351,7 +351,7 @@ void USBH_MSC_HandleBOTXfer (USB_OTG_CORE_HANDLE *pdev ,USBH_HOST *phost)
                                   MSC_Machine.hc_num_in);
             USBH_MSC_BOTXferParam.BOTState = USBH_MSC_DECODE_CSW;
             xfer_error_count=0;
-            time = HCD_GetCurrentFrame(pdev);
+            USB_OTG_BSP_InitTimer(&timer, DATA_STAGE_TIMEOUT);
 
             break;
 
@@ -387,7 +387,7 @@ void USBH_MSC_HandleBOTXfer (USB_OTG_CORE_HANDLE *pdev ,USBH_HOST *phost)
                     USBH_MSC_BOTXferParam.BOTXferStatus = USBH_MSC_PHASE_ERROR;
                 }
             }
-            else if ((HCD_GetCurrentFrame(pdev) - time) > DATA_STAGE_TIMEOUT)
+            else if (USB_OTG_BSP_TimerFired(&timer))
             {
                 /* 5-second timeout. Fail immediately. */
                 printk("MSC_CSW 5s timeout\n");

@@ -42,8 +42,14 @@ void USB_OTG_BSP_ConfigVBUS(USB_OTG_CORE_HANDLE *pdev);
 void USB_OTG_BSP_DriveVBUS(USB_OTG_CORE_HANDLE *pdev,uint8_t state);
 void USB_OTG_BSP_Resume(USB_OTG_CORE_HANDLE *pdev) ;
 void USB_OTG_BSP_Suspend(USB_OTG_CORE_HANDLE *pdev);
-
 #endif /* USE_HOST_MODE */
+
+struct USB_OTG_BSP_Timer {
+    uint32_t prev_stk, ticks;
+};
+void USB_OTG_BSP_InitTimer(struct USB_OTG_BSP_Timer *t, uint32_t timeout_ms);
+bool_t USB_OTG_BSP_TimerFired(struct USB_OTG_BSP_Timer *t);
+
 
 #endif /* __USB_BSP__H__ */
 

@@ -48,6 +48,25 @@ void USB_OTG_BSP_mDelay(const uint32_t msec)
     delay_ms(msec);
 }
 
+void USB_OTG_BSP_InitTimer(struct USB_OTG_BSP_Timer *t, uint32_t timeout_ms)
+{
+    t->prev_stk = stk->val;
+    t->ticks = stk_ms(timeout_ms);
+}
+
+bool_t USB_OTG_BSP_TimerFired(struct USB_OTG_BSP_Timer *t)
+{
+    uint32_t now_stk = stk->val;
+    uint32_t diff = (t->prev_stk - now_stk) & STK_MASK;
+    if (t->ticks <= diff) {
+        t->ticks = 0;
+        return TRUE;
+    }
+    t->ticks -= diff;
+    t->prev_stk = now_stk;
+    return FALSE;
+}
+
 static void IRQ_usb(void)
 {
     USBH_OTG_ISR_Handler(&USB_OTG_Core);

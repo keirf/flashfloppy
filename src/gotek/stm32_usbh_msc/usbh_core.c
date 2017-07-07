@@ -619,7 +619,8 @@ static USBH_Status USBH_HandleEnum(USB_OTG_CORE_HANDLE *pdev, USBH_HOST *phost)
 USBH_Status USBH_HandleControl (USB_OTG_CORE_HANDLE *pdev, USBH_HOST *phost)
 {
     uint8_t direction;
-    static uint16_t timeout = 0;
+    uint16_t timeout;
+    static struct USB_OTG_BSP_Timer timer;
     USBH_Status status = USBH_OK;
     URB_STATE URB_Status = URB_IDLE;
 
@@ -677,7 +678,7 @@ USBH_Status USBH_HandleControl (USB_OTG_CORE_HANDLE *pdev, USBH_HOST *phost)
                 }
             }
             /* Set the delay timer to enable timeout for data stage completion */
-            phost->Control.timer = HCD_GetCurrentFrame(pdev);
+            USB_OTG_BSP_InitTimer(&timer, timeout);
         }
         else if(URB_Status == URB_ERROR)
         {
@@ -718,7 +719,7 @@ USBH_Status USBH_HandleControl (USB_OTG_CORE_HANDLE *pdev, USBH_HOST *phost)
             /* Device error */
             phost->Control.state = CTRL_ERROR;
         }
-        else if ((HCD_GetCurrentFrame(pdev)- phost->Control.timer) > timeout)
+        else if (USB_OTG_BSP_TimerFired(&timer))
         {
             /* timeout for IN transfer */
             phost->Control.state = CTRL_ERROR;
@@ -791,8 +792,7 @@ USBH_Status USBH_HandleControl (USB_OTG_CORE_HANDLE *pdev, USBH_HOST *phost)
             phost->Control.state = CTRL_ERROR;
         }
 
-        else if((HCD_GetCurrentFrame(pdev)\
-                 - phost->Control.timer) > timeout)
+        else if (USB_OTG_BSP_TimerFired(&timer))
         {
             phost->Control.state = CTRL_ERROR;
         }
