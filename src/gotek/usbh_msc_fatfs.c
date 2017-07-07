@@ -127,6 +127,7 @@ static void USBH_USR_DeviceNotSupported(void)
 static void USBH_USR_UnrecoveredError (void)
 {
     printk("> %s\n", __FUNCTION__);
+    msc_device_connected = FALSE;
 }
 
 static USBH_Usr_cb_TypeDef USR_cb = {
@@ -185,6 +186,20 @@ DSTATUS disk_status(BYTE pdrv)
     return pdrv ? STA_NOINIT : dstatus;
 }
 
+static DRESULT handle_usb_status(BYTE status)
+{
+    if (status != USBH_MSC_OK) {
+        /* Kick the USBH state machine to reinitialise. */
+        USB_Host.usr_cb->UnrecoveredError();
+        USB_Host.gState = HOST_ERROR_STATE;
+        /* Disallow further disk operations. */
+        dstatus |= STA_NOINIT;
+        return RES_ERROR;
+    }
+
+    return RES_OK;
+}
+
 DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
 {
     BYTE status;
@@ -195,21 +210,13 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
         return RES_NOTRDY;
 
     do {
-        if (!HCD_IsDeviceConnected(&USB_OTG_Core)) {
-            status = USBH_MSC_FAIL;
-            break;
-        }
+        if (!HCD_IsDeviceConnected(&USB_OTG_Core))
+            return handle_usb_status(USBH_MSC_FAIL);
         status = USBH_MSC_Read10(&USB_OTG_Core, buff, sector, 512 * count);
         USBH_MSC_HandleBOTXfer(&USB_OTG_Core, &USB_Host);
     } while (status == USBH_MSC_BUSY);
 
-    if (status != USBH_MSC_OK) {
-        msc_device_connected = FALSE;
-        dstatus |= STA_NOINIT;
-        return RES_ERROR;
-    }
-
-    return RES_OK;
+    return handle_usb_status(status);
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
@@ -224,22 +231,14 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
         return RES_WRPRT;
 
     do {
-        if (!HCD_IsDeviceConnected(&USB_OTG_Core)) {
-            status = USBH_MSC_FAIL;
-            break;
-        }
+        if (!HCD_IsDeviceConnected(&USB_OTG_Core))
+            return handle_usb_status(USBH_MSC_FAIL);
         status = USBH_MSC_Write10(
             &USB_OTG_Core, (BYTE *)buff, sector, 512 * count);
         USBH_MSC_HandleBOTXfer(&USB_OTG_Core, &USB_Host);
     } while (status == USBH_MSC_BUSY);
 
-    if (status != USBH_MSC_OK) {
-        msc_device_connected = FALSE;
-        dstatus |= STA_NOINIT;
-        return RES_ERROR;
-    }
-
-    return RES_OK;
+    return handle_usb_status(status);
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)
