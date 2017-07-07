@@ -449,8 +449,8 @@ uint8_t USBH_MSC_Write10(USB_OTG_CORE_HANDLE *pdev,
             {
                 /* Failure Mode */
                 USBH_MSC_BOTXferParam.CmdStateMachine = CMD_SEND_STATE;
+                status = USBH_MSC_FAIL;
             }
-
             else if ( USBH_MSC_BOTXferParam.BOTXferStatus == USBH_MSC_PHASE_ERROR )
             {
                 /* Failure Mode */
@@ -532,30 +532,23 @@ uint8_t USBH_MSC_Read10(USB_OTG_CORE_HANDLE *pdev,
 
         case CMD_WAIT_STATUS:
 
-            if((USBH_MSC_BOTXferParam.BOTXferStatus == USBH_MSC_OK) && \
-               (HCD_IsDeviceConnected(pdev)))
+            if(USBH_MSC_BOTXferParam.BOTXferStatus == USBH_MSC_OK)
             {
                 /* Commands successfully sent and Response Received  */
                 USBH_MSC_BOTXferParam.CmdStateMachine = CMD_SEND_STATE;
                 status = USBH_MSC_OK;
             }
-            else if (( USBH_MSC_BOTXferParam.BOTXferStatus == USBH_MSC_FAIL ) && \
-                     (HCD_IsDeviceConnected(pdev)))
+            else if (USBH_MSC_BOTXferParam.BOTXferStatus == USBH_MSC_FAIL)
             {
                 /* Failure Mode */
                 USBH_MSC_BOTXferParam.CmdStateMachine = CMD_SEND_STATE;
+                status = USBH_MSC_FAIL;
             }
-
-            else if ( USBH_MSC_BOTXferParam.BOTXferStatus == USBH_MSC_PHASE_ERROR )
+            else if (USBH_MSC_BOTXferParam.BOTXferStatus == USBH_MSC_PHASE_ERROR )
             {
                 /* Failure Mode */
                 USBH_MSC_BOTXferParam.CmdStateMachine = CMD_SEND_STATE;
                 status = USBH_MSC_PHASE_ERROR;
-            }
-            else
-            {
-                /* Wait for the Commands to get Completed */
-                /* NO Change in state Machine */
             }
             break;
 

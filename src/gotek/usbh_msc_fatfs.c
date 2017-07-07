@@ -195,13 +195,21 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
         return RES_NOTRDY;
 
     do {
-        if (!HCD_IsDeviceConnected(&USB_OTG_Core))
-            return RES_ERROR;
+        if (!HCD_IsDeviceConnected(&USB_OTG_Core)) {
+            status = USBH_MSC_FAIL;
+            break;
+        }
         status = USBH_MSC_Read10(&USB_OTG_Core, buff, sector, 512 * count);
         USBH_MSC_HandleBOTXfer(&USB_OTG_Core, &USB_Host);
     } while (status == USBH_MSC_BUSY);
 
-    return (status == USBH_MSC_OK) ? RES_OK : RES_ERROR;
+    if (status != USBH_MSC_OK) {
+        msc_device_connected = FALSE;
+        dstatus |= STA_NOINIT;
+        return RES_ERROR;
+    }
+
+    return RES_OK;
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
@@ -216,14 +224,22 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
         return RES_WRPRT;
 
     do {
-        if (!HCD_IsDeviceConnected(&USB_OTG_Core))
-            return RES_ERROR;
+        if (!HCD_IsDeviceConnected(&USB_OTG_Core)) {
+            status = USBH_MSC_FAIL;
+            break;
+        }
         status = USBH_MSC_Write10(
             &USB_OTG_Core, (BYTE *)buff, sector, 512 * count);
         USBH_MSC_HandleBOTXfer(&USB_OTG_Core, &USB_Host);
     } while (status == USBH_MSC_BUSY);
 
-    return (status == USBH_MSC_OK) ? RES_OK : RES_ERROR;
+    if (status != USBH_MSC_OK) {
+        msc_device_connected = FALSE;
+        dstatus |= STA_NOINIT;
+        return RES_ERROR;
+    }
+
+    return RES_OK;
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)
