@@ -98,8 +98,7 @@ int update(void)
     static FIL file;
     static DIR dp;
     static FILINFO fno;
-    static char lfn[_MAX_LFN+1];
-    static char update_fname[_MAX_LFN+1];
+    static char update_fname[FF_MAX_LFN+1];
 
     /* Our file buffer. Again, off stack. */
     static uint8_t buf[2048];
@@ -107,26 +106,20 @@ int update(void)
     uint32_t p;
     uint16_t footer[2], crc;
     UINT i, nr;
-    char *name;
     FIL *fp = &file;
-
-    fno.lfname = lfn;
-    fno.lfsize = sizeof(lfn);
 
     /* Find the update file, confirming that it exists and there is no 
      * ambiguity (ie. we don't allow multiple update files). */
     F_findfirst(&dp, &fno, "", "ff_gotek*.upd");
-    name = *fno.lfname ? fno.lfname : fno.fname;
-    if (!*name) {
+    if (*fno.fname == '\0') {
         fail_code = FC_no_file;
         goto fail;
     }
-    strcpy(update_fname, name);
+    strcpy(update_fname, fno.fname);
     printk("Found update \"%s\"\n", update_fname);
     F_findnext(&dp, &fno);
-    name = *fno.lfname ? fno.lfname : fno.fname;
-    if (*name) {
-        printk("** Error: found another file \"%s\"\n", name);
+    if (*fno.fname != '\0') {
+        printk("** Error: found another file \"%s\"\n", fno.fname);
         fail_code = FC_multiple_files;
         goto fail;
     }

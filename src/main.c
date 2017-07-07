@@ -16,7 +16,6 @@ static struct {
     FIL file;
     DIR dp;
     FILINFO fp;
-    char lfn[_MAX_LFN+1];
 } *fs;
 
 uint8_t board_id;
@@ -54,7 +53,7 @@ static void canary_check(void)
 
 static void list_dir(const char *dir)
 {
-    char *name;
+    char *name = fs->fp.fname;
     unsigned int i;
 
     F_opendir(&fs->dp, dir);
@@ -63,9 +62,8 @@ static void list_dir(const char *dir)
 
     for (i = 1; i < TFT_8x16_ROWS; ) {
         F_readdir(&fs->dp, &fs->fp);
-        if (fs->fp.fname[0] == '\0')
+        if (*name == '\0')
             break;
-        name = *fs->fp.lfname ? fs->fp.lfname : fs->fp.fname;
         if (*name == '.')
             continue;
         draw_string_8x16(0, i++, name);
@@ -80,8 +78,6 @@ int floppy_main(void)
 
     arena_init();
     fs = arena_alloc(sizeof(*fs));
-    fs->fp.lfname = fs->lfn;
-    fs->fp.lfsize = sizeof(fs->lfn);
 
     list_dir("/");
 
@@ -101,7 +97,7 @@ int floppy_main(void)
 
     speed_tests();
 
-    floppy_insert(0, "nzs_crack.adf");
+    floppy_insert(0, "nzs_crack.hfe");
 
     for (;;) {
         do_tft();

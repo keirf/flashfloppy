@@ -1,2 +1,2 @@
 OBJS += ff.o
-OBJS += ccsbcs.o
+OBJS += ffunicode.o
