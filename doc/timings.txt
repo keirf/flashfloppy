@@ -78,6 +78,18 @@ HFE Whole Track Writes: 33ms track read, 31ms track write
            Very predictable, does not miss any SCP writes
 ADF Write: Very predictable, 850us-2ms write-blk
 
+PROBLEMATIC STICKS:
+-------------------
+SanDisk 32GB Ultra Fit USB3.0 (0781:5583 "SanDisk Ultra Fit"):
+PROBLEM: Sometimes consistently fails to respond
+         to TestUnitReady until physically re-inserted.
+HFE Write: 40ms track read, 3ms write-blk, 6ms seek+write-blk
+           Occasional 200ms+ first write-blk after track read, misses SCP writes
+HFE Whole Track Writes: 40 ms track read, 40ms track write
+           Very predictable, does not miss any SCP writes
+ADF Write: 3ms write-blk, very predictable
+
+
 THE REST OF USB:
 ----------------
 Generic 16GB stick (058F:6366 "Generic Flash Card Reader/Writer"):
@@ -92,13 +104,6 @@ HFE Write: 37ms track read, 900us write-blk, 10ms seek+write-blk
            Occasional 140ms+ write-blk, misses SCP writes
 HFE Whole Track Writes: 34ms read, 34ms write, occasional 150ms+ writes
 ADF Write: 2-4ms write-blk, occasional 120ms+ write-blk
-
-SanDisk 32GB Ultra Fit USB3.0 (0781:5583 "SanDisk Ultra Fit"):
-HFE Write: 40ms track read, 3ms write-blk, 6ms seek+write-blk
-           Occasional 200ms+ first write-blk after track read, misses SCP writes
-HFE Whole Track Writes: 40 ms track read, 40ms track write
-           Very predictable, does not miss any SCP writes
-ADF Write: 3ms write-blk, very predictable
 
 SanDisk 16GB Cruzer Switch USB2 (0781:5572 "SanDisk Cruzer Switch"):
 HFE Write: 35ms track read, 3ms write-blk, 6ms seek+write-blk
