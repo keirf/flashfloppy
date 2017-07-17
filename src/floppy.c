@@ -311,6 +311,9 @@ void floppy_insert(unsigned int unit, const char *image_name)
     /* DMA setup: From the WDATA Timer's CCRx into a circular buffer. */
     dma_wdata.cpar = (uint32_t)(unsigned long)&tim_wdata->ccr1;
     dma_wdata.cmar = (uint32_t)(unsigned long)dma_wr->buf;
+
+    /* Drive is 'ready'. */
+    gpio_write_pins(gpio_out, m(pin_rdy), O_TRUE);
 }
 
 /* Called from IRQ context to stop the write stream. */
