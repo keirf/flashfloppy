@@ -315,12 +315,7 @@ static USBH_Status USBH_MSC_Handle(USB_OTG_CORE_HANDLE *pdev ,
         case USBH_MSC_BOT_USB_TRANSFERS:
             /* Process the BOT state machine */
             USBH_MSC_HandleBOTXfer(pdev,phost);
-            switch (USBH_MSC_BOTXferParam.BOTXferStatus) {
-            case USBH_MSC_FAIL:
-            case USBH_MSC_PHASE_ERROR:
-                status = USBH_UNRECOVERED_ERROR;
-                break;
-            }
+            /* Errors get handled in next state via USBH_MSC_ErrorHandle(). */
             break;
 
         case USBH_MSC_DEFAULT_APPLI_STATE:
