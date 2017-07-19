@@ -28,6 +28,7 @@
 #include "floppy.h"
 #include "speaker.h"
 #include "touch_panel.h"
+#include "hxc.h"
 
 /*
  * Local variables:

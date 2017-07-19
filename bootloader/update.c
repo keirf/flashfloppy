@@ -42,10 +42,6 @@
 #define FLASH_PAGE_SIZE 1024
 #endif
 
-/* CRC-CCITT */
-void crc16_gentable(void);
-uint16_t crc16_ccitt(const void *buf, size_t len, uint16_t crc);
-
 /* FPEC */
 void fpec_init(void);
 void fpec_page_erase(uint32_t flash_address);
@@ -260,7 +256,6 @@ int main(void)
     touch_init();
     led_7seg_init();
     usbh_msc_init();
-    crc16_gentable();
 
     msg_display("UPD");
 

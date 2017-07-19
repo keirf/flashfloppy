@@ -241,8 +241,8 @@ void floppy_insert(unsigned int unit, const char *image_name)
     image = arena_alloc(sizeof(*image));
     memset(image, 0, sizeof(*image));
 
-    /* Must buffer a full track of MFM to write out to mass storage. */
-    image->bufs.write_mfm.len = WRITE_TRACK_BITCELLS / 8;
+    /* Large buffer to absorb long write latencies at mass-storage layer. */
+    image->bufs.write_mfm.len = 20*1024;
     image->bufs.write_mfm.p = arena_alloc(image->bufs.write_mfm.len);
 
     /* Any remaining space is used for staging writes to mass storage, for 
@@ -251,16 +251,24 @@ void floppy_insert(unsigned int unit, const char *image_name)
     image->bufs.write_data.len = arena_avail();
     image->bufs.write_data.p = arena_alloc(image->bufs.write_data.len);
 
-    /* Finally the read staging buffer can overlap with the write buffers
-     * *except* that we must be able to start processing write flux while
-     * read-data is still processing (eg. in-flight mass storage io). Thus the
-     * first 4kB of the write_mfm buffer is dedicated to the write pipeline:
-     * even at HD data rate (1us/bitcell) this is good for 32ms before
-     * colliding with read buffers. This is more than enough time for read
-     * processing to complete. */
-    image->bufs.read_data.len =
-        image->bufs.write_data.len + image->bufs.write_mfm.len - 4096;
-    image->bufs.read_data.p = image->bufs.write_mfm.p + 4096;
+    /* Read MFM buffer overlaps the second half of the write MFM buffer.
+     * This is because:
+     *  (a) The read MFM buffer does not need to absorb such large latencies
+     *      (reads are much more predictable than writes to mass storage).
+     *  (b) By dedicating the first half of the write buffer to writes, we
+     *      can safely start processing write flux while read-data is still
+     *      processing (eg. in-flight mass storage io). At say 10kB of
+     *      dedicated write buffer, this is good for >80ms before colliding
+     *      with read buffers, even at HD data rate (1us/bitcell).
+     *      This is more than enough time for read
+     *      processing to complete. */
+    image->bufs.read_mfm.len = image->bufs.write_mfm.len / 2;
+    image->bufs.read_mfm.p = (char *)image->bufs.write_mfm.p
+        + image->bufs.read_mfm.len;
+
+    /* Read-data buffer can entirely share the space of the write-data buffer. 
+     * Change of use of this memory space is fully serialised. */
+    image->bufs.read_data = image->bufs.write_data;
 
     drive[unit].filename = image_name;
 
@@ -635,7 +643,7 @@ static void IRQ_input_changed(void)
         for (i = 0; i < NR_DRIVES; i++) {
             drv = &drive[i];
             if (!drv->sel || (drv->step.state & STEP_active)
-                || (drv->cyl == (step_inward ? 84 : 0)))
+                || (drv->cyl == (step_inward ? 255 : 0)))
                 continue;
             drv->step.inward = step_inward;
             drv->step.start = stk_now();
@@ -689,6 +697,8 @@ static void drive_step_timer(void *_drv)
         break;
     case STEP_latched:
         speaker_pulse(10);
+        if ((drv->cyl >= 84) && !drv->step.inward)
+            drv->cyl = 84; /* Fast step back from D-A cyl 255 */
         drv->cyl += drv->step.inward ? 1 : -1;
         timer_set(&drv->step.timer, stk_add(drv->step.start, DRIVE_SETTLE_MS));
         if ((drv == &drive[0]) && (drv->cyl == 0))

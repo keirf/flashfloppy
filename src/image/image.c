@@ -12,6 +12,7 @@
 extern const struct image_handler adf_image_handler;
 extern const struct image_handler hfe_image_handler;
 extern const struct image_handler scp_image_handler;
+extern const struct image_handler da_image_handler;
 
 bool_t image_open(struct image *im, const char *name)
 {
@@ -33,6 +34,7 @@ bool_t image_open(struct image *im, const char *name)
     else
         return FALSE;
 
+    im->_handler = im->handler;
     mode = FA_READ | FA_OPEN_EXISTING;
     if (im->handler->write_track != NULL)
         mode |= FA_WRITE;
@@ -42,13 +44,18 @@ bool_t image_open(struct image *im, const char *name)
 }
 
 bool_t image_seek_track(
-    struct image *im, uint8_t track, stk_time_t *start_pos)
+    struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     /* If we are already seeked to this track and we are not interested in 
      * a particular rotational position (ie. we are writing) then we have 
      * nothing to do. */
     if ((start_pos == NULL) && (track == im->cur_track))
         return TRUE;
+
+    /* Are we in special direct-access mode, or not? */
+    im->handler = (track >= 510)
+        ? &da_image_handler
+        : im->_handler;
 
     return im->handler->seek_track(im, track, start_pos);
 }

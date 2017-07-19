@@ -1,6 +1,7 @@
 OBJS += arena.o
 OBJS += cancellation.o
 OBJS += console.o
+OBJS += crc.o
 OBJS += vectors.o
 OBJS += floppy.o
 OBJS += fs.o

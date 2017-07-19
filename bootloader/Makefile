@@ -1,11 +1,11 @@
 RPATH = ../src
 
 OBJS += update.o
-OBJS += crc.o
 OBJS += fpec.o
 
 OBJS += cancellation.o
 OBJS += console.o
+OBJS += crc.o
 OBJS += vectors.o
 OBJS += fs.o
 OBJS += spi.o

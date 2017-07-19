@@ -76,14 +76,14 @@ static bool_t hfe_open(struct image *im)
 }
 
 static bool_t hfe_seek_track(
-    struct image *im, uint8_t track, stk_time_t *start_pos)
+    struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
     uint32_t sys_ticks = start_pos ? *start_pos : 0;
     struct track_header thdr;
 
     /* TODO: Fake out unformatted tracks. */
-    track = min_t(uint8_t, track, im->nr_tracks-1);
+    track = min_t(uint16_t, track, im->nr_tracks-1);
 
     F_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
     F_read(&im->fp, &thdr, sizeof(thdr), NULL);

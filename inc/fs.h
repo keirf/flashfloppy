@@ -12,6 +12,8 @@
 FRESULT F_call_cancellable(int (*fn)(void));
 FRESULT F_fresult(void);
 
+void F_die(void);
+
 void F_open(FIL *fp, const TCHAR *path, BYTE mode);
 void F_close(FIL *fp);
 void F_read(FIL *fp, void *buff, UINT btr, UINT *br);

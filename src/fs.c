@@ -36,6 +36,11 @@ static void handle_fr(FRESULT fr)
     cancel_call(&fs_cancellation);
 }
 
+void F_die(void)
+{
+    handle_fr(FR_DISK_ERR);
+}
+
 void F_open(FIL *fp, const TCHAR *path, BYTE mode)
 {
     FRESULT fr = f_open(fp, path, mode);

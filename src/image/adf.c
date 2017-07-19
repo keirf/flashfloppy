@@ -49,13 +49,13 @@ static bool_t adf_open(struct image *im)
 }
 
 static bool_t adf_seek_track(
-    struct image *im, uint8_t track, stk_time_t *start_pos)
+    struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
     uint32_t sector, sys_ticks = start_pos ? *start_pos : 0;
 
     /* TODO: Fake out unformatted tracks. */
-    track = min_t(uint8_t, track, im->nr_tracks-1);
+    track = min_t(uint16_t, track, im->nr_tracks-1);
 
     im->adf.trk_off = track * BYTES_PER_TRACK;
     im->adf.trk_len = BYTES_PER_TRACK;

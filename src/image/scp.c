@@ -63,7 +63,7 @@ static bool_t scp_open(struct image *im)
 }
 
 static bool_t scp_seek_track(
-    struct image *im, uint8_t track, stk_time_t *start_pos)
+    struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
     uint32_t sys_ticks = start_pos ? *start_pos : 0;
@@ -71,7 +71,7 @@ static bool_t scp_seek_track(
     uint32_t hdr_offset, i, j, nr_flux;
 
     /* TODO: Fake out unformatted tracks. */
-    track = min_t(uint8_t, track, im->nr_tracks-1);
+    track = min_t(uint16_t, track, im->nr_tracks-1);
 
     hdr_offset = 0x10 + track*4;
     F_lseek(&im->fp, hdr_offset);

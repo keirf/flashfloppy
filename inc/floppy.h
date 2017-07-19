@@ -12,7 +12,6 @@
 #define DRIVE_RPM 300u
 #define DRIVE_MS_PER_REV (60000u/DRIVE_RPM)
 #define DRIVE_SETTLE_MS 12
-#define WRITE_TRACK_BITCELLS 100000
 
 struct adf_image {
     uint32_t trk_off;
@@ -38,6 +37,10 @@ struct scp_image {
     } rev[5];
 };
 
+struct directaccess {
+    uint32_t lba;
+};
+
 struct image_buf {
     void *p;
     uint32_t len;
@@ -45,8 +48,10 @@ struct image_buf {
 };
 
 struct image_bufs {
-    /* Buffer space for a whole track of raw MFM. */
+    /* Buffering for MFM being written to disk. */
     struct image_buf write_mfm;
+    /* Buffering for MFM we generate from read_data. */
+    struct image_buf read_mfm;
     /* Staging area for writeout to mass storage. */
     struct image_buf write_data;
     /* Read buffer for track data to be used for generating flux pattern. */
@@ -55,6 +60,7 @@ struct image_bufs {
 
 struct image {
     const struct image_handler *handler;
+    const struct image_handler *_handler;
 
     /* FatFS. */
     FIL fp;
@@ -73,6 +79,8 @@ struct image {
     uint32_t ticks_since_flux; /* Ticks since last flux sample/reversal */
     uint32_t write_start; /* Ticks past index when current write started */
 
+    struct directaccess da;
+
     union {
         struct adf_image adf;
         struct hfe_image hfe;
@@ -83,7 +91,7 @@ struct image {
 struct image_handler {
     bool_t (*open)(struct image *im);
     bool_t (*seek_track)(
-        struct image *im, uint8_t track, stk_time_t *start_pos);
+        struct image *im, uint16_t track, stk_time_t *start_pos);
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
     void (*write_track)(struct image *im, bool_t flush);
@@ -101,7 +109,7 @@ bool_t image_open(struct image *im, const char *name);
  * 
  * Returns TRUE if track successfully loaded, else FALSE. */
 bool_t image_seek_track(
-    struct image *im, uint8_t track, stk_time_t *start_pos);
+    struct image *im, uint16_t track, stk_time_t *start_pos);
 
 /* Read track data into memory. Returns TRUE if any new data was read. */
 bool_t image_read_track(struct image *im);
