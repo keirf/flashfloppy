@@ -1,4 +1,3 @@
-
 /*
  * stm32f10x_regs.h
  * 
@@ -455,6 +454,11 @@ struct tim {
 #define TIM_CCMR1_OC1FE      (1u << 2)
 #define TIM_CCMR1_CC1S(x)    ((x)<< 0)
 
+#define TIM_CCMR1_IC2F(x)    ((x)<<12)
+#define TIM_CCMR1_IC2PSC(x)  ((x)<<10)
+#define TIM_CCMR1_IC1F(x)    ((x)<< 4)
+#define TIM_CCMR1_IC1PSC(x)  ((x)<< 2)
+
 #define TIM_CCMR2_OC4CE      (1u <<15)
 #define TIM_CCMR2_OC4M(x)    ((x)<<12)
 #define TIM_CCMR2_OC4PE      (1u <<11)
@@ -465,6 +469,11 @@ struct tim {
 #define TIM_CCMR2_OC3PE      (1u << 3)
 #define TIM_CCMR2_OC3FE      (1u << 2)
 #define TIM_CCMR2_CC3S(x)    ((x)<< 0)
+
+#define TIM_CCMR2_IC4F(x)    ((x)<<12)
+#define TIM_CCMR2_IC4PSC(x)  ((x)<<10)
+#define TIM_CCMR2_IC3F(x)    ((x)<< 4)
+#define TIM_CCMR2_IC3PSC(x)  ((x)<< 2)
 
 #define TIM_OCM_FROZEN       (0u)
 #define TIM_OCM_SET_HIGH     (1u)
