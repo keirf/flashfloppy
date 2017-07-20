@@ -303,8 +303,7 @@ void floppy_insert(unsigned int unit, const char *image_name)
      * buffer for batch processing in the DMA-completion ISR. */
     tim_wdata->psc = 0;
     tim_wdata->arr = 0xffff;
-    tim_wdata->ccmr1 = (TIM_CCMR1_CC1S(TIM_CCS_INPUT_TI1) |
-                        TIM_CCMR1_OC1M(TIM_OCM_PWM1));
+    tim_wdata->ccmr1 = TIM_CCMR1_CC1S(TIM_CCS_INPUT_TI1);
     tim_wdata->dier = TIM_DIER_CC1DE;
     tim_wdata->cr2 = 0;
 
