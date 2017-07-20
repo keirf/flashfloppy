@@ -136,6 +136,8 @@ void led_7seg_write(const char *p)
             d[i] = letters[c - 'a'];
         } else if ((c >= 'A') && (c <= 'Z')) {
             d[i] = letters[c - 'A'];
+        } else if (c == '-') {
+            d[i] = 0x40;
         } else {
             d[i] = 0;
         }
