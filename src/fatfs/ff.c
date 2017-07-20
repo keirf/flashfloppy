@@ -3823,7 +3823,7 @@ FRESULT f_sync (
 				}
 			} else
 #endif
-			{
+			if (fp->dir_ptr) {
 				res = move_window(fs, fp->dir_sect);
 				if (res == FR_OK) {
 					dir = fp->dir_ptr;
@@ -3836,6 +3836,11 @@ FRESULT f_sync (
 					res = sync_fs(fs);					/* Restore it to the directory */
 					fp->flag &= (BYTE)~FA_MODIFIED;
 				}
+			} else {
+				/* FlashFloppy: fatfs_from_slot() doesn't have
+				 * parent dir info and cannot update info. */
+				res = sync_fs(fs);
+				fp->flag &= (BYTE)~FA_MODIFIED;
 			}
 		}
 	}

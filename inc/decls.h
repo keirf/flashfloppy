@@ -17,18 +17,17 @@
 #include "stm32f10x_regs.h"
 #include "stm32f10x.h"
 #include "intrinsics.h"
-#include "util.h"
-#include "cancellation.h"
-
-#include "spi.h"
-#include "timer.h"
 
 #include "../src/fatfs/ff.h"
+#include "hxc.h"
+#include "util.h"
+#include "cancellation.h"
+#include "spi.h"
+#include "timer.h"
 #include "fs.h"
 #include "floppy.h"
 #include "speaker.h"
 #include "touch_panel.h"
-#include "hxc.h"
 
 /*
  * Local variables:

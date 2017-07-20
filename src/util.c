@@ -9,21 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-void filename_extension(const char *filename, char *extension, size_t size)
-{
-    const char *p;
-    unsigned int i;
-
-    extension[0] = '\0';
-    if ((p = strrchr(filename, '.')) == NULL)
-        return;
-
-    for (i = 0; i < (size-1); i++)
-        if ((extension[i] = tolower(p[i+1])) == '\0')
-            break;
-    extension[i] = '\0';
-}
-
 void *memset(void *s, int c, size_t n)
 {
     char *p = s;

@@ -14,9 +14,9 @@ extern const struct image_handler hfe_image_handler;
 extern const struct image_handler scp_image_handler;
 extern const struct image_handler da_image_handler;
 
-bool_t image_open(struct image *im, const char *name)
+bool_t image_open(struct image *im, const struct v2_slot *slot)
 {
-    char suffix[8];
+    char suffix[4];
     struct image_bufs bufs = im->bufs;
     BYTE mode;
 
@@ -24,7 +24,9 @@ bool_t image_open(struct image *im, const char *name)
     memset(im, 0, sizeof(*im));
     im->bufs = bufs;
 
-    filename_extension(name, suffix, sizeof(suffix));
+    memcpy(suffix, slot->type, 3);
+    suffix[3] = '\0';
+
     if (!strcmp(suffix, "adf"))
         im->handler = &adf_image_handler;
     else if (!strcmp(suffix, "hfe"))
@@ -38,7 +40,7 @@ bool_t image_open(struct image *im, const char *name)
     mode = FA_READ | FA_OPEN_EXISTING;
     if (im->handler->write_track != NULL)
         mode |= FA_WRITE;
-    F_open(&im->fp, name, mode);
+    fatfs_from_slot(&im->fp, slot, mode);
     
     return im->handler->open(im);
 }

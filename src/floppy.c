@@ -83,7 +83,7 @@ static struct dma_ring *dma_wr; /* WDATA DMA buffer */
 /* Statically-allocated floppy drive state. Tracks head movements and 
  * side changes at all times, even when the drive is empty. */
 static struct drive {
-    const char *filename;
+    struct v2_slot *slot;
     uint8_t cyl, head;
     bool_t sel;
     struct {
@@ -177,7 +177,7 @@ void floppy_cancel(void)
     /* Clear soft state. */
     for (i = 0; i < NR_DRIVES; i++) {
         drive[i].image = NULL;
-        drive[i].filename = NULL;
+        drive[i].slot = NULL;
     }
     max_read_us = 0;
     image = NULL;
@@ -231,7 +231,7 @@ void floppy_init(void)
     timer_init(&index.timer, index_pulse, NULL);
 }
 
-void floppy_insert(unsigned int unit, const char *image_name)
+void floppy_insert(unsigned int unit, struct v2_slot *slot)
 {
     arena_init();
 
@@ -270,7 +270,7 @@ void floppy_insert(unsigned int unit, const char *image_name)
      * Change of use of this memory space is fully serialised. */
     image->bufs.read_data = image->bufs.write_data;
 
-    drive[unit].filename = image_name;
+    drive[unit].slot = slot;
 
     index.prev_time = stk_now();
     timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
@@ -554,7 +554,7 @@ void floppy_handle(void)
     struct drive *drv = &drive[0];
 
     if (!drv->image) {
-        if (!image_open(image, drv->filename))
+        if (!image_open(image, drv->slot))
             return;
         drv->image = image;
         dma_rd->state = DMA_stopping;

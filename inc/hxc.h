@@ -76,11 +76,6 @@ struct __packed v1_slot {
     uint32_t firstCluster;
     uint32_t size;
     char     longName[17];
-    uint8_t  numberoftrack;
-    uint8_t  numberofside;
-    uint16_t rpm;
-    uint16_t bitrate;
-    uint16_t tracklistoffset;
 };
 
 /* HXCFECFGV2.x slots start at sector offset 'slots_position': */

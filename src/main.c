@@ -18,26 +18,40 @@ static struct {
     FILINFO fp;
 } *fs;
 
+static struct {
+    uint16_t slot_nr, max_slot_nr;
+    uint8_t slot_map[1000/8];
+    struct v2_slot autoboot, hxcsdfe, slot;
+} cfg;
+
 uint8_t board_id;
 
 void speed_tests(void) __attribute__((weak, alias("dummy_fn")));
 void speed_tests_cancel(void) __attribute__((weak, alias("dummy_fn")));
 static void dummy_fn(void) {}
 
-static void do_tft(void)
+static struct timer button_timer;
+static volatile uint8_t buttons;
+#define B_LEFT 1
+#define B_RIGHT 2
+static void button_timer_fn(void *unused)
 {
-    uint16_t x, y;
-    int sx, sy;
-    if (!touch_get_xy(&x, &y))
-        return;
-    /* x=0x160-0xe20; y=0x190-0xe60 */
-    sx = (x - 0x160) * 320 / (0xe20-0x160);
-    sy = (y - 0x190) * 240 / (0xe60-0x190);
-    if (sx < 0) sx = 0;
-    if (sx >= 320) sx = 319;
-    if (sy < 0) sy = 0;
-    if (sy >= 240) sy=239;
-    fill_rect(sx, sy, 2, 2, 0xf800);
+    static uint16_t bl, br;
+    uint8_t b = 0;
+
+    bl <<= 1;
+    bl |= gpio_read_pin(gpioc, 8);
+    if (bl == 0)
+        b |= B_LEFT;
+
+    br <<= 1;
+    br |= gpio_read_pin(gpioc, 7);
+    if (br == 0)
+        b |= B_RIGHT;
+
+    buttons = b;
+
+    timer_set(&button_timer, stk_add(button_timer.deadline, stk_ms(5)));
 }
 
 static void canary_init(void)
@@ -51,58 +65,170 @@ static void canary_check(void)
     ASSERT(_thread_stackbottom[0] == 0xdeadbeef);
 }
 
-static void list_dir(const char *dir)
+void fatfs_from_slot(FIL *file, const struct v2_slot *slot, BYTE mode)
 {
-    char *name = fs->fp.fname;
-    unsigned int i;
+    memset(file, 0, sizeof(*file));
+    file->obj.fs = &fatfs;
+    file->obj.id = fatfs.id;
+    file->obj.attr = slot->attributes;
+    file->obj.sclust = slot->firstCluster;
+    file->obj.objsize = slot->size;
+    file->flag = mode;
+    /* WARNING: dir_ptr, dir_sect are unknown. */
+}
 
-    F_opendir(&fs->dp, dir);
+static void fatfs_to_slot(struct v2_slot *slot, FIL *file, const char *name)
+{
+    const char *dot = strrchr(name, '.');
+    slot->attributes = file->obj.attr;
+    slot->firstCluster = file->obj.sclust;
+    slot->size = file->obj.objsize;
+    strcpy(slot->name, name);
+    memcpy(slot->type, dot+1, 3);
+}
 
-    draw_string_8x16(0, 0, dir);
+static void init_cfg(void)
+{
+    F_open(&fs->file, "HXCSDFE.CFG", FA_READ);
+    fatfs_to_slot(&cfg.hxcsdfe, &fs->file, "HXCSDFE.CFG");
+    F_close(&fs->file);
 
-    for (i = 1; i < TFT_8x16_ROWS; ) {
-        F_readdir(&fs->dp, &fs->fp);
-        if (*name == '\0')
+    F_open(&fs->file, "AUTOBOOT.HFE", FA_READ);
+    fatfs_to_slot(&cfg.autoboot, &fs->file, "AUTOBOOT.HFE");
+    F_close(&fs->file);
+}
+
+static void read_cfg(bool_t writeback_slot_nr)
+{
+    struct hxcsdfe_cfg hxc_cfg;
+    BYTE mode = FA_READ;
+    int i;
+
+    if (writeback_slot_nr)
+        mode |= FA_WRITE;
+
+    fatfs_from_slot(&fs->file, &cfg.hxcsdfe, mode);
+    F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+    if (strncmp("HXCFECFGV", hxc_cfg.signature, 9))
+        goto bad_signature;
+    switch (hxc_cfg.signature[9]-'0') {
+    case 1: {
+        struct v1_slot v1_slot;
+        if (writeback_slot_nr) {
+            hxc_cfg.slot_index = cfg.slot_nr;
+            F_lseek(&fs->file, 0);
+            F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+        }
+        cfg.slot_nr = hxc_cfg.slot_index;
+        cfg.max_slot_nr = hxc_cfg.number_of_slot - 1;
+        if (cfg.slot_nr == 0)
             break;
-        if (*name == '.')
-            continue;
-        draw_string_8x16(0, i++, name);
+        F_lseek(&fs->file, 1024 + cfg.slot_nr*128);
+        F_read(&fs->file, &v1_slot, sizeof(v1_slot), NULL);
+        memcpy(&cfg.slot.type, &v1_slot.name[8], 3);
+        memcpy(&cfg.slot.attributes, &v1_slot.attributes, 1+4+4+17);
+        cfg.slot.name[17] = '\0';
+        break;
     }
-    F_closedir(&fs->dp);
+    case 2:
+        if (writeback_slot_nr) {
+            hxc_cfg.cur_slot_number = cfg.slot_nr;
+            F_lseek(&fs->file, 0);
+            F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+        }
+        cfg.slot_nr = hxc_cfg.cur_slot_number;
+        cfg.max_slot_nr = hxc_cfg.max_slot_number;
+        if (cfg.slot_nr == 0)
+            break;
+        F_lseek(&fs->file, hxc_cfg.slots_position*512
+                + cfg.slot_nr*64*hxc_cfg.number_of_drive_per_slot);
+        F_read(&fs->file, &cfg.slot, sizeof(cfg.slot), NULL);
+        break;
+    default:
+    bad_signature:
+        hxc_cfg.signature[15] = '\0';
+        printk("Bad signature '%s'\n", hxc_cfg.signature);
+        F_die();
+    }
+    F_close(&fs->file);
+
+    if (cfg.slot_nr == 0)
+        memcpy(&cfg.slot, &cfg.autoboot, sizeof(cfg.slot));
+
+    for (i = 0; i < 3; i++)
+        cfg.slot.type[i] = tolower(cfg.slot.type[i]);
 }
 
 int floppy_main(void)
 {
-    char buf[32];
-    UINT i, nr;
+    char msg[4];
+    uint8_t b, prev_b;
+    stk_time_t last_change = 0;
+    uint32_t changes = 0;
 
     arena_init();
     fs = arena_alloc(sizeof(*fs));
+    init_cfg();
+    read_cfg(FALSE);
+    snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
+    led_7seg_write(msg);
 
-    list_dir("/");
-
-    F_open(&fs->file, "small", FA_READ);
     for (;;) {
-        F_read(&fs->file, buf, sizeof(buf), &nr);
-        if (nr == 0) {
-            printk("\nEOF\n");
-            break;
+        fs = NULL;
+
+        printk("Current slot: %u/%u\n", cfg.slot_nr, cfg.max_slot_nr+1);
+        memcpy(msg, cfg.slot.type, 3);
+        printk("Name: '%s' Type: %s\n", cfg.slot.name, msg);
+        printk("Attr: %02x Clus: %08x Size: %u\n",
+               cfg.slot.attributes, cfg.slot.firstCluster, cfg.slot.size);
+
+        speed_tests();
+
+        floppy_insert(0, &cfg.slot);
+
+        while ((b = buttons) == 0) {
+            floppy_handle();
+            canary_check();
         }
-        for (i = 0; i < nr; i++)
-            printk("%c", buf[i]);
-    }
-    F_close(&fs->file);
 
-    fs = NULL;
+        floppy_cancel();
+        arena_init();
+        fs = arena_alloc(sizeof(*fs));
 
-    speed_tests();
+        for (prev_b = 0; b != 0; prev_b = b, b = buttons) {
+            if (prev_b == b) {
+                /* Decaying delay between image steps while button pressed. */
+                stk_time_t delay = stk_ms(1000) / (changes + 1);
+                if (delay < stk_ms(50))
+                    delay = stk_ms(50);
+                if (stk_diff(last_change, stk_now()) < delay)
+                    continue;
+                changes++;
+            } else {
+                /* Different button pressed. Takes immediate effect, resets 
+                 * the continuous-press decaying delay. */
+                changes = 0;
+            }
+            last_change = stk_now();
+            if (!(b ^ (B_LEFT|B_RIGHT))) {
+                cfg.slot_nr = 0;
+                led_7seg_write("000");
+                /* Ignore changes while user is releasing the buttons. */
+                while ((stk_diff(last_change, stk_now()) < stk_ms(1000))
+                       && buttons)
+                    continue;
+            } else if (b & B_LEFT) {
+                if (cfg.slot_nr-- == 0)
+                    cfg.slot_nr = cfg.max_slot_nr;                
+            } else { /* b & B_RIGHT */
+                if (cfg.slot_nr++ >= cfg.max_slot_nr)
+                    cfg.slot_nr = 0;
+            }
+            snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
+            led_7seg_write(msg);
+        }
 
-    floppy_insert(0, "nzs_crack.hfe");
-
-    for (;;) {
-        do_tft();
-        floppy_handle();
-        canary_check();
+        read_cfg(TRUE);
     }
 
     ASSERT(0);
@@ -143,13 +269,14 @@ int main(void)
 
     floppy_init();
 
+    timer_init(&button_timer, button_timer_fn, NULL);
+    timer_set(&button_timer, stk_now());
+
     for (i = 0; ; i++) {
 
         bool_t mount_err = 0;
-        char msg[4];
 
-        snprintf(msg, sizeof(msg), "%03u", i);
-        led_7seg_write(msg);
+        led_7seg_write("F-F");
 
         while (f_mount(&fatfs, "", 1) != FR_OK) {
             usbh_msc_process();

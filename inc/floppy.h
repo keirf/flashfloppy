@@ -99,7 +99,7 @@ struct image_handler {
 };
 
 /* Open specified image file on mass storage device. */
-bool_t image_open(struct image *im, const char *name);
+bool_t image_open(struct image *im, const struct v2_slot *slot);
 
 /* Seek to given track and start reading track data at specified rotational
  * position (specified as number of SYSCLK ticks past the index mark).
@@ -125,7 +125,7 @@ void image_write_track(struct image *im, bool_t flush);
 uint32_t image_ticks_since_index(struct image *im);
 
 void floppy_init(void);
-void floppy_insert(unsigned int unit, const char *image_name);
+void floppy_insert(unsigned int unit, struct v2_slot *slot);
 void floppy_cancel(void);
 void floppy_handle(void);
 

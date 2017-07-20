@@ -40,7 +40,7 @@ typedef char bool_t;
 #define max_t(type,x,y) \
     ({ type __x = (x); type __y = (y); __x > __y ? __x: __y; })
 
-void filename_extension(const char *filename, char *extension, size_t size);
+void fatfs_from_slot(FIL *file, const struct v2_slot *slot, BYTE mode);
 
 void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
