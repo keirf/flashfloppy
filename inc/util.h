@@ -104,6 +104,7 @@ void led_7seg_display_setting(bool_t enable);
 /* Gotek: USB stack processing */
 void usbh_msc_init(void);
 void usbh_msc_process(void);
+bool_t usbh_msc_connected(void);
 
 #else /* !BUILD_GOTEK */
 

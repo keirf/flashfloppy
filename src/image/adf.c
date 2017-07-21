@@ -81,7 +81,7 @@ static bool_t adf_seek_track(
         *start_pos = sys_ticks;
     }
 
-    return TRUE;
+    return FALSE;
 }
 
 static bool_t adf_read_track(struct image *im)

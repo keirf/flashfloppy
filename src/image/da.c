@@ -84,7 +84,7 @@ static bool_t da_seek_track(
         *start_pos = 0;
     }
 
-    return TRUE;
+    return FALSE;
 }
 
 static bool_t da_read_track(struct image *im)

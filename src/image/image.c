@@ -48,11 +48,15 @@ bool_t image_open(struct image *im, const struct v2_slot *slot)
 bool_t image_seek_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
+    /* If we are exiting D-A mode then we need to re-read the config file. */
+    if ((im->handler == &da_image_handler) && (track < 510))
+        return TRUE;
+
     /* If we are already seeked to this track and we are not interested in 
      * a particular rotational position (ie. we are writing) then we have 
      * nothing to do. */
     if ((start_pos == NULL) && (track == im->cur_track))
-        return TRUE;
+        return FALSE;
 
     /* Are we in special direct-access mode, or not? */
     im->handler = (track >= 510)

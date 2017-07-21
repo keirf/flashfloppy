@@ -107,7 +107,7 @@ bool_t image_open(struct image *im, const struct v2_slot *slot);
  * If start_pos is NULL then the caller is in write mode and thus is not
  * interested in fetching data from a particular rotational position.
  * 
- * Returns TRUE if track successfully loaded, else FALSE. */
+ * Returns TRUE if the config file needs to be re-read (exiting D-A mode). */
 bool_t image_seek_track(
     struct image *im, uint16_t track, stk_time_t *start_pos);
 
@@ -127,7 +127,7 @@ uint32_t image_ticks_since_index(struct image *im);
 void floppy_init(void);
 void floppy_insert(unsigned int unit, struct v2_slot *slot);
 void floppy_cancel(void);
-void floppy_handle(void);
+bool_t floppy_handle(void); /* TRUE -> re-read config file */
 
 /*
  * Local variables:

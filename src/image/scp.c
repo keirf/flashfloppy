@@ -82,7 +82,7 @@ static bool_t scp_seek_track(
     F_read(&im->fp, &header, sizeof(header), NULL);
 
     if (strncmp((char *)header.sig, "TRK", 3) || header.track != track)
-        return FALSE;
+        return TRUE;
 
     for (i = 0; i < ARRAY_SIZE(im->scp.rev); i++) {
         j = i % im->scp.nr_revs;
@@ -108,7 +108,7 @@ static bool_t scp_seek_track(
     if (start_pos)
         image_read_track(im);
 
-    return TRUE;
+    return FALSE;
 }
 
 static bool_t scp_read_track(struct image *im)

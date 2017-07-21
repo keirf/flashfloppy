@@ -485,7 +485,7 @@ static void floppy_read_data(struct drive *drv)
     }
 }
 
-static void dma_rd_handle(struct drive *drv)
+static bool_t dma_rd_handle(struct drive *drv)
 {
     switch (dma_rd->state) {
 
@@ -515,7 +515,8 @@ static void dma_rd_handle(struct drive *drv)
         /* Seek to the new track. */
         track = drv->cyl*2 + drv->head;
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
-        image_seek_track(drv->image, track, &read_start_pos);
+        if (image_seek_track(drv->image, track, &read_start_pos))
+            return TRUE;
         read_start_pos /= SYSCLK_MHZ/STK_MHZ;
         /* Set the deadline. */
         if (wrapped)
@@ -549,15 +550,17 @@ static void dma_rd_handle(struct drive *drv)
             timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
         break;
     }
+
+    return FALSE;
 }
 
-void floppy_handle(void)
+bool_t floppy_handle(void)
 {
     struct drive *drv = &drive[0];
 
     if (!drv->image) {
         if (!image_open(image, drv->slot))
-            return;
+            return TRUE;
         drv->image = image;
         dma_rd->state = DMA_stopping;
         gpio_write_pin(gpio_out, pin_wrprot,
@@ -567,7 +570,8 @@ void floppy_handle(void)
     switch (dma_wr->state) {
 
     case DMA_inactive:
-        dma_rd_handle(drv);
+        if (dma_rd_handle(drv))
+            return TRUE;
         break;
 
     case DMA_starting: {
@@ -575,12 +579,14 @@ void floppy_handle(void)
         /* Bail out of read mode. */
         if (dma_rd->state != DMA_inactive) {
             ASSERT(dma_rd->state == DMA_stopping);
-            dma_rd_handle(drv);
+            if (dma_rd_handle(drv))
+                return TRUE;
             ASSERT(dma_rd->state == DMA_inactive);
         }
         /* Make sure we're on the correct track. */
         track = drv->cyl*2 + drv->head;
-        image_seek_track(drv->image, track, NULL);
+        if (image_seek_track(drv->image, track, NULL))
+            return TRUE;
         /* May race wdata_stop(). */
         cmpxchg(&dma_wr->state, DMA_starting, DMA_active);
         break;
@@ -610,6 +616,8 @@ void floppy_handle(void)
         break;
     }
     }
+
+    return FALSE;
 }
 
 static void index_pulse(void *dat)

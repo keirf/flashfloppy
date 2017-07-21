@@ -113,7 +113,7 @@ static bool_t hfe_seek_track(
         *start_pos = sys_ticks;
     }
 
-    return TRUE;
+    return FALSE;
 }
 
 static bool_t hfe_read_track(struct image *im)

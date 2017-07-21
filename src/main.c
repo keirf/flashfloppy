@@ -166,35 +166,44 @@ int floppy_main(void)
     stk_time_t last_change = 0;
     uint32_t changes = 0;
 
+    speed_tests();
+
     arena_init();
     fs = arena_alloc(sizeof(*fs));
     init_cfg();
     read_cfg(FALSE);
-    snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
-    led_7seg_write(msg);
 
     for (;;) {
         fs = NULL;
 
+        snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
+        led_7seg_write(msg);
         printk("Current slot: %u/%u\n", cfg.slot_nr, cfg.max_slot_nr+1);
         memcpy(msg, cfg.slot.type, 3);
         printk("Name: '%s' Type: %s\n", cfg.slot.name, msg);
         printk("Attr: %02x Clus: %08x Size: %u\n",
                cfg.slot.attributes, cfg.slot.firstCluster, cfg.slot.size);
 
-        speed_tests();
-
         floppy_insert(0, &cfg.slot);
 
-        while ((b = buttons) == 0) {
-            floppy_handle();
+        while (((b = buttons) == 0) && !floppy_handle()) {
             canary_check();
+            if (!usbh_msc_connected())
+                F_die();
         }
 
         floppy_cancel();
         arena_init();
         fs = arena_alloc(sizeof(*fs));
 
+        /* No buttons pressed: re-read config and carry on. */
+        if (b == 0) {
+            read_cfg(FALSE);
+            continue;
+        }
+
+        /* While buttons are pressed we poll them and update current slot 
+         * accordingly. */
         for (prev_b = 0; b != 0; prev_b = b, b = buttons) {
             if (prev_b == b) {
                 /* Decaying delay between image steps while button pressed. */

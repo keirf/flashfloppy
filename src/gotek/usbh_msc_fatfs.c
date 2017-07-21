@@ -165,6 +165,11 @@ void usbh_msc_process(void)
     USBH_Process(&USB_OTG_Core, &USB_Host);
 }
 
+bool_t usbh_msc_connected(void)
+{
+    return msc_device_connected && HCD_IsDeviceConnected(&USB_OTG_Core);
+}
+
 /*
  * FatFS low-level driver callbacks.
  */
