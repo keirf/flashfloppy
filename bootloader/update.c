@@ -11,9 +11,9 @@
  * Status messages:
  *  uPd -> Waiting for buttons to release
  *  uSb -> Waiting for USB stack
- *   Rd -> Reading the update file
+ *   rd -> Reading the update file
  *  CrC -> CRC-checking the file
- *  ErA -> Erasing flash
+ *  CLr -> Erasing flash
  *  Prg -> Programming flash
  * 
  * Error messages:
@@ -155,7 +155,7 @@ int update(void)
     }
 
     /* Erase the old firmware. */
-    msg_display("ERA");
+    msg_display("CLR");
     fpec_init();
     erase_old_firmware();
     old_firmware_erased = TRUE;
@@ -169,6 +169,11 @@ int update(void)
         nr = min_t(UINT, sizeof(buf), f_size(fp) - f_tell(fp));
         F_read(&file, buf, nr, NULL);
         fpec_write(buf, nr, p);
+        if (memcmp((void *)p, buf, nr) != 0) {
+            /* Byte-by-byte verify failed. */
+            fail_code = FC_bad_prg;
+            goto fail;
+        }
         p += nr;
     }
 
@@ -176,6 +181,7 @@ int update(void)
     p = FIRMWARE_START;
     crc = crc16_ccitt((void *)p, f_size(fp), 0xffff);
     if (crc) {
+        /* CRC verify failed. */
         fail_code = FC_bad_prg;
         goto fail;
     }

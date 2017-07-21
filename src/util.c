@@ -39,6 +39,18 @@ void *memmove(void *dest, const void *src, size_t n)
     return dest;
 }
 
+int memcmp(const void *s1, const void *s2, size_t n)
+{
+    const char *_s1 = s1;
+    const char *_s2 = s2;
+    while (n--) {
+        int diff = *_s1++ - *_s2++;
+        if (diff)
+            return diff;
+    }
+    return 0;
+}
+
 int strcmp(const char *s1, const char *s2)
 {
     return strncmp(s1, s2, ~0);
