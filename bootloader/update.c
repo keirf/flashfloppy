@@ -259,6 +259,9 @@ int main(void)
 
     msg_display("UPD");
 
+    /* Wait for buttons to be pressed. */
+    wait_buttons(LOW);
+
     /* Wait for buttons to be released. */
     wait_buttons(HIGH);
 
