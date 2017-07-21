@@ -169,11 +169,6 @@ void floppy_cancel(void)
     rdata_stop();
     wdata_stop();
 
-    /* Set outputs for empty drive. */
-    index.active = FALSE;
-    gpio_write_pins(gpio_out, m(pin_index) | m(pin_rdy), O_FALSE);
-//    gpio_write_pins(gpio_out, m(pin_dskchg), O_TRUE);
-
     /* Clear soft state. */
     for (i = 0; i < NR_DRIVES; i++) {
         drive[i].image = NULL;
@@ -182,6 +177,11 @@ void floppy_cancel(void)
     max_read_us = 0;
     image = NULL;
     dma_rd = dma_wr = NULL;
+
+    /* Set outputs for empty drive. */
+    index.active = FALSE;
+    gpio_write_pins(gpio_out, m(pin_index) | m(pin_rdy), O_FALSE);
+    gpio_write_pins(gpio_out, m(pin_dskchg), O_TRUE);
 }
 
 static struct dma_ring *dma_ring_alloc(void)
@@ -218,6 +218,8 @@ void floppy_init(void)
     gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
     floppy_check();
+
+    gpio_write_pins(gpio_out, m(pin_dskchg), O_TRUE);
 
     /* Enable physical interface interrupts. */
     for (i = 0; i < ARRAY_SIZE(exti_irqs); i++) {
@@ -651,6 +653,7 @@ static void IRQ_input_changed(void)
             if (i == 0) {
                 gpio_write_pin(gpio_out, pin_trk0, O_FALSE);
                 if (dma_rd != NULL) {
+                    gpio_write_pin(gpio_out, pin_dskchg, O_FALSE);
                     rdata_stop();
                     cancel_call(&dma_rd->startup_cancellation);
                 }
