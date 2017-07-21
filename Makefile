@@ -1,5 +1,6 @@
 
 PROJ = FlashFloppy
+VER = v0.1a
 
 SUBDIRS += src bootloader
 
@@ -30,17 +31,17 @@ dist:
 	mkdir -p flashfloppy_fw
 	$(MAKE) clean
 	$(MAKE) gotek
-	cp -a FF.upd flashfloppy_fw/FF_Gotek.upd
-	cp -a FF.hex flashfloppy_fw/FF_Gotek.hex
-	cp -a src/FlashFloppy.elf flashfloppy_fw/FF_Gotek.elf
-	cp -a bootloader/Bootloader.elf flashfloppy_fw/Bootloader_Gotek.elf
+	cp -a FF.upd flashfloppy_fw/FF_Gotek-$(VER).upd
+	cp -a FF.hex flashfloppy_fw/FF_Gotek-$(VER).hex
+	cp -a src/FlashFloppy.elf flashfloppy_fw/FF_Gotek-$(VER).elf
+	cp -a bootloader/Bootloader.elf flashfloppy_fw/Bootloader_Gotek-$(VER).elf
 	$(MAKE) clean
-	$(MAKE) touch
-	cp -a FF.upd flashfloppy_fw/FF_Touch.upd
-	cp -a FF.hex flashfloppy_fw/FF_Touch.hex
-	cp -a src/FlashFloppy.elf flashfloppy_fw/FF_Touch.elf
-	cp -a bootloader/Bootloader.elf flashfloppy_fw/Bootloader_Touch.elf
-	$(MAKE) clean
+#	$(MAKE) touch
+#	cp -a FF.upd flashfloppy_fw/FF_Touch.upd
+#	cp -a FF.hex flashfloppy_fw/FF_Touch.hex
+#	cp -a src/FlashFloppy.elf flashfloppy_fw/FF_Touch.elf
+#	cp -a bootloader/Bootloader.elf flashfloppy_fw/Bootloader_Touch.elf
+#	$(MAKE) clean
 	zip -r flashfloppy_fw flashfloppy_fw
 
 mrproper: clean

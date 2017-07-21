@@ -1,7 +1,7 @@
 # FlashFloppy
 
 A retro floppy emulator for STM32F10x-based boards including
-the uniquitous Gotek.
+the ubiquitous Gotek.
 
 Most code is public domain; the rest is MIT/BSD (see the
 [COPYING](COPYING) file).
@@ -36,3 +36,26 @@ mode:
 ```
  # sudo stm32flash -w FF.hex /dev/ttyUSB0
 ```
+
+## Updates
+
+If you have previously flashed the full firmware, you can make future updates
+via USB stick:
+```
+ # make dist
+ # rm /path/to/usb/FF_Gotek*.upd
+ # cp flashfloppy_fw/FF_Gotek*.upd /path/to/usb/
+```
+
+Now press both Gotek buttons while powering on. The updater will be
+entered and will automatically detect and apply the update file. Note
+that update will fail if there is more than one update file on the USB
+drive!
+
+Errors during update are reported on the LED display:
+- **E01** No update file found
+- **E02** More than one update file found
+- **E03** Update file is invalid (bad signature or size)
+- **E04** Update file is corrupt (bad CRC)
+- **E05** Flash programming error
+- **Fxx** FatFS error (probably bad USB drive or filesystem)
