@@ -121,6 +121,7 @@ static void read_cfg(bool_t writeback_slot_nr)
         }
         cfg.slot_nr = hxc_cfg.slot_index;
         cfg.max_slot_nr = hxc_cfg.number_of_slot - 1;
+        memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
         if (cfg.slot_nr == 0)
             break;
         F_lseek(&fs->file, 1024 + cfg.slot_nr*128);
@@ -137,7 +138,10 @@ static void read_cfg(bool_t writeback_slot_nr)
             F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
         }
         cfg.slot_nr = hxc_cfg.cur_slot_number;
-        cfg.max_slot_nr = hxc_cfg.max_slot_number;
+        cfg.max_slot_nr = hxc_cfg.max_slot_number - 1;
+        F_lseek(&fs->file, hxc_cfg.slots_map_position*512);
+        F_read(&fs->file, &cfg.slot_map, sizeof(cfg.slot_map), NULL);
+        cfg.slot_map[0] |= 0x80; /* slot 0 always available */
         if (cfg.slot_nr == 0)
             break;
         F_lseek(&fs->file, hxc_cfg.slots_position*512
@@ -164,7 +168,7 @@ int floppy_main(void)
     char msg[4];
     uint8_t b, prev_b;
     stk_time_t last_change = 0;
-    uint32_t changes = 0;
+    uint32_t i, changes = 0;
 
     speed_tests();
 
@@ -174,11 +178,24 @@ int floppy_main(void)
     read_cfg(FALSE);
 
     for (;;) {
+
+        /* Make sure slot index is on a valid slot. Find next valid slot if 
+         * not (and update config). */
+        i = cfg.slot_nr;
+        if (!(cfg.slot_map[i/8] & (0x80>>(i&7)))) {
+            while (!(cfg.slot_map[i/8] & (0x80>>(i&7))))
+                if (i++ >= cfg.max_slot_nr)
+                    i = 0;
+            printk("Updated slot %u -> %u\n", cfg.slot_nr, i);
+            cfg.slot_nr = i;
+            read_cfg(TRUE);
+        }
+
         fs = NULL;
 
         snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
         led_7seg_write(msg);
-        printk("Current slot: %u/%u\n", cfg.slot_nr, cfg.max_slot_nr+1);
+        printk("Current slot: %u/%u\n", cfg.slot_nr, cfg.max_slot_nr);
         memcpy(msg, cfg.slot.type, 3);
         printk("Name: '%s' Type: %s\n", cfg.slot.name, msg);
         printk("Attr: %02x Clus: %08x Size: %u\n",
@@ -219,20 +236,26 @@ int floppy_main(void)
                 changes = 0;
             }
             last_change = stk_now();
+            i = cfg.slot_nr;
             if (!(b ^ (B_LEFT|B_RIGHT))) {
-                cfg.slot_nr = 0;
+                i = 0;
                 led_7seg_write("000");
                 /* Ignore changes while user is releasing the buttons. */
                 while ((stk_diff(last_change, stk_now()) < stk_ms(1000))
                        && buttons)
                     continue;
             } else if (b & B_LEFT) {
-                if (cfg.slot_nr-- == 0)
-                    cfg.slot_nr = cfg.max_slot_nr;                
+                do {
+                    if (i-- == 0)
+                        i = cfg.max_slot_nr;
+                } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
             } else { /* b & B_RIGHT */
-                if (cfg.slot_nr++ >= cfg.max_slot_nr)
-                    cfg.slot_nr = 0;
+                do {
+                    if (i++ >= cfg.max_slot_nr)
+                        i = 0;
+                } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
             }
+            cfg.slot_nr = i;
             snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
             led_7seg_write(msg);
         }
