@@ -492,7 +492,6 @@ static bool_t dma_rd_handle(struct drive *drv)
     case DMA_inactive: {
         stk_time_t index_time, read_start_pos;
         unsigned int track;
-        bool_t wrapped;
         /* Allow 10ms from current rotational position to load new track */
         int32_t delay = stk_ms(10);
         /* Allow extra time if heads are settling. */
@@ -509,8 +508,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Work out where in new track to start reading data from. */
         index_time = index.prev_time;
         read_start_pos = stk_timesince(index_time) + delay;
-        wrapped = (read_start_pos > stk_ms(DRIVE_MS_PER_REV));
-        if (wrapped)
+        if (read_start_pos > stk_ms(DRIVE_MS_PER_REV))
             read_start_pos -= stk_ms(DRIVE_MS_PER_REV);
         /* Seek to the new track. */
         track = drv->cyl*2 + drv->head;
@@ -519,9 +517,9 @@ static bool_t dma_rd_handle(struct drive *drv)
             return TRUE;
         read_start_pos /= SYSCLK_MHZ/STK_MHZ;
         /* Set the deadline. */
-        if (wrapped)
-            read_start_pos += stk_ms(DRIVE_MS_PER_REV);
         sync_time = stk_add(index_time, read_start_pos);
+        if (stk_delta(stk_now(), sync_time) < 0)
+            sync_time = stk_add(sync_time, stk_ms(DRIVE_MS_PER_REV));
         /* Change state /then/ check for race against step or side change. */
         dma_rd->state = DMA_starting;
         barrier();
