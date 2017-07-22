@@ -83,10 +83,6 @@ void arena_init(void);
 /* Board-specific callouts */
 void board_init(void);
 
-/* Performance tests */
-void speed_tests(void);
-void speed_tests_cancel(void);
-
 /* Serial console control */
 void console_init(void);
 void console_sync(void);

@@ -26,10 +26,6 @@ static struct {
 
 uint8_t board_id;
 
-void speed_tests(void) __attribute__((weak, alias("dummy_fn")));
-void speed_tests_cancel(void) __attribute__((weak, alias("dummy_fn")));
-static void dummy_fn(void) {}
-
 static struct timer button_timer;
 static volatile uint8_t buttons;
 #define B_LEFT 1
@@ -169,8 +165,6 @@ int floppy_main(void)
     uint8_t b, prev_b;
     stk_time_t last_change = 0;
     uint32_t i, changes = 0;
-
-    speed_tests();
 
     arena_init();
     fs = arena_alloc(sizeof(*fs));
@@ -322,7 +316,6 @@ int main(void)
         arena_init();
         fres = F_call_cancellable(floppy_main);
         floppy_cancel();
-        speed_tests_cancel();
         printk("FATFS RETURN CODE: %u\n", fres);
     }
 

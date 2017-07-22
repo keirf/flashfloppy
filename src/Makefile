@@ -12,8 +12,6 @@ OBJS += stm32f10x.o
 OBJS += timer.o
 OBJS += util.o
 
-OBJS-$(tests) += tests.o
-
 SUBDIRS += fatfs
 SUBDIRS += image
 SUBDIRS-$(gotek) += gotek
