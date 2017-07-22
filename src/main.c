@@ -284,7 +284,6 @@ int main(void)
 
     console_init();
     console_crash_on_input();
-    delay_ms(250); /* XXX printk debug delay */
 
     board_init();
 
