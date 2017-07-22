@@ -34,7 +34,7 @@ To build the FlashFloppy firmware:
 ## Initial Installation
 
 The first installation of this firmware onto Gotek requires a USB-TTL
-serial dapter, with the Gotek jumpered into system-bootloader
+serial adapter (such as [the CAB-12977 from SparkFun](https://www.sparkfun.com/products/12977)), with the Gotek jumpered into system-bootloader
 mode. This process is described on the Cortex firmware webpage
 [here](https://cortexamigafloppydrive.wordpress.com).
 
