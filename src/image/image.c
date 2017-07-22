@@ -11,7 +11,6 @@
 
 extern const struct image_handler adf_image_handler;
 extern const struct image_handler hfe_image_handler;
-extern const struct image_handler scp_image_handler;
 extern const struct image_handler da_image_handler;
 
 bool_t image_open(struct image *im, const struct v2_slot *slot)
@@ -31,8 +30,6 @@ bool_t image_open(struct image *im, const struct v2_slot *slot)
         im->handler = &adf_image_handler;
     else if (!strcmp(suffix, "hfe"))
         im->handler = &hfe_image_handler;
-    else if (!strcmp(suffix, "scp"))
-        im->handler = &scp_image_handler;
     else
         return FALSE;
 
