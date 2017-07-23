@@ -46,6 +46,12 @@ GPIn:
  PC11  J7_PIN2
  PA14  JTCK_SWCLK
 
+1602 LCD Display:
+-----------------
+I2C2: (Tx:DMA1/4, Rx:DMA1/5)
+ PB10  I2C_CLK_2
+ PB11  I2C_DAT_2
+
 LED Display:
 ------------
 Custom I2C-like protocol.
