@@ -111,6 +111,7 @@ static inline void led_7seg_display_setting(bool_t enable) {}
 
 static inline void usbh_msc_init(void) {}
 static inline void usbh_msc_process(void) {}
+static inline bool_t usbh_msc_connected(void) { return FALSE; }
 
 #endif /* !BUILD_GOTEK */
 
