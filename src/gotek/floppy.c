@@ -43,7 +43,15 @@ void IRQ_12(void) __attribute__((alias("IRQ_wdata_dma")));
 #define dma_rdata_irq 13
 void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
 
-#define NR_DRIVES 1
+/* SELA line changes. */
+#define IRQ_SELA 6
+void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI0 */
+
+/* Other EXTI IRQs relevant for us. */
+void IRQ_7(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI1 */
+void IRQ_10(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI4 */
+void IRQ_23(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI9_5 */
+static const uint8_t exti_irqs[] = { 7, 10, 23 };
 
 /* Input pins:
  * DIR = PB0, STEP=PA1, SELA=PA0, WGATE=PB9, SIDE=PB4
@@ -52,7 +60,7 @@ static uint8_t input_update(void)
 {
     uint16_t pr, in_a, in_b;
 
-    pr = exti->pr;
+    pr = exti->pr & ~1; /* ignore SELA, handled in IRQ_SELA_changed */
     exti->pr = pr;
 
     in_a = gpioa->idr;
@@ -75,6 +83,38 @@ static void board_floppy_init(void)
     afio->exticr1 = 0x1100;
 
     exti->imr = exti->rtsr = exti->ftsr = m(9) | m(4) | m(1) | m(0);
+
+    IRQx_set_prio(IRQ_SELA, FLOPPY_IRQ_SEL_PRI);
+    IRQx_set_pending(IRQ_SELA);
+    IRQx_enable(IRQ_SELA);
+}
+
+static void IRQ_SELA_changed(void)
+{
+    /* Clear SELA-changed flag. */
+    exti->pr = 1;
+
+    if (!(gpioa->idr & 1)) {
+        /* SELA is asserted (this drive is selected). 
+         * Immediately re-enable all our asserted outputs. */
+        gpio_out->brr = gpio_out_active;
+        /* Set pin_rdata as timer output (AFO_bus). */
+        if (dma_rd && (dma_rd->state == DMA_active))
+            gpio_data->crl = (gpio_data->crl & ~(0xfu<<(pin_rdata<<2)))
+                | (AFO_bus<<(pin_rdata<<2));
+        /* Let main code know it can drive the bus until further notice. */
+        drive.sel = 1;
+    } else {
+        /* SELA is deasserted (this drive is not selected).
+         * Relinquish the bus by disabling all our asserted outputs. */
+        gpio_out->bsrr = gpio_out_active;
+        /* Set pin_rdata to GPO_pushpull(_2MHz). */
+        if (dma_rd && (dma_rd->state == DMA_active))
+            gpio_data->crl = (gpio_data->crl & ~(0xfu<<(pin_rdata<<2)))
+                | (2<<(pin_rdata<<2));
+        /* Tell main code to leave the bus alone. */
+        drive.sel = 0;
+    }
 }
 
 /*

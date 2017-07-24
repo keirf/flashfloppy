@@ -134,7 +134,8 @@ extern uint32_t _irq_stacktop[], _irq_stackbottom[];
 void EXC_unused(void);
 
 /* IRQ priorities, 0 (highest) to 15 (lowest). */
-#define FLOPPY_IRQ_HI_PRI     1
+#define FLOPPY_IRQ_SEL_PRI    1
+#define FLOPPY_IRQ_HI_PRI     2
 #define TIMER_IRQ_PRI         4
 #define WDATA_IRQ_PRI         7
 #define RDATA_IRQ_PRI         8

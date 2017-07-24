@@ -44,7 +44,15 @@ void IRQ_11(void) __attribute__((alias("IRQ_wdata_dma")));
 #define dma_rdata_irq 17
 void IRQ_17(void) __attribute__((alias("IRQ_rdata_dma")));
 
-#define NR_DRIVES 2
+/* Bind all EXTI IRQs */
+void IRQ_6(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI0 */
+void IRQ_7(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI1 */
+void IRQ_8(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI2 */
+void IRQ_9(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI3 */
+void IRQ_10(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI4 */
+void IRQ_23(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI9_5 */
+void IRQ_40(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI15_10 */
+static const uint8_t exti_irqs[] = { 6, 7, 8, 9, 10, 23, 40 };
 
 /* Updates the board-agnostic input_pins bitmask with current states of 
  * input pins, and returns mask of pins which have changed state. */
