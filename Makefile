@@ -28,7 +28,7 @@ touch: all
 
 dist:
 	rm -rf flashfloppy_fw*
-	mkdir -p flashfloppy_fw
+	mkdir -p flashfloppy_fw/doc
 	$(MAKE) clean
 	$(MAKE) gotek
 	cp -a FF.upd flashfloppy_fw/FF_Gotek-$(VER).upd
@@ -38,7 +38,9 @@ dist:
 #	cp -a FF.upd flashfloppy_fw/FF_Touch-$(VER).upd
 #	cp -a FF.hex flashfloppy_fw/FF_Touch-$(VER).hex
 #	$(MAKE) clean
+	cp -a COPYING flashfloppy_fw/
 	cp -a README.md flashfloppy_fw/
+	cp -a doc/*.md flashfloppy_fw/doc/
 	zip -r flashfloppy_fw flashfloppy_fw
 
 mrproper: clean
