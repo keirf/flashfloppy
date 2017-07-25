@@ -61,12 +61,6 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
 int snprintf(char *str, size_t size, const char *format, ...)
     __attribute__ ((format (printf, 3, 4)));
 
-int vprintk(const char *format, va_list ap)
-    __attribute__ ((format (printf, 1, 0)));
-
-int printk(const char *format, ...)
-    __attribute__ ((format (printf, 1, 2)));
-
 #define le16toh(x) (x)
 #define le32toh(x) (x)
 #define htole16(x) (x)
@@ -85,10 +79,28 @@ void arena_init(void);
 /* Board-specific callouts */
 void board_init(void);
 
+#ifndef NDEBUG
+
 /* Serial console control */
 void console_init(void);
 void console_sync(void);
 void console_crash_on_input(void);
+
+/* Serial console output */
+int vprintk(const char *format, va_list ap)
+    __attribute__ ((format (printf, 1, 0)));
+int printk(const char *format, ...)
+    __attribute__ ((format (printf, 1, 2)));
+
+#else /* NDEBUG */
+
+#define console_init() ((void)0)
+#define console_sync() IRQ_global_disable()
+#define console_crash_on_input() ((void)0)
+static inline int vprintk(const char *format, va_list ap) { return 0; }
+static inline int printk(const char *format, ...) { return 0; }
+
+#endif
 
 /* CRC-CCITT */
 uint16_t crc16_ccitt(const void *buf, size_t len, uint16_t crc);

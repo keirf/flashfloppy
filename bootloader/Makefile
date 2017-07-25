@@ -4,7 +4,6 @@ OBJS += update.o
 OBJS += fpec.o
 
 OBJS += cancellation.o
-OBJS += console.o
 OBJS += crc.o
 OBJS += vectors.o
 OBJS += fs.o
@@ -13,6 +12,8 @@ OBJS += string.o
 OBJS += stm32f10x.o
 OBJS += timer.o
 OBJS += util.o
+
+OBJS-$(debug) += console.o
 
 SUBDIRS += fatfs
 SUBDIRS-$(gotek) += gotek
