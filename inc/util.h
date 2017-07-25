@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define FW_VER "0.1a"
+#define FW_VER "0.2a"
 
 #define ASSERT(p) if (!(p)) illegal();
 
