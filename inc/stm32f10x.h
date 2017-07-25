@@ -23,6 +23,7 @@
 #define DMA volatile struct dma * const
 #define TIM volatile struct tim * const
 #define SPI volatile struct spi * const
+#define I2C volatile struct i2c * const
 #define USART volatile struct usart * const
 #define USB_OTG volatile struct usb_otg * const
 
@@ -55,6 +56,8 @@ static TIM tim7 = (struct tim *)TIM7_BASE;
 static SPI spi1 = (struct spi *)SPI1_BASE;
 static SPI spi2 = (struct spi *)SPI2_BASE;
 static SPI spi3 = (struct spi *)SPI3_BASE;
+static I2C i2c1 = (struct i2c *)I2C1_BASE;
+static I2C i2c2 = (struct i2c *)I2C2_BASE;
 static USART usart1 = (struct usart *)USART1_BASE;
 static USART usart2 = (struct usart *)USART2_BASE;
 static USART usart3 = (struct usart *)USART3_BASE;

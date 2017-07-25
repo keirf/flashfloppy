@@ -573,6 +573,72 @@ struct spi {
 #define SPI2_BASE 0x40003800
 #define SPI3_BASE 0x40003C00
 
+/* I2C */
+struct i2c {
+    uint32_t cr1;     /* 00: Control 1 */
+    uint32_t cr2;     /* 04: Control 2 */
+    uint32_t oar1;    /* 08: Own address 1 */
+    uint32_t oar2;    /* 0C: Own address 2 */
+    uint32_t dr;      /* 10: Data */
+    uint32_t sr1;     /* 14: Status 1 */
+    uint32_t sr2;     /* 18: Status 2 */
+    uint32_t ccr;     /* 1C: Clock control */
+    uint32_t trise;   /* 20: Rise time */
+};
+
+#define I2C_CR1_SWRST     (1u<<15)
+#define I2C_CR1_ALERT     (1u<<13)
+#define I2C_CR1_PEC       (1u<<12)
+#define I2C_CR1_POS       (1u<<11)
+#define I2C_CR1_ACK       (1u<<10)
+#define I2C_CR1_STOP      (1u<< 9)
+#define I2C_CR1_START     (1u<< 8)
+#define I2C_CR1_NOSTRETCH (1u<< 7)
+#define I2C_CR1_ENGC      (1u<< 6)
+#define I2C_CR1_ENPEC     (1u<< 5)
+#define I2C_CR1_ENARP     (1u<< 4)
+#define I2C_CR1_SMBTYPE   (1u<< 3)
+#define I2C_CR1_SMBUS     (1u<< 1)
+#define I2C_CR1_PE        (1u<< 0)
+
+#define I2C_CR2_LAST      (1u<<12)
+#define I2C_CR2_DMAEN     (1u<<11)
+#define I2C_CR2_ITBUFEN   (1u<<10)
+#define I2C_CR2_ITEVTEN   (1u<< 9)
+#define I2C_CR2_ITERREN   (1u<< 8)
+#define I2C_CR2_FREQ(x)   (x)
+
+#define I2C_SR1_SMBALERT  (1u<<15)
+#define I2C_SR1_TIMEOUT   (1u<<14)
+#define I2C_SR1_PECERR    (1u<<12)
+#define I2C_SR1_OVR       (1u<<11)
+#define I2C_SR1_AF        (1u<<10)
+#define I2C_SR1_ARLO      (1u<< 9)
+#define I2C_SR1_BERR      (1u<< 8)
+#define I2C_SR1_TXE       (1u<< 7)
+#define I2C_SR1_RXNE      (1u<< 6)
+#define I2C_SR1_STOPF     (1u<< 4)
+#define I2C_SR1_ADD10     (1u<< 3)
+#define I2C_SR1_BTF       (1u<< 2)
+#define I2C_SR1_ADDR      (1u<< 1)
+#define I2C_SR1_SB        (1u<< 0)
+
+#define I2C_SR2_PEC(x)    ((x)<<15)
+#define I2C_SR2_DUALF     (1u<< 7)
+#define I2C_SR2_SMBHOST   (1u<< 6)
+#define I2C_SR2_SMBDEFAULT (1u<< 5)
+#define I2C_SR2_GENCALL   (1u<< 4)
+#define I2C_SR2_TRA       (1u<< 2)
+#define I2C_SR2_BUSY      (1u<< 1)
+#define I2C_SR2_MSL       (1u<< 0)
+
+#define I2C_CCR_FS        (1u<<15)
+#define I2C_CCR_DUTY      (1u<<14)
+#define I2C_CCR_CCR(x)    (x)
+
+#define I2C1_BASE 0x40005400
+#define I2C2_BASE 0x40005800
+
 /* USART */
 struct usart {
     uint32_t sr;   /* 00: Status */
