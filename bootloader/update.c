@@ -42,6 +42,10 @@
 #define FLASH_PAGE_SIZE 1024
 #endif
 
+static uint8_t display_mode;
+#define DM_LCD_1602 1
+#define DM_LED_7SEG 2
+
 /* FPEC */
 void fpec_init(void);
 void fpec_page_erase(uint32_t flash_address);
@@ -85,7 +89,15 @@ static void erase_old_firmware(void)
 static void msg_display(const char *p)
 {
     printk("[%s]\n", p);
-    led_7seg_write(p);
+    switch (display_mode) {
+    case DM_LED_7SEG:
+        led_7seg_write(p);
+        break;
+    case DM_LCD_1602:
+        lcd_write(6, 1, 0, p);
+        lcd_sync();
+        break;
+    }
 }
 
 int update(void)
@@ -194,11 +206,24 @@ fail:
     return 0;
 }
 
+static void display_setting(bool_t on)
+{
+    switch (display_mode) {
+    case DM_LED_7SEG:
+        led_7seg_display_setting(on);
+        break;
+    case DM_LCD_1602:
+        lcd_backlight(on);
+        lcd_sync();
+        break;
+    }
+}
+
 static struct timer blink_timer;
 static void blink_display(void *unused)
 {
     static int i;
-    led_7seg_display_setting(i++&1);
+    display_setting(i++&1);
     timer_set(&blink_timer, stk_add(blink_timer.deadline, stk_ms(500)));
 }
 
@@ -260,10 +285,17 @@ int main(void)
     tft_init();
     backlight_set(8);
     touch_init();
-    led_7seg_init();
+    if (lcd_init()) {
+        display_mode = DM_LCD_1602;
+        lcd_write(0, 0, 0, "FF Update Flash");
+        lcd_write(5, 1, 0, "[---]");
+        lcd_sync();
+    } else {
+        led_7seg_init();
+        display_mode = DM_LED_7SEG;
+        msg_display("UPD");
+    }
     usbh_msc_init();
-
-    msg_display("UPD");
 
     /* Wait for buttons to be pressed. */
     wait_buttons(LOW);
@@ -292,7 +324,9 @@ int main(void)
         /* All done. Reset. */
         ASSERT(!fail_code);
         printk("Success!\n");
-        led_7seg_display_setting(FALSE);
+        if (display_mode == DM_LCD_1602)
+            lcd_clear();
+        display_setting(FALSE);
         system_reset();
     }
 
@@ -309,7 +343,9 @@ int main(void)
 
     /* Clear the display. */
     timer_cancel(&blink_timer);
-    led_7seg_display_setting(FALSE);
+    if (display_mode == DM_LCD_1602)
+        lcd_clear();
+    display_setting(FALSE);
 
     /* All done. Reset. */
     system_reset();

@@ -1,4 +1,5 @@
 OBJS += board.o
+OBJS += lcd.o
 OBJS += led_7seg.o
 OBJS += usb_bsp.o
 OBJS += usbh_msc_fatfs.o

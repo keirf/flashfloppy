@@ -615,6 +615,7 @@ struct i2c {
 #define I2C_SR1_AF        (1u<<10)
 #define I2C_SR1_ARLO      (1u<< 9)
 #define I2C_SR1_BERR      (1u<< 8)
+#define I2C_SR1_ERRORS    0xdf00
 #define I2C_SR1_TXE       (1u<< 7)
 #define I2C_SR1_RXNE      (1u<< 6)
 #define I2C_SR1_STOPF     (1u<< 4)
@@ -622,6 +623,7 @@ struct i2c {
 #define I2C_SR1_BTF       (1u<< 2)
 #define I2C_SR1_ADDR      (1u<< 1)
 #define I2C_SR1_SB        (1u<< 0)
+#define I2C_SR1_EVENTS    0x00df
 
 #define I2C_SR2_PEC(x)    ((x)<<15)
 #define I2C_SR2_DUALF     (1u<< 7)

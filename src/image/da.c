@@ -13,7 +13,7 @@
 
 static struct da_status_sector dass = {
     .sig = "HxCFEDA",
-    .fw_ver = "FF-v0.1a",
+    .fw_ver = "FF-v"FW_VER,
 };
 
 #define CMD_NOP          0

@@ -9,6 +9,8 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#define FW_VER "0.1a"
+
 #define ASSERT(p) if (!(p)) illegal();
 
 typedef char bool_t;
@@ -98,6 +100,13 @@ void led_7seg_init(void);
 void led_7seg_write(const char *p);
 void led_7seg_display_setting(bool_t enable);
 
+/* Gotek: I2C 16x2 LCD */
+bool_t lcd_init(void);
+void lcd_clear(void);
+void lcd_write(int col, int row, int min, const char *str);
+void lcd_backlight(bool_t on);
+void lcd_sync(void);
+
 /* Gotek: USB stack processing */
 void usbh_msc_init(void);
 void usbh_msc_process(void);
@@ -108,6 +117,12 @@ bool_t usbh_msc_connected(void);
 static inline void led_7seg_init(void) {}
 static inline void led_7seg_write(const char *p) {}
 static inline void led_7seg_display_setting(bool_t enable) {}
+
+static inline bool_t lcd_init(void) { return FALSE; }
+static inline void lcd_clear(void) {}
+static inline void lcd_write(int col, int row, int min, const char *str) {}
+static inline void lcd_backlight(bool_t on) {};
+static inline void lcd_sync(void) {}
 
 static inline void usbh_msc_init(void) {}
 static inline void usbh_msc_process(void) {}
@@ -142,6 +157,7 @@ void EXC_unused(void);
 #define FLOPPY_IRQ_LO_PRI     9
 #define USB_IRQ_PRI          10
 #define LED_7SEG_PRI         14
+#define I2C_IRQ_PRI          14
 #define CONSOLE_IRQ_PRI      15
 
 /*

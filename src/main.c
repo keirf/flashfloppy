@@ -26,6 +26,36 @@ static struct {
 
 uint8_t board_id;
 
+static uint8_t display_mode;
+#define DM_LCD_1602 1
+#define DM_LED_7SEG 2
+
+#define BACKLIGHT_ON_SECS      20
+static uint32_t backlight_ticks;
+static uint8_t backlight_state;
+#define BACKLIGHT_OFF          0
+#define BACKLIGHT_SWITCHING_ON 1
+#define BACKLIGHT_ON           2
+
+static void lcd_on(void)
+{
+    backlight_ticks = 0;
+    barrier();
+    backlight_state = BACKLIGHT_ON;
+    barrier();
+    lcd_backlight(TRUE);
+}
+
+static void lcd_write_slot(void)
+{
+    char msg[17];
+    snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
+    lcd_write(0, 0, 16, msg);
+    snprintf(msg, sizeof(msg), "%03u/%03u", cfg.slot_nr, cfg.max_slot_nr);
+    lcd_write(0, 1, 0, msg);
+    lcd_on();
+}
+
 static struct timer button_timer;
 static volatile uint8_t buttons;
 #define B_LEFT 1
@@ -46,6 +76,30 @@ static void button_timer_fn(void *unused)
         b |= B_RIGHT;
 
     buttons = b;
+
+    switch (backlight_state) {
+    case BACKLIGHT_OFF:
+        if (!buttons)
+            break;
+        buttons = 0;
+        backlight_state = BACKLIGHT_SWITCHING_ON;
+        lcd_backlight(TRUE);
+        break;
+    case BACKLIGHT_SWITCHING_ON:
+        if (!buttons)
+            backlight_state = BACKLIGHT_ON;
+        buttons = 0;
+        backlight_ticks = 0;
+        break;
+    case BACKLIGHT_ON:
+        if (buttons)
+            backlight_ticks = 0;
+        if (backlight_ticks++ == 200*BACKLIGHT_ON_SECS) {
+            lcd_backlight(FALSE);
+            backlight_state = BACKLIGHT_OFF;
+        }
+        break;
+    }
 
     timer_set(&button_timer, stk_add(button_timer.deadline, stk_ms(5)));
 }
@@ -94,13 +148,16 @@ static void init_cfg(void)
     F_close(&fs->file);
 }
 
-static void read_cfg(bool_t writeback_slot_nr)
+#define CFG_KEEP_SLOT_NR  0
+#define CFG_READ_SLOT_NR  1
+#define CFG_WRITE_SLOT_NR 2
+static void read_cfg(uint8_t slot_mode)
 {
     struct hxcsdfe_cfg hxc_cfg;
     BYTE mode = FA_READ;
     int i;
 
-    if (writeback_slot_nr)
+    if (slot_mode == CFG_WRITE_SLOT_NR)
         mode |= FA_WRITE;
 
     fatfs_from_slot(&fs->file, &cfg.hxcsdfe, mode);
@@ -110,10 +167,12 @@ static void read_cfg(bool_t writeback_slot_nr)
     switch (hxc_cfg.signature[9]-'0') {
     case 1: {
         struct v1_slot v1_slot;
-        if (writeback_slot_nr) {
+        if (slot_mode != CFG_READ_SLOT_NR) {
             hxc_cfg.slot_index = cfg.slot_nr;
-            F_lseek(&fs->file, 0);
-            F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+            if (slot_mode == CFG_WRITE_SLOT_NR) {
+                F_lseek(&fs->file, 0);
+                F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+            }
         }
         cfg.slot_nr = hxc_cfg.slot_index;
         cfg.max_slot_nr = hxc_cfg.number_of_slot - 1;
@@ -128,10 +187,12 @@ static void read_cfg(bool_t writeback_slot_nr)
         break;
     }
     case 2:
-        if (writeback_slot_nr) {
+        if (slot_mode != CFG_READ_SLOT_NR) {
             hxc_cfg.cur_slot_number = cfg.slot_nr;
-            F_lseek(&fs->file, 0);
-            F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+            if (slot_mode == CFG_WRITE_SLOT_NR) {
+                F_lseek(&fs->file, 0);
+                F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+            }
         }
         cfg.slot_nr = hxc_cfg.cur_slot_number;
         cfg.max_slot_nr = hxc_cfg.max_slot_number - 1;
@@ -166,10 +227,11 @@ int floppy_main(void)
     stk_time_t last_change = 0;
     uint32_t i, changes = 0;
 
+    lcd_clear();
     arena_init();
     fs = arena_alloc(sizeof(*fs));
     init_cfg();
-    read_cfg(FALSE);
+    read_cfg(CFG_READ_SLOT_NR);
 
     for (;;) {
 
@@ -182,13 +244,21 @@ int floppy_main(void)
                     i = 0;
             printk("Updated slot %u -> %u\n", cfg.slot_nr, i);
             cfg.slot_nr = i;
-            read_cfg(TRUE);
+            read_cfg(CFG_WRITE_SLOT_NR);
         }
 
         fs = NULL;
 
-        snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
-        led_7seg_write(msg);
+        switch (display_mode) {
+        case DM_LED_7SEG:
+            snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
+            led_7seg_write(msg);
+            break;
+        case DM_LCD_1602:
+            lcd_write_slot();
+            break;
+        }
+
         printk("Current slot: %u/%u\n", cfg.slot_nr, cfg.max_slot_nr);
         memcpy(msg, cfg.slot.type, 3);
         printk("Name: '%s' Type: %s\n", cfg.slot.name, msg);
@@ -209,7 +279,7 @@ int floppy_main(void)
 
         /* No buttons pressed: re-read config and carry on. */
         if (b == 0) {
-            read_cfg(FALSE);
+            read_cfg(CFG_READ_SLOT_NR);
             continue;
         }
 
@@ -232,8 +302,16 @@ int floppy_main(void)
             last_change = stk_now();
             i = cfg.slot_nr;
             if (!(b ^ (B_LEFT|B_RIGHT))) {
-                i = 0;
-                led_7seg_write("000");
+                i = cfg.slot_nr = 0;
+                switch (display_mode) {
+                case DM_LED_7SEG:
+                    led_7seg_write("000");
+                    break;
+                case DM_LCD_1602:
+                    read_cfg(CFG_KEEP_SLOT_NR);
+                    lcd_write_slot();
+                    break;
+                }
                 /* Ignore changes while user is releasing the buttons. */
                 while ((stk_diff(last_change, stk_now()) < stk_ms(1000))
                        && buttons)
@@ -250,11 +328,19 @@ int floppy_main(void)
                 } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
             }
             cfg.slot_nr = i;
-            snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
-            led_7seg_write(msg);
+            switch (display_mode) {
+            case DM_LED_7SEG:
+                snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
+                led_7seg_write(msg);
+                break;
+            case DM_LCD_1602:
+                read_cfg(CFG_KEEP_SLOT_NR);
+                lcd_write_slot();
+                break;
+            }
         }
 
-        read_cfg(TRUE);
+        read_cfg(CFG_WRITE_SLOT_NR);
     }
 
     ASSERT(0);
@@ -263,7 +349,6 @@ int floppy_main(void)
 
 int main(void)
 {
-    unsigned int i;
     FRESULT fres;
 
     /* Relocate DATA. Initialise BSS. */
@@ -288,7 +373,12 @@ int main(void)
     backlight_set(8);
     touch_init();
 
-    led_7seg_init();
+    if (lcd_init()) {
+        display_mode = DM_LCD_1602;
+    } else {
+        led_7seg_init();
+        display_mode = DM_LED_7SEG;
+    }
 
     usbh_msc_init();
 
@@ -297,21 +387,23 @@ int main(void)
     timer_init(&button_timer, button_timer_fn, NULL);
     timer_set(&button_timer, stk_now());
 
-    for (i = 0; ; i++) {
+    for (;;) {
 
-        bool_t mount_err = 0;
-
-        led_7seg_write("F-F");
-
-        while (f_mount(&fatfs, "", 1) != FR_OK) {
-            usbh_msc_process();
-            if (!mount_err) {
-                mount_err = 1;
-                draw_string_8x16(2, 7, "* Please Insert Valid SD Card *");
-            }
+        switch (display_mode) {
+        case DM_LED_7SEG:
+            led_7seg_write("F-F");
+            break;
+        case DM_LCD_1602:
+            lcd_clear();
+            lcd_write(0, 0, 0, "FlashFloppy");
+            lcd_write(0, 1, 0, "v");
+            lcd_write(1, 1, 0, FW_VER);
+            lcd_on();
+            break;
         }
-        if (mount_err)
-            clear_screen();
+
+        while (f_mount(&fatfs, "", 1) != FR_OK)
+            usbh_msc_process();
 
         arena_init();
         fres = F_call_cancellable(floppy_main);
