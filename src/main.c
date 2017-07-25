@@ -30,7 +30,9 @@ static uint8_t display_mode;
 #define DM_LCD_1602 1
 #define DM_LED_7SEG 2
 
+#define IMAGE_SELECT_WAIT_SECS  4
 #define BACKLIGHT_ON_SECS      20
+
 static uint32_t backlight_ticks;
 static uint8_t backlight_state;
 #define BACKLIGHT_OFF          0
@@ -227,12 +229,75 @@ static void read_cfg(uint8_t slot_mode)
         cfg.slot.type[i] = tolower(cfg.slot.type[i]);
 }
 
-int floppy_main(void)
+/* Based on button presses, change which floppy image is selected. */
+static void choose_new_image(uint8_t init_b)
 {
     char msg[4];
     uint8_t b, prev_b;
     stk_time_t last_change = 0;
     uint32_t i, changes = 0;
+
+    for (prev_b = 0, b = init_b; b != 0; prev_b = b, b = buttons) {
+        if (prev_b == b) {
+            /* Decaying delay between image steps while button pressed. */
+            stk_time_t delay = stk_ms(1000) / (changes + 1);
+            if (delay < stk_ms(50))
+                delay = stk_ms(50);
+            if (stk_diff(last_change, stk_now()) < delay)
+                continue;
+            changes++;
+        } else {
+            /* Different button pressed. Takes immediate effect, resets 
+             * the continuous-press decaying delay. */
+            changes = 0;
+        }
+        last_change = stk_now();
+        i = cfg.slot_nr;
+        if (!(b ^ (B_LEFT|B_RIGHT))) {
+            i = cfg.slot_nr = 0;
+            switch (display_mode) {
+            case DM_LED_7SEG:
+                led_7seg_write("000");
+                break;
+            case DM_LCD_1602:
+                read_cfg(CFG_KEEP_SLOT_NR);
+                lcd_write_slot();
+                break;
+            }
+            /* Ignore changes while user is releasing the buttons. */
+            while ((stk_diff(last_change, stk_now()) < stk_ms(1000))
+                   && buttons)
+                continue;
+        } else if (b & B_LEFT) {
+            do {
+                if (i-- == 0)
+                    i = cfg.max_slot_nr;
+            } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
+        } else { /* b & B_RIGHT */
+            do {
+                if (i++ >= cfg.max_slot_nr)
+                    i = 0;
+            } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
+        }
+        cfg.slot_nr = i;
+        switch (display_mode) {
+        case DM_LED_7SEG:
+            snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
+            led_7seg_write(msg);
+            break;
+        case DM_LCD_1602:
+            read_cfg(CFG_KEEP_SLOT_NR);
+            lcd_write_slot();
+            break;
+        }
+    }
+}
+
+int floppy_main(void)
+{
+    char msg[4];
+    uint8_t b;
+    uint32_t i;
 
     lcd_clear();
     arena_init();
@@ -290,62 +355,19 @@ int floppy_main(void)
             continue;
         }
 
-        /* While buttons are pressed we poll them and update current slot 
-         * accordingly. */
-        for (prev_b = 0; b != 0; prev_b = b, b = buttons) {
-            if (prev_b == b) {
-                /* Decaying delay between image steps while button pressed. */
-                stk_time_t delay = stk_ms(1000) / (changes + 1);
-                if (delay < stk_ms(50))
-                    delay = stk_ms(50);
-                if (stk_diff(last_change, stk_now()) < delay)
-                    continue;
-                changes++;
-            } else {
-                /* Different button pressed. Takes immediate effect, resets 
-                 * the continuous-press decaying delay. */
-                changes = 0;
-            }
-            last_change = stk_now();
-            i = cfg.slot_nr;
-            if (!(b ^ (B_LEFT|B_RIGHT))) {
-                i = cfg.slot_nr = 0;
-                switch (display_mode) {
-                case DM_LED_7SEG:
-                    led_7seg_write("000");
+        do {
+            /* While buttons are pressed we poll them and update current image
+             * accordingly. */
+            choose_new_image(b);
+            /* Wait a few seconds for further button presses before acting on 
+             * the new image selection. */
+            for (i = 0; i < IMAGE_SELECT_WAIT_SECS*1000; i++) {
+                b = buttons;
+                if (b != 0)
                     break;
-                case DM_LCD_1602:
-                    read_cfg(CFG_KEEP_SLOT_NR);
-                    lcd_write_slot();
-                    break;
-                }
-                /* Ignore changes while user is releasing the buttons. */
-                while ((stk_diff(last_change, stk_now()) < stk_ms(1000))
-                       && buttons)
-                    continue;
-            } else if (b & B_LEFT) {
-                do {
-                    if (i-- == 0)
-                        i = cfg.max_slot_nr;
-                } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
-            } else { /* b & B_RIGHT */
-                do {
-                    if (i++ >= cfg.max_slot_nr)
-                        i = 0;
-                } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
+                delay_ms(1);
             }
-            cfg.slot_nr = i;
-            switch (display_mode) {
-            case DM_LED_7SEG:
-                snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
-                led_7seg_write(msg);
-                break;
-            case DM_LCD_1602:
-                read_cfg(CFG_KEEP_SLOT_NR);
-                lcd_write_slot();
-                break;
-            }
-        }
+        } while (b != 0);
 
         /* Write the slot number resulting from the latest round of button 
          * presses back to the config file. */
