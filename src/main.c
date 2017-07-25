@@ -30,7 +30,7 @@ static uint8_t display_mode;
 #define DM_LCD_1602 1
 #define DM_LED_7SEG 2
 
-#define IMAGE_SELECT_WAIT_SECS  4
+#define IMAGE_SELECT_WAIT_SECS  2
 #define BACKLIGHT_ON_SECS      20
 
 static uint32_t backlight_ticks;
@@ -39,8 +39,11 @@ static uint8_t backlight_state;
 #define BACKLIGHT_SWITCHING_ON 1
 #define BACKLIGHT_ON           2
 
+/* Turn the LCD backlight on, reset the switch-off handler and ticker. */
 static void lcd_on(void)
 {
+    if (display_mode != DM_LCD_1602)
+        return;
     backlight_ticks = 0;
     barrier();
     backlight_state = BACKLIGHT_ON;
@@ -48,39 +51,46 @@ static void lcd_on(void)
     lcd_backlight(TRUE);
 }
 
+/* Write slot info to LCD. */
 static void lcd_write_slot(void)
 {
     char msg[17];
+    if (display_mode != DM_LCD_1602)
+        return;
     snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
     lcd_write(0, 0, 16, msg);
     snprintf(msg, sizeof(msg), "%03u/%03u", cfg.slot_nr, cfg.max_slot_nr);
-    lcd_write(0, 1, 0, msg);
+    lcd_write(0, 1, 16, msg);
     lcd_on();
 }
 
-static struct timer button_timer;
-static volatile uint8_t buttons;
-#define B_LEFT 1
-#define B_RIGHT 2
-static void button_timer_fn(void *unused)
+/* Wrate track number to LCD. */
+static uint8_t lcd_cyl, lcd_side;
+static stk_time_t lcd_update_time;
+static void lcd_write_track_info(bool_t force)
 {
-    static uint16_t bl, br;
-    uint8_t b = 0;
+    uint8_t cyl, side;
+    char msg[17];
+    if (display_mode != DM_LCD_1602)
+        return;
+    floppy_get_track(&cyl, &side);
+    cyl = min_t(uint8_t, cyl, 99);
+    side = min_t(uint8_t, side, 1);
+    if (force || (cyl != lcd_cyl) || (side != lcd_side)) {
+        snprintf(msg, sizeof(msg), "T:%02u S:%u", cyl, side);
+        lcd_write(8, 1, 0, msg);
+    }
+    lcd_cyl = cyl;
+    lcd_side = side;
+    lcd_update_time = stk_now();
+}
 
-    /* We debounce the switches by waiting for them to be pressed continuously 
-     * for 16 consecutive sample periods (16 * 5ms == 80ms) */
+/* Handle switching the LCD backlight. */
+static uint8_t lcd_handle_backlight(uint8_t b)
+{
+    if (display_mode != DM_LCD_1602)
+        return b;
 
-    bl <<= 1;
-    bl |= gpio_read_pin(gpioc, 8);
-    if (bl == 0)
-        b |= B_LEFT;
-
-    br <<= 1;
-    br |= gpio_read_pin(gpioc, 7);
-    if (br == 0)
-        b |= B_RIGHT;
-
-    /* LCD backlight handling. */
     switch (backlight_state) {
     case BACKLIGHT_OFF:
         if (!b)
@@ -107,6 +117,33 @@ static void button_timer_fn(void *unused)
         }
         break;
     }
+
+    return b;
+}
+
+static struct timer button_timer;
+static volatile uint8_t buttons;
+#define B_LEFT 1
+#define B_RIGHT 2
+static void button_timer_fn(void *unused)
+{
+    static uint16_t bl, br;
+    uint8_t b = 0;
+
+    /* We debounce the switches by waiting for them to be pressed continuously 
+     * for 16 consecutive sample periods (16 * 5ms == 80ms) */
+
+    bl <<= 1;
+    bl |= gpio_read_pin(gpioc, 8);
+    if (bl == 0)
+        b |= B_LEFT;
+
+    br <<= 1;
+    br |= gpio_read_pin(gpioc, 7);
+    if (br == 0)
+        b |= B_RIGHT;
+
+    b = lcd_handle_backlight(b);
 
     /* Latch final button state and reset the timer. */
     buttons = b;
@@ -208,6 +245,10 @@ static void read_cfg(uint8_t slot_mode)
         F_lseek(&fs->file, hxc_cfg.slots_map_position*512);
         F_read(&fs->file, &cfg.slot_map, sizeof(cfg.slot_map), NULL);
         cfg.slot_map[0] |= 0x80; /* slot 0 always available */
+        /* Find true max_slot_nr: */
+        while (!(cfg.slot_map[cfg.max_slot_nr/8]
+                 & (0x80>>(cfg.max_slot_nr&7))))
+            cfg.max_slot_nr--;
         if (cfg.slot_nr == 0)
             break;
         F_lseek(&fs->file, hxc_cfg.slots_position*512
@@ -299,7 +340,9 @@ int floppy_main(void)
     uint8_t b;
     uint32_t i;
 
-    lcd_clear();
+    if (display_mode == DM_LCD_1602)
+        lcd_clear();
+
     arena_init();
     fs = arena_alloc(sizeof(*fs));
     init_cfg();
@@ -328,11 +371,13 @@ int floppy_main(void)
             break;
         case DM_LCD_1602:
             lcd_write_slot();
+            lcd_write_track_info(TRUE);
             break;
         }
 
         printk("Current slot: %u/%u\n", cfg.slot_nr, cfg.max_slot_nr);
         memcpy(msg, cfg.slot.type, 3);
+        msg[3] = '\0';
         printk("Name: '%s' Type: %s\n", cfg.slot.name, msg);
         printk("Attr: %02x Clus: %08x Size: %u\n",
                cfg.slot.attributes, cfg.slot.firstCluster, cfg.slot.size);
@@ -340,6 +385,9 @@ int floppy_main(void)
         floppy_insert(0, &cfg.slot);
 
         while (((b = buttons) == 0) && !floppy_handle()) {
+            if ((display_mode == DM_LCD_1602)
+                && (stk_diff(lcd_update_time, stk_now()) > stk_ms(20)))
+                lcd_write_track_info(FALSE);
             canary_check();
             if (!usbh_msc_connected())
                 F_die();
@@ -359,6 +407,7 @@ int floppy_main(void)
             /* While buttons are pressed we poll them and update current image
              * accordingly. */
             choose_new_image(b);
+
             /* Wait a few seconds for further button presses before acting on 
              * the new image selection. */
             for (i = 0; i < IMAGE_SELECT_WAIT_SECS*1000; i++) {
@@ -366,6 +415,14 @@ int floppy_main(void)
                 if (b != 0)
                     break;
                 delay_ms(1);
+            }
+
+            /* Flash the LED display to indicate loading the new image. */
+            if ((b == 0) && (display_mode == DM_LED_7SEG)) {
+                led_7seg_display_setting(FALSE);
+                delay_ms(200);
+                led_7seg_display_setting(TRUE);
+                b = buttons;
             }
         } while (b != 0);
 

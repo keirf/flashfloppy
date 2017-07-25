@@ -116,6 +116,7 @@ void floppy_init(void);
 void floppy_insert(unsigned int unit, struct v2_slot *slot);
 void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
+void floppy_get_track(uint8_t *p_cyl, uint8_t *p_side);
 
 /*
  * Local variables:
