@@ -65,6 +65,9 @@ static void button_timer_fn(void *unused)
     static uint16_t bl, br;
     uint8_t b = 0;
 
+    /* We debounce the switches by waiting for them to be pressed continuously 
+     * for 16 consecutive sample periods (16 * 5ms == 80ms) */
+
     bl <<= 1;
     bl |= gpio_read_pin(gpioc, 8);
     if (bl == 0)
@@ -75,24 +78,26 @@ static void button_timer_fn(void *unused)
     if (br == 0)
         b |= B_RIGHT;
 
-    buttons = b;
-
+    /* LCD backlight handling. */
     switch (backlight_state) {
     case BACKLIGHT_OFF:
-        if (!buttons)
+        if (!b)
             break;
-        buttons = 0;
+        /* First button press is to turn on the backlight. Nothing more. */
+        b = 0;
         backlight_state = BACKLIGHT_SWITCHING_ON;
         lcd_backlight(TRUE);
         break;
     case BACKLIGHT_SWITCHING_ON:
-        if (!buttons)
+        /* We sit in this state until the button is released. */
+        if (!b)
             backlight_state = BACKLIGHT_ON;
-        buttons = 0;
+        b = 0;
         backlight_ticks = 0;
         break;
     case BACKLIGHT_ON:
-        if (buttons)
+        /* After a period with no button activity we turn the backlight off. */
+        if (b)
             backlight_ticks = 0;
         if (backlight_ticks++ == 200*BACKLIGHT_ON_SECS) {
             lcd_backlight(FALSE);
@@ -101,6 +106,8 @@ static void button_timer_fn(void *unused)
         break;
     }
 
+    /* Latch final button state and reset the timer. */
+    buttons = b;
     timer_set(&button_timer, stk_add(button_timer.deadline, stk_ms(5)));
 }
 
@@ -148,9 +155,9 @@ static void init_cfg(void)
     F_close(&fs->file);
 }
 
-#define CFG_KEEP_SLOT_NR  0
-#define CFG_READ_SLOT_NR  1
-#define CFG_WRITE_SLOT_NR 2
+#define CFG_KEEP_SLOT_NR  0 /* Do not re-read slot number from config */
+#define CFG_READ_SLOT_NR  1 /* Read slot number afresh from config */
+#define CFG_WRITE_SLOT_NR 2 /* Write new slot number to config */
 static void read_cfg(uint8_t slot_mode)
 {
     struct hxcsdfe_cfg hxc_cfg;
@@ -340,6 +347,8 @@ int floppy_main(void)
             }
         }
 
+        /* Write the slot number resulting from the latest round of button 
+         * presses back to the config file. */
         read_cfg(CFG_WRITE_SLOT_NR);
     }
 
