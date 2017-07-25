@@ -52,9 +52,6 @@ struct dma_ring {
         uint16_t prod; /* dma_rd: our producer index for flux samples */
         uint16_t prev_sample; /* dma_wr: previous CCRx sample value */
     };
-    /* {inactive, starting} -> {active} must happen within this cancellation. 
-     * This allows it to be cancelled from the EXTI ISR if inputs change. */
-    struct cancellation startup_cancellation;
     /* DMA ring buffer of timer values (ARR or CCRx). */
     uint16_t buf[1024];
 };
@@ -398,12 +395,12 @@ static void rdata_stop(void)
     dma_rdata.cndtr = ARRAY_SIZE(dma_rd->buf);
 }
 
-/* Called from a cancellable context to start the read stream. */
-static int rdata_start(void)
+/* Called from user context to start the read stream. */
+static void rdata_start(void)
 {
     IRQ_global_disable();
 
-    /* Did we race cancellation? Then bail. */
+    /* Did we race rdata_stop()? Then bail. */
     if (dma_rd->state == DMA_stopping)
         goto out;
 
@@ -431,7 +428,6 @@ static int rdata_start(void)
 
 out:
     IRQ_global_enable();
-    return 0;
 }
 
 static void floppy_sync_flux(void)
@@ -455,7 +451,7 @@ static void floppy_sync_flux(void)
     if (ticks > 0)
         delay_ticks(ticks);
     ticks = stk_delta(stk_now(), sync_time); /* XXX */
-    call_cancellable_fn(&dma_rd->startup_cancellation, rdata_start);
+    rdata_start();
     printk("Trk %u: sync_ticks=%d\n", drv->image->cur_track, ticks);
 }
 
@@ -651,7 +647,6 @@ static void IRQ_input_changed(void)
             if (dma_rd != NULL) {
                 floppy_change_outputs(m(pin_dskchg), O_FALSE);
                 rdata_stop();
-                cancel_call(&dma_rd->startup_cancellation);
             }
             IRQx_set_pending(STEP_IRQ);
         }
@@ -662,7 +657,6 @@ static void IRQ_input_changed(void)
         drv->head = !(inp & m(inp_side));
         if (dma_rd != NULL) {
             rdata_stop();
-            cancel_call(&dma_rd->startup_cancellation);
         }
     }
 
@@ -674,7 +668,6 @@ static void IRQ_input_changed(void)
         } else {
             rdata_stop();
             wdata_start();
-            cancel_call(&dma_rd->startup_cancellation);
         }
     }
 
