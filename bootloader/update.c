@@ -24,8 +24,7 @@
  *  E05 -> Flash error (bad CRC on verify)
  *  Fxx -> FatFS error (probably bad filesystem)
  * 
- * Errors flash on the display once per second. Press both Gotek buttons
- * to dismiss the error and retry the update.
+ * Press both Gotek buttons to dismiss an error and retry the update.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -219,14 +218,6 @@ static void display_setting(bool_t on)
     }
 }
 
-static struct timer blink_timer;
-static void blink_display(void *unused)
-{
-    static int i;
-    display_setting(i++&1);
-    timer_set(&blink_timer, stk_add(blink_timer.deadline, stk_ms(500)));
-}
-
 /* Wait for both buttons to be pressed (LOW) or not pressed (HIGH). Perform 
  * debouncing by sampling the buttons every 5ms and checking for same state 
  * over 16 consecutive samples. */
@@ -313,36 +304,30 @@ int main(void)
     /* Do the update. */
     fres = F_call_cancellable(update);
 
-    /* Check for errors and report them on display. */
-    if (fres) {
-        snprintf(msg, sizeof(msg), "F%02u", fres);
+    if (fres || fail_code) {
+
+        /* An error occurred. Report it on the display. */
+        if (fres)
+            snprintf(msg, sizeof(msg), "F%02u", fres);
+        else
+            snprintf(msg, sizeof(msg), "E%02u", fail_code);
         msg_display(msg);
-    } else if (fail_code) {
-        snprintf(msg, sizeof(msg), "E%02u", fail_code);
-        msg_display(msg);
+
+        /* If we had modified flash, fully erase the main firmware area. */
+        if (old_firmware_erased)
+            erase_old_firmware();
+
+        /* Wait for buttons to be pressed, so user sees error message. */
+        wait_buttons(LOW);
+
     } else {
-        /* All done. Reset. */
-        ASSERT(!fail_code);
+
+        /* No errors. */
         printk("Success!\n");
-        if (display_mode == DM_LCD_1602)
-            lcd_clear();
-        display_setting(FALSE);
-        system_reset();
+
     }
 
-    /* Flash the display on error. */
-    timer_init(&blink_timer, blink_display, NULL);
-    timer_set(&blink_timer, stk_add(stk_now(), stk_ms(500)));
-
-    /* If we had modified flash, fully erase the main firmware area. */
-    if (old_firmware_erased)
-        erase_old_firmware();
-
-    /* Wait for buttons to be pressed, so user sees error message. */
-    wait_buttons(LOW);
-
     /* Clear the display. */
-    timer_cancel(&blink_timer);
     if (display_mode == DM_LCD_1602)
         lcd_clear();
     display_setting(FALSE);
