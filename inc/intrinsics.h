@@ -16,6 +16,9 @@ struct exception_frame {
 #define __packed __attribute((packed))
 #define always_inline __inline__ __attribute__((always_inline))
 
+#define likely(x)     __builtin_expect(!!(x),1)
+#define unlikely(x)   __builtin_expect(!!(x),0)
+
 #define illegal() asm volatile (".short 0xde00");
 
 #define barrier() asm volatile ("" ::: "memory")

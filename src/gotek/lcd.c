@@ -38,6 +38,7 @@ void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
 void IRQ_34(void) __attribute__((alias("IRQ_i2c_error")));
 static void IRQ_i2c_error(void);
 
+static bool_t force_bl;
 static uint8_t _bl;
 static uint8_t addr;
 static uint8_t i2c_dead;
@@ -54,6 +55,19 @@ static void IRQ_i2c_event(void)
 {
     uint16_t sr1 = i2c->sr1 & I2C_SR1_EVENTS;
 
+    /* HACK: To allow lcd_backlight() control from IRQ. */
+    if (unlikely(force_bl)) {
+        force_bl = FALSE;
+        /* If buffer is empty, just replay the last command */
+        if (bc == bp)
+            bc--;
+        /* If the state machine is idle, kick things off. */
+        if (state == I2CS_IDLE) {
+            state = I2CS_START;
+            i2c->cr1 |= I2C_CR1_START;
+        }
+    }
+
     switch (state) {
 
     case I2CS_IDLE:
@@ -63,14 +77,14 @@ static void IRQ_i2c_event(void)
 
     case I2CS_START:
         if (sr1 & I2C_SR1_SB) {
-            /* Push address. Clears SR1_SB. */
+            /* Send address. Clears SR1_SB. */
             i2c->dr = addr<<1;
         }
         if (sr1 & I2C_SR1_ADDR) {
             /* Read SR2 clears SR1_ADDR. */
             (void)i2c->sr2;
-            /* Push DATA0. Clears SR1_TXE. */
-            i2c->dr = buffer[bc++ % sizeof(buffer)];
+            /* Send data0. Clears SR1_TXE. */
+            i2c->dr = buffer[bc++ % sizeof(buffer)] | _bl;
             state = I2CS_DATA;
         }
         break;
@@ -79,9 +93,11 @@ static void IRQ_i2c_event(void)
         if (!(sr1 & I2C_SR1_BTF))
             break;
         if (bc != bp) {
-            i2c->dr = buffer[bc++ % sizeof(buffer)]; /* clears TXE+BTF */
+            /* Send dataN. Clears SR1_TXE and SR1_BTF. */
+            i2c->dr = buffer[bc++ % sizeof(buffer)] | _bl;
         } else {
-            i2c->cr1 |= I2C_CR1_STOP; /* clears TXE+BTF */
+            /* Send STOP. Clears SR1_TXE and SR1_BTF. */
+            i2c->cr1 |= I2C_CR1_STOP;
             while (i2c->cr1 & I2C_CR1_STOP)
                 continue;
             if (bc != bp) {
@@ -130,9 +146,8 @@ static void i2c_cmd(uint8_t cmd)
     ASSERT(!in_exception());
     while ((uint16_t)(bp - bc) == sizeof(buffer))
         cpu_relax();
-    cmd |= _bl;
     buffer[bp++ % sizeof(buffer)] = cmd;
-    barrier();
+    barrier(); /* push command /then/ check state */
     if (state == I2CS_IDLE) {
         IRQx_disable(I2C_EVENT_IRQ);
         if ((state == I2CS_IDLE) && (bc != bp)) {
@@ -191,7 +206,7 @@ static bool_t i2c_probe(uint8_t a)
     if (!i2c_wait(I2C_SR1_ADDR)) return FALSE;
     (void)i2c->sr2;
     if (!i2c_wait(I2C_SR1_TXE)) return FALSE;
-    i2c->dr = _bl;
+    i2c->dr = 0;
     if (!i2c_wait(I2C_SR1_TXE | I2C_SR1_BTF)) return FALSE;
     i2c->cr1 |= I2C_CR1_STOP;
     return TRUE;
@@ -228,8 +243,17 @@ void lcd_write(int col, int row, int min, const char *str)
 void lcd_backlight(bool_t on)
 {
     _bl = on ? _BL : 0;
-    if (!in_exception())
+    if (!in_exception()) {
+        /* Send a dummy command for the new setting to piggyback on. */
         i2c_cmd(0);
+    } else {
+        /* We can't poke the command ring directly from IRQ context, so instead 
+         * we have a sneaky side channel into the ISR. */
+        IRQx_disable(I2C_EVENT_IRQ);
+        force_bl = TRUE;
+        IRQx_set_pending(I2C_EVENT_IRQ);
+        IRQx_enable(I2C_EVENT_IRQ);
+    }
 }
 
 void lcd_sync(void)
