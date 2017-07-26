@@ -271,6 +271,7 @@ int main(void)
     stm32_init();
     timers_init();
     console_init();
+    delay_ms(200); /* 5v settle */
     board_init();
     backlight_init();
     tft_init();
