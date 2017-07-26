@@ -11,7 +11,11 @@
 
 #define FW_VER "0.2a"
 
-#define ASSERT(p) if (!(p)) illegal();
+#ifndef NDEBUG
+#define ASSERT(p) do { if (!(p)) illegal(); } while (0)
+#else
+#define ASSERT(p) do { if (0 && (p)) {} } while (0)
+#endif
 
 typedef char bool_t;
 #define TRUE 1
