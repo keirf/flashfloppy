@@ -244,6 +244,7 @@ void lcd_write(int col, int row, int min, const char *str)
 void lcd_backlight(bool_t on)
 {
     _bl = on ? _BL : 0;
+    barrier(); /* set new flag /then/ kick i2c */
     if (!in_exception()) {
         /* Send a dummy command for the new setting to piggyback on. */
         i2c_cmd(0);
@@ -311,7 +312,7 @@ bool_t lcd_init(void)
     write8(CMD_FUNCTIONSET | FS_2LINE);
     write8(CMD_DISPLAYCTL);
     lcd_clear();
-    _bl = _BL;
+    lcd_backlight(TRUE);
     write8(CMD_ENTRYMODE | 2);
     write8(CMD_DISPLAYCTL | 4); /* display on */
 
