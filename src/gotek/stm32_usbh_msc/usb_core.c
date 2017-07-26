@@ -712,7 +712,11 @@ void USB_OTG_DriveVbus (USB_OTG_CORE_HANDLE *pdev, uint8_t state)
         USB_OTG_WRITE_REG32(pdev->regs.HPRT0, hprt0.d32);
     }
 
+    /* VBUS isn't switched on Gotek: no need for power-on delay. 
+     * Instead we have a one-off startup delay in src/main.c. */
+#if 0
     USB_OTG_BSP_mDelay(200);
+#endif
 }
 /**
  * @brief  USB_OTG_EnableHostInt: Enables the Host mode interrupts

@@ -452,6 +452,9 @@ int main(void)
     console_init();
     console_crash_on_input();
 
+    /* Wait for 5v power to stabilise before initing external peripherals. */
+    delay_ms(200);
+
     board_init();
 
     speaker_init();
