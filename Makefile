@@ -1,6 +1,6 @@
 
 PROJ = FlashFloppy
-VER = v0.2a
+VER = v0.2.1a
 
 SUBDIRS += src bootloader
 
@@ -27,24 +27,24 @@ touch: export touch=y
 touch: all
 
 dist:
-	rm -rf flashfloppy_fw*
-	mkdir -p flashfloppy_fw/doc
+	rm -rf flashfloppy_*
+	mkdir -p flashfloppy_$(VER)/doc
 	$(MAKE) clean
 	$(MAKE) gotek
-	cp -a FF.upd flashfloppy_fw/FF_Gotek-$(VER).upd
-	cp -a FF.hex flashfloppy_fw/FF_Gotek-$(VER).hex
+	cp -a FF.upd flashfloppy_$(VER)/FF_Gotek-$(VER).upd
+	cp -a FF.hex flashfloppy_$(VER)/FF_Gotek-$(VER).hex
 	$(MAKE) clean
 #	$(MAKE) touch
-#	cp -a FF.upd flashfloppy_fw/FF_Touch-$(VER).upd
-#	cp -a FF.hex flashfloppy_fw/FF_Touch-$(VER).hex
+#	cp -a FF.upd flashfloppy_$(VER)/FF_Touch-$(VER).upd
+#	cp -a FF.hex flashfloppy_$(VER)/FF_Touch-$(VER).hex
 #	$(MAKE) clean
-	cp -a COPYING flashfloppy_fw/
-	cp -a README.md flashfloppy_fw/
-	cp -a doc/*.md flashfloppy_fw/doc/
-	zip -r flashfloppy_fw flashfloppy_fw
+	cp -a COPYING flashfloppy_$(VER)/
+	cp -a README.md flashfloppy_$(VER)/
+	cp -a doc/*.md flashfloppy_$(VER)/doc/
+	zip -r flashfloppy_$(VER).zip flashfloppy_$(VER)
 
 mrproper: clean
-	rm -rf flashfloppy_fw*
+	rm -rf flashfloppy_*
 
 endif
 

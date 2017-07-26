@@ -8,4 +8,4 @@
 *.orig
 *.rej
 *.upd
-/flashfloppy_fw*
+/flashfloppy_*
