@@ -31,6 +31,8 @@
 #define FS_2LINE         0x08
 
 #define i2c i2c2
+#define SCL 10
+#define SDA 11
 
 #define I2C_EVENT_IRQ 33
 #define I2C_ERROR_IRQ 34
@@ -269,14 +271,41 @@ bool_t lcd_init(void)
 
     rcc->apb1enr |= RCC_APB1ENR_I2C2EN;
 
-    gpio_configure_pin(gpiob, 10, AFO_opendrain(_2MHz)); /* PB10 = SCL2 */
-    gpio_configure_pin(gpiob, 11, AFO_opendrain(_2MHz)); /* PB11 = SDA2 */
+    /* Check we have a clear I2C bus. Both clock and data must be high. If SDA 
+     * is stuck low then slave may be stuck in an ACK cycle. We can try to 
+     * unwedge the slave in that case and drive it into the STOP condition. */
+    gpio_configure_pin(gpiob, SCL, GPO_opendrain(_2MHz, HIGH));
+    gpio_configure_pin(gpiob, SDA, GPO_opendrain(_2MHz, HIGH));
+    delay_us(10);
+    if (gpio_read_pin(gpiob, SCL) && !gpio_read_pin(gpiob, SDA)) {
+        printk("I2C: SDA held by slave? Forcing STOP...\n");
+        /* We will hold SDA low (as slave is) and also drive SCL low to end 
+         * the current ACK cycle. */
+        gpio_write_pin(gpiob, SDA, FALSE);
+        gpio_write_pin(gpiob, SCL, FALSE);
+        delay_us(10);
+        /* Slave should no longer be driving SDA low (but we still are).
+         * Now prepare for the STOP condition by setting SCL high. */
+        gpio_write_pin(gpiob, SCL, TRUE);
+        delay_us(10);
+        /* Enter the STOP condition by setting SDA high while SCL is high. */
+        gpio_write_pin(gpiob, SDA, TRUE);
+        delay_us(10);
+    }
 
-    /* Check we have a clear I2C bus. Both clock and data must be high. */
-    if (!gpio_read_pin(gpiob, 10) || !gpio_read_pin(gpiob, 11)) {
-        printk("I2C: Invalid bus state\n");
+    /* Check the bus is not floating (or still stuck!). We shouldn't be able to 
+     * pull the lines low with our internal weak pull-downs (min. 30kohm). */
+    gpio_configure_pin(gpiob, SCL, GPI_pull_down);
+    gpio_configure_pin(gpiob, SDA, GPI_pull_down);
+    delay_us(10);
+    if (!gpio_read_pin(gpiob, SCL) || !gpio_read_pin(gpiob, SDA)) {
+        printk("I2C: FATAL: Bus floating or stuck\n");
         goto fail;
     }
+
+    printk("I2C: Bus quiescent\n");
+    gpio_configure_pin(gpiob, SCL, AFO_opendrain(_2MHz));
+    gpio_configure_pin(gpiob, SDA, AFO_opendrain(_2MHz));
 
     /* Standard Mode (100kHz) */
     i2c->cr2 = I2C_CR2_FREQ(36);
@@ -320,8 +349,8 @@ bool_t lcd_init(void)
 
 fail:
     i2c->cr1 &= ~I2C_CR1_PE;
-    gpio_configure_pin(gpiob, 10, GPI_pull_up);
-    gpio_configure_pin(gpiob, 11, GPI_pull_up);
+    gpio_configure_pin(gpiob, SCL, GPI_pull_up);
+    gpio_configure_pin(gpiob, SDA, GPI_pull_up);
     rcc->apb1enr &= ~RCC_APB1ENR_I2C2EN;
     return FALSE;
 }
