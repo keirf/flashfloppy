@@ -205,10 +205,11 @@ static bool_t i2c_probe(uint8_t a)
     i2c->dr = a<<1;
     if (!i2c_wait(I2C_SR1_ADDR)) return FALSE;
     (void)i2c->sr2;
-    if (!i2c_wait(I2C_SR1_TXE)) return FALSE;
     i2c->dr = 0;
-    if (!i2c_wait(I2C_SR1_TXE | I2C_SR1_BTF)) return FALSE;
+    if (!i2c_wait(I2C_SR1_BTF)) return FALSE;
     i2c->cr1 |= I2C_CR1_STOP;
+    while (i2c->cr1 & I2C_CR1_STOP)
+        continue;
     return TRUE;
 }
 
