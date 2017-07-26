@@ -36,17 +36,16 @@
 #define I2C_ERROR_IRQ 34
 void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
 void IRQ_34(void) __attribute__((alias("IRQ_i2c_error")));
+static void IRQ_i2c_error(void);
 
 static uint8_t _bl;
-static uint8_t addr = 0x20;
+static uint8_t addr;
 static uint8_t i2c_dead;
 
 /* Ring buffer for I2C. */
 #define I2CS_IDLE  0
 #define I2CS_START 1
-#define I2CS_ADDR  2
-#define I2CS_DATA  3
-#define I2CS_STOP  4
+#define I2CS_DATA  2
 static uint8_t state;
 static uint8_t buffer[256];
 static uint16_t bc, bp;
@@ -55,44 +54,51 @@ static void IRQ_i2c_event(void)
 {
     uint16_t sr1 = i2c->sr1 & I2C_SR1_EVENTS;
 
-    if (sr1 & I2C_SR1_SB) {
-        i2c->dr = addr<<1; /* clears I2C_SR1_SB */
-        state = I2CS_ADDR;
-    }
-
-    if (sr1 & I2C_SR1_ADDR) {
-        (void)i2c->sr2; /* clears I2C_SR1_ADDR */
-        state = I2CS_DATA;
-    }
-
     switch (state) {
-    case I2CS_DATA:
-        if (!(sr1 & I2C_SR1_TXE)) {
-            i2c->cr2 |= I2C_CR2_ITBUFEN; /* request IRQ on TXE */
-            break;
-        }
-        i2c->dr = buffer[bc++ % sizeof(buffer)]; /* clears TXE */
-        state = I2CS_STOP;
-        i2c->cr2 &= ~I2C_CR2_ITBUFEN;
+
+    case I2CS_IDLE:
+        printk("Unexpected I2C IRQ sr1=%04x\n", i2c->sr1);
+        IRQ_i2c_error();
         break;
-    case I2CS_STOP:
-        if ((sr1 & (I2C_SR1_TXE|I2C_SR1_BTF)) != (I2C_SR1_TXE|I2C_SR1_BTF))
+
+    case I2CS_START:
+        if (sr1 & I2C_SR1_SB) {
+            /* Push address. Clears SR1_SB. */
+            i2c->dr = addr<<1;
+        }
+        if (sr1 & I2C_SR1_ADDR) {
+            /* Read SR2 clears SR1_ADDR. */
+            (void)i2c->sr2;
+            /* Push DATA0. Clears SR1_TXE. */
+            i2c->dr = buffer[bc++ % sizeof(buffer)];
+            state = I2CS_DATA;
+        }
+        break;
+
+    case I2CS_DATA:
+        if (!(sr1 & I2C_SR1_BTF))
             break;
-        i2c->cr1 |= I2C_CR1_STOP; /* clears TXE and BTF */
-        state = I2CS_IDLE;
         if (bc != bp) {
+            i2c->dr = buffer[bc++ % sizeof(buffer)]; /* clears TXE+BTF */
+        } else {
+            i2c->cr1 |= I2C_CR1_STOP; /* clears TXE+BTF */
             while (i2c->cr1 & I2C_CR1_STOP)
                 continue;
-            state = I2CS_START;
-            i2c->cr1 |= I2C_CR1_START;
+            if (bc != bp) {
+                state = I2CS_START;
+                i2c->cr1 |= I2C_CR1_START;
+            } else {
+                state = I2CS_IDLE;
+            }
         }
         break;
+
     }
 }
 
 static void IRQ_i2c_error(void)
 {
-    printk("I2C Error %04x\n", i2c->cr1);
+    printk("I2C Error cr1=%04x sr1=%04x\n", i2c->cr1, i2c->sr1);
     i2c->sr1 &= ~I2C_SR1_ERRORS;
     i2c->cr1 = 0;
     i2c->cr1 = I2C_CR1_SWRST;
@@ -107,9 +113,8 @@ static void IRQ_i2c_error(void)
 
 static void i2c_sync(void)
 {
+    ASSERT(!in_exception());
     while (state != I2CS_IDLE)
-        cpu_relax();
-    while (i2c->cr1 & I2C_CR1_STOP)
         cpu_relax();
 }
 
@@ -122,16 +127,20 @@ static void i2c_delay_us(unsigned int usec)
 /* Send an I2C command to the PCF8574. */
 static void i2c_cmd(uint8_t cmd)
 {
-    while ((bp - bc) == sizeof(buffer))
+    ASSERT(!in_exception());
+    while ((uint16_t)(bp - bc) == sizeof(buffer))
         cpu_relax();
     cmd |= _bl;
-    IRQx_disable(I2C_EVENT_IRQ);
     buffer[bp++ % sizeof(buffer)] = cmd;
+    barrier();
     if (state == I2CS_IDLE) {
-        state = I2CS_START;
-        i2c->cr1 |= I2C_CR1_START;
+        IRQx_disable(I2C_EVENT_IRQ);
+        if ((state == I2CS_IDLE) && (bc != bp)) {
+            state = I2CS_START;
+            i2c->cr1 |= I2C_CR1_START;
+        }
+        IRQx_enable(I2C_EVENT_IRQ);
     }
-    IRQx_enable(I2C_EVENT_IRQ);
 }
 
 /* Write a 4-bit nibble over D7-D4 (4-bit bus). */
@@ -174,11 +183,11 @@ static bool_t i2c_wait(uint8_t s)
 }
 
 /* Check whether an I2C device is responding at given address. */
-static bool_t i2c_probe(uint8_t _addr)
+static bool_t i2c_probe(uint8_t a)
 {
     i2c->cr1 |= I2C_CR1_START;
     if (!i2c_wait(I2C_SR1_SB)) return FALSE;
-    i2c->dr = _addr<<1;
+    i2c->dr = a<<1;
     if (!i2c_wait(I2C_SR1_ADDR)) return FALSE;
     (void)i2c->sr2;
     if (!i2c_wait(I2C_SR1_TXE)) return FALSE;
@@ -186,6 +195,16 @@ static bool_t i2c_probe(uint8_t _addr)
     if (!i2c_wait(I2C_SR1_TXE | I2C_SR1_BTF)) return FALSE;
     i2c->cr1 |= I2C_CR1_STOP;
     return TRUE;
+}
+
+/* Check given inclusive range of addresses for a responding I2C device. */
+static uint8_t i2c_probe_range(uint8_t s, uint8_t e)
+{
+    uint8_t a;
+    for (a = s; (a <= e) && !i2c_dead; a++)
+        if (i2c_probe(a))
+            return a;
+    return 0;
 }
 
 void lcd_clear(void)
@@ -209,7 +228,8 @@ void lcd_write(int col, int row, int min, const char *str)
 void lcd_backlight(bool_t on)
 {
     _bl = on ? _BL : 0;
-    i2c_cmd(0);
+    if (!in_exception())
+        i2c_cmd(0);
 }
 
 void lcd_sync(void)
@@ -219,6 +239,8 @@ void lcd_sync(void)
 
 bool_t lcd_init(void)
 {
+    uint8_t a;
+
     rcc->apb1enr |= RCC_APB1ENR_I2C2EN;
 
     gpio_configure_pin(gpiob, 10, AFO_opendrain(_2MHz)); /* PB10 = SCL2 */
@@ -237,19 +259,14 @@ bool_t lcd_init(void)
     i2c->cr1 = I2C_CR1_PE;
 
     /* Probe the bus for an I2C device. */
-    for (addr = 0x20; addr < 0x28; addr++)
-        if (i2c_probe(addr) || i2c_dead)
-            break;
-    if (i2c_dead) {
-        printk("I2C: Bus locked up?\n");
-        goto fail;
-    }
-    if (addr == 0x28) {
-        printk("I2C: No device found\n");
+    a = i2c_probe_range(0x20, 0x27) ?: i2c_probe_range(0x38, 0x3f);
+    if (a == 0) {
+        printk("I2C: %s\n", i2c_dead ? "Bus locked up?" : "No device found");
         goto fail;
     }
 
-    printk("I2C: LCD found at %02x\n", addr);
+    printk("I2C: LCD found at %02x\n", a);
+    addr = a;
 
     IRQx_set_prio(I2C_EVENT_IRQ, I2C_IRQ_PRI);
     IRQx_enable(I2C_EVENT_IRQ);
