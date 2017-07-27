@@ -623,7 +623,7 @@ struct i2c {
 #define I2C_SR1_BTF       (1u<< 2)
 #define I2C_SR1_ADDR      (1u<< 1)
 #define I2C_SR1_SB        (1u<< 0)
-#define I2C_SR1_EVENTS    0x00df
+#define I2C_SR1_EVENTS    0x001f
 
 #define I2C_SR2_PEC(x)    ((x)<<15)
 #define I2C_SR2_DUALF     (1u<< 7)

@@ -38,7 +38,6 @@
 #define I2C_ERROR_IRQ 34
 void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
 void IRQ_34(void) __attribute__((alias("IRQ_i2c_error")));
-static void IRQ_i2c_error(void);
 
 static bool_t force_bl;
 static uint8_t _bl;
@@ -46,9 +45,10 @@ static uint8_t addr;
 static uint8_t i2c_dead;
 
 /* Ring buffer for I2C. */
-#define I2CS_IDLE  0
-#define I2CS_START 1
-#define I2CS_DATA  2
+#define I2CS_IDLE      0 /* Bus is idle, no transaction */
+#define I2CS_START     1 /* START and ADDR phases */
+#define I2CS_DATA      2 /* Data phase: ring buffer non-empty */
+#define I2CS_DATA_WAIT 3 /* Data phase: ring buffer empty */
 static uint8_t state;
 static uint8_t buffer[256];
 static uint16_t bc, bp;
@@ -63,51 +63,45 @@ static void IRQ_i2c_event(void)
         /* If buffer is empty, just replay the last command */
         if (bc == bp)
             bc--;
-        /* If the state machine is idle, kick things off. */
-        if (state == I2CS_IDLE) {
-            state = I2CS_START;
-            i2c->cr1 |= I2C_CR1_START;
-        }
     }
 
     switch (state) {
 
     case I2CS_IDLE:
-        printk("Unexpected I2C IRQ sr1=%04x\n", i2c->sr1);
-        IRQ_i2c_error();
+        ASSERT(!sr1);
+        if (bc == bp)
+            break;
+        state = I2CS_START;
+        i2c->cr1 |= I2C_CR1_START;
         break;
 
     case I2CS_START:
+        ASSERT(bc != bp);
         if (sr1 & I2C_SR1_SB) {
             /* Send address. Clears SR1_SB. */
             i2c->dr = addr<<1;
+            break;
         }
-        if (sr1 & I2C_SR1_ADDR) {
-            /* Read SR2 clears SR1_ADDR. */
-            (void)i2c->sr2;
-            /* Send data0. Clears SR1_TXE. */
-            i2c->dr = buffer[bc++ % sizeof(buffer)] | _bl;
-            state = I2CS_DATA;
-        }
-        break;
+        ASSERT(!(sr1 & ~I2C_SR1_ADDR));
+        if (!(sr1 & I2C_SR1_ADDR))
+            break;
+        /* Read SR2 clears SR1_ADDR. */
+        (void)i2c->sr2;
+        /* Send data0. Clears SR1_TXE. */
+        i2c->dr = buffer[bc++ % sizeof(buffer)] | _bl;
+        sr1 = 0;
 
     case I2CS_DATA:
-        if (!(sr1 & I2C_SR1_BTF))
-            break;
-        if (bc != bp) {
+    case I2CS_DATA_WAIT:
+        ASSERT(!(sr1 & ~I2C_SR1_BTF));
+        state = I2CS_DATA;
+        if ((sr1 & I2C_SR1_BTF) && (bc != bp)) {
             /* Send dataN. Clears SR1_TXE and SR1_BTF. */
             i2c->dr = buffer[bc++ % sizeof(buffer)] | _bl;
-        } else {
-            /* Send STOP. Clears SR1_TXE and SR1_BTF. */
-            i2c->cr1 |= I2C_CR1_STOP;
-            while (i2c->cr1 & I2C_CR1_STOP)
-                continue;
-            if (bc != bp) {
-                state = I2CS_START;
-                i2c->cr1 |= I2C_CR1_START;
-            } else {
-                state = I2CS_IDLE;
-            }
+        }
+        if (bc == bp) {
+            state = I2CS_DATA_WAIT;
+            IRQx_disable(I2C_EVENT_IRQ);
         }
         break;
 
@@ -123,16 +117,18 @@ static void IRQ_i2c_error(void)
     i2c->cr1 = 0;
     i2c->cr1 = I2C_CR1_PE;
     state = I2CS_IDLE;
-    if (bc != bp) {
-        state = I2CS_START;
-        i2c->cr1 |= I2C_CR1_START;
-    }
+    IRQx_set_pending(I2C_EVENT_IRQ);
+    IRQx_enable(I2C_EVENT_IRQ);
 }
 
 static void i2c_sync(void)
 {
     ASSERT(!in_exception());
-    while (state != I2CS_IDLE)
+    /* Wait for ring buffer to drain. */
+    while (bc != bp)
+        cpu_relax();
+    /* Wait for last byte to be fully transmitted. */
+    while ((state == I2CS_DATA_WAIT) && !(i2c->sr1 & I2C_SR1_BTF))
         cpu_relax();
 }
 
@@ -150,12 +146,10 @@ static void i2c_cmd(uint8_t cmd)
         cpu_relax();
     buffer[bp++ % sizeof(buffer)] = cmd;
     barrier(); /* push command /then/ check state */
-    if (state == I2CS_IDLE) {
-        IRQx_disable(I2C_EVENT_IRQ);
-        if ((state == I2CS_IDLE) && (bc != bp)) {
-            state = I2CS_START;
-            i2c->cr1 |= I2C_CR1_START;
-        }
+    switch (state) {
+    case I2CS_IDLE:
+        IRQx_set_pending(I2C_EVENT_IRQ);
+    case I2CS_DATA_WAIT:
         IRQx_enable(I2C_EVENT_IRQ);
     }
 }
@@ -253,8 +247,8 @@ void lcd_backlight(bool_t on)
     } else {
         /* We can't poke the command ring directly from IRQ context, so instead 
          * we have a sneaky side channel into the ISR. */
-        IRQx_disable(I2C_EVENT_IRQ);
         force_bl = TRUE;
+        barrier(); /* set flag /then/ fire IRQ */
         IRQx_set_pending(I2C_EVENT_IRQ);
         IRQx_enable(I2C_EVENT_IRQ);
     }
@@ -326,7 +320,6 @@ bool_t lcd_init(void)
     addr = a;
 
     IRQx_set_prio(I2C_EVENT_IRQ, I2C_IRQ_PRI);
-    IRQx_enable(I2C_EVENT_IRQ);
     IRQx_set_prio(I2C_ERROR_IRQ, I2C_IRQ_PRI);
     IRQx_enable(I2C_ERROR_IRQ);
     i2c->cr2 |= I2C_CR2_ITEVTEN | I2C_CR2_ITERREN;
