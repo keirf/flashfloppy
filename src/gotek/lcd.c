@@ -278,7 +278,7 @@ bool_t lcd_init(void)
     gpio_configure_pin(gpiob, SDA, GPO_opendrain(_2MHz, HIGH));
     delay_us(10);
     if (gpio_read_pin(gpiob, SCL) && !gpio_read_pin(gpiob, SDA)) {
-        printk("I2C: SDA held by slave?\n");
+        printk("I2C: SDA held by slave? Fixing... ");
         /* We will hold SDA low (as slave is) and also drive SCL low to end 
          * the current ACK cycle. */
         gpio_write_pin(gpiob, SDA, FALSE);
@@ -291,6 +291,9 @@ bool_t lcd_init(void)
         /* Enter the STOP condition by setting SDA high while SCL is high. */
         gpio_write_pin(gpiob, SDA, TRUE);
         delay_us(10);
+        printk("%s\n",
+               !gpio_read_pin(gpiob, SCL) || !gpio_read_pin(gpiob, SDA)
+               ? "Still held" : "Done");
     }
 
     /* Check the bus is not floating (or still stuck!). We shouldn't be able to 
@@ -303,7 +306,6 @@ bool_t lcd_init(void)
         goto fail;
     }
 
-    printk("I2C: Bus quiescent\n");
     gpio_configure_pin(gpiob, SCL, AFO_opendrain(_2MHz));
     gpio_configure_pin(gpiob, SDA, AFO_opendrain(_2MHz));
 
@@ -320,7 +322,7 @@ bool_t lcd_init(void)
         goto fail;
     }
 
-    printk("I2C: LCD found at %02x\n", a);
+    printk("I2C: LCD found at 0x%02x\n", a);
     addr = a;
 
     IRQx_set_prio(I2C_EVENT_IRQ, I2C_IRQ_PRI);
