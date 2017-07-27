@@ -26,10 +26,6 @@ static struct {
 
 uint8_t board_id;
 
-static uint8_t display_mode;
-#define DM_LCD_1602 1
-#define DM_LED_7SEG 2
-
 #define IMAGE_SELECT_WAIT_SECS  2
 #define BACKLIGHT_ON_SECS      20
 
@@ -297,8 +293,8 @@ static void choose_new_image(uint8_t init_b)
         if (!(b ^ (B_LEFT|B_RIGHT))) {
             i = cfg.slot_nr = 0;
             switch (display_mode) {
-            case DM_LED_7SEG:
-                led_7seg_write("000");
+            case DM_LED_3DIG:
+                led_3dig_write("000");
                 break;
             case DM_LCD_1602:
                 read_cfg(CFG_KEEP_SLOT_NR);
@@ -322,9 +318,9 @@ static void choose_new_image(uint8_t init_b)
         }
         cfg.slot_nr = i;
         switch (display_mode) {
-        case DM_LED_7SEG:
+        case DM_LED_3DIG:
             snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
-            led_7seg_write(msg);
+            led_3dig_write(msg);
             break;
         case DM_LCD_1602:
             read_cfg(CFG_KEEP_SLOT_NR);
@@ -365,9 +361,9 @@ int floppy_main(void)
         fs = NULL;
 
         switch (display_mode) {
-        case DM_LED_7SEG:
+        case DM_LED_3DIG:
             snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
-            led_7seg_write(msg);
+            led_3dig_write(msg);
             break;
         case DM_LCD_1602:
             lcd_write_slot();
@@ -418,10 +414,10 @@ int floppy_main(void)
             }
 
             /* Flash the LED display to indicate loading the new image. */
-            if ((b == 0) && (display_mode == DM_LED_7SEG)) {
-                led_7seg_display_setting(FALSE);
+            if ((b == 0) && (display_mode == DM_LED_3DIG)) {
+                led_3dig_display_setting(FALSE);
                 delay_ms(200);
-                led_7seg_display_setting(TRUE);
+                led_3dig_display_setting(TRUE);
                 b = buttons;
             }
         } while (b != 0);
@@ -457,19 +453,11 @@ int main(void)
 
     board_init();
 
-    speaker_init();
+    printk("\n** FlashFloppy v%s for Gotek\n", FW_VER);
+    printk("** Keir Fraser <keir.xen@gmail.com>\n");
+    printk("** https://github.com/keirf/FlashFloppy\n\n");
 
-    backlight_init();
-    tft_init();
-    backlight_set(8);
-    touch_init();
-
-    if (lcd_init()) {
-        display_mode = DM_LCD_1602;
-    } else {
-        led_7seg_init();
-        display_mode = DM_LED_7SEG;
-    }
+    display_init();
 
     usbh_msc_init();
 
@@ -481,8 +469,8 @@ int main(void)
     for (;;) {
 
         switch (display_mode) {
-        case DM_LED_7SEG:
-            led_7seg_write("F-F");
+        case DM_LED_3DIG:
+            led_3dig_write("F-F");
             break;
         case DM_LCD_1602:
             lcd_clear();

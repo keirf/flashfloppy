@@ -1,5 +1,5 @@
 /*
- * led_7seg.c
+ * led_3dig.c
  * 
  * Drive 3-digit 7-segment display via TM1651 driver IC.
  * I2C-style serial protocol: DIO=PB10, CLK=PB11
@@ -105,7 +105,7 @@ static void stop(void)
     delay_us(CYCLE/4);
 }
 
-static void send_cmd(uint8_t cmd)
+static bool_t send_cmd(uint8_t cmd)
 {
     bool_t fail = TRUE;
     int retry;
@@ -115,14 +115,16 @@ static void send_cmd(uint8_t cmd)
         fail = write(cmd);
         stop();
     }
+
+    return fail;
 }
 
-void led_7seg_display_setting(bool_t enable)
+void led_3dig_display_setting(bool_t enable)
 {
     send_cmd(enable ? 0x88 + BRIGHTNESS : 0x80);
 }
 
-void led_7seg_write(const char *p)
+void led_3dig_write(const char *p)
 {
     bool_t fail = TRUE;
     uint8_t d[3], c;
@@ -154,19 +156,24 @@ void led_7seg_write(const char *p)
     }
 }
 
-void led_7seg_init(void)
+bool_t led_3dig_init(void)
 {
     set_dat(HIGH);
     set_clk(HIGH);
 
-    /* Data command: write registers, auto-increment address. */
-    send_cmd(0x40);
+    /* Data command: write registers, auto-increment address. 
+     * Also check the controller is sending ACKs. If not, we must assume 
+     * no LED controller is attached. */
+    if (send_cmd(0x40))
+        return FALSE;
 
     /* Clear the registers. */
-    led_7seg_write("    ");
+    led_3dig_write("    ");
 
     /* Display control: brightness. */
     send_cmd(0x88 + BRIGHTNESS);
+
+    return TRUE;
 }
 
 /*

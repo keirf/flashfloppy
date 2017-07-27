@@ -278,7 +278,7 @@ bool_t lcd_init(void)
     gpio_configure_pin(gpiob, SDA, GPO_opendrain(_2MHz, HIGH));
     delay_us(10);
     if (gpio_read_pin(gpiob, SCL) && !gpio_read_pin(gpiob, SDA)) {
-        printk("I2C: SDA held by slave? Forcing STOP...\n");
+        printk("I2C: SDA held by slave?\n");
         /* We will hold SDA low (as slave is) and also drive SCL low to end 
          * the current ACK cycle. */
         gpio_write_pin(gpiob, SDA, FALSE);
@@ -299,7 +299,7 @@ bool_t lcd_init(void)
     gpio_configure_pin(gpiob, SDA, GPI_pull_down);
     delay_us(10);
     if (!gpio_read_pin(gpiob, SCL) || !gpio_read_pin(gpiob, SDA)) {
-        printk("I2C: FATAL: Bus floating or stuck\n");
+        printk("I2C: Invalid bus\n");
         goto fail;
     }
 

@@ -5,6 +5,7 @@ OBJS += fpec.o
 
 OBJS += cancellation.o
 OBJS += crc.o
+OBJS += display.o
 OBJS += vectors.o
 OBJS += fs.o
 OBJS += spi.o

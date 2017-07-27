@@ -41,10 +41,6 @@
 #define FLASH_PAGE_SIZE 1024
 #endif
 
-static uint8_t display_mode;
-#define DM_LCD_1602 1
-#define DM_LED_7SEG 2
-
 /* FPEC */
 void fpec_init(void);
 void fpec_page_erase(uint32_t flash_address);
@@ -89,8 +85,8 @@ static void msg_display(const char *p)
 {
     printk("[%s]\n", p);
     switch (display_mode) {
-    case DM_LED_7SEG:
-        led_7seg_write(p);
+    case DM_LED_3DIG:
+        led_3dig_write(p);
         break;
     case DM_LCD_1602:
         lcd_write(6, 1, 0, p);
@@ -208,8 +204,8 @@ fail:
 static void display_setting(bool_t on)
 {
     switch (display_mode) {
-    case DM_LED_7SEG:
-        led_7seg_display_setting(on);
+    case DM_LED_3DIG:
+        led_3dig_display_setting(on);
         break;
     case DM_LCD_1602:
         lcd_backlight(on);
@@ -273,20 +269,23 @@ int main(void)
     console_init();
     delay_ms(200); /* 5v settle */
     board_init();
-    backlight_init();
-    tft_init();
-    backlight_set(8);
-    touch_init();
-    if (lcd_init()) {
-        display_mode = DM_LCD_1602;
+
+    printk("\n** FF Update Bootloader v%s for Gotek\n", FW_VER);
+    printk("** Keir Fraser <keir.xen@gmail.com>\n");
+    printk("** https://github.com/keirf/FlashFloppy\n\n");
+
+    display_init();
+    switch (display_mode) {
+    case DM_LED_3DIG:
+        msg_display("UPD");
+        break;
+    case DM_LCD_1602:
         lcd_write(0, 0, 0, "FF Update Flash");
         lcd_write(5, 1, 0, "[---]");
         lcd_sync();
-    } else {
-        led_7seg_init();
-        display_mode = DM_LED_7SEG;
-        msg_display("UPD");
+        break;
     }
+
     usbh_msc_init();
 
     /* Wait for buttons to be pressed. */

@@ -1,6 +1,7 @@
 OBJS += arena.o
 OBJS += cancellation.o
 OBJS += crc.o
+OBJS += display.o
 OBJS += vectors.o
 OBJS += floppy.o
 OBJS += fs.o
