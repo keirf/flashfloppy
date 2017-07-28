@@ -118,6 +118,11 @@ void gpio_configure_pin(GPIO gpio, unsigned int pin, unsigned int mode);
     ((gpio)->bsrr = (uint32_t)(mask) << ((level) ? 0 : 16))
 #define gpio_read_pin(gpio, pin) (((gpio)->idr >> (pin)) & 1)
 
+/* FPEC */
+void fpec_init(void);
+void fpec_page_erase(uint32_t flash_address);
+void fpec_write(const void *data, unsigned int size, uint32_t flash_address);
+
 /*
  * Local variables:
  * mode: C

@@ -32,19 +32,25 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#ifndef RELOADER
+/* Main bootloader: flashes the main firmware (last 96kB of Flash). */
 #define FIRMWARE_START 0x08008000
 #define FIRMWARE_END   0x08020000
+#define FILE_PATTERN   "ff_gotek*.upd"
+#define is_reloader    FALSE
+#else
+/* "Reloader": reflashes the main bootloader (first 32kB). */
+#define FIRMWARE_START 0x08000000
+#define FIRMWARE_END   0x08008000
+#define FILE_PATTERN   "ff_gotek*.rld"
+#define is_reloader    TRUE
+#endif
 
 #if BUILD_GOTEK
 #define FLASH_PAGE_SIZE 2048
 #elif BUILD_TOUCH
 #define FLASH_PAGE_SIZE 1024
 #endif
-
-/* FPEC */
-void fpec_init(void);
-void fpec_page_erase(uint32_t flash_address);
-void fpec_write(const void *data, unsigned int size, uint32_t flash_address);
 
 int EXC_reset(void) __attribute__((alias("main")));
 
@@ -113,7 +119,7 @@ int update(void)
 
     /* Find the update file, confirming that it exists and there is no 
      * ambiguity (ie. we don't allow multiple update files). */
-    F_findfirst(&dp, &fno, "", "ff_gotek*.upd");
+    F_findfirst(&dp, &fno, "", FILE_PATTERN);
     if (*fno.fname == '\0') {
         fail_code = FC_no_file;
         goto fail;
@@ -231,7 +237,7 @@ static void wait_buttons(uint8_t level)
 
 int main(void)
 {
-    char msg[4];
+    char msg[20];
     FRESULT fres;
 
     /* Relocate DATA. Initialise BSS. */
@@ -239,6 +245,7 @@ int main(void)
         memcpy(_sdat, _ldat, _edat-_sdat);
     memset(_sbss, 0, _ebss-_sbss);
 
+#ifndef RELOADER
     /* Enable GPIOC, set all pins as input with weak pull-up. */
     rcc->apb2enr = RCC_APB2ENR_IOPCEN;
     gpioc->odr = 0xffffu;
@@ -257,6 +264,7 @@ int main(void)
                 :: "r" (sp), "r" (pc));
         }
     }
+#endif
 
     /*
      * UPDATE MODE
@@ -270,18 +278,23 @@ int main(void)
     delay_ms(200); /* 5v settle */
     board_init();
 
-    printk("\n** FF Update Bootloader v%s for Gotek\n", FW_VER);
+    printk("\n** FF %s v%s for Gotek\n",
+           is_reloader ? "Reloader" : "Update Bootloader",
+           FW_VER);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
 
     display_init();
     switch (display_mode) {
     case DM_LED_3DIG:
-        msg_display("UPD");
+        msg_display(is_reloader ? "RLD" : "UPD");
         break;
     case DM_LCD_1602:
-        lcd_write(0, 0, 0, "FF Update Flash");
-        lcd_write(5, 1, 0, "[---]");
+        snprintf(msg, sizeof(msg), "FF %s",
+                 is_reloader ? "Reloader" : "Update Flash");
+        lcd_write(0, 0, 0, msg);
+        lcd_write(0, 1, 0, "v");
+        lcd_write(1, 1, 0, FW_VER);
         lcd_sync();
         break;
     }
@@ -293,6 +306,9 @@ int main(void)
 
     /* Wait for buttons to be released. */
     wait_buttons(HIGH);
+
+    if (display_mode == DM_LCD_1602)
+        lcd_write(0, 1, 16, "     [   ]");
 
     /* Wait for a filesystem. */
     msg_display("USB");
