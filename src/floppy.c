@@ -692,7 +692,7 @@ static void drive_step_timer(void *_drv)
         /* nothing to do, IRQ_step() needs to reset our deadline */
         break;
     case STEP_latched:
-        speaker_pulse(10);
+        speaker_pulse();
         if ((drv->cyl >= 84) && !drv->step.inward)
             drv->cyl = 84; /* Fast step back from D-A cyl 255 */
         drv->cyl += drv->step.inward ? 1 : -1;

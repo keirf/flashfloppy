@@ -245,7 +245,8 @@ static void no_cfg_update(uint8_t slot_mode)
 
     if (slot_mode == CFG_READ_SLOT_NR) {
 
-        /* Default backlight. */
+        /* Default settings. */
+        speaker_volume(10);
         cfg.backlight_on_secs = BACKLIGHT_ON_SECS;
         cfg.lcd_scroll_msec = LCD_SCROLL_MSEC;
 
@@ -299,6 +300,9 @@ static void hxc_cfg_update(uint8_t slot_mode)
         goto bad_signature;
 
     if (slot_mode == CFG_READ_SLOT_NR) {
+        /* buzzer_step_duration seems to range 0xFF-0xD8. */
+        speaker_volume(hxc_cfg.step_sound
+                       ? (0x100 - hxc_cfg.buzzer_step_duration) / 2 : 0);
         cfg.backlight_on_secs = hxc_cfg.back_light_tmr;
         cfg.lcd_scroll_msec = LCD_SCROLL_MSEC;
         /* Interpret HxC scroll speed as updates per minute. */
@@ -658,6 +662,8 @@ int main(void)
     printk("\n** FlashFloppy v%s for Gotek\n", FW_VER);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
+
+    speaker_init();
 
     display_init();
 

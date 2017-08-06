@@ -24,8 +24,8 @@ void board_init(void)
     board_id = BRDREV_Gotek;
 
     /* Pull up all currently unused and possibly-floating pins. */
-    /* Skip PA0-1,8 (floppy inputs), PA9-10 (serial console). */
-    gpio_pull_up_pins(gpioa, ~0x0703);
+    /* Skip PA0-1,8 (floppy inputs), PA2 (speaker), PA9-10 (serial console). */
+    gpio_pull_up_pins(gpioa, ~0x0707);
     /* Skip PB0,4,9 (floppy inputs). */
     gpio_pull_up_pins(gpiob, ~0x0211);
     /* Don't skip any PCx pins. */

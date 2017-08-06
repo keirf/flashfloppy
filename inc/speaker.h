@@ -7,17 +7,9 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#ifdef BUILD_TOUCH
-
 void speaker_init(void);
-void speaker_pulse(uint8_t volume);
-
-#else
-
-static inline void speaker_init(void) {}
-static inline void speaker_pulse(uint8_t volume) {}
-
-#endif
+void speaker_volume(uint8_t volume);
+void speaker_pulse(void);
 
 /*
  * Local variables:

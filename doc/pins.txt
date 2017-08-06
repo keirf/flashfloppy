@@ -75,6 +75,11 @@ Pull the GPIOs high, they are disconnected on USB setup anyway.
  PA11  USB_DM
  PA12  USB_DP
 
+Speaker (switching NPN BJT):
+----------------------------
+ PA2   Speaker Pulse, Active High
+
+
 TOUCH-ONLY PINS
 ***************
 
