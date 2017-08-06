@@ -64,6 +64,9 @@ a full reflash by following the steps in
 [Initial Installation](#initial-installation). Therefore make sure the
 Gotek has a stable power supply and a known good USB stick.
 
+New features and bugfixes are rare. In general **you do not need to
+update the bootloader** and can skip these steps.
+
 - Remove all old *.UPD and *.RLD files from the USB stick.
 - Copy the contents of the release's reloader/ folder to the root of
   the USB stick.
