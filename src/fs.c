@@ -41,6 +41,20 @@ void F_die(void)
     handle_fr(FR_DISK_ERR);
 }
 
+FRESULT F_try_open(FIL *fp, const TCHAR *path, BYTE mode)
+{
+    FRESULT fr = f_open(fp, path, mode);
+    switch (fr) {
+    case FR_NO_FILE:
+    case FR_NO_PATH:
+        break;
+    default:
+        handle_fr(fr);
+        break;
+    }
+    return fr;
+}
+
 void F_open(FIL *fp, const TCHAR *path, BYTE mode)
 {
     FRESULT fr = f_open(fp, path, mode);

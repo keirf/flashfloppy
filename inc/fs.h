@@ -14,6 +14,7 @@ FRESULT F_fresult(void);
 
 void F_die(void);
 
+FRESULT F_try_open(FIL *fp, const TCHAR *path, BYTE mode);
 void F_open(FIL *fp, const TCHAR *path, BYTE mode);
 void F_close(FIL *fp);
 void F_read(FIL *fp, void *buff, UINT btr, UINT *br);

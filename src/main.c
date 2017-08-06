@@ -24,6 +24,10 @@ static struct {
     struct v2_slot autoboot, hxcsdfe, slot;
 } cfg;
 
+static uint8_t cfg_mode;
+#define CFG_none      0 /* Iterate through all images in root. */
+#define CFG_hxc       1 /* Operation based on HXCSDFE.CFG. */
+
 uint8_t board_id;
 
 #define IMAGE_SELECT_WAIT_SECS 2
@@ -198,25 +202,43 @@ static void fatfs_to_slot(struct v2_slot *slot, FIL *file, const char *name)
     memcpy(slot->type, dot+1, 3);
 }
 
-static void init_cfg(void)
+static uint8_t hxc_cfg_init(void)
 {
-    F_open(&fs->file, "HXCSDFE.CFG", FA_READ);
+    struct hxcsdfe_cfg hxc_cfg;
+    FRESULT fr;
+
+    fr = F_try_open(&fs->file, "HXCSDFE.CFG", FA_READ);
+    if (fr)
+        return CFG_none;
     fatfs_to_slot(&cfg.hxcsdfe, &fs->file, "HXCSDFE.CFG");
+    F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
     F_close(&fs->file);
+
+    /* Indexed mode (DSKAxxxx.HFE) does not neeed AUTOBOOT.HFE. */
+    if (!strncmp("HXCFECFGV", hxc_cfg.signature, 9) && hxc_cfg.index_mode) {
+        memset(&cfg.autoboot, 0, sizeof(cfg.autoboot));
+        return CFG_hxc;
+    }
 
     F_open(&fs->file, "AUTOBOOT.HFE", FA_READ);
     fatfs_to_slot(&cfg.autoboot, &fs->file, "AUTOBOOT.HFE");
     F_close(&fs->file);
+
+    return CFG_hxc;
 }
 
 #define CFG_KEEP_SLOT_NR  0 /* Do not re-read slot number from config */
 #define CFG_READ_SLOT_NR  1 /* Read slot number afresh from config */
 #define CFG_WRITE_SLOT_NR 2 /* Write new slot number to config */
-static void read_cfg(uint8_t slot_mode)
+static void hxc_cfg_read(uint8_t slot_mode)
 {
     struct hxcsdfe_cfg hxc_cfg;
     BYTE mode = FA_READ;
     int i;
+
+    /* Only HxC modes depend on HXCSDFE.CFG */
+    if (cfg_mode != CFG_hxc)
+        return;
 
     if (slot_mode == CFG_WRITE_SLOT_NR)
         mode |= FA_WRITE;
@@ -225,28 +247,41 @@ static void read_cfg(uint8_t slot_mode)
     F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
     if (strncmp("HXCFECFGV", hxc_cfg.signature, 9))
         goto bad_signature;
+
     switch (hxc_cfg.signature[9]-'0') {
+
     case 1: {
         struct v1_slot v1_slot;
         if (slot_mode != CFG_READ_SLOT_NR) {
+            /* Keep the already-configured slot number. */
             hxc_cfg.slot_index = cfg.slot_nr;
             if (slot_mode == CFG_WRITE_SLOT_NR) {
+                /* Update the config file with new slot number. */
                 F_lseek(&fs->file, 0);
                 F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
             }
         }
         cfg.slot_nr = hxc_cfg.slot_index;
-        cfg.max_slot_nr = hxc_cfg.number_of_slot - 1;
-        memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
-        if (cfg.slot_nr == 0)
+        if (hxc_cfg.index_mode)
             break;
-        F_lseek(&fs->file, 1024 + cfg.slot_nr*128);
-        F_read(&fs->file, &v1_slot, sizeof(v1_slot), NULL);
-        memcpy(&cfg.slot.type, &v1_slot.name[8], 3);
-        memcpy(&cfg.slot.attributes, &v1_slot.attributes, 1+4+4+17);
-        cfg.slot.name[17] = '\0';
+        /* Slot mode: initialise slot map and current slot. */
+        if (slot_mode == CFG_READ_SLOT_NR) {
+            cfg.max_slot_nr = hxc_cfg.number_of_slot - 1;
+            memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
+        }
+        /* Slot mode: read current slot file info. */
+        if (cfg.slot_nr == 0) {
+            memcpy(&cfg.slot, &cfg.autoboot, sizeof(cfg.slot));
+        } else {
+            F_lseek(&fs->file, 1024 + cfg.slot_nr*128);
+            F_read(&fs->file, &v1_slot, sizeof(v1_slot), NULL);
+            memcpy(&cfg.slot.type, &v1_slot.name[8], 3);
+            memcpy(&cfg.slot.attributes, &v1_slot.attributes, 1+4+4+17);
+            cfg.slot.name[17] = '\0';
+        }
         break;
     }
+
     case 2:
         if (slot_mode != CFG_READ_SLOT_NR) {
             hxc_cfg.cur_slot_number = cfg.slot_nr;
@@ -256,30 +291,94 @@ static void read_cfg(uint8_t slot_mode)
             }
         }
         cfg.slot_nr = hxc_cfg.cur_slot_number;
-        cfg.max_slot_nr = hxc_cfg.max_slot_number - 1;
-        F_lseek(&fs->file, hxc_cfg.slots_map_position*512);
-        F_read(&fs->file, &cfg.slot_map, sizeof(cfg.slot_map), NULL);
-        cfg.slot_map[0] |= 0x80; /* slot 0 always available */
-        /* Find true max_slot_nr: */
-        while (!(cfg.slot_map[cfg.max_slot_nr/8]
-                 & (0x80>>(cfg.max_slot_nr&7))))
-            cfg.max_slot_nr--;
-        if (cfg.slot_nr == 0)
+        if (hxc_cfg.index_mode)
             break;
-        F_lseek(&fs->file, hxc_cfg.slots_position*512
-                + cfg.slot_nr*64*hxc_cfg.number_of_drive_per_slot);
-        F_read(&fs->file, &cfg.slot, sizeof(cfg.slot), NULL);
+        /* Slot mode: initialise slot map and current slot. */
+        if (slot_mode == CFG_READ_SLOT_NR) {
+            cfg.max_slot_nr = hxc_cfg.max_slot_number - 1;
+            F_lseek(&fs->file, hxc_cfg.slots_map_position*512);
+            F_read(&fs->file, &cfg.slot_map, sizeof(cfg.slot_map), NULL);
+            cfg.slot_map[0] |= 0x80; /* slot 0 always available */
+            /* Find true max_slot_nr: */
+            while (!(cfg.slot_map[cfg.max_slot_nr/8]
+                     & (0x80>>(cfg.max_slot_nr&7))))
+                cfg.max_slot_nr--;
+        }
+        /* Slot mode: read current slot file info. */
+        if (cfg.slot_nr == 0) {
+            memcpy(&cfg.slot, &cfg.autoboot, sizeof(cfg.slot));
+        } else {
+            F_lseek(&fs->file, hxc_cfg.slots_position*512
+                    + cfg.slot_nr*64*hxc_cfg.number_of_drive_per_slot);
+            F_read(&fs->file, &cfg.slot, sizeof(cfg.slot), NULL);
+        }
         break;
+
     default:
     bad_signature:
         hxc_cfg.signature[15] = '\0';
         printk("Bad signature '%s'\n", hxc_cfg.signature);
         F_die();
+
     }
+
     F_close(&fs->file);
 
-    if (cfg.slot_nr == 0)
-        memcpy(&cfg.slot, &cfg.autoboot, sizeof(cfg.slot));
+    if (hxc_cfg.index_mode) {
+
+        char name[16];
+
+        /* Index mode: populate slot_map[]. */
+        if (slot_mode == CFG_READ_SLOT_NR) {
+            memset(&cfg.slot_map, 0, sizeof(cfg.slot_map));
+            cfg.max_slot_nr = 0;
+            for (F_findfirst(&fs->dp, &fs->fp, "", "DSKA*.*");
+                 fs->fp.fname[0] != '\0';
+                 F_findnext(&fs->dp, &fs->fp)) {
+                const char *p = fs->fp.fname + 4; /* skip "DSKA" */
+                unsigned int idx = 0;
+                char ext[4];
+                /* Skip directories. */
+                if (fs->fp.fattrib & AM_DIR)
+                    continue;
+                /* Parse 4-digit index number. */
+                for (i = 0; i < 4; i++) {
+                    if ((*p < '0') || (*p > '9'))
+                        break;
+                    idx *= 10;
+                    idx += *p++ - '0';
+                }
+                /* Expect a 4-digit number range 0-999 followed by a period. */
+                if ((i != 4) || (*p++ != '.') || (idx > 999))
+                    continue;
+                /* Parse 3-character extension. */
+                for (i = 0; (i < 3) && *p; i++, p++)
+                    ext[i] = tolower(*p);
+                ext[3] = '\0';
+                /* Expect 3-char extension followed by nul. */
+                if ((i != 3) || (*p != '\0'))
+                    continue;
+                /* A file type we support? */
+                if (strcmp(ext, "adf") && strcmp(ext, "hfe"))
+                    continue;
+                /* All is fine, populate the 'slot'. */
+                cfg.slot_map[idx/8] |= 0x80 >> (idx&7);
+                cfg.max_slot_nr = max_t(
+                    uint16_t, cfg.max_slot_nr, idx);
+            }
+            F_closedir(&fs->dp);
+        }
+
+        /* Index mode: populate current slot. */
+        snprintf(name, sizeof(name), "DSKA%04u.*", cfg.slot_nr);
+        F_findfirst(&fs->dp, &fs->fp, "", name);
+        F_closedir(&fs->dp);
+        if (fs->fp.fname[0]) {
+            F_open(&fs->file, fs->fp.fname, FA_READ);
+            fatfs_to_slot(&cfg.slot, &fs->file, fs->fp.fname);
+            F_close(&fs->file);
+        }
+    }
 
     for (i = 0; i < 3; i++)
         cfg.slot.type[i] = tolower(cfg.slot.type[i]);
@@ -316,7 +415,7 @@ static void choose_new_image(uint8_t init_b)
                 led_3dig_write("000");
                 break;
             case DM_LCD_1602:
-                read_cfg(CFG_KEEP_SLOT_NR);
+                hxc_cfg_read(CFG_KEEP_SLOT_NR);
                 lcd_write_slot();
                 break;
             }
@@ -342,7 +441,7 @@ static void choose_new_image(uint8_t init_b)
             led_3dig_write(msg);
             break;
         case DM_LCD_1602:
-            read_cfg(CFG_KEEP_SLOT_NR);
+            hxc_cfg_read(CFG_KEEP_SLOT_NR);
             lcd_write_slot();
             break;
         }
@@ -361,8 +460,16 @@ int floppy_main(void)
 
     arena_init();
     fs = arena_alloc(sizeof(*fs));
-    init_cfg();
-    read_cfg(CFG_READ_SLOT_NR);
+    
+    cfg_mode = hxc_cfg_init();
+
+    switch (cfg_mode) {
+    case CFG_none:
+        break;
+    case CFG_hxc:
+        hxc_cfg_read(CFG_READ_SLOT_NR);
+        break;
+    }
 
     for (;;) {
 
@@ -375,7 +482,7 @@ int floppy_main(void)
                     i = 0;
             printk("Updated slot %u -> %u\n", cfg.slot_nr, i);
             cfg.slot_nr = i;
-            read_cfg(CFG_WRITE_SLOT_NR);
+            hxc_cfg_read(CFG_WRITE_SLOT_NR);
         }
 
         fs = NULL;
@@ -430,7 +537,7 @@ int floppy_main(void)
 
         /* No buttons pressed: re-read config and carry on. */
         if (b == 0) {
-            read_cfg(CFG_READ_SLOT_NR);
+            hxc_cfg_read(CFG_READ_SLOT_NR);
             continue;
         }
 
@@ -459,7 +566,7 @@ int floppy_main(void)
 
         /* Write the slot number resulting from the latest round of button 
          * presses back to the config file. */
-        read_cfg(CFG_WRITE_SLOT_NR);
+        hxc_cfg_read(CFG_WRITE_SLOT_NR);
     }
 
     ASSERT(0);
