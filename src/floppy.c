@@ -368,6 +368,7 @@ static void wdata_start(void)
     start_pos *= SYSCLK_MHZ / STK_MHZ;
     image->write_start = start_pos;
     printk("Write start %u us\n", start_pos / SYSCLK_MHZ);
+    delay_us(100); /* XXX X-Copy workaround -- fix me properly!!!! */
 }
 
 /* Called from IRQ context to stop the read stream. */
