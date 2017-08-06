@@ -21,6 +21,7 @@ static struct {
 static struct {
     uint16_t slot_nr, max_slot_nr;
     uint8_t slot_map[1000/8];
+    uint8_t backlight_on_secs;
     struct v2_slot autoboot, hxcsdfe, slot;
 } cfg;
 
@@ -50,7 +51,7 @@ static void lcd_on(void)
     barrier();
     backlight_state = BACKLIGHT_ON;
     barrier();
-    lcd_backlight(TRUE);
+    lcd_backlight(cfg.backlight_on_secs != 0);
 }
 
 /* Write slot info to LCD. */
@@ -107,7 +108,9 @@ static void lcd_scroll_name(void)
 /* Handle switching the LCD backlight. */
 static uint8_t lcd_handle_backlight(uint8_t b)
 {
-    if (display_mode != DM_LCD_1602)
+    if ((display_mode != DM_LCD_1602)
+        || (cfg.backlight_on_secs == 0)
+        || (cfg.backlight_on_secs == 0xff))
         return b;
 
     switch (backlight_state) {
@@ -130,7 +133,7 @@ static uint8_t lcd_handle_backlight(uint8_t b)
         /* After a period with no button activity we turn the backlight off. */
         if (b)
             backlight_ticks = 0;
-        if (backlight_ticks++ == 200*BACKLIGHT_ON_SECS) {
+        if (backlight_ticks++ >= 200*cfg.backlight_on_secs) {
             lcd_backlight(FALSE);
             backlight_state = BACKLIGHT_OFF;
         }
@@ -239,8 +242,12 @@ static void no_cfg_update(uint8_t slot_mode)
 {
     int i;
 
-    /* Populate slot_map[]. */
     if (slot_mode == CFG_READ_SLOT_NR) {
+
+        /* Default backlight. */
+        cfg.backlight_on_secs = BACKLIGHT_ON_SECS;
+
+        /* Populate slot_map[]. */
         memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
         cfg.slot_nr = cfg.max_slot_nr = 0;
         for (F_findfirst(&fs->dp, &fs->fp, "", "*.*");
@@ -288,6 +295,9 @@ static void hxc_cfg_update(uint8_t slot_mode)
     F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
     if (strncmp("HXCFECFGV", hxc_cfg.signature, 9))
         goto bad_signature;
+
+    if (slot_mode == CFG_READ_SLOT_NR)
+        cfg.backlight_on_secs = hxc_cfg.back_light_tmr;
 
     switch (hxc_cfg.signature[9]-'0') {
 
@@ -648,6 +658,7 @@ int main(void)
 
     floppy_init();
 
+    cfg.backlight_on_secs = 0xff;
     timer_init(&button_timer, button_timer_fn, NULL);
     timer_set(&button_timer, stk_now());
 
