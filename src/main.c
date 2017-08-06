@@ -22,6 +22,7 @@ static struct {
     uint16_t slot_nr, max_slot_nr;
     uint8_t slot_map[1000/8];
     uint8_t backlight_on_secs;
+    uint16_t lcd_scroll_msec;
     struct v2_slot autoboot, hxcsdfe, slot;
 } cfg;
 
@@ -33,7 +34,7 @@ uint8_t board_id;
 
 #define IMAGE_SELECT_WAIT_SECS 2
 #define BACKLIGHT_ON_SECS      20
-#define LCD_SCROLL_RATE_MSEC   400
+#define LCD_SCROLL_MSEC        400
 #define LCD_SCROLL_PAUSE_MSEC  2000
 
 static uint32_t backlight_ticks;
@@ -102,7 +103,7 @@ static void lcd_scroll_name(void)
     lcd_scroll_ticks =
         ((lcd_scroll_off == 0)
          || (lcd_scroll_off == lcd_scroll_end))
-        ? stk_ms(LCD_SCROLL_PAUSE_MSEC) : stk_ms(LCD_SCROLL_RATE_MSEC);
+        ? stk_ms(LCD_SCROLL_PAUSE_MSEC) : stk_ms(cfg.lcd_scroll_msec);
 }
 
 /* Handle switching the LCD backlight. */
@@ -246,6 +247,7 @@ static void no_cfg_update(uint8_t slot_mode)
 
         /* Default backlight. */
         cfg.backlight_on_secs = BACKLIGHT_ON_SECS;
+        cfg.lcd_scroll_msec = LCD_SCROLL_MSEC;
 
         /* Populate slot_map[]. */
         memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
@@ -296,8 +298,13 @@ static void hxc_cfg_update(uint8_t slot_mode)
     if (strncmp("HXCFECFGV", hxc_cfg.signature, 9))
         goto bad_signature;
 
-    if (slot_mode == CFG_READ_SLOT_NR)
+    if (slot_mode == CFG_READ_SLOT_NR) {
         cfg.backlight_on_secs = hxc_cfg.back_light_tmr;
+        cfg.lcd_scroll_msec = LCD_SCROLL_MSEC;
+        /* Interpret HxC scroll speed as updates per minute. */
+        if (hxc_cfg.lcd_scroll_speed)
+            cfg.lcd_scroll_msec = 60000u / hxc_cfg.lcd_scroll_speed;
+    }
 
     switch (hxc_cfg.signature[9]-'0') {
 
