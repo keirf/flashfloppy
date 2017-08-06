@@ -13,9 +13,28 @@ extern const struct image_handler adf_image_handler;
 extern const struct image_handler hfe_image_handler;
 extern const struct image_handler da_image_handler;
 
+bool_t image_valid(FILINFO *fp)
+{
+    char ext[8];
+
+    /* Skip directories. */
+    if (fp->fattrib & AM_DIR)
+        return FALSE;
+
+    /* Check valid extension. */
+    filename_extension(fp->fname, ext, sizeof(ext));
+    if (!strcmp(ext, "adf")) {
+        return fp->fsize == 901120;
+    } else if (!strcmp(ext, "hfe")) {
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 bool_t image_open(struct image *im, const struct v2_slot *slot)
 {
-    char suffix[4];
+    char ext[4];
     struct image_bufs bufs = im->bufs;
     BYTE mode;
 
@@ -23,12 +42,12 @@ bool_t image_open(struct image *im, const struct v2_slot *slot)
     memset(im, 0, sizeof(*im));
     im->bufs = bufs;
 
-    memcpy(suffix, slot->type, 3);
-    suffix[3] = '\0';
+    memcpy(ext, slot->type, 3);
+    ext[3] = '\0';
 
-    if (!strcmp(suffix, "adf"))
+    if (!strcmp(ext, "adf"))
         im->handler = &adf_image_handler;
-    else if (!strcmp(suffix, "hfe"))
+    else if (!strcmp(ext, "hfe"))
         im->handler = &hfe_image_handler;
     else
         return FALSE;

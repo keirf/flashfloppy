@@ -86,6 +86,9 @@ struct image_handler {
     uint32_t syncword;
 };
 
+/* Is given file valid to open as an image? */
+bool_t image_valid(FILINFO *fp);
+
 /* Open specified image file on mass storage device. */
 bool_t image_open(struct image *im, const struct v2_slot *slot);
 

@@ -195,14 +195,18 @@ void fatfs_from_slot(FIL *file, const struct v2_slot *slot, BYTE mode)
 static void fatfs_to_slot(struct v2_slot *slot, FIL *file, const char *name)
 {
     const char *dot = strrchr(name, '.');
+    unsigned int i;
+
     slot->attributes = file->obj.attr;
     slot->firstCluster = file->obj.sclust;
     slot->size = file->obj.objsize;
     strcpy(slot->name, name);
     memcpy(slot->type, dot+1, 3);
+    for (i = 0; i < 3; i++)
+        slot->type[i] = tolower(slot->type[i]);
 }
 
-static uint8_t hxc_cfg_init(void)
+static uint8_t cfg_init(void)
 {
     struct hxcsdfe_cfg hxc_cfg;
     FRESULT fr;
@@ -230,15 +234,52 @@ static uint8_t hxc_cfg_init(void)
 #define CFG_KEEP_SLOT_NR  0 /* Do not re-read slot number from config */
 #define CFG_READ_SLOT_NR  1 /* Read slot number afresh from config */
 #define CFG_WRITE_SLOT_NR 2 /* Write new slot number to config */
-static void hxc_cfg_read(uint8_t slot_mode)
+
+static void no_cfg_update(uint8_t slot_mode)
+{
+    int i;
+
+    /* Populate slot_map[]. */
+    if (slot_mode == CFG_READ_SLOT_NR) {
+        memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
+        cfg.slot_nr = cfg.max_slot_nr = 0;
+        for (F_findfirst(&fs->dp, &fs->fp, "", "*.*");
+             fs->fp.fname[0] != '\0';
+             F_findnext(&fs->dp, &fs->fp)) {
+            if (!image_valid(&fs->fp))
+                continue;
+            /* All is fine, populate the 'slot'. */
+            cfg.max_slot_nr++;
+        }
+        F_closedir(&fs->dp);
+        /* Adjust max_slot_nr. Must be at least one 'slot'. */
+        if (!cfg.max_slot_nr)
+            F_die();
+        cfg.max_slot_nr--;
+    }
+
+    /* Populate current slot. */
+    i = 0;
+    for (F_findfirst(&fs->dp, &fs->fp, "", "*.*");
+         fs->fp.fname[0] != '\0';
+         F_findnext(&fs->dp, &fs->fp)) {
+        if (!image_valid(&fs->fp))
+            continue;
+        if (i == cfg.slot_nr)
+            break;
+        i++;
+    }
+    F_closedir(&fs->dp);
+    F_open(&fs->file, fs->fp.fname, FA_READ);
+    fatfs_to_slot(&cfg.slot, &fs->file, fs->fp.fname);
+    F_close(&fs->file);
+}
+
+static void hxc_cfg_update(uint8_t slot_mode)
 {
     struct hxcsdfe_cfg hxc_cfg;
     BYTE mode = FA_READ;
     int i;
-
-    /* Only HxC modes depend on HXCSDFE.CFG */
-    if (cfg_mode != CFG_hxc)
-        return;
 
     if (slot_mode == CFG_WRITE_SLOT_NR)
         mode |= FA_WRITE;
@@ -337,7 +378,6 @@ static void hxc_cfg_read(uint8_t slot_mode)
                  F_findnext(&fs->dp, &fs->fp)) {
                 const char *p = fs->fp.fname + 4; /* skip "DSKA" */
                 unsigned int idx = 0;
-                char ext[4];
                 /* Skip directories. */
                 if (fs->fp.fattrib & AM_DIR)
                     continue;
@@ -351,15 +391,13 @@ static void hxc_cfg_read(uint8_t slot_mode)
                 /* Expect a 4-digit number range 0-999 followed by a period. */
                 if ((i != 4) || (*p++ != '.') || (idx > 999))
                     continue;
-                /* Parse 3-character extension. */
-                for (i = 0; (i < 3) && *p; i++, p++)
-                    ext[i] = tolower(*p);
-                ext[3] = '\0';
                 /* Expect 3-char extension followed by nul. */
+                for (i = 0; (i < 3) && *p; i++, p++)
+                    continue;
                 if ((i != 3) || (*p != '\0'))
                     continue;
                 /* A file type we support? */
-                if (strcmp(ext, "adf") && strcmp(ext, "hfe"))
+                if (!image_valid(&fs->fp))
                     continue;
                 /* All is fine, populate the 'slot'. */
                 cfg.slot_map[idx/8] |= 0x80 >> (idx&7);
@@ -382,6 +420,18 @@ static void hxc_cfg_read(uint8_t slot_mode)
 
     for (i = 0; i < 3; i++)
         cfg.slot.type[i] = tolower(cfg.slot.type[i]);
+}
+
+static void cfg_update(uint8_t slot_mode)
+{
+    switch (cfg_mode) {
+    case CFG_none:
+        no_cfg_update(slot_mode);
+        break;
+    case CFG_hxc:
+        hxc_cfg_update(slot_mode);
+        break;
+    }
 }
 
 /* Based on button presses, change which floppy image is selected. */
@@ -415,7 +465,7 @@ static void choose_new_image(uint8_t init_b)
                 led_3dig_write("000");
                 break;
             case DM_LCD_1602:
-                hxc_cfg_read(CFG_KEEP_SLOT_NR);
+                cfg_update(CFG_KEEP_SLOT_NR);
                 lcd_write_slot();
                 break;
             }
@@ -441,7 +491,7 @@ static void choose_new_image(uint8_t init_b)
             led_3dig_write(msg);
             break;
         case DM_LCD_1602:
-            hxc_cfg_read(CFG_KEEP_SLOT_NR);
+            cfg_update(CFG_KEEP_SLOT_NR);
             lcd_write_slot();
             break;
         }
@@ -461,15 +511,8 @@ int floppy_main(void)
     arena_init();
     fs = arena_alloc(sizeof(*fs));
     
-    cfg_mode = hxc_cfg_init();
-
-    switch (cfg_mode) {
-    case CFG_none:
-        break;
-    case CFG_hxc:
-        hxc_cfg_read(CFG_READ_SLOT_NR);
-        break;
-    }
+    cfg_mode = cfg_init();
+    cfg_update(CFG_READ_SLOT_NR);
 
     for (;;) {
 
@@ -482,7 +525,7 @@ int floppy_main(void)
                     i = 0;
             printk("Updated slot %u -> %u\n", cfg.slot_nr, i);
             cfg.slot_nr = i;
-            hxc_cfg_read(CFG_WRITE_SLOT_NR);
+            cfg_update(CFG_WRITE_SLOT_NR);
         }
 
         fs = NULL;
@@ -537,7 +580,7 @@ int floppy_main(void)
 
         /* No buttons pressed: re-read config and carry on. */
         if (b == 0) {
-            hxc_cfg_read(CFG_READ_SLOT_NR);
+            cfg_update(CFG_READ_SLOT_NR);
             continue;
         }
 
@@ -566,7 +609,7 @@ int floppy_main(void)
 
         /* Write the slot number resulting from the latest round of button 
          * presses back to the config file. */
-        hxc_cfg_read(CFG_WRITE_SLOT_NR);
+        cfg_update(CFG_WRITE_SLOT_NR);
     }
 
     ASSERT(0);
