@@ -26,8 +26,10 @@ static struct {
 
 uint8_t board_id;
 
-#define IMAGE_SELECT_WAIT_SECS  2
+#define IMAGE_SELECT_WAIT_SECS 2
 #define BACKLIGHT_ON_SECS      20
+#define LCD_SCROLL_RATE_MSEC   400
+#define LCD_SCROLL_PAUSE_MSEC  2000
 
 static uint32_t backlight_ticks;
 static uint8_t backlight_state;
@@ -60,9 +62,9 @@ static void lcd_write_slot(void)
     lcd_on();
 }
 
-/* Wrate track number to LCD. */
+/* Write track number to LCD. */
 static uint8_t lcd_cyl, lcd_side;
-static stk_time_t lcd_update_time;
+static int32_t lcd_update_ticks;
 static void lcd_write_track_info(bool_t force)
 {
     uint8_t cyl, side;
@@ -78,7 +80,24 @@ static void lcd_write_track_info(bool_t force)
     }
     lcd_cyl = cyl;
     lcd_side = side;
-    lcd_update_time = stk_now();
+}
+
+/* Scroll long filename within 16-character window. */
+static uint8_t lcd_scroll_off, lcd_scroll_end;
+static int32_t lcd_scroll_ticks;
+static void lcd_scroll_name(void)
+{
+    char msg[17];
+    if (lcd_scroll_ticks > 0)
+        return;
+    if (++lcd_scroll_off > lcd_scroll_end)
+        lcd_scroll_off = 0;
+    snprintf(msg, sizeof(msg), "%s", cfg.slot.name + lcd_scroll_off);
+    lcd_write(0, 0, 16, msg);
+    lcd_scroll_ticks =
+        ((lcd_scroll_off == 0)
+         || (lcd_scroll_off == lcd_scroll_end))
+        ? stk_ms(LCD_SCROLL_PAUSE_MSEC) : stk_ms(LCD_SCROLL_RATE_MSEC);
 }
 
 /* Handle switching the LCD backlight. */
@@ -332,6 +351,7 @@ static void choose_new_image(uint8_t init_b)
 
 int floppy_main(void)
 {
+    stk_time_t t_now, t_prev, t_diff;
     char msg[4];
     uint8_t b;
     uint32_t i;
@@ -380,13 +400,28 @@ int floppy_main(void)
 
         floppy_insert(0, &cfg.slot);
 
+        lcd_update_ticks = stk_ms(20);
+        lcd_scroll_ticks = stk_ms(LCD_SCROLL_PAUSE_MSEC);
+        lcd_scroll_off = 0;
+        lcd_scroll_end = max_t(
+            int, strnlen(cfg.slot.name, sizeof(cfg.slot.name)) - 16, 0);
+        t_prev = stk_now();
         while (((b = buttons) == 0) && !floppy_handle()) {
-            if ((display_mode == DM_LCD_1602)
-                && (stk_diff(lcd_update_time, stk_now()) > stk_ms(20)))
-                lcd_write_track_info(FALSE);
+            t_now = stk_now();
+            t_diff = stk_diff(t_prev, t_now);
+            if (display_mode == DM_LCD_1602) {
+                lcd_update_ticks -= t_diff;
+                if (lcd_update_ticks <= 0) {
+                    lcd_write_track_info(FALSE);
+                    lcd_update_ticks = stk_ms(20);
+                }
+                lcd_scroll_ticks -= t_diff;
+                lcd_scroll_name();
+            }
             canary_check();
             if (!usbh_msc_connected())
                 F_die();
+            t_prev = t_now;
         }
 
         floppy_cancel();
