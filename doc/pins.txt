@@ -56,8 +56,8 @@ LED Display:
 ------------
 Custom I2C-like protocol.
 TimerOut:
- PB10  DISP_DAT (Timer2/3, UP:DMA1/2)
- PB11  DISP_CLK (Timer2/4)
+ PB10  DISP_DAT
+ PB11  DISP_CLK
 
 Serial Flash:
 -------------
