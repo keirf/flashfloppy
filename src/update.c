@@ -124,7 +124,7 @@ int update(void)
         fail_code = FC_no_file;
         goto fail;
     }
-    strcpy(update_fname, fno.fname);
+    snprintf(update_fname, sizeof(update_fname), "%s", fno.fname);
     printk("Found update \"%s\"\n", update_fname);
     F_findnext(&dp, &fno);
     if (*fno.fname != '\0') {

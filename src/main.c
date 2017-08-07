@@ -204,7 +204,7 @@ static void fatfs_to_slot(struct v2_slot *slot, FIL *file, const char *name)
     slot->attributes = file->obj.attr;
     slot->firstCluster = file->obj.sclust;
     slot->size = file->obj.objsize;
-    strcpy(slot->name, name);
+    snprintf(slot->name, sizeof(slot->name), "%s", name);
     memcpy(slot->type, dot+1, 3);
     for (i = 0; i < 3; i++)
         slot->type[i] = tolower(slot->type[i]);

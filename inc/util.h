@@ -59,7 +59,6 @@ size_t strnlen(const char *s, size_t maxlen);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strrchr(const char *s, int c);
-char *strcpy(char *dest, const char *src);
 int tolower(int c);
 
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
