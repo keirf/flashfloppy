@@ -157,6 +157,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             im->cur_bc = im->cur_ticks = 0;
             /* Skip tail of current 256-byte block. */
             rd->cons = (rd->cons + 256*8-1) & ~(256*8-1);
+            continue;
         }
         y = rd->cons % 8;
         x = buf[(rd->cons/8) % buflen] >> y;
