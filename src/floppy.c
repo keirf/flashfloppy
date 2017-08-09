@@ -13,10 +13,6 @@
 #define GPO_bus GPO_pushpull(_2MHz,O_FALSE)
 #define AFO_bus AFO_pushpull(_2MHz)
 
-/* NB. All input pins must be 5v tolerant. */
-/* Bitmap of current states of input pins. */
-static uint8_t input_pins;
-
 /* Subset of output pins which are active (O_TRUE). */
 static uint16_t gpio_out_active;
 
@@ -96,49 +92,19 @@ static void index_pulse(void *);
 static uint32_t max_read_us;
 
 static void rdata_stop(void);
+static void wdata_start(void);
 static void wdata_stop(void);
+
+static void floppy_change_outputs(uint16_t mask, uint8_t val);
+
+struct exti_irq {
+    uint8_t irq, pri;
+};
 
 #if BUILD_TOUCH
 #include "touch/floppy.c"
 #elif BUILD_GOTEK
 #include "gotek/floppy.c"
-#endif
-
-#if 0
-/* List changes at floppy inputs and sequentially activate outputs. */
-static void floppy_check(void)
-{
-    uint16_t i=0, pin, prev_pin=0, inp, prev_inp=0;
-    uint8_t changed;
-    volatile struct gpio *gpio, *prev_gpio = NULL;
-
-    for (;;) {
-        gpio = gpio_out;
-        switch (i++) {
-        case 0: pin = pin_dskchg; break;
-        case 1: pin = pin_index; break;
-        case 2: pin = pin_trk0; break;
-        case 3: pin = pin_wrprot; break;
-        case 4: pin = pin_rdata; gpio = gpio_data; break;
-        case 5: pin = pin_rdy; break;
-        default: pin = 0; i = 0; break;
-        }
-        if (prev_pin) gpio_write_pin(prev_gpio, prev_pin, O_FALSE);
-        if (pin) gpio_write_pin(gpio, pin, O_TRUE);
-        prev_pin = pin;
-        prev_gpio = gpio;
-        delay_ms(50);
-        changed = input_update();
-        inp = input_pins;
-        /* Stash wdata in inp[1] (Touch) or inp[3] (Gotek). */
-        inp |= (gpio_data->idr & m(pin_wdata)) >> 5;
-        if ((inp ^ prev_inp) || changed)
-            printk("IN: %02x->%02x (%02x)\n", prev_inp, inp, changed);
-        prev_inp = inp;
-    }
-}
-#else
-#define floppy_check() ((void)0)
 #endif
 
 static void floppy_change_outputs(uint16_t mask, uint8_t val)
@@ -176,7 +142,7 @@ void floppy_cancel(void)
     /* Set outputs for empty drive. */
     index.active = FALSE;
     floppy_change_outputs(m(pin_index) | m(pin_rdy), O_FALSE);
-    floppy_change_outputs(m(pin_dskchg), O_TRUE);
+    floppy_change_outputs(m(pin_dskchg) | m(pin_wrprot), O_TRUE);
 }
 
 static struct dma_ring *dma_ring_alloc(void)
@@ -204,15 +170,13 @@ void floppy_init(void)
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
-    floppy_check();
-
-    floppy_change_outputs(m(pin_dskchg), O_TRUE);
+    floppy_change_outputs(m(pin_dskchg) | m(pin_wrprot), O_TRUE);
 
     /* Enable physical interface interrupts. */
     for (i = 0; i < ARRAY_SIZE(exti_irqs); i++) {
-        IRQx_set_prio(exti_irqs[i], FLOPPY_IRQ_HI_PRI);
-        IRQx_set_pending(exti_irqs[i]);
-        IRQx_enable(exti_irqs[i]);
+        IRQx_set_prio(exti_irqs[i].irq, exti_irqs[i].pri);
+        IRQx_set_pending(exti_irqs[i].irq);
+        IRQx_enable(exti_irqs[i].irq);
     }
 
     IRQx_set_prio(STEP_IRQ, FLOPPY_IRQ_LO_PRI);
@@ -559,9 +523,8 @@ bool_t floppy_handle(void)
             return TRUE;
         drv->image = image;
         dma_rd->state = DMA_stopping;
-        floppy_change_outputs(
-            m(pin_wrprot),
-            !image->handler->write_track ? O_TRUE : O_FALSE);
+        if (image->handler->write_track)
+            floppy_change_outputs(m(pin_wrprot), O_FALSE);
     }
 
     switch (dma_wr->state) {
@@ -629,58 +592,6 @@ static void index_pulse(void *dat)
         if (dma_rd->state != DMA_active) /* timer set from input flux stream */
             timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
     }
-}
-
-static void IRQ_input_changed(void)
-{
-    uint8_t inp, changed, sel;
-    struct drive *drv = &drive;
-
-    changed = input_update();
-    inp = input_pins;
-    sel = !(inp & m(inp_sel0));
-
-    /* Handle step request. */
-    if ((changed & inp & m(inp_step)) /* Rising edge on STEP */
-        && sel                        /* Drive is selected */
-        && !(drv->step.state & STEP_active)) { /* Not already mid-step */
-        /* Latch the step direction and check bounds (0 <= cyl <= 255). */
-        drv->step.inward = !(inp & m(inp_dir));
-        if (drv->cyl != (drv->step.inward ? 255 : 0)) {
-            /* Valid step request for this drive: start the step operation. */
-            drv->step.start = stk_now();
-            drv->step.state = STEP_started;
-            floppy_change_outputs(m(pin_trk0), O_FALSE);
-            if (dma_rd != NULL) {
-                floppy_change_outputs(m(pin_dskchg), O_FALSE);
-                rdata_stop();
-            }
-            IRQx_set_pending(STEP_IRQ);
-        }
-    }
-
-    /* Handle side change. */
-    if (changed & m(inp_side)) {
-        drv->head = !(inp & m(inp_side));
-        if (dma_rd != NULL) {
-            rdata_stop();
-        }
-    }
-
-    /* Handle write gate. */
-    if ((changed & m(inp_wgate)) && (dma_wr != NULL)
-        && sel && drv->image->handler->write_track) {
-        if (inp & m(inp_wgate)) {
-            wdata_stop();
-        } else {
-            rdata_stop();
-            wdata_start();
-        }
-    }
-
-#if !BUILD_GOTEK
-    drv->sel = sel;
-#endif
 }
 
 static void drive_step_timer(void *_drv)

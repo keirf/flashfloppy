@@ -12,14 +12,14 @@
 #define O_FALSE 1
 #define O_TRUE  0
 
-/* Offsets within the input_pins bitmap. */
-#define inp_dir     0
-#define inp_step    2
-#define inp_sel0    1
-#define inp_wgate   7
-#define inp_side    4
+/* Input pins: DIR=PB0, STEP=PA1, SELA=PA0, WGATE=PB9, SIDE=PB4 */
+#define pin_dir     0 /* PB0 */
+#define pin_step    1 /* PA1 */
+#define pin_sel0    0 /* PA0 */
+#define pin_wgate   9 /* PB9 */
+#define pin_side    4 /* PB4 */
 
-/* Outputs. */
+/* Output pins. */
 #define gpio_out gpiob
 #define pin_dskchg  7
 #define pin_index   8
@@ -43,58 +43,40 @@ void IRQ_12(void) __attribute__((alias("IRQ_wdata_dma")));
 #define dma_rdata_irq 13
 void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
 
-/* SELA line changes. */
-#define IRQ_SELA 6
+/* EXTI IRQs. */
 void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI0 */
-
-/* Other EXTI IRQs relevant for us. */
-void IRQ_7(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI1 */
-void IRQ_10(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI4 */
-void IRQ_23(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI9_5 */
-static const uint8_t exti_irqs[] = { 7, 10, 23 };
-
-/* Input pins:
- * DIR = PB0, STEP=PA1, SELA=PA0, WGATE=PB9, SIDE=PB4
- */
-static uint8_t input_update(void)
-{
-    uint16_t pr, in_a, in_b;
-
-    pr = exti->pr & ~1; /* ignore SELA, handled in IRQ_SELA_changed */
-    exti->pr = pr;
-
-    in_a = gpioa->idr;
-    in_b = gpiob->idr;
-    input_pins = ((in_a << 1) & 0x06) | ((in_b >> 2) & 0x80) | (in_b & 0x11);
-
-    return ((pr << 1) & 0x06) | ((pr >> 2) & 0x80) | (pr & 0x10);
-}
+void IRQ_7(void) __attribute__((alias("IRQ_STEP_changed"))); /* EXTI1 */
+void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
+void IRQ_23(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI9_5 */
+static const struct exti_irq exti_irqs[] = {
+    {  6, FLOPPY_IRQ_SEL_PRI }, 
+    {  7, FLOPPY_IRQ_STEP_PRI }, 
+    { 10, FLOPPY_IRQ_SIDE_PRI }, 
+    { 23, FLOPPY_IRQ_WGATE_PRI } 
+};
 
 static void board_floppy_init(void)
 {
-    gpio_configure_pin(gpiob, 0, GPI_bus);
-    gpio_configure_pin(gpioa, 1, GPI_bus);
-    gpio_configure_pin(gpioa, 0, GPI_bus);
-    gpio_configure_pin(gpiob, 9, GPI_bus);
-    gpio_configure_pin(gpiob, 4, GPI_bus);
+    gpio_configure_pin(gpiob, pin_dir,   GPI_bus);
+    gpio_configure_pin(gpioa, pin_step,  GPI_bus);
+    gpio_configure_pin(gpioa, pin_sel0,  GPI_bus);
+    gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
+    gpio_configure_pin(gpiob, pin_side,  GPI_bus);
 
     /* PB[15:2] -> EXT[15:2], PA[1:0] -> EXT[1:0] */
     afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x1111;
     afio->exticr1 = 0x1100;
 
-    exti->imr = exti->rtsr = exti->ftsr = m(9) | m(4) | m(1) | m(0);
-
-    IRQx_set_prio(IRQ_SELA, FLOPPY_IRQ_SEL_PRI);
-    IRQx_set_pending(IRQ_SELA);
-    IRQx_enable(IRQ_SELA);
+    exti->imr = exti->rtsr = exti->ftsr =
+        m(pin_wgate) | m(pin_side) | m(pin_step) | m(pin_sel0);
 }
 
 static void IRQ_SELA_changed(void)
 {
     /* Clear SELA-changed flag. */
-    exti->pr = 1;
+    exti->pr = m(pin_sel0);
 
-    if (!(gpioa->idr & 1)) {
+    if (!(gpioa->idr & m(pin_sel0))) {
         /* SELA is asserted (this drive is selected). 
          * Immediately re-enable all our asserted outputs. */
         gpio_out->brr = gpio_out_active;
@@ -114,6 +96,69 @@ static void IRQ_SELA_changed(void)
                 | (2<<(pin_rdata<<2));
         /* Tell main code to leave the bus alone. */
         drive.sel = 0;
+    }
+}
+
+static void IRQ_STEP_changed(void)
+{
+    struct drive *drv = &drive;
+    uint8_t idr_a, idr_b;
+
+    /* Clear STEP-changed flag. */
+    exti->pr = m(pin_step);
+
+    /* Latch inputs. */
+    idr_a = gpioa->idr;
+    idr_b = gpiob->idr;
+
+    if (!(idr_a & m(pin_step))   /* Not rising edge on STEP? */
+        || (idr_a & m(pin_sel0)) /* Drive not selected? */
+        || (drv->step.state & STEP_active)) /* Already mid-step? */
+        return;
+
+    /* Latch the step direction and check bounds (0 <= cyl <= 255). */
+    drv->step.inward = !(idr_b & m(pin_dir));
+    if (drv->cyl == (drv->step.inward ? 255 : 0))
+        return;
+
+    /* Valid step request for this drive: start the step operation. */
+    drv->step.start = stk_now();
+    drv->step.state = STEP_started;
+    floppy_change_outputs(m(pin_trk0), O_FALSE);
+    if (dma_rd != NULL) {
+        floppy_change_outputs(m(pin_dskchg), O_FALSE);
+        rdata_stop();
+    }
+    IRQx_set_pending(STEP_IRQ);
+}
+
+static void IRQ_SIDE_changed(void)
+{
+    struct drive *drv = &drive;
+
+    /* Clear SIDE-changed flag. */
+    exti->pr = m(pin_side);
+
+    drv->head = !(gpiob->idr & m(pin_side));
+    if (dma_rd != NULL)
+        rdata_stop();
+}
+
+static void IRQ_WGATE_changed(void)
+{
+    /* Clear WGATE-changed flag. */
+    exti->pr = m(pin_wgate);
+
+    /* If WRPROT line is asserted then we ignore WGATE. */
+    if (gpio_out_active & m(pin_wrprot))
+        return;
+
+    if ((gpiob->idr & m(pin_wgate))      /* WGATE off? */
+        || (gpioa->idr & m(pin_sel0))) { /* Not selected? */
+        wdata_stop();
+    } else {
+        rdata_stop();
+        wdata_start();
     }
 }
 

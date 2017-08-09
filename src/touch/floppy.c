@@ -12,6 +12,10 @@
 #define O_FALSE 0
 #define O_TRUE  1
 
+/* NB. All input pins must be 5v tolerant. */
+/* Bitmap of current states of input pins. */
+static uint8_t input_pins;
+
 /* Offsets within the input_pins bitmap. */
 #define inp_dir     0
 #define inp_step    3
@@ -52,7 +56,15 @@ void IRQ_9(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI3 */
 void IRQ_10(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI4 */
 void IRQ_23(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI9_5 */
 void IRQ_40(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI15_10 */
-static const uint8_t exti_irqs[] = { 6, 7, 8, 9, 10, 23, 40 };
+static const struct exti_irq exti_irqs[] = {
+    {  6, FLOPPY_IRQ_HI_PRI }, 
+    {  7, FLOPPY_IRQ_HI_PRI }, 
+    {  8, FLOPPY_IRQ_HI_PRI }, 
+    {  9, FLOPPY_IRQ_HI_PRI }, 
+    { 10, FLOPPY_IRQ_HI_PRI }, 
+    { 23, FLOPPY_IRQ_HI_PRI }, 
+    { 40, FLOPPY_IRQ_HI_PRI }
+};
 
 /* Updates the board-agnostic input_pins bitmask with current states of 
  * input pins, and returns mask of pins which have changed state. */
@@ -143,6 +155,56 @@ static void board_floppy_init(void)
         input_init_tb160();
         break;
     }
+}
+
+static void IRQ_input_changed(void)
+{
+    uint8_t inp, changed, sel;
+    struct drive *drv = &drive;
+
+    changed = input_update();
+    inp = input_pins;
+    sel = !(inp & m(inp_sel0));
+
+    /* Handle step request. */
+    if ((changed & inp & m(inp_step)) /* Rising edge on STEP */
+        && sel                        /* Drive is selected */
+        && !(drv->step.state & STEP_active)) { /* Not already mid-step */
+        /* Latch the step direction and check bounds (0 <= cyl <= 255). */
+        drv->step.inward = !(inp & m(inp_dir));
+        if (drv->cyl != (drv->step.inward ? 255 : 0)) {
+            /* Valid step request for this drive: start the step operation. */
+            drv->step.start = stk_now();
+            drv->step.state = STEP_started;
+            floppy_change_outputs(m(pin_trk0), O_FALSE);
+            if (dma_rd != NULL) {
+                floppy_change_outputs(m(pin_dskchg), O_FALSE);
+                rdata_stop();
+            }
+            IRQx_set_pending(STEP_IRQ);
+        }
+    }
+
+    /* Handle side change. */
+    if (changed & m(inp_side)) {
+        drv->head = !(inp & m(inp_side));
+        if (dma_rd != NULL) {
+            rdata_stop();
+        }
+    }
+
+    /* Handle write gate. */
+    if ((changed & m(inp_wgate)) && (dma_wr != NULL)
+        && sel && drv->image->handler->write_track) {
+        if (inp & m(inp_wgate)) {
+            wdata_stop();
+        } else {
+            rdata_stop();
+            wdata_start();
+        }
+    }
+
+    drv->sel = sel;
 }
 
 /*
