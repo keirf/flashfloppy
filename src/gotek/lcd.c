@@ -10,7 +10,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-/* Pin assignment: D7-D6-D5-D4-BL-EN-RW-RS */
+/* PCF8574 pin assignment: D7-D6-D5-D4-BL-EN-RW-RS */
 #define _D7 (1u<<7)
 #define _D6 (1u<<6)
 #define _D5 (1u<<5)
@@ -20,6 +20,7 @@
 #define _RW (1u<<1)
 #define _RS (1u<<0)
 
+/* HD44780 commands */
 #define CMD_ENTRYMODE    0x04
 #define CMD_DISPLAYCTL   0x08
 #define CMD_DISPLAYSHIFT 0x10
@@ -28,28 +29,66 @@
 #define CMD_SETDDRADDR   0x80
 #define FS_2LINE         0x08
 
+/* STM32 I2C peripheral. */
 #define i2c i2c2
 #define SCL 10
 #define SDA 11
 
-#define I2C_EVENT_IRQ 33
+/* I2C error ISR. */
 #define I2C_ERROR_IRQ 34
+void IRQ_34(void) __attribute__((alias("IRQ_i2c_error")));
 
+/* DMA completion ISR. */
 #define DMA1_CH4_IRQ 14
 void IRQ_14(void) __attribute__((alias("IRQ_dma1_ch4_tc")));
 
 static uint8_t _bl;
-static uint8_t addr;
+static uint8_t i2c_addr;
 static uint8_t i2c_dead;
 
 #define OLED_ADDR 0x3c
-static bool_t oled_init(void);
+static void oled_init(void);
 static unsigned int oled_prep_buffer(void);
 
+/* Count of DMA completions. For synchronisation/flush. */
 static volatile uint8_t dma_count;
+
+/* I2C data buffer. Data is DMAed to the I2C peripheral. */
 static uint32_t buffer[512/4];
+
+/* 16x2 text buffer, rendered into I2C data and placed into buffer[]. */
 static char text[2][16];
 
+/* Occasionally the I2C/DMA engine seems to get stuck. Detect this with 
+ * a timeout timer and unwedge it by calling the I2C error handler. */
+#define DMA_TIMEOUT stk_ms(200)
+static struct timer timeout_timer;
+static void timeout_fn(void *unused)
+{
+    IRQx_set_pending(I2C_ERROR_IRQ);
+}
+
+/* I2C Error ISR: Reset the peripheral and reinit everything. */
+static void IRQ_i2c_error(void)
+{
+    /* Dump and clear I2C errors. */
+    printk("I2C: Error (%04x)\n", (uint16_t)(i2c->sr1 & I2C_SR1_ERRORS));
+    i2c->sr1 &= ~I2C_SR1_ERRORS;
+
+    /* Clear the I2C peripheral. */
+    i2c->cr1 = 0;
+    i2c->cr1 = I2C_CR1_SWRST;
+
+    /* Clear the DMA controller. */
+    dma1->ch4.ccr = 0;
+    dma1->ifcr = DMA_IFCR_CGIF(4);
+
+    timer_cancel(&timeout_timer);
+
+    lcd_init();
+}
+
+/* Start an I2C DMA sequence. */
 static void dma_start(unsigned int sz)
 {
     dma1->ch4.cmar = (uint32_t)(unsigned long)buffer;
@@ -60,6 +99,9 @@ static void dma_start(unsigned int sz)
                      DMA_CCR_DIR_M2P |
                      DMA_CCR_TCIE |
                      DMA_CCR_EN);
+
+    /* Set the timeout timer in case the DMA hangs for any reason. */
+    timer_set(&timeout_timer, stk_add(stk_now(), DMA_TIMEOUT));
 }
 
 /* Emit a 4-bit command to the HD44780 via the DMA buffer. */
@@ -95,12 +137,15 @@ static unsigned int lcd_prep_buffer(void)
 
 static void IRQ_dma1_ch4_tc(void)
 {
+    unsigned int dma_sz;
+
     /* Clear the DMA controller. */
     dma1->ch4.ccr = 0;
     dma1->ifcr = DMA_IFCR_CGIF(4);
 
     /* Prepare the DMA buffer and start the next DMA sequence. */
-    dma_start((addr == OLED_ADDR) ? oled_prep_buffer() : lcd_prep_buffer());
+    dma_sz = (i2c_addr == OLED_ADDR) ? oled_prep_buffer() : lcd_prep_buffer();
+    dma_start(dma_sz);
 
     dma_count++;
 }
@@ -174,27 +219,36 @@ static uint8_t i2c_probe_range(uint8_t s, uint8_t e)
 
 void lcd_clear(void)
 {
-    memset(text, ' ', sizeof(text));
+    lcd_write(0, 0, 16, "");
+    lcd_write(0, 1, 16, "");
 }
 
 void lcd_write(int col, int row, int min, const char *str)
 {
     char c, *p = &text[row][col];
+    uint32_t oldpri;
+
+    /* Prevent the text[] getting rendered while we're updating it. */
+    oldpri = IRQ_save(I2C_IRQ_PRI);
+
     while ((c = *str++) && (col++ < 16)) {
         *p++ = c;
         min--;
     }
     while ((min-- > 0) && (col++ < 16))
         *p++ = ' ';
+
+    IRQ_restore(oldpri);
 }
 
 bool_t lcd_has_backlight(void)
 {
-    return (addr != OLED_ADDR);
+    return (i2c_addr != OLED_ADDR);
 }
 
 void lcd_backlight(bool_t on)
 {
+    /* Will be picked up the next time text[] is rendered. */
     _bl = on ? _BL : 0;
 }
 
@@ -209,6 +263,7 @@ void lcd_sync(void)
 bool_t lcd_init(void)
 {
     uint8_t a, *p;
+    bool_t reinit = (i2c_addr != 0);
 
     rcc->apb1enr |= RCC_APB1ENR_I2C2EN;
 
@@ -239,35 +294,43 @@ bool_t lcd_init(void)
 
     /* Check the bus is not floating (or still stuck!). We shouldn't be able to 
      * pull the lines low with our internal weak pull-downs (min. 30kohm). */
-    gpio_configure_pin(gpiob, SCL, GPI_pull_down);
-    gpio_configure_pin(gpiob, SDA, GPI_pull_down);
-    delay_us(10);
-    if (!gpio_read_pin(gpiob, SCL) || !gpio_read_pin(gpiob, SDA)) {
-        printk("I2C: Invalid bus\n");
-        goto fail;
+    if (!reinit) {
+        gpio_configure_pin(gpiob, SCL, GPI_pull_down);
+        gpio_configure_pin(gpiob, SDA, GPI_pull_down);
+        delay_us(10);
+        if (!gpio_read_pin(gpiob, SCL) || !gpio_read_pin(gpiob, SDA)) {
+            printk("I2C: Invalid bus\n");
+            goto fail;
+        }
     }
 
     gpio_configure_pin(gpiob, SCL, AFO_opendrain(_2MHz));
     gpio_configure_pin(gpiob, SDA, AFO_opendrain(_2MHz));
 
     /* Standard Mode (100kHz) */
+    i2c->cr1 = 0;
     i2c->cr2 = I2C_CR2_FREQ(36);
     i2c->ccr = I2C_CCR_CCR(180);
     i2c->trise = 37;
     i2c->cr1 = I2C_CR1_PE;
 
-    /* Probe the bus for an I2C device. */
-    a = i2c_probe_range(0x20, 0x27) ?: i2c_probe_range(0x38, 0x3f);
-    if (a == 0) {
-        printk("I2C: %s\n", i2c_dead ? "Bus locked up?" : "No device found");
-        goto fail;
+    if (!reinit) {
+        /* Probe the bus for an I2C device. */
+        a = i2c_probe_range(0x20, 0x27) ?: i2c_probe_range(0x38, 0x3f);
+        if (a == 0) {
+            printk("I2C: %s\n",
+                   i2c_dead ? "Bus locked up?" : "No device found");
+            goto fail;
+        }
+
+        printk("I2C: %s found at 0x%02x\n",
+               (a == OLED_ADDR) ? "OLED" : "LCD", a);
+        i2c_addr = a;
+
+        lcd_clear();
     }
 
-    printk("I2C: %s found at 0x%02x\n", (a == OLED_ADDR) ? "OLED" : "LCD", a);
-    addr = a;
-
-    /* Enable the Error IRQ. We don't explicitly handle it, so any I2C 
-     * error will trigger reset (and thereby full reinitialisation). */
+    /* Enable the Error IRQ. */
     IRQx_set_prio(I2C_ERROR_IRQ, I2C_IRQ_PRI);
     IRQx_enable(I2C_ERROR_IRQ);
     i2c->cr2 |= I2C_CR2_ITERREN;
@@ -275,19 +338,20 @@ bool_t lcd_init(void)
     /* Initialise DMA1 channel 4 and its completion interrupt. */
     dma1->ch4.cpar = (uint32_t)(unsigned long)&i2c->dr;
     dma1->ifcr = DMA_IFCR_CGIF(4);
-    IRQx_set_prio(DMA1_CH4_IRQ, CONSOLE_IRQ_PRI);
+    IRQx_set_prio(DMA1_CH4_IRQ, I2C_IRQ_PRI);
     IRQx_enable(DMA1_CH4_IRQ);
 
-    lcd_clear();
+    /* Timeout handler for if I2C transmission borks. */
+    timer_init(&timeout_timer, timeout_fn, NULL);
+    timer_set(&timeout_timer, stk_add(stk_now(), DMA_TIMEOUT));
 
-    if (a == OLED_ADDR) {
-        if (!oled_init())
-            goto fail;
+    if (!i2c_start(i2c_addr))
+        goto fail;
+
+    if (i2c_addr == OLED_ADDR) {
+        oled_init();
         return TRUE;
     }
-
-    if (!i2c_start(a))
-        goto fail;
 
     /* Initialise 4-bit interface, as in the datasheet. Do this synchronously
      * and with the required delays. */
@@ -306,14 +370,18 @@ bool_t lcd_init(void)
     emit8(&p, CMD_DISPLAYCTL | 4, 0); /* display on */
     i2c->cr2 |= I2C_CR2_DMAEN;
     dma_start(p - (uint8_t *)buffer);
-
+    
     /* Wait for DMA engine to initialise RAM, then turn on backlight. */
-    lcd_sync();
-    lcd_backlight(TRUE);
+    if (!reinit) {
+        lcd_sync();
+        lcd_backlight(TRUE);
+    }
 
     return TRUE;
 
 fail:
+    if (reinit)
+        return FALSE;
     IRQx_disable(I2C_ERROR_IRQ);
     IRQx_disable(DMA1_CH4_IRQ);
     i2c->cr1 &= ~I2C_CR1_PE;
@@ -446,7 +514,7 @@ static unsigned int oled_prep_buffer(void)
     return sizeof(buffer);
 }
 
-static bool_t oled_init(void)
+static void oled_init(void)
 {
     static const uint8_t init_cmds[] = {
         0xae,       /* display off */
@@ -473,19 +541,6 @@ static bool_t oled_init(void)
     uint8_t *p = (uint8_t *)buffer;
     int i;
 
-    /* Disable I2C (currently in Standard Mode). */
-    i2c->cr1 = 0;
-
-    /* Fast Mode (400kHz). */
-    i2c->cr2 = I2C_CR2_FREQ(36);
-    i2c->ccr = I2C_CCR_FS | I2C_CCR_CCR(30);
-    i2c->trise = 12;
-    i2c->cr1 = I2C_CR1_PE;
-    i2c->cr2 |= I2C_CR2_DMAEN | I2C_CR2_ITERREN;
-
-    if (!i2c_start(addr))
-        return FALSE;
-
     /* Initialisation sequence for SSD1306. */
     for (i = 0; i < sizeof(init_cmds); i++) {
         *p++ = 0x80; /* Co=1, Command */
@@ -496,9 +551,8 @@ static bool_t oled_init(void)
     *p++ = 0x40;
 
     /* Send the initialisation command sequence by DMA. */
+    i2c->cr2 |= I2C_CR2_DMAEN;
     dma_start(p - (uint8_t *)buffer);
-
-    return TRUE;
 }
 
 /*
