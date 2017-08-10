@@ -129,6 +129,7 @@ void led_3dig_display_setting(bool_t enable);
 bool_t lcd_init(void);
 void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
+bool_t lcd_has_backlight(void);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
 
@@ -146,6 +147,7 @@ static inline void led_3dig_display_setting(bool_t enable) {}
 static inline bool_t lcd_init(void) { return FALSE; }
 static inline void lcd_clear(void) {}
 static inline void lcd_write(int col, int row, int min, const char *str) {}
+static inline bool_t lcd_has_backlight(void) { return FALSE; }
 static inline void lcd_backlight(bool_t on) {};
 static inline void lcd_sync(void) {}
 

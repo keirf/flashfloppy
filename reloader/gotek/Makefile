@@ -2,6 +2,7 @@ RPATH = ../../src/gotek
 
 OBJS += board.o
 OBJS += lcd.o
+OBJS += oled.o
 OBJS += led_3dig.o
 OBJS += usb_bsp.o
 OBJS += usbh_msc_fatfs.o

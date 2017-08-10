@@ -110,6 +110,7 @@ static void lcd_scroll_name(void)
 static uint8_t lcd_handle_backlight(uint8_t b)
 {
     if ((display_mode != DM_LCD_1602)
+        || !lcd_has_backlight()
         || (cfg.backlight_on_secs == 0)
         || (cfg.backlight_on_secs == 0xff))
         return b;

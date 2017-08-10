@@ -44,6 +44,12 @@ static uint8_t _bl;
 static uint8_t addr;
 static uint8_t i2c_dead;
 
+/* Callouts to handle 128x32 OLED, which appears on i2c address 0x3c. */
+#define OLED_ADDR 0x3c
+void oled_clear(void);
+void oled_write(int col, int row, int min, const char *str);
+void oled_sync(void);
+
 /* Ring buffer for I2C. */
 #define I2CS_IDLE      0 /* Bus is idle, no transaction */
 #define I2CS_START     1 /* START and ADDR phases */
@@ -221,6 +227,9 @@ static uint8_t i2c_probe_range(uint8_t s, uint8_t e)
 
 void lcd_clear(void)
 {
+    if (addr == OLED_ADDR)
+        return oled_clear();
+
     write8(CMD_DISPLAYCLEAR);
     i2c_delay_us(2000); /* slow to clear */
 }
@@ -228,17 +237,29 @@ void lcd_clear(void)
 void lcd_write(int col, int row, int min, const char *str)
 {
     char c;
+
+    if (addr == OLED_ADDR)
+        return oled_write(col, row, min, str);
+
     write8(CMD_SETDDRADDR | (col + row*64));
-    while ((c = *str++)) {
+    while ((c = *str++) && (col++ < 16)) {
         write8_ram(c);
         min--;
     }
-    while (min-- > 0)
+    while ((min-- > 0) && (col++ < 16))
         write8_ram(' ');
+}
+
+bool_t lcd_has_backlight(void)
+{
+    return (addr != OLED_ADDR);
 }
 
 void lcd_backlight(bool_t on)
 {
+    if (addr == OLED_ADDR)
+        return;
+
     _bl = on ? _BL : 0;
     barrier(); /* set new flag /then/ kick i2c */
     if (!in_exception()) {
@@ -256,8 +277,13 @@ void lcd_backlight(bool_t on)
 
 void lcd_sync(void)
 {
+    if (addr == OLED_ADDR)
+        return oled_sync();
+
     i2c_sync();
 }
+
+bool_t oled_init(uint8_t i2c_addr);
 
 bool_t lcd_init(void)
 {
@@ -316,8 +342,11 @@ bool_t lcd_init(void)
         goto fail;
     }
 
-    printk("I2C: LCD found at 0x%02x\n", a);
+    printk("I2C: %s found at 0x%02x\n", (a == OLED_ADDR) ? "OLED" : "LCD", a);
     addr = a;
+
+    if (a == OLED_ADDR)
+        return oled_init(a);
 
     IRQx_set_prio(I2C_EVENT_IRQ, I2C_IRQ_PRI);
     IRQx_set_prio(I2C_ERROR_IRQ, I2C_IRQ_PRI);
