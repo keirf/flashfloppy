@@ -1,7 +1,8 @@
 /*
  * lcd.c
  * 
- * HD44780 LCD controller via a PCF8574 I2C backpack.
+ * 1. HD44780 LCD controller via a PCF8574 I2C backpack.
+ * 2. SSD1306 OLED controller driving 128x32 bitmap display.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -19,15 +20,12 @@
 #define _RW (1u<<1)
 #define _RS (1u<<0)
 
-#define CMD_DISPLAYCLEAR 0x01
-#define CMD_RETURNHOME   0x02
 #define CMD_ENTRYMODE    0x04
 #define CMD_DISPLAYCTL   0x08
 #define CMD_DISPLAYSHIFT 0x10
 #define CMD_FUNCTIONSET  0x20
 #define CMD_SETCGRADDR   0x40
 #define CMD_SETDDRADDR   0x80
-
 #define FS_2LINE         0x08
 
 #define i2c i2c2
@@ -36,152 +34,78 @@
 
 #define I2C_EVENT_IRQ 33
 #define I2C_ERROR_IRQ 34
-void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
-void IRQ_34(void) __attribute__((alias("IRQ_i2c_error")));
 
-static bool_t force_bl;
+#define DMA1_CH4_IRQ 14
+void IRQ_14(void) __attribute__((alias("IRQ_dma1_ch4_tc")));
+
 static uint8_t _bl;
 static uint8_t addr;
 static uint8_t i2c_dead;
 
-/* Callouts to handle 128x32 OLED, which appears on i2c address 0x3c. */
 #define OLED_ADDR 0x3c
-void oled_clear(void);
-void oled_write(int col, int row, int min, const char *str);
-void oled_sync(void);
+static bool_t oled_init(void);
+static unsigned int oled_prep_buffer(void);
 
-/* Ring buffer for I2C. */
-#define I2CS_IDLE      0 /* Bus is idle, no transaction */
-#define I2CS_START     1 /* START and ADDR phases */
-#define I2CS_DATA      2 /* Data phase: ring buffer non-empty */
-#define I2CS_DATA_WAIT 3 /* Data phase: ring buffer empty */
-static uint8_t state;
-static uint8_t buffer[256];
-static uint16_t bc, bp;
+static volatile uint8_t dma_count;
+static uint32_t buffer[512/4];
+static char text[2][16];
 
-static void IRQ_i2c_event(void)
+static void dma_start(unsigned int sz)
 {
-    uint16_t sr1 = i2c->sr1 & I2C_SR1_EVENTS;
+    dma1->ch4.cmar = (uint32_t)(unsigned long)buffer;
+    dma1->ch4.cndtr = sz;
+    dma1->ch4.ccr = (DMA_CCR_MSIZE_8BIT |
+                     DMA_CCR_PSIZE_16BIT |
+                     DMA_CCR_MINC |
+                     DMA_CCR_DIR_M2P |
+                     DMA_CCR_TCIE |
+                     DMA_CCR_EN);
+}
 
-    /* HACK: To allow lcd_backlight() control from IRQ. */
-    if (unlikely(force_bl)) {
-        force_bl = FALSE;
-        /* If buffer is empty, just replay the last command */
-        if (bc == bp)
-            bc--;
+/* Emit a 4-bit command to the HD44780 via the DMA buffer. */
+static void emit4(uint8_t **p, uint8_t val)
+{
+    *(*p)++ = val;
+    *(*p)++ = val | _EN;
+    *(*p)++ = val;
+}
+
+/* Emit an 8-bit command to the HD44780 via the DMA buffer. */
+static void emit8(uint8_t **p, uint8_t val, uint8_t signals)
+{
+    signals |= _bl;
+    emit4(p, (val & 0xf0) | signals);
+    emit4(p, (val << 4) | signals);
+}
+
+/* Snapshot text buffer into the command buffer. */
+static unsigned int lcd_prep_buffer(void)
+{
+    uint8_t *q = (uint8_t *)buffer;
+    unsigned int i, j;
+
+    for (i = 0; i < 2; i++) {
+        emit8(&q, CMD_SETDDRADDR | (i*64), 0);
+        for (j = 0; j < 16; j++)
+            emit8(&q, text[i][j], _RS);
     }
 
-    switch (state) {
-
-    case I2CS_IDLE:
-        ASSERT(!sr1);
-        if (bc == bp)
-            break;
-        state = I2CS_START;
-        i2c->cr1 |= I2C_CR1_START;
-        break;
-
-    case I2CS_START:
-        ASSERT(bc != bp);
-        if (sr1 & I2C_SR1_SB) {
-            /* Send address. Clears SR1_SB. */
-            i2c->dr = addr<<1;
-            break;
-        }
-        ASSERT(!(sr1 & ~I2C_SR1_ADDR));
-        if (!(sr1 & I2C_SR1_ADDR))
-            break;
-        /* Read SR2 clears SR1_ADDR. */
-        (void)i2c->sr2;
-        /* Send data0. Clears SR1_TXE. */
-        i2c->dr = buffer[bc++ % sizeof(buffer)] | _bl;
-        sr1 = 0;
-
-    case I2CS_DATA:
-    case I2CS_DATA_WAIT:
-        ASSERT(!(sr1 & ~I2C_SR1_BTF));
-        state = I2CS_DATA;
-        if ((sr1 & I2C_SR1_BTF) && (bc != bp)) {
-            /* Send dataN. Clears SR1_TXE and SR1_BTF. */
-            i2c->dr = buffer[bc++ % sizeof(buffer)] | _bl;
-        }
-        if (bc == bp) {
-            state = I2CS_DATA_WAIT;
-            IRQx_disable(I2C_EVENT_IRQ);
-        }
-        break;
-
-    }
+    return q - (uint8_t *)buffer;
 }
 
-static void IRQ_i2c_error(void)
+static void IRQ_dma1_ch4_tc(void)
 {
-    printk("I2C Error cr1=%04x sr1=%04x\n", i2c->cr1, i2c->sr1);
-    i2c->sr1 &= ~I2C_SR1_ERRORS;
-    i2c->cr1 = 0;
-    i2c->cr1 = I2C_CR1_SWRST;
-    i2c->cr1 = 0;
-    i2c->cr1 = I2C_CR1_PE;
-    state = I2CS_IDLE;
-    IRQx_set_pending(I2C_EVENT_IRQ);
-    IRQx_enable(I2C_EVENT_IRQ);
+    /* Clear the DMA controller. */
+    dma1->ch4.ccr = 0;
+    dma1->ifcr = DMA_IFCR_CGIF(4);
+
+    /* Prepare the DMA buffer and start the next DMA sequence. */
+    dma_start((addr == OLED_ADDR) ? oled_prep_buffer() : lcd_prep_buffer());
+
+    dma_count++;
 }
 
-static void i2c_sync(void)
-{
-    ASSERT(!in_exception());
-    /* Wait for ring buffer to drain. */
-    while (bc != bp)
-        cpu_relax();
-    /* Wait for last byte to be fully transmitted. */
-    while ((state == I2CS_DATA_WAIT) && !(i2c->sr1 & I2C_SR1_BTF))
-        cpu_relax();
-}
-
-static void i2c_delay_us(unsigned int usec)
-{
-    i2c_sync();
-    delay_us(usec);
-}
-
-/* Send an I2C command to the PCF8574. */
-static void i2c_cmd(uint8_t cmd)
-{
-    ASSERT(!in_exception());
-    while ((uint16_t)(bp - bc) == sizeof(buffer))
-        cpu_relax();
-    buffer[bp++ % sizeof(buffer)] = cmd;
-    barrier(); /* push command /then/ check state */
-    switch (state) {
-    case I2CS_IDLE:
-        IRQx_set_pending(I2C_EVENT_IRQ);
-    case I2CS_DATA_WAIT:
-        IRQx_enable(I2C_EVENT_IRQ);
-    }
-}
-
-/* Write a 4-bit nibble over D7-D4 (4-bit bus). */
-static void write4(uint8_t val)
-{
-    i2c_cmd(val);
-    i2c_cmd(val | _EN);
-    i2c_cmd(val);
-}
-
-/* Write an 8-bit command over the 4-bit bus. */
-static void write8(uint8_t val)
-{
-    write4(val & 0xf0);
-    write4(val << 4);
-}
-
-/* Write an 8-bit RAM byte over the 4-bit bus. */
-static void write8_ram(uint8_t val)
-{
-    write4((val & 0xf0) | _RS);
-    write4((val << 4) | _RS);
-}
-
+/* Wait for given status condition @s while also checking for errors. */
 static bool_t i2c_wait(uint8_t s)
 {
     stk_time_t t = stk_now();
@@ -199,16 +123,39 @@ static bool_t i2c_wait(uint8_t s)
     return TRUE;
 }
 
+/* Synchronously transmit the I2C START sequence. */
+static bool_t i2c_start(uint8_t a)
+{
+    i2c->cr1 |= I2C_CR1_START;
+    if (!i2c_wait(I2C_SR1_SB))
+        return FALSE;
+    i2c->dr = a << 1;
+    if (!i2c_wait(I2C_SR1_ADDR))
+        return FALSE;
+    (void)i2c->sr2;
+    return TRUE;
+}
+
+/* Synchronously transmit an I2C command. */
+static bool_t i2c_cmd(uint8_t cmd)
+{
+    i2c->dr = cmd;
+    return i2c_wait(I2C_SR1_BTF);
+}
+
+/* Write a 4-bit nibble over D7-D4 (4-bit bus). */
+static void write4(uint8_t val)
+{
+    i2c_cmd(val);
+    i2c_cmd(val | _EN);
+    i2c_cmd(val);
+}
+
 /* Check whether an I2C device is responding at given address. */
 static bool_t i2c_probe(uint8_t a)
 {
-    i2c->cr1 |= I2C_CR1_START;
-    if (!i2c_wait(I2C_SR1_SB)) return FALSE;
-    i2c->dr = a<<1;
-    if (!i2c_wait(I2C_SR1_ADDR)) return FALSE;
-    (void)i2c->sr2;
-    i2c->dr = 0;
-    if (!i2c_wait(I2C_SR1_BTF)) return FALSE;
+    if (!i2c_start(a) || !i2c_cmd(0))
+        return FALSE;
     i2c->cr1 |= I2C_CR1_STOP;
     while (i2c->cr1 & I2C_CR1_STOP)
         continue;
@@ -227,27 +174,18 @@ static uint8_t i2c_probe_range(uint8_t s, uint8_t e)
 
 void lcd_clear(void)
 {
-    if (addr == OLED_ADDR)
-        return oled_clear();
-
-    write8(CMD_DISPLAYCLEAR);
-    i2c_delay_us(2000); /* slow to clear */
+    memset(text, ' ', sizeof(text));
 }
 
 void lcd_write(int col, int row, int min, const char *str)
 {
-    char c;
-
-    if (addr == OLED_ADDR)
-        return oled_write(col, row, min, str);
-
-    write8(CMD_SETDDRADDR | (col + row*64));
+    char c, *p = &text[row][col];
     while ((c = *str++) && (col++ < 16)) {
-        write8_ram(c);
+        *p++ = c;
         min--;
     }
     while ((min-- > 0) && (col++ < 16))
-        write8_ram(' ');
+        *p++ = ' ';
 }
 
 bool_t lcd_has_backlight(void)
@@ -257,37 +195,20 @@ bool_t lcd_has_backlight(void)
 
 void lcd_backlight(bool_t on)
 {
-    if (addr == OLED_ADDR)
-        return;
-
     _bl = on ? _BL : 0;
-    barrier(); /* set new flag /then/ kick i2c */
-    if (!in_exception()) {
-        /* Send a dummy command for the new setting to piggyback on. */
-        i2c_cmd(0);
-    } else {
-        /* We can't poke the command ring directly from IRQ context, so instead 
-         * we have a sneaky side channel into the ISR. */
-        force_bl = TRUE;
-        barrier(); /* set flag /then/ fire IRQ */
-        IRQx_set_pending(I2C_EVENT_IRQ);
-        IRQx_enable(I2C_EVENT_IRQ);
-    }
 }
 
 void lcd_sync(void)
 {
-    if (addr == OLED_ADDR)
-        return oled_sync();
-
-    i2c_sync();
+    uint8_t c = dma_count;
+    /* Two IRQs: 1st: text[] -> buffer[]; 2nd: buffer[] -> I2C. */
+    while ((uint8_t)(c - dma_count) < 2)
+        cpu_relax();
 }
-
-bool_t oled_init(uint8_t i2c_addr);
 
 bool_t lcd_init(void)
 {
-    uint8_t a;
+    uint8_t a, *p;
 
     rcc->apb1enr |= RCC_APB1ENR_I2C2EN;
 
@@ -345,38 +266,239 @@ bool_t lcd_init(void)
     printk("I2C: %s found at 0x%02x\n", (a == OLED_ADDR) ? "OLED" : "LCD", a);
     addr = a;
 
-    if (a == OLED_ADDR)
-        return oled_init(a);
-
-    IRQx_set_prio(I2C_EVENT_IRQ, I2C_IRQ_PRI);
+    /* Enable the Error IRQ. We don't explicitly handle it, so any I2C 
+     * error will trigger reset (and thereby full reinitialisation). */
     IRQx_set_prio(I2C_ERROR_IRQ, I2C_IRQ_PRI);
     IRQx_enable(I2C_ERROR_IRQ);
-    i2c->cr2 |= I2C_CR2_ITEVTEN | I2C_CR2_ITERREN;
+    i2c->cr2 |= I2C_CR2_ITERREN;
 
-    /* Initialise 4-bit interface, as in the datasheet. */
+    /* Initialise DMA1 channel 4 and its completion interrupt. */
+    dma1->ch4.cpar = (uint32_t)(unsigned long)&i2c->dr;
+    dma1->ifcr = DMA_IFCR_CGIF(4);
+    IRQx_set_prio(DMA1_CH4_IRQ, CONSOLE_IRQ_PRI);
+    IRQx_enable(DMA1_CH4_IRQ);
+
+    lcd_clear();
+
+    if (a == OLED_ADDR) {
+        if (!oled_init())
+            goto fail;
+        return TRUE;
+    }
+
+    if (!i2c_start(a))
+        goto fail;
+
+    /* Initialise 4-bit interface, as in the datasheet. Do this synchronously
+     * and with the required delays. */
     write4(3 << 4);
-    i2c_delay_us(4100);
+    delay_us(4100);
     write4(3 << 4);
-    i2c_delay_us(100);
+    delay_us(100);
     write4(3 << 4);
     write4(2 << 4);
 
-    /* More initialisation from the datasheet. */
-    write8(CMD_FUNCTIONSET | FS_2LINE);
-    write8(CMD_DISPLAYCTL);
-    lcd_clear();
+    /* More initialisation from the datasheet. Send by DMA. */
+    p = (uint8_t *)buffer;
+    emit8(&p, CMD_FUNCTIONSET | FS_2LINE, 0);
+    emit8(&p, CMD_DISPLAYCTL, 0);
+    emit8(&p, CMD_ENTRYMODE | 2, 0);
+    emit8(&p, CMD_DISPLAYCTL | 4, 0); /* display on */
+    i2c->cr2 |= I2C_CR2_DMAEN;
+    dma_start(p - (uint8_t *)buffer);
+
+    /* Wait for DMA engine to initialise RAM, then turn on backlight. */
+    lcd_sync();
     lcd_backlight(TRUE);
-    write8(CMD_ENTRYMODE | 2);
-    write8(CMD_DISPLAYCTL | 4); /* display on */
 
     return TRUE;
 
 fail:
+    IRQx_disable(I2C_ERROR_IRQ);
+    IRQx_disable(DMA1_CH4_IRQ);
     i2c->cr1 &= ~I2C_CR1_PE;
     gpio_configure_pin(gpiob, SCL, GPI_pull_up);
     gpio_configure_pin(gpiob, SDA, GPI_pull_up);
     rcc->apb1enr &= ~RCC_APB1ENR_I2C2EN;
     return FALSE;
+}
+
+/* ASCII 0x20-0x7f inclusive */
+const static uint32_t oled_font[] = {
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 
+    0xfc380000, 0x000038fc, 0x0d000000, 0x0000000d, 
+    0x001e0e00, 0x000e1e00, 0x00000000, 0x00000000, 
+    0x20f8f820, 0x0020f8f8, 0x020f0f02, 0x00020f0f, 
+    0x47447c38, 0x0098cc47, 0x38080c06, 0x00070f38, 
+    0x80003030, 0x003060c0, 0x0103060c, 0x000c0c00, 
+    0xe47cd880, 0x0040d8bc, 0x08080f07, 0x00080f07, 
+    0x0e1e1000, 0x00000000, 0x00000000, 0x00000000, 
+    0xf8f00000, 0x0000040c, 0x07030000, 0x0000080c, 
+    0x0c040000, 0x0000f0f8, 0x0c080000, 0x00000307, 
+    0xc0e0a080, 0x80a0e0c0, 0x01030200, 0x00020301, 
+    0xe0808000, 0x008080e0, 0x03000000, 0x00000003, 
+    0x00000000, 0x00000000, 0x1e100000, 0x0000000e, 
+    0x80808080, 0x00808080, 0x00000000, 0x00000000, 
+    0x00000000, 0x00000000, 0x0c000000, 0x0000000c, 
+    0x80000000, 0x003060c0, 0x0103060c, 0x00000000, 
+    0xc40cf8f0, 0x00f0f80c, 0x080c0703, 0x0003070c, 
+    0xfc181000, 0x000000fc, 0x0f080800, 0x0008080f, 
+    0xc4840c08, 0x00183c64, 0x08090f0e, 0x000c0c08, 
+    0x44440c08, 0x00b8fc44, 0x08080c04, 0x00070f08, 
+    0x98b0e0c0, 0x0080fcfc, 0x08000000, 0x00080f0f, 
+    0x44447c7c, 0x0084c444, 0x08080c04, 0x00070f08, 
+    0x444cf8f0, 0x0080c044, 0x08080f07, 0x00070f08, 
+    0x84040c0c, 0x003c7cc4, 0x0f0f0000, 0x00000000, 
+    0x4444fcb8, 0x00b8fc44, 0x08080f07, 0x00070f08, 
+    0x44447c38, 0x00f8fc44, 0x08080800, 0x0003070c, 
+    0x30000000, 0x00000030, 0x06000000, 0x00000006, 
+    0x30000000, 0x00000030, 0x0e080000, 0x00000006, 
+    0x60c08000, 0x00081830, 0x03010000, 0x00080c06, 
+    0x20202000, 0x00202020, 0x01010100, 0x00010101, 
+    0x30180800, 0x0080c060, 0x060c0800, 0x00000103, 
+    0xc4041c18, 0x00183ce4, 0x0d000000, 0x0000000d, 
+    0xc808f8f0, 0x00f0f8c8, 0x0b080f07, 0x00010b0b, 
+    0x8c98f0e0, 0x00e0f098, 0x00000f0f, 0x000f0f00, 
+    0x44fcfc04, 0x00b8fc44, 0x080f0f08, 0x00070f08, 
+    0x040cf8f0, 0x00180c04, 0x080c0703, 0x00060c08, 
+    0x04fcfc04, 0x00f0f80c, 0x080f0f08, 0x0003070c, 
+    0x44fcfc04, 0x001c0ce4, 0x080f0f08, 0x000e0c08, 
+    0x44fcfc04, 0x001c0ce4, 0x080f0f08, 0x00000000, 
+    0x840cf8f0, 0x00988c84, 0x080c0703, 0x000f0708, 
+    0x4040fcfc, 0x00fcfc40, 0x00000f0f, 0x000f0f00, 
+    0xfc040000, 0x000004fc, 0x0f080000, 0x0000080f, 
+    0x04000000, 0x0004fcfc, 0x08080f07, 0x0000070f, 
+    0xc0fcfc04, 0x001c3ce0, 0x000f0f08, 0x000e0f01, 
+    0x04fcfc04, 0x00000000, 0x080f0f08, 0x000e0c08, 
+    0x7038fcfc, 0x00fcfc38, 0x00000f0f, 0x000f0f00, 
+    0x7038fcfc, 0x00fcfce0, 0x00000f0f, 0x000f0f00, 
+    0x0404fcf8, 0x00f8fc04, 0x08080f07, 0x00070f08, 
+    0x44fcfc04, 0x00387c44, 0x080f0f08, 0x00000000, 
+    0x0404fcf8, 0x00f8fc04, 0x0e080f07, 0x00273f3c, 
+    0x44fcfc04, 0x0038fcc4, 0x000f0f08, 0x000f0f00, 
+    0x44643c18, 0x00189cc4, 0x08080e06, 0x00070f08, 
+    0xfc0c1c00, 0x001c0cfc, 0x0f080000, 0x0000080f, 
+    0x0000fcfc, 0x00fcfc00, 0x08080f07, 0x00070f08, 
+    0x0000fcfc, 0x00fcfc00, 0x0c060301, 0x00010306, 
+    0xc000fcfc, 0x00fcfc00, 0x030e0f07, 0x00070f0e, 
+    0xe0f03c0c, 0x000c3cf0, 0x01030f0c, 0x000c0f03, 
+    0xc07c3c00, 0x003c7cc0, 0x0f080000, 0x0000080f, 
+    0xc4840c1c, 0x001c3c64, 0x08090f0e, 0x000e0c08, 
+    0xfcfc0000, 0x00000404, 0x0f0f0000, 0x00000808, 
+    0xc0e07038, 0x00000080, 0x01000000, 0x000e0703, 
+    0x04040000, 0x0000fcfc, 0x08080000, 0x00000f0f, 
+    0x03060c08, 0x00080c06, 0x00000000, 0x00000000, 
+    0x00000000, 0x00000000, 0x20202020, 0x20202020, 
+    0x06020000, 0x0000080c, 0x00000000, 0x00000000, 
+    0xa0a0a000, 0x0000c0e0, 0x08080f07, 0x00080f07, 
+    0x20fcfc04, 0x0080c060, 0x080f0f00, 0x00070f08, 
+    0x2020e0c0, 0x00406020, 0x08080f07, 0x00040c08, 
+    0x2460c080, 0x0000fcfc, 0x08080f07, 0x00080f07, 
+    0xa0a0e0c0, 0x00c0e0a0, 0x08080f07, 0x00040c08, 
+    0xfcf84000, 0x00180c44, 0x0f0f0800, 0x00000008, 
+    0x2020e0c0, 0x0020e0c0, 0x48486f27, 0x00003f7f, 
+    0x40fcfc04, 0x00c0e020, 0x000f0f08, 0x000f0f00, 
+    0xec200000, 0x000000ec, 0x0f080000, 0x0000080f, 
+    0x00000000, 0x00ecec20, 0x40703000, 0x003f7f40, 
+    0x80fcfc04, 0x002060c0, 0x010f0f08, 0x000c0e03, 
+    0xfc040000, 0x000000fc, 0x0f080000, 0x0000080f, 
+    0xc060e0e0, 0x00c0e060, 0x07000f0f, 0x000f0f00, 
+    0x20c0e020, 0x00c0e020, 0x000f0f00, 0x000f0f00, 
+    0x2020e0c0, 0x00c0e020, 0x08080f07, 0x00070f08, 
+    0x20c0e020, 0x00c0e020, 0x487f7f40, 0x00070f08, 
+    0x2020e0c0, 0x0020e0c0, 0x48080f07, 0x00407f7f, 
+    0x60c0e020, 0x00c0e020, 0x080f0f08, 0x00000000, 
+    0x20a0e040, 0x00406020, 0x09090c04, 0x00040e0b, 
+    0xfcf82020, 0x00002020, 0x0f070000, 0x00040c08, 
+    0x0000e0e0, 0x0000e0e0, 0x08080f07, 0x00080f07, 
+    0x0000e0e0, 0x00e0e000, 0x080c0703, 0x0003070c, 
+    0x8000e0e0, 0x00e0e000, 0x070c0f07, 0x00070f0c, 
+    0x80c06020, 0x002060c0, 0x03070c08, 0x00080c07, 
+    0x0000e0e0, 0x00e0e000, 0x48484f47, 0x001f3f68, 
+    0xa0206060, 0x002060e0, 0x090b0e0c, 0x000c0c08, 
+    0xf8404000, 0x000404bc, 0x07000000, 0x0008080f, 
+    0xfc000000, 0x000000fc, 0x0f000000, 0x0000000f, 
+    0xbc040400, 0x004040f8, 0x0f080800, 0x00000007, 
+    0x06020604, 0x00020604, 0x00000000, 0x00000000, 
+    0x3060c080, 0x0080c060, 0x04040707, 0x00070704, 
+};
+
+/* Snapshot text buffer into the bitmap buffer. */
+static unsigned int oled_prep_buffer(void)
+{
+    const uint32_t *p;
+    uint32_t *q = buffer;
+    unsigned int i, j, c;
+
+    for (i = 0; i < 2; i++) {
+        for (j = 0; j < 16; j++) {
+            if ((c = text[i][j] - 0x20) > 0x5f)
+                c = '.' - 0x20;
+            p = &oled_font[c * 4];
+            *q++ = *p++;
+            *q++ = *p++;
+            q[32-2] = *p++;
+            q[32-1] = *p++;
+        }
+        q += 32;
+    }
+
+    return sizeof(buffer);
+}
+
+static bool_t oled_init(void)
+{
+    static const uint8_t init_cmds[] = {
+        0xae,       /* display off */
+        0xd5, 0x80, /* default clock */
+        0xa8, 31,   /* multiplex ratio (lcd height - 1) */
+        0xd3, 0x00, /* display offset = 0 */
+        0x40,       /* display start line = 0 */
+        0x8d, 0x14, /* enable charge pump */
+        0x20, 0x00, /* horizontal addressing mode */
+        0xa1,       /* segment mapping (reverse) */
+        0xc8,       /* com scan direction (decrement) */
+        0xda, 0x02, /* com pins configuration */
+        0x81, 0x8f, /* display contrast */
+        0xd9, 0xf1, /* pre-charge period */
+        0xdb, 0x20, /* vcomh detect (default) */
+        0xa4,       /* output follows ram contents */
+        0xa6,       /* normal display output (inverse=off) */
+        0x2e,       /* deactivate scroll */
+        0xaf,       /* display on */
+        0x21, 0, 127, /* column address range: 0-127 */
+        0x22, 0, 3    /* page address range: 0-3 */
+    };
+
+    uint8_t *p = (uint8_t *)buffer;
+    int i;
+
+    /* Disable I2C (currently in Standard Mode). */
+    i2c->cr1 = 0;
+
+    /* Fast Mode (400kHz). */
+    i2c->cr2 = I2C_CR2_FREQ(36);
+    i2c->ccr = I2C_CCR_FS | I2C_CCR_CCR(30);
+    i2c->trise = 12;
+    i2c->cr1 = I2C_CR1_PE;
+    i2c->cr2 |= I2C_CR2_DMAEN | I2C_CR2_ITERREN;
+
+    if (!i2c_start(addr))
+        return FALSE;
+
+    /* Initialisation sequence for SSD1306. */
+    for (i = 0; i < sizeof(init_cmds); i++) {
+        *p++ = 0x80; /* Co=1, Command */
+        *p++ = init_cmds[i];
+    }
+
+    /* All subsequent bytes are data bytes, forever more. */
+    *p++ = 0x40;
+
+    /* Send the initialisation command sequence by DMA. */
+    dma_start(p - (uint8_t *)buffer);
+
+    return TRUE;
 }
 
 /*
