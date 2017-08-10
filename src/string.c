@@ -142,6 +142,8 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
 
     if (p <= end)
         *p = '\0';
+    else if (str <= end)
+        *end = '\0';
 
     return p - str;
 }
