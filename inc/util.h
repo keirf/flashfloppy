@@ -176,6 +176,7 @@ extern uint32_t _irq_stacktop[], _irq_stackbottom[];
 void EXC_unused(void);
 
 /* IRQ priorities, 0 (highest) to 15 (lowest). */
+#define RESET_IRQ_PRI         0
 #define FLOPPY_IRQ_SEL_PRI    1
 #define FLOPPY_IRQ_WGATE_PRI  2
 #define FLOPPY_IRQ_STEP_PRI   3
@@ -187,7 +188,6 @@ void EXC_unused(void);
 #define FLOPPY_IRQ_LO_PRI     9
 #define USB_IRQ_PRI          10
 #define I2C_IRQ_PRI          14
-#define CONSOLE_IRQ_PRI      15
 
 /*
  * Local variables:

@@ -88,7 +88,7 @@ void console_crash_on_input(void)
 {
     (void)usart1->dr; /* clear UART_SR_RXNE */
     usart1->cr1 |= USART_CR1_RXNEIE;
-    IRQx_set_prio(USART1_IRQ, CONSOLE_IRQ_PRI);
+    IRQx_set_prio(USART1_IRQ, RESET_IRQ_PRI);
     IRQx_enable(USART1_IRQ);
 }
 
