@@ -54,7 +54,7 @@ static unsigned int oled_prep_buffer(void);
 static volatile uint8_t dma_count;
 
 /* I2C data buffer. Data is DMAed to the I2C peripheral. */
-static uint32_t buffer[512/4];
+static uint32_t buffer[256/4];
 
 /* 16x2 text buffer, rendered into I2C data and placed into buffer[]. */
 static char text[2][16];
@@ -91,6 +91,8 @@ static void IRQ_i2c_error(void)
 /* Start an I2C DMA sequence. */
 static void dma_start(unsigned int sz)
 {
+    ASSERT(sz <= sizeof(buffer));
+
     dma1->ch4.cmar = (uint32_t)(unsigned long)buffer;
     dma1->ch4.cndtr = sz;
     dma1->ch4.ccr = (DMA_CCR_MSIZE_8BIT |
@@ -255,8 +257,10 @@ void lcd_backlight(bool_t on)
 void lcd_sync(void)
 {
     uint8_t c = dma_count;
-    /* Two IRQs: 1st: text[] -> buffer[]; 2nd: buffer[] -> I2C. */
-    while ((uint8_t)(c - dma_count) < 2)
+    /* LCD: 2 IRQs: 1. text[*] -> buffer[]; 2. all Tx. 
+     * OLED: 3 IRQs: 1. text[0] -> buffer; 2. text[1] -> buffer; 3. all Tx. */
+    uint8_t wait = (i2c_addr == OLED_ADDR) ? 3 : 2;
+    while ((uint8_t)(dma_count - c) < wait)
         cpu_relax();
 }
 
@@ -332,6 +336,7 @@ bool_t lcd_init(void)
 
     /* Enable the Error IRQ. */
     IRQx_set_prio(I2C_ERROR_IRQ, I2C_IRQ_PRI);
+    IRQx_clear_pending(I2C_ERROR_IRQ);
     IRQx_enable(I2C_ERROR_IRQ);
     i2c->cr2 |= I2C_CR2_ITERREN;
 
@@ -339,6 +344,7 @@ bool_t lcd_init(void)
     dma1->ch4.cpar = (uint32_t)(unsigned long)&i2c->dr;
     dma1->ifcr = DMA_IFCR_CGIF(4);
     IRQx_set_prio(DMA1_CH4_IRQ, I2C_IRQ_PRI);
+    IRQx_clear_pending(DMA1_CH4_IRQ);
     IRQx_enable(DMA1_CH4_IRQ);
 
     /* Timeout handler for if I2C transmission borks. */
@@ -491,27 +497,31 @@ const static uint32_t oled_font[] = {
     0x3060c080, 0x0080c060, 0x04040707, 0x00070704, 
 };
 
+static uint8_t oled_row;
+
 /* Snapshot text buffer into the bitmap buffer. */
 static unsigned int oled_prep_buffer(void)
 {
     const uint32_t *p;
     uint32_t *q = buffer;
-    unsigned int i, j, c;
+    char *pc = text[oled_row];
+    unsigned int i, c;
 
-    for (i = 0; i < 2; i++) {
-        for (j = 0; j < 16; j++) {
-            if ((c = text[i][j] - 0x20) > 0x5f)
-                c = '.' - 0x20;
-            p = &oled_font[c * 4];
-            *q++ = *p++;
-            *q++ = *p++;
-            q[32-2] = *p++;
-            q[32-1] = *p++;
-        }
-        q += 32;
+    /* Convert one row of text[] into buffer[] writes. */
+    for (i = 0; i < 16; i++) {
+        if ((c = *pc++ - 0x20) > 0x5f)
+            c = '.' - 0x20;
+        p = &oled_font[c * 4];
+        *q++ = *p++;
+        *q++ = *p++;
+        q[32-2] = *p++;
+        q[32-1] = *p++;
     }
 
-    return sizeof(buffer);
+    /* Do the other text[] row next time. */
+    oled_row ^= 1;
+
+    return 256;
 }
 
 static void oled_init(void)
@@ -549,6 +559,7 @@ static void oled_init(void)
 
     /* All subsequent bytes are data bytes, forever more. */
     *p++ = 0x40;
+    oled_row = 0;
 
     /* Send the initialisation command sequence by DMA. */
     i2c->cr2 |= I2C_CR2_DMAEN;
