@@ -166,6 +166,9 @@ static void IRQ_input_changed(void)
     inp = input_pins;
     sel = !(inp & m(inp_sel0));
 
+    /* DSKCHG asserts on any falling edge of STEP. We deassert on any edge. */
+    if ((changed & m(inp_step)) && sel && (dma_rd != NULL))
+        floppy_change_outputs(m(pin_dskchg), O_FALSE);
     /* Handle step request. */
     if ((changed & inp & m(inp_step)) /* Rising edge on STEP */
         && sel                        /* Drive is selected */
@@ -177,10 +180,8 @@ static void IRQ_input_changed(void)
             drv->step.start = stk_now();
             drv->step.state = STEP_started;
             floppy_change_outputs(m(pin_trk0), O_FALSE);
-            if (dma_rd != NULL) {
-                floppy_change_outputs(m(pin_dskchg), O_FALSE);
+            if (dma_rd != NULL)
                 rdata_stop();
-            }
             IRQx_set_pending(STEP_IRQ);
         }
     }

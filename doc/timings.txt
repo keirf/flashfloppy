@@ -8,6 +8,8 @@ Citizen Z1DE-58A (a generic HD PC drive):
   - TRK0 immediately deasserted
   - TRK0 asserted after 3ms
   - RDDAT asserted after 18ms
+ DSKCHG: deasserted immediately on falling edge of STEP,
+         even if STEP is to be ignored (eg. on min/max cyl already)
 
 Cortex-M3 STM32F1xx Timings:
 ----------------------------

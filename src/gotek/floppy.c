@@ -111,8 +111,15 @@ static void IRQ_STEP_changed(void)
     idr_a = gpioa->idr;
     idr_b = gpiob->idr;
 
+    /* Bail if drive not selected. */
+    if (idr_a & m(pin_sel0))
+        return;
+
+    /* DSKCHG asserts on any falling edge of STEP. We deassert on any edge. */
+    if ((gpio_out_active & m(pin_dskchg)) && (dma_rd != NULL))
+        floppy_change_outputs(m(pin_dskchg), O_FALSE);
+
     if (!(idr_a & m(pin_step))   /* Not rising edge on STEP? */
-        || (idr_a & m(pin_sel0)) /* Drive not selected? */
         || (drv->step.state & STEP_active)) /* Already mid-step? */
         return;
 
@@ -124,11 +131,10 @@ static void IRQ_STEP_changed(void)
     /* Valid step request for this drive: start the step operation. */
     drv->step.start = stk_now();
     drv->step.state = STEP_started;
-    floppy_change_outputs(m(pin_trk0), O_FALSE);
-    if (dma_rd != NULL) {
-        floppy_change_outputs(m(pin_dskchg), O_FALSE);
+    if (gpio_out_active & m(pin_trk0))
+        floppy_change_outputs(m(pin_trk0), O_FALSE);
+    if (dma_rd != NULL)
         rdata_stop();
-    }
     IRQx_set_pending(STEP_IRQ);
 }
 
