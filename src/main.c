@@ -666,11 +666,11 @@ int main(void)
 
     speaker_init();
 
+    floppy_init();
+
     display_init();
 
     usbh_msc_init();
-
-    floppy_init();
 
     cfg.backlight_on_secs = 0xff;
     timer_init(&button_timer, button_timer_fn, NULL);
