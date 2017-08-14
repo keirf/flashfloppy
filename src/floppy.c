@@ -158,7 +158,6 @@ void floppy_init(void)
 
     board_floppy_init();
 
-    drive.cyl = 1; /* XXX */
     timer_init(&drive.step.timer, drive_step_timer, &drive);
 
     gpio_configure_pin(gpio_out, pin_dskchg, GPO_bus);
@@ -170,7 +169,7 @@ void floppy_init(void)
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
-    floppy_change_outputs(m(pin_dskchg) | m(pin_wrprot), O_TRUE);
+    floppy_change_outputs(m(pin_dskchg) | m(pin_wrprot) | m(pin_trk0), O_TRUE);
 
     /* Enable physical interface interrupts. */
     for (i = 0; i < ARRAY_SIZE(exti_irqs); i++) {
