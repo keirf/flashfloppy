@@ -57,13 +57,13 @@ void IRQ_10(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI4 */
 void IRQ_23(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI9_5 */
 void IRQ_40(void) __attribute__((alias("IRQ_input_changed"))); /* EXTI15_10 */
 static const struct exti_irq exti_irqs[] = {
-    {  6, FLOPPY_IRQ_HI_PRI }, 
-    {  7, FLOPPY_IRQ_HI_PRI }, 
-    {  8, FLOPPY_IRQ_HI_PRI }, 
-    {  9, FLOPPY_IRQ_HI_PRI }, 
-    { 10, FLOPPY_IRQ_HI_PRI }, 
-    { 23, FLOPPY_IRQ_HI_PRI }, 
-    { 40, FLOPPY_IRQ_HI_PRI }
+    {  6, FLOPPY_IRQ_HI_PRI, 0 }, 
+    {  7, FLOPPY_IRQ_HI_PRI, 0 }, 
+    {  8, FLOPPY_IRQ_HI_PRI, 0 }, 
+    {  9, FLOPPY_IRQ_HI_PRI, 0 }, 
+    { 10, FLOPPY_IRQ_HI_PRI, 0 }, 
+    { 23, FLOPPY_IRQ_HI_PRI, 0 }, 
+    { 40, FLOPPY_IRQ_HI_PRI, 0 }
 };
 
 /* Updates the board-agnostic input_pins bitmask with current states of 

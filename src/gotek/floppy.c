@@ -49,10 +49,10 @@ void IRQ_7(void) __attribute__((alias("IRQ_STEP_changed"))); /* EXTI1 */
 void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
 void IRQ_23(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI9_5 */
 static const struct exti_irq exti_irqs[] = {
-    {  6, FLOPPY_IRQ_SEL_PRI }, 
-    {  7, FLOPPY_IRQ_STEP_PRI }, 
-    { 10, FLOPPY_IRQ_SIDE_PRI }, 
-    { 23, FLOPPY_IRQ_WGATE_PRI } 
+    {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
+    {  7, FLOPPY_IRQ_STEP_PRI, m(pin_step) },
+    { 10, FLOPPY_IRQ_SIDE_PRI, 0 }, 
+    { 23, FLOPPY_IRQ_WGATE_PRI, 0 } 
 };
 
 static void board_floppy_init(void)

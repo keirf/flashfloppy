@@ -99,6 +99,7 @@ static void floppy_change_outputs(uint16_t mask, uint8_t val);
 
 struct exti_irq {
     uint8_t irq, pri;
+    uint16_t pr_mask; /* != 0: irq- and exti-pending flags are cleared */
 };
 
 #if BUILD_TOUCH
@@ -173,9 +174,16 @@ void floppy_init(void)
 
     /* Enable physical interface interrupts. */
     for (i = 0; i < ARRAY_SIZE(exti_irqs); i++) {
-        IRQx_set_prio(exti_irqs[i].irq, exti_irqs[i].pri);
-        IRQx_set_pending(exti_irqs[i].irq);
-        IRQx_enable(exti_irqs[i].irq);
+        const struct exti_irq *e = &exti_irqs[i];
+        IRQx_set_prio(e->irq, e->pri);
+        if (e->pr_mask != 0) {
+            IRQx_clear_pending(e->irq);
+            cpu_sync(); /* clear pending /then/ clear EXTI_PR */
+            exti->pr = e->pr_mask;
+        } else {
+            IRQx_set_pending(e->irq);
+        }
+        IRQx_enable(e->irq);
     }
 
     IRQx_set_prio(STEP_IRQ, FLOPPY_IRQ_LO_PRI);
