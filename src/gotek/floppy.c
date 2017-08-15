@@ -44,7 +44,7 @@ void IRQ_12(void) __attribute__((alias("IRQ_wdata_dma")));
 void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
 
 /* EXTI IRQs. */
-void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI0 */
+/*void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed")));*/ /* EXTI0 */
 void IRQ_7(void) __attribute__((alias("IRQ_STEP_changed"))); /* EXTI1 */
 void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
 void IRQ_23(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI9_5 */
@@ -71,7 +71,40 @@ static void board_floppy_init(void)
         m(pin_wgate) | m(pin_side) | m(pin_step) | m(pin_sel0);
 }
 
-static void IRQ_SELA_changed(void)
+/* Fast speculative entry point for SELA-changed IRQ. We assume SELA has 
+ * changed to the opposite of what we observed on the previous interrupt. This
+ * is always the case unless we missed an edge (fast transitions). 
+ * Note that the entirety of the SELA handler is in SRAM (.data) -- not only 
+ * is this faster to execute, but allows us to co-locate gpio_out_active for 
+ * even faster access in the time-critical speculative entry point. */
+asm (
+"    .data\n"
+"    .thumb\n"
+"    .thumb_func\n"
+"IRQ_SELA_changed:\n"
+"    ldr  r0, [pc, #4]\n" /* r0 = gpio_out_active */
+"    ldr  r1, [pc, #8]\n" /* r1 = &gpio_out->b[s]rr */
+"    str  r0, [r1, #0]\n" /* gpio_out->b[s]rr = gpio_out_active */
+"    b.n  _IRQ_SELA_changed\n" /* branch to the main ISR entry point */
+"gpio_out_active:   .word 0\n"
+"gpio_out_setreset: .word 0x40010c10\n" /* gpio_out->b[s]rr */
+"    .global IRQ_6\n"
+"    .thumb_set IRQ_6,IRQ_SELA_changed\n"
+"    .previous\n"
+);
+
+/* Subset of output pins which are active (O_TRUE). */
+extern uint32_t gpio_out_active;
+
+/* GPIO register to either assert or deassert active output pins. */
+extern uint32_t gpio_out_setreset;
+
+/* Main entry point for SELA-changed IRQ. This fixes up GPIO pins if we 
+ * mis-speculated, also handles the timer-driver RDATA pin, and sets up the 
+ * speculative entry point for the next interrupt. */
+static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
+    __attribute__((used)) __attribute__((section(".data#")));
+static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
 {
     /* Clear SELA-changed flag. */
     exti->pr = m(pin_sel0);
@@ -79,7 +112,7 @@ static void IRQ_SELA_changed(void)
     if (!(gpioa->idr & m(pin_sel0))) {
         /* SELA is asserted (this drive is selected). 
          * Immediately re-enable all our asserted outputs. */
-        gpio_out->brr = gpio_out_active;
+        gpio_out->brr = _gpio_out_active;
         /* Set pin_rdata as timer output (AFO_bus). */
         if (dma_rd && (dma_rd->state == DMA_active))
             gpio_data->crl = (gpio_data->crl & ~(0xfu<<(pin_rdata<<2)))
@@ -89,7 +122,7 @@ static void IRQ_SELA_changed(void)
     } else {
         /* SELA is deasserted (this drive is not selected).
          * Relinquish the bus by disabling all our asserted outputs. */
-        gpio_out->bsrr = gpio_out_active;
+        gpio_out->bsrr = _gpio_out_active;
         /* Set pin_rdata to GPO_pushpull(_2MHz). */
         if (dma_rd && (dma_rd->state == DMA_active))
             gpio_data->crl = (gpio_data->crl & ~(0xfu<<(pin_rdata<<2)))
@@ -97,6 +130,12 @@ static void IRQ_SELA_changed(void)
         /* Tell main code to leave the bus alone. */
         drive.sel = 0;
     }
+
+    /* Set up the speculative fast path for the next interrupt. */
+    if (drive.sel)
+        gpio_out_setreset &= ~4; /* gpio_out->bsrr */
+    else
+        gpio_out_setreset |= 4; /* gpio_out->brr */
 }
 
 static void IRQ_STEP_changed(void)

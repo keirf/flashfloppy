@@ -24,6 +24,9 @@ static uint8_t input_pins;
 #define inp_wgate   6
 #define inp_side    7
 
+/* Subset of output pins which are active (O_TRUE). */
+static uint16_t gpio_out_active;
+
 /* Outputs are buffered, thus do *not* need to be 5v tolerant. */
 #define gpio_out gpiob
 #define pin_dskchg  3

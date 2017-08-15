@@ -13,9 +13,6 @@
 #define GPO_bus GPO_pushpull(_2MHz,O_FALSE)
 #define AFO_bus AFO_pushpull(_2MHz)
 
-/* Subset of output pins which are active (O_TRUE). */
-static uint16_t gpio_out_active;
-
 #define m(pin) (1u<<(pin))
 
 /* A soft IRQ for handling step pulses. */
