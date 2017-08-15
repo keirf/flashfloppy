@@ -527,9 +527,6 @@ int floppy_main(void)
     uint8_t b;
     uint32_t i;
 
-    if (display_mode == DM_LCD_1602)
-        lcd_clear();
-
     arena_init();
     fs = arena_alloc(sizeof(*fs));
     
