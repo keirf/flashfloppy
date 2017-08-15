@@ -152,6 +152,7 @@ static struct dma_ring *dma_ring_alloc(void)
 
 void floppy_init(void)
 {
+    const struct exti_irq *e;
     unsigned int i;
 
     board_floppy_init();
@@ -169,17 +170,25 @@ void floppy_init(void)
 
     floppy_change_outputs(m(pin_dskchg) | m(pin_wrprot) | m(pin_trk0), O_TRUE);
 
-    /* Enable physical interface interrupts. */
-    for (i = 0; i < ARRAY_SIZE(exti_irqs); i++) {
-        const struct exti_irq *e = &exti_irqs[i];
+    /* Configure physical interface interrupts. */
+    for (i = 0, e = exti_irqs; i < ARRAY_SIZE(exti_irqs); i++, e++) {
         IRQx_set_prio(e->irq, e->pri);
         if (e->pr_mask != 0) {
-            IRQx_clear_pending(e->irq);
-            cpu_sync(); /* clear pending /then/ clear EXTI_PR */
+            /* Do not trigger an initial interrupt on this line. Clear EXTI_PR 
+             * /then/ IRQ-pending, otherwise IRQ-pending is immediately
+             * reasserted. */
             exti->pr = e->pr_mask;
+            cpu_sync();
+            IRQx_clear_pending(e->irq);
         } else {
+            /* Common case: we deliberately trigger the first interrupt to 
+             * prime the ISR's state. */
             IRQx_set_pending(e->irq);
         }
+    }
+
+    /* Enable physical interface interrupts. */
+    for (i = 0, e = exti_irqs; i < ARRAY_SIZE(exti_irqs); i++, e++) {
         IRQx_enable(e->irq);
     }
 
