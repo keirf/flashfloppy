@@ -174,11 +174,10 @@ void floppy_init(void)
     for (i = 0, e = exti_irqs; i < ARRAY_SIZE(exti_irqs); i++, e++) {
         IRQx_set_prio(e->irq, e->pri);
         if (e->pr_mask != 0) {
-            /* Do not trigger an initial interrupt on this line. Clear EXTI_PR 
-             * /then/ IRQ-pending, otherwise IRQ-pending is immediately
+            /* Do not trigger an initial interrupt on this line. Clear EXTI_PR
+             * before IRQ-pending, otherwise IRQ-pending is immediately
              * reasserted. */
             exti->pr = e->pr_mask;
-            cpu_sync();
             IRQx_clear_pending(e->irq);
         } else {
             /* Common case: we deliberately trigger the first interrupt to 
