@@ -36,7 +36,7 @@ does not need to match the FlashFloppy firmware version.
 ### Index mode
 
 This mode requires only a special HXCSDFE.CFG file, such as included
-in the FlashFloppy distribution: simply copy the conetnts of the
+in the FlashFloppy distribution: simply copy the contents of the
 Config/Index_Mode/ subfolder to the root of your USB
 stick. FlashFloppy will switch between images with names of the form
 DSKA0000.HFE, DSKA0001.HFE, and so on, which will be automatically
@@ -63,20 +63,46 @@ between using the Gotek buttons.
 
 A speaker can be attached to the Gotek to sound whenever the floppy
 drive heads are stepped. A piezo sounder can be connected directly
-between jumper JB and Ground. A magnetic speaker should be buffered
-via an NPN transistor (eg 2N3904) as follows:
-- **Base**: connected to JB via a 1k resistor
+between jumper JB and Ground, marked respectively as SPEAKER and GND
+in the picture below.
+![Piezo speaker](assets/jumpers.jpg)
+
+A magnetic speaker should be buffered via an NPN transistor (eg
+2N3904) as follows:
+- **Base**: connected to JB (SPEAKER) via a 1k resistor
 - **Collector**: connected to one terminal of the speaker (the other
     connected to 5v)
-- **Emitter**: connected to Ground
+- **Emitter**: connected to Ground (GND)
+
+Pinout for the 2N3904 is shown below (note that the leg arrangement
+can differ on other NPN transistors).
+![2N3904 legs](assets/2n3904.jpg)
 
 ## LCD Display
 
 As an alternative to the Gotek 3-digit display, FlashFloppy supports
 the ubiquitous 1602 LCD with I2C backpack board. These are available
 from many Ebay sellers. The connections should be made just as for HxC
-Gotek firmware. Note that many I2C boards have the pullup resistors on
-board and in this case you do not need to attach your own external
-pullups. You can confirm this by checking the resistance between
-SDA/SCL and VCC. If it is less than 10k you do not need to add
+Gotek firmware, including pullup resistors (if required - see below).
+
+You can locate SCL, SDA, and GND on your Gotek PCB as below. These
+connect to the corresponding header pins on your LCD I2C backpack
+module.
+![LCD data/clock interface](assets/header_closeup.jpg)
+
+VCC (aka 5V) can be found in various places, including just behind the
+floppy power connector.
+![LCD VCC](assets/jumpers.jpg)
+
+The SCL and SDA lines must be connected to VCC ("pulled up" to VCC)
+via 4.7k resistors.  Note that many I2C boards have the pullup
+resistors on board and in this case you do not need to attach your own
+external pullups. You can confirm this by checking the resistance
+between SDA/SCL and VCC. If it is less than 10k you do not need to add
 pullups.
+
+If you do require the pullup resistors, these can be soldered to the
+backside of the Gotek PCB between VCC and each of SDA and
+SCL. Alternatively can be soldered to the back of the I2C module
+header as below.
+![LCD Pullup Resistors](assets/pullups.jpg)

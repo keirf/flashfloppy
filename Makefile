@@ -36,7 +36,6 @@ touch: all
 
 dist:
 	rm -rf flashfloppy_*
-	mkdir -p flashfloppy_$(VER)/doc
 	mkdir -p flashfloppy_$(VER)/reloader
 	$(MAKE) clean
 	$(MAKE) gotek
@@ -45,13 +44,8 @@ dist:
 	cp -a FF_Gotek-Reloader-$(VER).upd flashfloppy_$(VER)/reloader/
 	cp -a FF_Gotek-Bootloader-$(VER).rld flashfloppy_$(VER)/reloader/
 	$(MAKE) clean
-#	$(MAKE) touch
-#	cp -a FF.upd flashfloppy_$(VER)/FF_Touch-$(VER).upd
-#	cp -a FF.hex flashfloppy_$(VER)/FF_Touch-$(VER).hex
-#	$(MAKE) clean
 	cp -a COPYING flashfloppy_$(VER)/
 	cp -a README.md flashfloppy_$(VER)/
-	cp -a doc/*.md flashfloppy_$(VER)/doc/
 	zip -r flashfloppy_$(VER).zip flashfloppy_$(VER)
 
 mrproper: clean
