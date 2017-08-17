@@ -13,8 +13,20 @@ available on Ebay or from project webstores:
 - [CAB-12977 from SparkFun](https://www.sparkfun.com/products/12977)
 - Search "PL2303HX usb ttl adapter" on Ebay, available for around one dollar.
 
+![USB-TTL Adapter](assets/usbttl.jpg)
+
 The Gotek is then jumpered in system-bootloader mode and programmed
-from the host PC. This process is described, along with suitable
+from the host PC. See the below picture for wiring and jumper
+selection. This Gotek has had pins soldered to the programming
+header. It is possible to make the required connections with no
+soldering, but be careful that all wires are sufficiently well
+connected. Also note that the ordering of the connections
+(5V,GND,TX,RX) can vary across adapters, so be careful to note the
+ordering on your own.
+
+![Programming header](assets/programming_header.jpg)
+
+The programming process is described, along with suitable
 Windows software, on the
 [Cortex firmware webpage](https://cortexamigafloppydrive.wordpress.com).
 Of course, rather than using the Cortex HEX file, use the HEX file
