@@ -38,6 +38,10 @@
 #define I2C_ERROR_IRQ 34
 void IRQ_34(void) __attribute__((alias("IRQ_i2c_error")));
 
+/* I2C event ISR. */
+#define I2C_EVENT_IRQ 33
+void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
+
 /* DMA completion ISR. */
 #define DMA1_CH4_IRQ 14
 void IRQ_14(void) __attribute__((alias("IRQ_dma1_ch4_tc")));
@@ -50,8 +54,8 @@ static uint8_t i2c_dead;
 static void oled_init(void);
 static unsigned int oled_prep_buffer(void);
 
-/* Count of DMA completions. For synchronisation/flush. */
-static volatile uint8_t dma_count;
+/* Count of display-refresh completions. For synchronisation/flush. */
+static volatile uint8_t refresh_count;
 
 /* I2C data buffer. Data is DMAed to the I2C peripheral. */
 static uint32_t buffer[256/4];
@@ -86,6 +90,23 @@ static void IRQ_i2c_error(void)
     timer_cancel(&timeout_timer);
 
     lcd_init();
+}
+
+static void IRQ_i2c_event(void)
+{
+    uint16_t sr1 = i2c->sr1;
+
+    if (sr1 & I2C_SR1_SB) {
+        /* Send address. Clears SR1_SB. */
+        i2c->dr = i2c_addr << 1;
+    }
+
+    if (sr1 & I2C_SR1_ADDR) {
+        /* Read SR2 clears SR1_ADDR. */
+        (void)i2c->sr2;
+        /* No more events: data phase is driven by DMA. */
+        i2c->cr2 &= ~I2C_CR2_ITEVTEN;
+    }
 }
 
 /* Start an I2C DMA sequence. */
@@ -128,6 +149,9 @@ static unsigned int lcd_prep_buffer(void)
     uint8_t *q = (uint8_t *)buffer;
     unsigned int i, j;
 
+    /* We transmit complete display on every DMA. */
+    refresh_count++;
+
     for (i = 0; i < 2; i++) {
         emit8(&q, CMD_SETDDRADDR | (i*64), 0);
         for (j = 0; j < 16; j++)
@@ -148,8 +172,6 @@ static void IRQ_dma1_ch4_tc(void)
     /* Prepare the DMA buffer and start the next DMA sequence. */
     dma_sz = (i2c_addr == OLED_ADDR) ? oled_prep_buffer() : lcd_prep_buffer();
     dma_start(dma_sz);
-
-    dma_count++;
 }
 
 /* Wait for given status condition @s while also checking for errors. */
@@ -256,11 +278,8 @@ void lcd_backlight(bool_t on)
 
 void lcd_sync(void)
 {
-    uint8_t c = dma_count;
-    /* LCD: 2 IRQs: 1. text[*] -> buffer[]; 2. all Tx. 
-     * OLED: 3 IRQs: 1. text[0] -> buffer; 2. text[1] -> buffer; 3. all Tx. */
-    uint8_t wait = (i2c_addr == OLED_ADDR) ? 3 : 2;
-    while ((uint8_t)(dma_count - c) < wait)
+    uint8_t c = refresh_count;
+    while ((uint8_t)(refresh_count - c) < 2)
         cpu_relax();
 }
 
@@ -334,6 +353,11 @@ bool_t lcd_init(void)
         lcd_clear();
     }
 
+    /* Enable the Event IRQ. */
+    IRQx_set_prio(I2C_EVENT_IRQ, I2C_IRQ_PRI);
+    IRQx_clear_pending(I2C_EVENT_IRQ);
+    IRQx_enable(I2C_EVENT_IRQ);
+
     /* Enable the Error IRQ. */
     IRQx_set_prio(I2C_ERROR_IRQ, I2C_IRQ_PRI);
     IRQx_clear_pending(I2C_ERROR_IRQ);
@@ -351,13 +375,13 @@ bool_t lcd_init(void)
     timer_init(&timeout_timer, timeout_fn, NULL);
     timer_set(&timeout_timer, stk_add(stk_now(), DMA_TIMEOUT));
 
-    if (!i2c_start(i2c_addr))
-        goto fail;
-
     if (i2c_addr == OLED_ADDR) {
         oled_init();
         return TRUE;
     }
+
+    if (!i2c_start(i2c_addr))
+        goto fail;
 
     /* Initialise 4-bit interface, as in the datasheet. Do this synchronously
      * and with the required delays. */
@@ -446,14 +470,57 @@ static void oled_convert_text_row(char *pc)
 
 static uint8_t oled_row;
 
+static unsigned int oled_start_i2c(uint8_t *buf)
+{
+    static const uint8_t setup_addr_cmds[] = {
+        0x21, 0, 127, /* column address range: 0-127 */
+        0x22, 0, 3    /* page address range: 0-3 */
+    };
+
+    uint8_t *p = buf;
+    int i;
+
+    /* Set up the display address range. */
+    for (i = 0; i < sizeof(setup_addr_cmds); i++) {
+        *p++ = 0x80; /* Co=1, Command */
+        *p++ = setup_addr_cmds[i];
+    }
+
+    /* All subsequent bytes are data bytes. */
+    *p++ = 0x40;
+    oled_row = 0;
+
+    /* Start the I2C transaction. */
+    i2c->cr2 |= I2C_CR2_ITEVTEN;
+    i2c->cr1 |= I2C_CR1_START;
+
+    return p - buf;
+}
+
 /* Snapshot text buffer into the bitmap buffer. */
 static unsigned int oled_prep_buffer(void)
 {
-    /* Convert one row of text[] into buffer[] writes. */
-    oled_convert_text_row(text[oled_row]);
+    /* If we have completed a complete fill of the OLED display, start a new 
+     * I2C transaction. The OLED display seems to occasionally silently lose 
+     * a byte and then we lose sync with the display address. */
+    if (oled_row == 2) {
+        refresh_count++;
+        /* Wait for BTF. */
+        while (!(i2c->sr1 & I2C_SR1_BTF)) {
+            /* Any errors: bail and leave it to the Error ISR. */
+            if (i2c->sr1 & I2C_SR1_ERRORS)
+                return 0;
+        }
+        /* Send STOP. Clears SR1_TXE and SR1_BTF. */
+        i2c->cr1 |= I2C_CR1_STOP;
+        while (i2c->cr1 & I2C_CR1_STOP)
+            continue;
+        /* Kick off new I2C transaction. */
+        return oled_start_i2c((uint8_t *)buffer);
+    }
 
-    /* Do the other text[] row next time. */
-    oled_row ^= 1;
+    /* Convert one row of text[] into buffer[] writes. */
+    oled_convert_text_row(text[oled_row++]);
 
     return 256;
 }
@@ -477,13 +544,21 @@ static void oled_init(void)
         0xa4,       /* output follows ram contents */
         0xa6,       /* normal display output (inverse=off) */
         0x2e,       /* deactivate scroll */
-        0xaf,       /* display on */
-        0x21, 0, 127, /* column address range: 0-127 */
-        0x22, 0, 3    /* page address range: 0-3 */
+        0xaf        /* display on */
     };
 
     uint8_t *p = (uint8_t *)buffer;
     int i;
+
+    /* Disable I2C (currently in Standard Mode). */
+    i2c->cr1 = 0;
+
+    /* Fast Mode (400kHz). */
+    i2c->cr2 = I2C_CR2_FREQ(36);
+    i2c->ccr = I2C_CCR_FS | I2C_CCR_CCR(30);
+    i2c->trise = 12;
+    i2c->cr1 = I2C_CR1_PE;
+    i2c->cr2 |= I2C_CR2_ITERREN;
 
     /* Initialisation sequence for SSD1306. */
     for (i = 0; i < sizeof(init_cmds); i++) {
@@ -491,9 +566,8 @@ static void oled_init(void)
         *p++ = init_cmds[i];
     }
 
-    /* All subsequent bytes are data bytes, forever more. */
-    *p++ = 0x40;
-    oled_row = 0;
+    /* Start off the I2C transaction. */
+    p += oled_start_i2c(p);
 
     /* Send the initialisation command sequence by DMA. */
     i2c->cr2 |= I2C_CR2_DMAEN;

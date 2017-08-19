@@ -186,8 +186,8 @@ void EXC_unused(void);
 #define WDATA_IRQ_PRI         7
 #define RDATA_IRQ_PRI         8
 #define FLOPPY_IRQ_LO_PRI     9
-#define USB_IRQ_PRI          10
-#define I2C_IRQ_PRI          14
+#define I2C_IRQ_PRI          13
+#define USB_IRQ_PRI          14
 
 /*
  * Local variables:
