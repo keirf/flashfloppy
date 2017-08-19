@@ -37,12 +37,17 @@ touch: all
 dist:
 	rm -rf flashfloppy_*
 	mkdir -p flashfloppy_$(VER)/reloader
+	mkdir -p flashfloppy_$(VER)/alt
 	$(MAKE) clean
 	$(MAKE) gotek
 	cp -a FF_Gotek-$(VER).upd flashfloppy_$(VER)/
 	cp -a FF_Gotek-$(VER).hex flashfloppy_$(VER)/
 	cp -a FF_Gotek-Reloader-$(VER).upd flashfloppy_$(VER)/reloader/
 	cp -a FF_Gotek-Bootloader-$(VER).rld flashfloppy_$(VER)/reloader/
+	$(MAKE) clean
+	font_7x16=y $(MAKE) gotek
+	mv FF_Gotek-$(VER).upd FF_Gotek-7x16-$(VER).upd
+	cp -a FF_Gotek-7x16-$(VER).upd flashfloppy_$(VER)/alt/
 	$(MAKE) clean
 	cp -a COPYING flashfloppy_$(VER)/
 	cp -a README.md flashfloppy_$(VER)/
