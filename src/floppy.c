@@ -185,9 +185,12 @@ static struct dma_ring *dma_ring_alloc(void)
 
 static void floppy_set_fintf_mode(uint8_t fintf_mode)
 {
+    static const char * const fintf_name[] = { "Shugart", "PC" };
     struct drive *drv = &drive;
     uint32_t old_active;
     uint8_t outp;
+
+    printk("Interface: %s\n", fintf_name[fintf_mode]);
 
     IRQ_global_disable();
 

@@ -638,6 +638,7 @@ int floppy_main(void)
 int main(void)
 {
     FRESULT fres;
+    uint8_t fintf_mode;
 
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
@@ -652,10 +653,10 @@ int main(void)
     console_init();
     console_crash_on_input();
 
+    board_init();
+
     /* Wait for 5v power to stabilise before initing external peripherals. */
     delay_ms(200);
-
-    board_init();
 
     printk("\n** FlashFloppy v%s for Gotek\n", FW_VER);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
@@ -663,7 +664,11 @@ int main(void)
 
     speaker_init();
 
-    floppy_init(FINTF_SHUGART);
+    /* Jumper JC selects default floppy interface configuration:
+     *   - No Jumper: Shugart
+     *   - Jumpered:  PC */
+    fintf_mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_PC;
+    floppy_init(fintf_mode);
 
     display_init();
 
