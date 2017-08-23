@@ -13,7 +13,7 @@
 #define GPO_bus GPO_pushpull(_2MHz,O_FALSE)
 #define AFO_bus AFO_pushpull(_2MHz)
 
-#define m(pin) (1u<<(pin))
+#define m(bitnr) (1u<<(bitnr))
 
 /* A soft IRQ for handling step pulses. */
 static void drive_step_timer(void *_drv);
@@ -60,6 +60,13 @@ static struct drive {
     struct v2_slot *slot;
     uint8_t cyl, head;
     bool_t sel;
+#define outp_dskchg 0
+#define outp_index  1
+#define outp_trk0   2
+#define outp_wrprot 3
+#define outp_rdy    4
+#define outp_nr     5
+    uint8_t outp;
     struct {
         bool_t started; /* set by hi-irq, cleared by lo-irq */
         bool_t active;  /* set by hi-irq, cleared by step.timer */
@@ -92,7 +99,8 @@ static void rdata_stop(void);
 static void wdata_start(void);
 static void wdata_stop(void);
 
-static void floppy_change_outputs(uint16_t mask, uint8_t val);
+static void drive_change_output(
+    struct drive *drv, uint8_t outp, bool_t assert);
 
 struct exti_irq {
     uint8_t irq, pri;
@@ -105,20 +113,42 @@ struct exti_irq {
 #include "gotek/floppy.c"
 #endif
 
-static void floppy_change_outputs(uint16_t mask, uint8_t val)
+#define pin_unset 17
+const static uint8_t *fintf, fintfs[][outp_nr] = {
+    [FINTF_SHUGART] = {
+        [outp_dskchg] = pin_02,
+        [outp_index]  = pin_08,
+        [outp_trk0]   = pin_26,
+        [outp_wrprot] = pin_28,
+        [outp_rdy]    = pin_34 },
+    [FINTF_PC] = {
+        [outp_dskchg] = pin_34,
+        [outp_index]  = pin_08,
+        [outp_trk0]   = pin_26,
+        [outp_wrprot] = pin_28,
+        [outp_rdy]    = pin_unset }
+};
+
+static void drive_change_output(struct drive *drv, uint8_t outp, bool_t assert)
 {
+    uint16_t pin_mask = m(fintf[outp]);
     IRQ_global_disable();
-    if (val == O_TRUE)
-        gpio_out_active |= mask;
-    else
-        gpio_out_active &= ~mask;
-    if (drive.sel)
-        gpio_write_pins(gpio_out, mask, val);
+    if (assert) {
+        drv->outp |= m(outp);
+        gpio_out_active |= pin_mask;
+    } else {
+        drv->outp &= ~m(outp);
+        gpio_out_active &= ~pin_mask;
+    }
+    if (drv->sel)
+        gpio_write_pins(gpio_out, pin_mask, assert ? O_TRUE : O_FALSE);
     IRQ_global_enable();
 }
 
 void floppy_cancel(void)
 {
+    struct drive *drv = &drive;
+
     /* Initialised? Bail if not. */
     if (!dma_rd)
         return;
@@ -138,9 +168,12 @@ void floppy_cancel(void)
     dma_rd = dma_wr = NULL;
 
     /* Set outputs for empty drive. */
+    barrier();
     index.active = FALSE;
-    floppy_change_outputs(m(pin_index) | m(pin_rdy), O_FALSE);
-    floppy_change_outputs(m(pin_dskchg) | m(pin_wrprot), O_TRUE);
+    drive_change_output(drv, outp_index, FALSE);
+    drive_change_output(drv, outp_rdy,   FALSE);
+    drive_change_output(drv, outp_dskchg, TRUE);
+    drive_change_output(drv, outp_wrprot, TRUE);
 }
 
 static struct dma_ring *dma_ring_alloc(void)
@@ -150,25 +183,55 @@ static struct dma_ring *dma_ring_alloc(void)
     return dma;
 }
 
-void floppy_init(void)
+static void floppy_set_fintf_mode(uint8_t fintf_mode)
 {
+    struct drive *drv = &drive;
+    uint32_t old_active;
+    uint8_t outp;
+
+    IRQ_global_disable();
+
+    fintf = fintfs[fintf_mode];
+
+    old_active = gpio_out_active;
+    gpio_out_active = 0;
+    for (outp = 0; outp < outp_nr; outp++) {
+        if (drv->outp & m(outp)) {
+            uint16_t mask = m(fintf[outp]);
+            gpio_out_active |= mask;
+        }
+    }
+
+    gpio_write_pins(gpio_out, old_active & ~gpio_out_active, O_FALSE);
+    gpio_write_pins(gpio_out, ~old_active & gpio_out_active, O_TRUE);
+
+    IRQ_global_enable();
+}
+
+void floppy_init(uint8_t fintf_mode)
+{
+    struct drive *drv = &drive;
     const struct exti_irq *e;
     unsigned int i;
+
+    floppy_set_fintf_mode(fintf_mode);
 
     board_floppy_init();
 
     timer_init(&drive.step.timer, drive_step_timer, &drive);
 
-    gpio_configure_pin(gpio_out, pin_dskchg, GPO_bus);
-    gpio_configure_pin(gpio_out, pin_index,  GPO_bus);
-    gpio_configure_pin(gpio_out, pin_trk0,   GPO_bus);
-    gpio_configure_pin(gpio_out, pin_wrprot, GPO_bus);
-    gpio_configure_pin(gpio_out, pin_rdy,    GPO_bus);
+    gpio_configure_pin(gpio_out, pin_02, GPO_bus);
+    gpio_configure_pin(gpio_out, pin_08, GPO_bus);
+    gpio_configure_pin(gpio_out, pin_26, GPO_bus);
+    gpio_configure_pin(gpio_out, pin_28, GPO_bus);
+    gpio_configure_pin(gpio_out, pin_34, GPO_bus);
 
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
-    floppy_change_outputs(m(pin_dskchg) | m(pin_wrprot) | m(pin_trk0), O_TRUE);
+    drive_change_output(drv, outp_dskchg, TRUE);
+    drive_change_output(drv, outp_wrprot, TRUE);
+    drive_change_output(drv, outp_trk0,   TRUE);
 
     /* Configure physical interface interrupts. */
     for (i = 0, e = exti_irqs; i < ARRAY_SIZE(exti_irqs); i++, e++) {
@@ -199,6 +262,8 @@ void floppy_init(void)
 
 void floppy_insert(unsigned int unit, struct v2_slot *slot)
 {
+    struct drive *drv = &drive;
+
     arena_init();
 
     dma_rd = dma_ring_alloc();
@@ -236,7 +301,7 @@ void floppy_insert(unsigned int unit, struct v2_slot *slot)
      * Change of use of this memory space is fully serialised. */
     image->bufs.read_data = image->bufs.write_data;
 
-    drive.slot = slot;
+    drv->slot = slot;
 
     index.prev_time = stk_now();
     timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
@@ -286,7 +351,7 @@ void floppy_insert(unsigned int unit, struct v2_slot *slot)
     dma_wdata.cmar = (uint32_t)(unsigned long)dma_wr->buf;
 
     /* Drive is 'ready'. */
-    floppy_change_outputs(m(pin_rdy), O_TRUE);
+    drive_change_output(drv, outp_rdy, TRUE);
 }
 
 /* Called from IRQ context to stop the write stream. */
@@ -536,7 +601,7 @@ bool_t floppy_handle(void)
         drv->image = image;
         dma_rd->state = DMA_stopping;
         if (image->handler->write_track)
-            floppy_change_outputs(m(pin_wrprot), O_FALSE);
+            drive_change_output(drv, outp_wrprot, FALSE);
     }
 
     switch (dma_wr->state) {
@@ -594,13 +659,15 @@ bool_t floppy_handle(void)
 
 static void index_pulse(void *dat)
 {
+    struct drive *drv = &drive;
+
     index.active ^= 1;
     if (index.active) {
         index.prev_time = index.timer.deadline;
-        floppy_change_outputs(m(pin_index), O_TRUE);
+        drive_change_output(drv, outp_index, TRUE);
         timer_set(&index.timer, stk_add(index.prev_time, stk_ms(2)));
     } else {
-        floppy_change_outputs(m(pin_index), O_FALSE);
+        drive_change_output(drv, outp_index, FALSE);
         if (dma_rd->state != DMA_active) /* timer set from input flux stream */
             timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
     }
@@ -621,7 +688,7 @@ static void drive_step_timer(void *_drv)
         drv->cyl += drv->step.inward ? 1 : -1;
         timer_set(&drv->step.timer, stk_add(drv->step.start, DRIVE_SETTLE_MS));
         if (drv->cyl == 0)
-            floppy_change_outputs(m(pin_trk0), O_TRUE);
+            drive_change_output(drv, outp_trk0, TRUE);
         /* New state last, as that lets hi-pri IRQ start another step. */
         barrier();
         drv->step.state = STEP_settling;

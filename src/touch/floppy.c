@@ -29,11 +29,11 @@ static uint16_t gpio_out_active;
 
 /* Outputs are buffered, thus do *not* need to be 5v tolerant. */
 #define gpio_out gpiob
-#define pin_dskchg  3
-static uint8_t pin_index; /* differs across board revisions */
-#define pin_trk0    5
-#define pin_wrprot 11
-#define pin_rdy    12
+#define pin_02      3
+static uint8_t pin_08; /* differs across board revisions */
+#define pin_26      5
+#define pin_28     11
+#define pin_34     12
 
 #define gpio_data gpiob
 
@@ -146,15 +146,15 @@ static void board_floppy_init(void)
 {
     switch (board_id) {
     case BRDREV_LC150:
-        pin_index = 4;
+        pin_08 = 4;
         input_init_default();
         break;
     case BRDREV_MM150:
-        pin_index = 2;
+        pin_08 = 2;
         input_init_default();
         break;
     case BRDREV_TB160:
-        pin_index = 1;
+        pin_08 = 1;
         input_init_tb160();
         break;
     }
@@ -171,7 +171,7 @@ static void IRQ_input_changed(void)
 
     /* DSKCHG asserts on any falling edge of STEP. We deassert on any edge. */
     if ((changed & m(inp_step)) && sel && (dma_rd != NULL))
-        floppy_change_outputs(m(pin_dskchg), O_FALSE);
+        drive_change_output(drv, outp_dskchg, FALSE);
     /* Handle step request. */
     if ((changed & inp & m(inp_step)) /* Rising edge on STEP */
         && sel                        /* Drive is selected */
@@ -182,7 +182,7 @@ static void IRQ_input_changed(void)
             /* Valid step request for this drive: start the step operation. */
             drv->step.start = stk_now();
             drv->step.state = STEP_started;
-            floppy_change_outputs(m(pin_trk0), O_FALSE);
+            drive_change_output(drv, outp_trk0, FALSE);
             if (dma_rd != NULL)
                 rdata_stop();
             IRQx_set_pending(STEP_IRQ);

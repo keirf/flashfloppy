@@ -21,11 +21,11 @@
 
 /* Output pins. */
 #define gpio_out gpiob
-#define pin_dskchg  7
-#define pin_index   8
-#define pin_trk0    6
-#define pin_wrprot  5
-#define pin_rdy     3
+#define pin_02      7
+#define pin_08      8
+#define pin_26      6
+#define pin_28      5
+#define pin_34      3
 
 #define gpio_data gpioa
 
@@ -155,8 +155,8 @@ static void IRQ_STEP_changed(void)
         return;
 
     /* DSKCHG asserts on any falling edge of STEP. We deassert on any edge. */
-    if ((gpio_out_active & m(pin_dskchg)) && (dma_rd != NULL))
-        floppy_change_outputs(m(pin_dskchg), O_FALSE);
+    if ((drv->outp & m(outp_dskchg)) && (dma_rd != NULL))
+        drive_change_output(drv, outp_dskchg, FALSE);
 
     if (!(idr_a & m(pin_step))   /* Not rising edge on STEP? */
         || (drv->step.state & STEP_active)) /* Already mid-step? */
@@ -170,8 +170,8 @@ static void IRQ_STEP_changed(void)
     /* Valid step request for this drive: start the step operation. */
     drv->step.start = stk_now();
     drv->step.state = STEP_started;
-    if (gpio_out_active & m(pin_trk0))
-        floppy_change_outputs(m(pin_trk0), O_FALSE);
+    if (drv->outp & m(outp_trk0))
+        drive_change_output(drv, outp_trk0, FALSE);
     if (dma_rd != NULL)
         rdata_stop();
     IRQx_set_pending(STEP_IRQ);
@@ -191,11 +191,13 @@ static void IRQ_SIDE_changed(void)
 
 static void IRQ_WGATE_changed(void)
 {
+    struct drive *drv = &drive;
+
     /* Clear WGATE-changed flag. */
     exti->pr = m(pin_wgate);
 
     /* If WRPROT line is asserted then we ignore WGATE. */
-    if (gpio_out_active & m(pin_wrprot))
+    if (drv->outp & m(outp_wrprot))
         return;
 
     if ((gpiob->idr & m(pin_wgate))      /* WGATE off? */

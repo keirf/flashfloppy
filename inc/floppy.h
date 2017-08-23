@@ -13,6 +13,9 @@
 #define DRIVE_MS_PER_REV (60000u/DRIVE_RPM)
 #define DRIVE_SETTLE_MS 12
 
+#define FINTF_SHUGART 0
+#define FINTF_PC      1
+
 struct adf_image {
     uint32_t trk_off;
     uint16_t trk_pos, trk_len;
@@ -115,7 +118,7 @@ void image_write_track(struct image *im, bool_t flush);
 /* Rotational position of last-generated flux (SYSCLK ticks past index). */
 uint32_t image_ticks_since_index(struct image *im);
 
-void floppy_init(void);
+void floppy_init(uint8_t fintf_mode);
 void floppy_insert(unsigned int unit, struct v2_slot *slot);
 void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */

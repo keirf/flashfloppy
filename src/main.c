@@ -663,7 +663,7 @@ int main(void)
 
     speaker_init();
 
-    floppy_init();
+    floppy_init(FINTF_SHUGART);
 
     display_init();
 
