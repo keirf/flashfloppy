@@ -1,6 +1,6 @@
 
 PROJ = FlashFloppy
-VER = v0.5.0a
+VER = v0.6.0a
 
 SUBDIRS += src bootloader reloader
 
@@ -51,6 +51,7 @@ dist:
 	$(MAKE) clean
 	cp -a COPYING flashfloppy_$(VER)/
 	cp -a README.md flashfloppy_$(VER)/
+	cp -a RELEASE_NOTES flashfloppy_$(VER)/
 	zip -r flashfloppy_$(VER).zip flashfloppy_$(VER)
 
 mrproper: clean

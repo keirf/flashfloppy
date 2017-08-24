@@ -1,0 +1,102 @@
+************************************
+** FlashFloppy Release Notes
+** Keir Fraser <keir.xen@gmail.com>
+************************************
+
+** v0.6.0a - 24 August 2017
+** PC Interface Support. OLED Fixes & Narrower Font Support.
+ - Allow PC Floppy Interface (DSKCHG on pin 34) to be selected via a
+   jumper at position JC. Default interface (no jumper at JC) remains
+   Shugart, as compatible with many non-PC systems including Amiga.
+ - Kingstener: Support narrower 7x16 OLED font. Allows entire display to be
+   visible through the 3-digit cutout in the Gotek case. This is a separate
+   firmware build, update file is in distribution subfolder alt/.
+ - OLED reliability fixes.
+
+-------------------------------------------------------------------------
+
+** v0.5.0a - 15 August 2017
+** Greater stability on A1200 and accelerated Amigas
+ - I/O latency reduced on drive select/deselect. Results in more reliable
+   drive detection on A1200, with and without accelerator, and on warm
+   and cold reboots.
+
+-------------------------------------------------------------------------
+
+** v0.4.4a - 14 August 2017
+ - Improvements to power-on initialisation: initialise the floppy
+   interface earlier, start on cylinder 0, and don't trigger a spurious
+   step command
+
+** v0.4.3a - 13 August 2017
+ - Fix DSKCHG handling. Should make disk insertion more reliable,
+   especially on Amiga with noclick patch.
+
+** v0.4.2a - 11 August 2017
+ - More efficient I2C handling for OLED and fix synch during flash
+   update process.
+
+** v0.4.1a - 11 August 2017
+ - Improve I2C robustness
+
+** v0.4.0a - 10 August 2017
+** 128x32 I2C OLED Display support
+ - Support for 0.91" I2C OLED (128x32, SSD1306 controller). Connect in
+   the same way as a 1602 LCD module, including 4.7k pullups to VCC on
+   the SCL and SDA lines.
+ - Various optimisations and bug fixes.
+
+-------------------------------------------------------------------------
+
+** v0.3.2a - 7 August 2017
+ - Fix buffer overrun in HFE image handler when cannot read data from
+   USB stick fast enough.
+ - Update the Amiga AUTOBOOT.HFE with latest changes from upstream,
+   and bump version number.
+
+** v0.3.1a - 7 August 2017
+ - Fix buffer overflow when copying long filenames in no-config mode.
+
+** v0.3.0a - 6 August 2017
+** Config-less & indexed operation
+ - Operate with no AUTOBOOT.HFE (requires HXCSDFE.CFG in 'indexed
+   mode'): files must be called DSKA0000.HFE, DSKA0001.HFE, and so
+   on. ADF images are also supported.
+ - Operate with no HXCSDFE.CFG! Buttons will cycle through all valid
+   images in the USB root folder.
+ - Step-pulse speaker is supported on output JB. Recommend buffering
+   through an NPN transistor unless using a piezo speaker (high
+   resistance).
+ - Long filenames scroll on the 1602 LCD
+ - LCD backlight timer, scroll speed, and step speaker volume all
+   configured via HXCSDFE.CFG (when available)
+ - Hack workaround for X-Copy problems. Verified writes/copies are now
+   reliable!
+
+-------------------------------------------------------------------------
+
+** v0.2.1a - 26 July 2017
+** Fixes for LCD handling
+ - More reliable startup
+ - Fix crashes and deadlocks in operation
+ - More efficient command transmission (one I2C transaction for
+   successive commands)
+ - Support 0x38-0x3F I2C addresses
+
+** v0.2.a - 25 July 2017
+** 1602 LCD + Drive Logic Fixes
+ - 1602 LCD handling: Will recognise a 1602 LCD with "I2C backpack" as
+   used (and connected) for the usual "HxC LCD mod". Does not yet
+   scroll long filenames, this will be added shortly.
+ - Drive Logic: Will now play nicely in multi-drive systems and make
+   AmigaDOS much less confused (no more DF1-3:BAD type messages!)
+ - The bootloader is also modified to talk to the 1602 LCD: if you
+   want this feature then you must also update the bootloader by doing
+   a full serial or USB/DFU flash of the main HEX file.
+
+-------------------------------------------------------------------------
+
+** v0.1a - 21 July 2017
+** Initial release
+ - Works only as sole drive in a host system (eg disconnect external
+   drives!)
