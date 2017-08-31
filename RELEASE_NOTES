@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.6.1a - 31 August 2017
+ - Support 2-digit LED display
+ - Suppress LCD update of side number when another drive is selected
+
 ** v0.6.0a - 24 August 2017
 ** PC Interface Support. OLED Fixes & Narrower Font Support.
  - Allow PC Floppy Interface (DSKCHG on pin 34) to be selected via a
