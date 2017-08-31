@@ -459,7 +459,6 @@ static void cfg_update(uint8_t slot_mode)
 /* Based on button presses, change which floppy image is selected. */
 static void choose_new_image(uint8_t init_b)
 {
-    char msg[4];
     uint8_t b, prev_b;
     stk_time_t last_change = 0;
     uint32_t i, changes = 0;
@@ -484,7 +483,7 @@ static void choose_new_image(uint8_t init_b)
             i = cfg.slot_nr = 0;
             switch (display_mode) {
             case DM_LED_7SEG:
-                led_7seg_write("000");
+                led_7seg_write_decimal(0);
                 break;
             case DM_LCD_1602:
                 cfg_update(CFG_KEEP_SLOT_NR);
@@ -509,8 +508,7 @@ static void choose_new_image(uint8_t init_b)
         cfg.slot_nr = i;
         switch (display_mode) {
         case DM_LED_7SEG:
-            snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
-            led_7seg_write(msg);
+            led_7seg_write_decimal(cfg.slot_nr);
             break;
         case DM_LCD_1602:
             cfg_update(CFG_KEEP_SLOT_NR);
@@ -551,8 +549,7 @@ int floppy_main(void)
 
         switch (display_mode) {
         case DM_LED_7SEG:
-            snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
-            led_7seg_write(msg);
+            led_7seg_write_decimal(cfg.slot_nr);
             break;
         case DM_LCD_1602:
             lcd_write_slot();
@@ -682,7 +679,7 @@ int main(void)
 
         switch (display_mode) {
         case DM_LED_7SEG:
-            led_7seg_write("F-F");
+            led_7seg_write_string((led_7seg_nr_digits() == 3) ? "F-F" : "FF");
             break;
         case DM_LCD_1602:
             lcd_clear();

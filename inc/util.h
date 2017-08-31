@@ -121,8 +121,9 @@ extern uint8_t display_mode;
 #ifdef BUILD_GOTEK
 
 /* Gotek: 3-digit 7-segment display */
-bool_t led_7seg_init(void);
-void led_7seg_write(const char *p);
+void led_7seg_init(void);
+void led_7seg_write_string(const char *p);
+void led_7seg_write_decimal(unsigned int val);
 void led_7seg_display_setting(bool_t enable);
 int led_7seg_nr_digits(void);
 
@@ -141,8 +142,9 @@ bool_t usbh_msc_connected(void);
 
 #else /* !BUILD_GOTEK */
 
-static inline bool_t led_7seg_init(void) { return FALSE; }
-static inline void led_7seg_write(const char *p) {}
+static inline void led_7seg_init(void) {}
+static inline void led_7seg_write_string(const char *p) {}
+static inline void led_7seg_write_decimal(unsigned int val) {}
 static inline void led_7seg_display_setting(bool_t enable) {}
 static inline int led_7seg_nr_digits(void) { return 0; }
 

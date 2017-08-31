@@ -92,7 +92,7 @@ static void msg_display(const char *p)
     printk("[%s]\n", p);
     switch (display_mode) {
     case DM_LED_7SEG:
-        led_7seg_write(p);
+        led_7seg_write_string(p);
         break;
     case DM_LCD_1602:
         lcd_write(6, 1, 0, p);

@@ -11,18 +11,19 @@
 
 uint8_t display_mode;
 
-static const char * const dm_name[] = {
-    "None",
-    "1602 LCD",
-    "7-Seg LED"
-};
-
 void display_init(void)
 {
-    display_mode = (lcd_init() ? DM_LCD_1602
-                    : led_7seg_init() ? DM_LED_7SEG
-                    : DM_NONE);
-    printk("** Display: %s\n\n", dm_name[display_mode]);
+    char name[20];
+
+    if (lcd_init()) {
+        display_mode = DM_LCD_1602;
+        snprintf(name, sizeof(name), "1602 LCD");
+    } else {
+        led_7seg_init();
+        display_mode = DM_LED_7SEG;
+        snprintf(name, sizeof(name), "%u-Digit 7-Seg LED");
+    }
+    printk("** Display: %s\n\n", name);
 }
 
 /*
