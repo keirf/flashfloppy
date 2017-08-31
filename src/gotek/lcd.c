@@ -473,6 +473,7 @@ static uint8_t oled_row;
 static unsigned int oled_start_i2c(uint8_t *buf)
 {
     static const uint8_t setup_addr_cmds[] = {
+        0x20, 0,      /* horizontal addressing mode */
         0x21, 0, 127, /* column address range: 0-127 */
         0x22, 0, 3    /* page address range: 0-3 */
     };
@@ -528,13 +529,11 @@ static unsigned int oled_prep_buffer(void)
 static void oled_init(void)
 {
     static const uint8_t init_cmds[] = {
-        0xae,       /* display off */
         0xd5, 0x80, /* default clock */
         0xa8, 31,   /* multiplex ratio (lcd height - 1) */
         0xd3, 0x00, /* display offset = 0 */
         0x40,       /* display start line = 0 */
         0x8d, 0x14, /* enable charge pump */
-        0x20, 0x00, /* horizontal addressing mode */
         0xa1,       /* segment mapping (reverse) */
         0xc8,       /* com scan direction (decrement) */
         0xda, 0x02, /* com pins configuration */
