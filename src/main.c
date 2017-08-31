@@ -73,19 +73,19 @@ static uint8_t lcd_cyl, lcd_side;
 static int32_t lcd_update_ticks;
 static void lcd_write_track_info(bool_t force)
 {
-    uint8_t cyl, side;
+    uint8_t cyl, side, sel;
     char msg[17];
     if (display_mode != DM_LCD_1602)
         return;
-    floppy_get_track(&cyl, &side);
+    floppy_get_track(&cyl, &side, &sel);
     cyl = min_t(uint8_t, cyl, 99);
     side = min_t(uint8_t, side, 1);
-    if (force || (cyl != lcd_cyl) || (side != lcd_side)) {
+    if (force || (cyl != lcd_cyl) || ((side != lcd_side) && sel)) {
         snprintf(msg, sizeof(msg), "T:%02u S:%u", cyl, side);
         lcd_write(8, 1, 0, msg);
+        lcd_cyl = cyl;
+        lcd_side = side;
     }
-    lcd_cyl = cyl;
-    lcd_side = side;
 }
 
 /* Scroll long filename within 16-character window. */
