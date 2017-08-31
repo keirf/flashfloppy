@@ -483,8 +483,8 @@ static void choose_new_image(uint8_t init_b)
         if (!(b ^ (B_LEFT|B_RIGHT))) {
             i = cfg.slot_nr = 0;
             switch (display_mode) {
-            case DM_LED_3DIG:
-                led_3dig_write("000");
+            case DM_LED_7SEG:
+                led_7seg_write("000");
                 break;
             case DM_LCD_1602:
                 cfg_update(CFG_KEEP_SLOT_NR);
@@ -508,9 +508,9 @@ static void choose_new_image(uint8_t init_b)
         }
         cfg.slot_nr = i;
         switch (display_mode) {
-        case DM_LED_3DIG:
+        case DM_LED_7SEG:
             snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
-            led_3dig_write(msg);
+            led_7seg_write(msg);
             break;
         case DM_LCD_1602:
             cfg_update(CFG_KEEP_SLOT_NR);
@@ -550,9 +550,9 @@ int floppy_main(void)
         fs = NULL;
 
         switch (display_mode) {
-        case DM_LED_3DIG:
+        case DM_LED_7SEG:
             snprintf(msg, sizeof(msg), "%03u", cfg.slot_nr);
-            led_3dig_write(msg);
+            led_7seg_write(msg);
             break;
         case DM_LCD_1602:
             lcd_write_slot();
@@ -618,10 +618,10 @@ int floppy_main(void)
             }
 
             /* Flash the LED display to indicate loading the new image. */
-            if ((b == 0) && (display_mode == DM_LED_3DIG)) {
-                led_3dig_display_setting(FALSE);
+            if ((b == 0) && (display_mode == DM_LED_7SEG)) {
+                led_7seg_display_setting(FALSE);
                 delay_ms(200);
-                led_3dig_display_setting(TRUE);
+                led_7seg_display_setting(TRUE);
                 b = buttons;
             }
         } while (b != 0);
@@ -681,8 +681,8 @@ int main(void)
     for (;;) {
 
         switch (display_mode) {
-        case DM_LED_3DIG:
-            led_3dig_write("F-F");
+        case DM_LED_7SEG:
+            led_7seg_write("F-F");
             break;
         case DM_LCD_1602:
             lcd_clear();

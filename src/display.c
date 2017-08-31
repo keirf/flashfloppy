@@ -14,13 +14,13 @@ uint8_t display_mode;
 static const char * const dm_name[] = {
     "None",
     "1602 LCD",
-    "3-digit LED"
+    "7-Seg LED"
 };
 
 void display_init(void)
 {
     display_mode = (lcd_init() ? DM_LCD_1602
-                    : led_3dig_init() ? DM_LED_3DIG
+                    : led_7seg_init() ? DM_LED_7SEG
                     : DM_NONE);
     printk("** Display: %s\n\n", dm_name[display_mode]);
 }

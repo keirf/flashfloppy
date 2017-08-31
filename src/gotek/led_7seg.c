@@ -1,5 +1,5 @@
 /*
- * led_3dig.c
+ * led_7seg.c
  * 
  * Drive 3-digit 7-segment display via TM1651 driver IC.
  * I2C-style serial protocol: DIO=PB10, CLK=PB11
@@ -7,6 +7,9 @@
  * TM1651 specified f_max is 500kHz with 50% duty cycle, so clock should change 
  * change value no more often than 1us. We clock with half-cycle 20us so we
  * are very conservative.
+ * 
+ * Drive 2-digit 7-segment display via a pair of 74HC164 shift registers.
+ * DATA=PB10, CLK=PB11.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -119,12 +122,12 @@ static bool_t send_cmd(uint8_t cmd)
     return fail;
 }
 
-void led_3dig_display_setting(bool_t enable)
+void led_7seg_display_setting(bool_t enable)
 {
     send_cmd(enable ? 0x88 + BRIGHTNESS : 0x80);
 }
 
-void led_3dig_write(const char *p)
+void led_7seg_write(const char *p)
 {
     bool_t fail = TRUE;
     uint8_t d[3], c;
@@ -156,7 +159,7 @@ void led_3dig_write(const char *p)
     }
 }
 
-bool_t led_3dig_init(void)
+bool_t led_7seg_init(void)
 {
     set_dat(HIGH);
     set_clk(HIGH);
@@ -168,7 +171,7 @@ bool_t led_3dig_init(void)
         return FALSE;
 
     /* Clear the registers. */
-    led_3dig_write("    ");
+    led_7seg_write("    ");
 
     /* Display control: brightness. */
     send_cmd(0x88 + BRIGHTNESS);

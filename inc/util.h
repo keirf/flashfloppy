@@ -116,14 +116,15 @@ void display_init(void);
 extern uint8_t display_mode;
 #define DM_NONE     0
 #define DM_LCD_1602 1
-#define DM_LED_3DIG 2
+#define DM_LED_7SEG 2
 
 #ifdef BUILD_GOTEK
 
 /* Gotek: 3-digit 7-segment display */
-bool_t led_3dig_init(void);
-void led_3dig_write(const char *p);
-void led_3dig_display_setting(bool_t enable);
+bool_t led_7seg_init(void);
+void led_7seg_write(const char *p);
+void led_7seg_display_setting(bool_t enable);
+int led_7seg_nr_digits(void);
 
 /* Gotek: I2C 16x2 LCD */
 bool_t lcd_init(void);
@@ -140,9 +141,10 @@ bool_t usbh_msc_connected(void);
 
 #else /* !BUILD_GOTEK */
 
-static inline bool_t led_3dig_init(void) { return FALSE; }
-static inline void led_3dig_write(const char *p) {}
-static inline void led_3dig_display_setting(bool_t enable) {}
+static inline bool_t led_7seg_init(void) { return FALSE; }
+static inline void led_7seg_write(const char *p) {}
+static inline void led_7seg_display_setting(bool_t enable) {}
+static inline int led_7seg_nr_digits(void) { return 0; }
 
 static inline bool_t lcd_init(void) { return FALSE; }
 static inline void lcd_clear(void) {}

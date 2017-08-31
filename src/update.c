@@ -91,8 +91,8 @@ static void msg_display(const char *p)
 {
     printk("[%s]\n", p);
     switch (display_mode) {
-    case DM_LED_3DIG:
-        led_3dig_write(p);
+    case DM_LED_7SEG:
+        led_7seg_write(p);
         break;
     case DM_LCD_1602:
         lcd_write(6, 1, 0, p);
@@ -210,8 +210,8 @@ fail:
 static void display_setting(bool_t on)
 {
     switch (display_mode) {
-    case DM_LED_3DIG:
-        led_3dig_display_setting(on);
+    case DM_LED_7SEG:
+        led_7seg_display_setting(on);
         break;
     case DM_LCD_1602:
         lcd_backlight(on);
@@ -286,7 +286,7 @@ int main(void)
 
     display_init();
     switch (display_mode) {
-    case DM_LED_3DIG:
+    case DM_LED_7SEG:
         msg_display(is_reloader ? "RLD" : "UPD");
         break;
     case DM_LCD_1602:
