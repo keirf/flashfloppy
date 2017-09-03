@@ -1,5 +1,10 @@
 # Usage
 
+- [Modes of operation](#modes-of-operation)
+- [Speaker](#speaker)
+- [LCD Display](#lcd-display)
+- [OLED Display](#oled-display)
+
 ## Modes of operation
 
 FlashFloppy supports three different modes of operation:
@@ -80,7 +85,7 @@ can differ on other NPN transistors).
 
 ## LCD Display
 
-As an alternative to the Gotek 3-digit display, FlashFloppy supports
+As an alternative to the Gotek 7-segment display, FlashFloppy supports
 the ubiquitous 1602 LCD with I2C backpack board. These are available
 from many Ebay sellers. The connections should be made just as for HxC
 Gotek firmware, including pullup resistors (if required - see below).
@@ -106,3 +111,17 @@ backside of the Gotek PCB between VCC and each of SDA and
 SCL. Alternatively can be soldered to the back of the I2C module
 header as below.
 ![LCD Pullup Resistors](assets/pullups.jpg)
+
+## OLED Display
+
+Another alternative to the Gotek 7-segment display is a 0.91" 128x32
+display, as sold for Arduino projects by many Ebay sellers. You will
+require a display with I2C interface: you should see it has a 4-pin
+header marked GND, VCC, SCL, SDA.
+
+These displays can simply connect to the 7-segment display's header,
+reusing the existing jumper wires, as in the pictires below.
+
+![OLED Display Front](assets/oled1.jpg)
+
+![OLED Display Rear](assets/oled2.jpg)
