@@ -545,6 +545,10 @@ static void oled_init(void)
         0x2e,       /* deactivate scroll */
         0xaf        /* display on */
     };
+    /* NB. Changes for 128x64 display: 0xa8, 63, 0xda, 0x12, 0x81, 0xcf. 
+     * Otherwise above settings create a double-height 128x32 viewport
+     * utilising alternate display lines (which is a sane fallback). 
+     * NB. 128x64 displays may have I2C address 0x3c same as 128x32 display. */
 
     uint8_t *p = (uint8_t *)buffer;
     int i;
