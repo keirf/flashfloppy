@@ -180,11 +180,17 @@ static void IRQ_STEP_changed(void)
 static void IRQ_SIDE_changed(void)
 {
     struct drive *drv = &drive;
+    uint8_t hd;
 
     /* Clear SIDE-changed flag. */
     exti->pr = m(pin_side);
 
-    drv->head = !(gpiob->idr & m(pin_side));
+    /* Has SIDE actually changed? */
+    hd = !(gpiob->idr & m(pin_side));
+    if (hd == drv->head)
+        return;
+
+    drv->head = hd;
     if (dma_rd != NULL)
         rdata_stop();
 }
