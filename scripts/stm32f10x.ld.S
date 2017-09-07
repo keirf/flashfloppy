@@ -35,13 +35,13 @@ SECTIONS
 
   .bss : {
     . = ALIGN(8);
-    _sbss = .;
     _irq_stackbottom = .;
     . = . + 512;
     _irq_stacktop = .;
     _thread_stackbottom = .;
     . = . + 1024;
     _thread_stacktop = .;
+    _sbss = .;
     *(.bss)
     *(.bss*)
     . = ALIGN(4);
