@@ -21,6 +21,9 @@ typedef char bool_t;
 #define TRUE 1
 #define FALSE 0
 
+#define LONG_MAX ((long int)((~0UL)>>1))
+#define LONG_MIN ((long int)~LONG_MAX)
+
 #ifndef offsetof
 #define offsetof(a,b) __builtin_offsetof(a,b)
 #endif
@@ -65,6 +68,9 @@ int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strrchr(const char *s, int c);
 int tolower(int c);
+int isspace(int c);
+
+long int strtol(const char *nptr, char **endptr, int base);
 
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));
