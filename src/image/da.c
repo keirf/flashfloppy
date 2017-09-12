@@ -289,6 +289,11 @@ static void da_write_track(struct image *im, bool_t flush)
                 }
                 printk("D-A LBA %08x\n", dass.lba_base);
                 break;
+            case CMD_SET_CYL:
+                printk("D-A Cyl A=%u B=%u\n", dac->param[0], dac->param[1]);
+                for (i = 0; i < 2; i++)
+                    floppy_set_cyl(i, dac->param[i]);
+                break;
             default:
                 printk("Unexpected DA Cmd %02x\n", dac->cmd);
                 break;

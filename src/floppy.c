@@ -588,6 +588,12 @@ static bool_t dma_rd_handle(struct drive *drv)
     return FALSE;
 }
 
+void floppy_set_cyl(uint8_t unit, uint8_t cyl)
+{
+    if (unit == 0)
+        drive.cyl = cyl;
+}
+
 void floppy_get_track(uint8_t *p_cyl, uint8_t *p_side, uint8_t *p_sel)
 {
     *p_cyl = drive.cyl;
