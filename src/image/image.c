@@ -32,33 +32,54 @@ bool_t image_valid(FILINFO *fp)
     return FALSE;
 }
 
+static bool_t try_handler(struct image *im, const struct v2_slot *slot,
+                          const struct image_handler *handler)
+{
+    BYTE mode;
+
+    im->handler = im->_handler = handler;
+
+    mode = FA_READ | FA_OPEN_EXISTING;
+    if (handler->write_track != NULL)
+        mode |= FA_WRITE;
+    fatfs_from_slot(&im->fp, slot, mode);
+    
+    return handler->open(im);
+}
+
 bool_t image_open(struct image *im, const struct v2_slot *slot)
 {
+    static const struct image_handler * const image_handlers[] = {
+        &hfe_image_handler, &adf_image_handler
+    };
+
     char ext[4];
     struct image_bufs bufs = im->bufs;
-    BYTE mode;
+    const struct image_handler *hint;
+    int i;
 
     /* Reinitialise image structure, except for static buffers. */
     memset(im, 0, sizeof(*im));
     im->bufs = bufs;
 
+    /* Extract filename extension (if available). */
     memcpy(ext, slot->type, 3);
     ext[3] = '\0';
 
-    if (!strcmp(ext, "adf"))
-        im->handler = &adf_image_handler;
-    else if (!strcmp(ext, "hfe"))
-        im->handler = &hfe_image_handler;
-    else
-        return FALSE;
+    /* Use the extension as a hint to the correct image handler. */
+    hint = (!strcmp(ext, "adf") ? &adf_image_handler
+            : !strcmp(ext, "hfe") ? &hfe_image_handler
+            : NULL);
+    if (hint && try_handler(im, slot, hint))
+        return TRUE;
 
-    im->_handler = im->handler;
-    mode = FA_READ | FA_OPEN_EXISTING;
-    if (im->handler->write_track != NULL)
-        mode |= FA_WRITE;
-    fatfs_from_slot(&im->fp, slot, mode);
-    
-    return im->handler->open(im);
+    /* Filename extension hinting failed: walk the handler list. */
+    for (i = 0; i < ARRAY_SIZE(image_handlers); i++) {
+        if (try_handler(im, slot, image_handlers[i]))
+            return TRUE;
+    }
+
+    return FALSE;
 }
 
 bool_t image_seek_track(
