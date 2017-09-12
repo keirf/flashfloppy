@@ -717,7 +717,7 @@ static void IRQ_step(void)
     if (drv->step.state == STEP_started) {
         timer_cancel(&drv->step.timer);
         drv->step.state = STEP_latched;
-        timer_set(&drv->step.timer, stk_add(drv->step.start, stk_ms(2)));
+        timer_set(&drv->step.timer, stk_add(drv->step.start, stk_ms(1)));
     }
 }
 
