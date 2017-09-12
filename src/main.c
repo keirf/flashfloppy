@@ -29,6 +29,7 @@ static struct {
 static uint8_t cfg_mode;
 #define CFG_none      0 /* Iterate through all images in root. */
 #define CFG_hxc       1 /* Operation based on HXCSDFE.CFG. */
+#define CFG_lastidx   2 /* remember last image but dont store any config. */
 
 uint8_t board_id;
 
@@ -217,8 +218,17 @@ static uint8_t cfg_init(void)
     FRESULT fr;
 
     fr = F_try_open(&fs->file, "HXCSDFE.CFG", FA_READ);
-    if (fr)
-        return CFG_none;
+    if (fr) {
+        char slot[10];
+        cfg.slot_nr = 0;
+        fr = F_try_open(&fs->file, "LASTDISK.IDX", FA_READ|FA_WRITE);
+        if (fr)
+            return CFG_none;
+        F_read(&fs->file, slot, sizeof(slot), NULL);
+        F_close(&fs->file);
+        cfg.slot_nr = strtol(slot, NULL, 10);
+        return CFG_lastidx;
+    }
     fatfs_to_slot(&cfg.hxcsdfe, &fs->file, "HXCSDFE.CFG");
     F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
     F_close(&fs->file);
@@ -253,7 +263,7 @@ static void no_cfg_update(uint8_t slot_mode)
 
         /* Populate slot_map[]. */
         memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
-        cfg.slot_nr = cfg.max_slot_nr = 0;
+        cfg.max_slot_nr = 0;
         for (F_findfirst(&fs->dp, &fs->fp, "", "*.*");
              fs->fp.fname[0] != '\0';
              F_findnext(&fs->dp, &fs->fp)) {
@@ -267,8 +277,19 @@ static void no_cfg_update(uint8_t slot_mode)
         if (!cfg.max_slot_nr)
             F_die();
         cfg.max_slot_nr--;
+        /* Select last disk_index if not greater than available slots. */
+        cfg.slot_nr = (cfg.slot_nr <= cfg.max_slot_nr) ? cfg.slot_nr : 0;
     }
 
+    if ((cfg_mode == CFG_lastidx) && (slot_mode == CFG_WRITE_SLOT_NR)) {
+        char slot[10];
+        snprintf(slot, sizeof(slot), "%u", cfg.slot_nr);
+        F_open(&fs->file, "LASTDISK.IDX", FA_WRITE);
+        F_write(&fs->file, slot, strnlen(slot, sizeof(slot)), NULL);
+        F_truncate(&fs->file);
+        F_close(&fs->file);
+    }
+    
     /* Populate current slot. */
     i = 0;
     for (F_findfirst(&fs->dp, &fs->fp, "", "*.*");
@@ -448,6 +469,7 @@ static void cfg_update(uint8_t slot_mode)
 {
     switch (cfg_mode) {
     case CFG_none:
+    case CFG_lastidx:
         no_cfg_update(slot_mode);
         break;
     case CFG_hxc:
