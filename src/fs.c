@@ -103,6 +103,12 @@ void F_lseek(FIL *fp, DWORD ofs)
     handle_fr(fr);
 }
 
+void F_truncate(FIL *fp)
+{
+    FRESULT fr = f_truncate(fp);
+    handle_fr(fr);
+}
+
 void F_opendir(DIR *dp, const TCHAR *path)
 {
     FRESULT fr = f_opendir(dp, path);
