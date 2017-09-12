@@ -58,7 +58,7 @@ struct image {
     FIL fp;
 
     /* Info about image as a whole. */
-    uint16_t nr_tracks;
+    uint8_t nr_cyls, nr_sides;
 
     /* Data buffers. */
     struct image_bufs bufs;

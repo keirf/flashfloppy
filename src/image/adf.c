@@ -43,7 +43,8 @@ static bool_t adf_open(struct image *im)
     if (f_size(&im->fp) != BYTES_PER_TRACK*TRACKS_PER_DISK)
         return FALSE;
 
-    im->nr_tracks = TRACKS_PER_DISK;
+    im->nr_cyls = TRACKS_PER_DISK/2;
+    im->nr_sides = 2;
 
     return TRUE;
 }
@@ -53,9 +54,12 @@ static bool_t adf_seek_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     uint32_t sector, sys_ticks = start_pos ? *start_pos : 0;
+    uint8_t cyl = track/2, side = track&1;
 
     /* TODO: Fake out unformatted tracks. */
-    track = min_t(uint16_t, track, im->nr_tracks-1);
+    cyl = min_t(uint8_t, cyl, im->nr_cyls-1);
+    side = min_t(uint8_t, side, im->nr_sides-1);
+    track = cyl*2 + side;
 
     im->adf.trk_off = track * BYTES_PER_TRACK;
     im->adf.trk_len = BYTES_PER_TRACK;

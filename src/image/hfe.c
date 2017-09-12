@@ -70,7 +70,8 @@ static bool_t hfe_open(struct image *im)
         return FALSE;
 
     im->hfe.tlut_base = le16toh(dhdr.track_list_offset);
-    im->nr_tracks = dhdr.nr_tracks * 2;
+    im->nr_cyls = dhdr.nr_tracks;
+    im->nr_sides = dhdr.nr_sides;
 
     return TRUE;
 }
@@ -81,9 +82,12 @@ static bool_t hfe_seek_track(
     struct image_buf *rd = &im->bufs.read_data;
     uint32_t sys_ticks = start_pos ? *start_pos : 0;
     struct track_header thdr;
+    uint8_t cyl = track/2, side = track&1;
 
     /* TODO: Fake out unformatted tracks. */
-    track = min_t(uint16_t, track, im->nr_tracks-1);
+    cyl = min_t(uint8_t, cyl, im->nr_cyls-1);
+    side = min_t(uint8_t, side, im->nr_sides-1);
+    track = cyl*2 + side;
 
     F_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
     F_read(&im->fp, &thdr, sizeof(thdr), NULL);
