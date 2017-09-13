@@ -204,6 +204,10 @@ static void hfe_write_track(struct image *im, bool_t flush)
      * suffer 30ms+ of latency as the track buffer is written out. */
     const bool_t write_whole_track = 0;
 
+    /* Round-to-nearest the producer index if we are processing final data. */
+    if (flush && (wr->prod & 4))
+        p++;
+
     if (!im->bufs.write_data.prod) {
         /* How many bytes is the full track data? */
         im->bufs.write_data.prod = ((im->hfe.trk_len * 2) + 511) & ~511;
