@@ -60,6 +60,7 @@ static struct drive {
     struct v2_slot *slot;
     uint8_t cyl, head;
     bool_t sel;
+    bool_t index_suppressed; /* disable IDX while writing to USB stick */
 #define outp_dskchg 0
 #define outp_index  1
 #define outp_trk0   2
@@ -153,6 +154,11 @@ void floppy_cancel(void)
     if (!dma_rd)
         return;
 
+    /* Immediately change outputs that we control entirely from the main loop. 
+     * Asserting WRPROT prevents any further calls to wdata_start(). */
+    drive_change_output(drv, outp_rdy, FALSE);
+    drive_change_output(drv, outp_wrprot, TRUE);
+
     /* Stop DMA/timer work. */
     IRQx_disable(dma_rdata_irq);
     IRQx_disable(dma_wdata_irq);
@@ -161,6 +167,7 @@ void floppy_cancel(void)
     wdata_stop();
 
     /* Clear soft state. */
+    drive.index_suppressed = FALSE;
     drive.image = NULL;
     drive.slot = NULL;
     max_read_us = 0;
@@ -171,9 +178,7 @@ void floppy_cancel(void)
     barrier();
     index.active = FALSE;
     drive_change_output(drv, outp_index, FALSE);
-    drive_change_output(drv, outp_rdy,   FALSE);
     drive_change_output(drv, outp_dskchg, TRUE);
-    drive_change_output(drv, outp_wrprot, TRUE);
 }
 
 static struct dma_ring *dma_ring_alloc(void)
@@ -306,6 +311,7 @@ void floppy_insert(unsigned int unit, struct v2_slot *slot)
 
     drv->slot = slot;
 
+    drv->index_suppressed = FALSE;
     index.prev_time = stk_now();
     timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
 
@@ -376,6 +382,9 @@ static void wdata_stop(void)
 
     /* Drain out the DMA buffer. */
     IRQx_set_pending(dma_wdata_irq);
+
+    /* No more IDX pulses until write-out is complete. */
+    drive.index_suppressed = TRUE;
 }
 
 static void wdata_start(void)
@@ -413,6 +422,9 @@ static void wdata_start(void)
     image->write_start = start_pos;
     printk("Write start %u us\n", start_pos / SYSCLK_MHZ);
     delay_us(100); /* XXX X-Copy workaround -- fix me properly!!!! */
+
+    /* Allow IDX pulses while handling a write. */
+    drive.index_suppressed = FALSE;
 }
 
 /* Called from IRQ context to stop the read stream. */
@@ -470,6 +482,9 @@ static void rdata_start(void)
     /* Enable output. */
     if (drive.sel)
         gpio_configure_pin(gpio_data, pin_rdata, AFO_bus);
+
+    /* Allow IDX pulses in normal read mode. */
+    drive.index_suppressed = FALSE;
 
 out:
     IRQ_global_enable();
@@ -678,7 +693,7 @@ static void index_pulse(void *dat)
     index.active ^= 1;
     if (index.active) {
         index.prev_time = index.timer.deadline;
-        drive_change_output(drv, outp_index, TRUE);
+        drive_change_output(drv, outp_index, !drv->index_suppressed);
         timer_set(&index.timer, stk_add(index.prev_time, stk_ms(2)));
     } else {
         drive_change_output(drv, outp_index, FALSE);
