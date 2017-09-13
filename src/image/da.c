@@ -249,12 +249,17 @@ static void da_write_track(struct image *im, bool_t flush)
     uint16_t crc;
     uint8_t x;
 
-    while ((p - c) >= (sec_sz + 6)) {
+    /* Round up the producer index if we are processing final data. */
+    if (flush && (wr->prod & 15))
+        p++;
 
-        /* Scan for sync word and IDAM mark. */
+    while ((p - c) >= (3 + sec_sz + 2)) {
+
+        /* Scan for sync words and IDAM. Because of the way we sync we expect
+         * to see only 2*4489 and thus consume only 3 words for the header. */
         if (be16toh(buf[c++ % buflen]) != 0x4489)
             continue;
-        for (i = 0; i < 3; i++)
+        for (i = 0; i < 2; i++)
             if ((x = mfmtobin(buf[c++ % buflen])) != 0xa1)
                 break;
         if (x != 0xfb)
