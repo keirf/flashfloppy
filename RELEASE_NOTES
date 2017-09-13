@@ -3,6 +3,16 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.6.2a - 13 September 2017
+ - Prettier 7x16 'narrow' LED font (Kingstener)
+ - Remember last-selected slot in no-config mode (LASTDISK.IDX file
+   must exist).
+ - Ignore glitches on SIDE-select signal (fix for Eric Gustafson's A3000)
+ - Various fixes for file selector on Atari ST and Amstard CPC
+ - Suppress index pulse when writing to USB stick. Makes slow writes
+   more reliable (avoids timeouts on the host).
+ - Optimised memory copying and clearing
+
 ** v0.6.1a - 31 August 2017
  - Support 2-digit LED display
  - Suppress LCD update of side number when another drive is selected
