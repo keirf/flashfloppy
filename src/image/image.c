@@ -11,6 +11,8 @@
 
 extern const struct image_handler adf_image_handler;
 extern const struct image_handler hfe_image_handler;
+extern const struct image_handler img_image_handler;
+extern const struct image_handler st_image_handler;
 extern const struct image_handler da_image_handler;
 
 bool_t image_valid(FILINFO *fp)
@@ -25,7 +27,9 @@ bool_t image_valid(FILINFO *fp)
     filename_extension(fp->fname, ext, sizeof(ext));
     if (!strcmp(ext, "adf")) {
         return fp->fsize == 901120;
-    } else if (!strcmp(ext, "hfe")) {
+    } else if (!strcmp(ext, "hfe")
+               || !strcmp(ext, "img")
+               || !strcmp(ext, "st")) {
         return TRUE;
     }
 
@@ -61,6 +65,7 @@ bool_t image_open(struct image *im, const struct v2_slot *slot)
     /* Reinitialise image structure, except for static buffers. */
     memset(im, 0, sizeof(*im));
     im->bufs = bufs;
+    im->write_bc_ticks = sysclk_us(2);
 
     /* Extract filename extension (if available). */
     memcpy(ext, slot->type, 3);
@@ -69,6 +74,8 @@ bool_t image_open(struct image *im, const struct v2_slot *slot)
     /* Use the extension as a hint to the correct image handler. */
     hint = (!strcmp(ext, "adf") ? &adf_image_handler
             : !strcmp(ext, "hfe") ? &hfe_image_handler
+            : !strcmp(ext, "img") ? &img_image_handler
+            : !strcmp(ext, "st") ? &st_image_handler
             : NULL);
     if (hint && try_handler(im, slot, hint))
         return TRUE;

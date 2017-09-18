@@ -29,6 +29,20 @@ struct hfe_image {
     uint32_t ticks_per_cell;
 };
 
+struct img_image {
+    uint32_t trk_off;
+    uint16_t trk_pos, trk_len;
+    int32_t decode_pos;
+    bool_t has_iam;
+    uint8_t gap3;
+    int8_t write_sector;
+    uint8_t sec_base, sec_map[64];
+    uint8_t nr_sectors;
+    uint16_t data_rate, gap4;
+    uint32_t ticks_per_cell;
+    uint32_t idx_sz, idam_sz, dam_sz;
+};
+
 struct directaccess {
     uint32_t lba;
 };
@@ -65,6 +79,7 @@ struct image {
 
     /* Info about current track. */
     uint16_t cur_track;
+    uint16_t write_bc_ticks; /* Nr systicks per bitcell in write stream */
     uint32_t tracklen_bc, cur_bc; /* Track length and cursor, in bitcells */
     uint32_t tracklen_ticks; /* Timing of previous revolution, in 'ticks' */
     uint32_t cur_ticks; /* Offset from index, in 'ticks' */
@@ -76,6 +91,7 @@ struct image {
     union {
         struct adf_image adf;
         struct hfe_image hfe;
+        struct img_image img;
     };
 };
 
@@ -118,6 +134,12 @@ void image_write_track(struct image *im, bool_t flush);
 /* Rotational position of last-generated flux (SYSCLK ticks past index). */
 uint32_t image_ticks_since_index(struct image *im);
 
+/* MFM conversion. */
+extern const uint16_t mfmtab[];
+static inline uint16_t bintomfm(uint8_t x) { return mfmtab[x]; }
+uint8_t mfmtobin(uint16_t x);
+
+/* External API. */
 void floppy_init(uint8_t fintf_mode);
 void floppy_insert(unsigned int unit, struct v2_slot *slot);
 void floppy_cancel(void);

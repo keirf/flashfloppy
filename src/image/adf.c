@@ -228,6 +228,10 @@ static void adf_write_track(struct image *im, bool_t flush)
     unsigned int i, sect;
     stk_time_t t;
 
+    /* Round up the producer index if we are processing final data. */
+    if (flush && (wr->prod & 31))
+        p++;
+
     while ((p - c) >= (542/2)) {
 
         /* Scan for sync word. */

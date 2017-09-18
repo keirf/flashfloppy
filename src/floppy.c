@@ -839,9 +839,12 @@ static void IRQ_wdata_dma(void)
 {
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
     uint16_t cons, prod, prev, curr, next;
+    uint16_t cell = image->write_bc_ticks, window;
     uint32_t mfm = 0, mfmprod, syncword = image->handler->syncword;
     uint32_t *mfmbuf = image->bufs.write_mfm.p;
     unsigned int mfmbuflen = image->bufs.write_mfm.len / 4;
+
+    window = cell + (cell >> 1);
 
     /* Clear DMA peripheral interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_wdata_ch);
@@ -862,8 +865,8 @@ static void IRQ_wdata_dma(void)
         next = dma_wr->buf[cons];
         curr = next - prev;
         prev = next;
-        while (curr > 3*SYSCLK_MHZ) {
-            curr -= 2*SYSCLK_MHZ;
+        while (curr > window) {
+            curr -= cell;
             mfm <<= 1;
             mfmprod++;
             if (!(mfmprod&31))
