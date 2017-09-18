@@ -1,12 +1,12 @@
-# Installation & Update
+# Firmware Programming & Update
 
-## Initial Installation
+## Initial Programming
 
 The first installation of this firmware onto Gotek can be done either
-by [serial](#serial-installation) or [USB](#usb-installation) link to
+by [serial](#serial-programming) or [USB](#usb-programming) link to
 a host PC.
 
-### Serial Installation
+### Serial Programming
 
 This method requires a USB-TTL serial adapter, which are readily
 available on Ebay or from project webstores:
@@ -40,7 +40,7 @@ then use stm32flash to do the programming:
  # sudo stm32flash -w flashfloppy_fw/FF_Gotek*.hex /dev/ttyUSB0
 ```
 
-### USB Installation
+### USB Programming
 
 See this [Youtube video](https://www.youtube.com/watch?v=yUOyZB9cro4@feature=youtu.be)
 for detailed instructions on this method. You will require a USB-A to
@@ -73,11 +73,14 @@ Errors during update are reported on the LED display:
 The main bootloader can also be updated by USB stick. Note that it is
 important for this operation to succeed, otherwise the Gotek will require
 a full reflash by following the steps in
-[Initial Installation](#initial-installation). Therefore make sure the
+[Initial Programming](#initial-programming). Therefore make sure the
 Gotek has a stable power supply and a known good USB stick.
 
 New features and bugfixes are rare. In general **you do not need to
 update the bootloader** and can skip these steps.
+
+**I repeat: do not follow these steps unless you are sure of what you are
+doing.**
 
 - Remove all old *.UPD and *.RLD files from the USB stick.
 - Copy the contents of the release's reloader/ folder to the root of

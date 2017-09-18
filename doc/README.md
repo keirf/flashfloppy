@@ -8,6 +8,7 @@ Binaries can be downloaded from the
 [Releases page](https://github.com/keirf/FlashFloppy/releases).
 
 Documentation links:
-- [**Install/Update**](Install.md)
+- [**Firmware Programming & Update**](Flash.md)
+- [**Hardware Mods**](Hardware.md)
 - [**Usage**](Usage.md)
 - [**Building from source**](Build.md)
