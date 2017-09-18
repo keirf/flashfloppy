@@ -88,11 +88,12 @@ static struct image *image;
 static stk_time_t sync_time;
 
 static struct {
-    struct timer timer;
+    struct timer timer, timer_deassert;
     bool_t active;
     stk_time_t prev_time;
 } index;
-static void index_pulse(void *);
+static void index_assert(void *);   /* index.timer */
+static void index_deassert(void *); /* index.timer_deassert */
 
 static uint32_t max_read_us;
 
@@ -163,6 +164,7 @@ void floppy_cancel(void)
     IRQx_disable(dma_rdata_irq);
     IRQx_disable(dma_wdata_irq);
     timer_cancel(&index.timer);
+    timer_cancel(&index.timer_deassert);
     rdata_stop();
     wdata_stop();
 
@@ -265,7 +267,8 @@ void floppy_init(uint8_t fintf_mode)
     IRQx_set_prio(STEP_IRQ, FLOPPY_IRQ_LO_PRI);
     IRQx_enable(STEP_IRQ);
 
-    timer_init(&index.timer, index_pulse, NULL);
+    timer_init(&index.timer, index_assert, NULL);
+    timer_init(&index.timer_deassert, index_deassert, NULL);
 }
 
 void floppy_insert(unsigned int unit, struct v2_slot *slot)
@@ -483,9 +486,6 @@ static void rdata_start(void)
     if (drive.sel)
         gpio_configure_pin(gpio_data, pin_rdata, AFO_bus);
 
-    /* Allow IDX pulses in normal read mode. */
-    drive.index_suppressed = FALSE;
-
 out:
     IRQ_global_enable();
 }
@@ -504,13 +504,21 @@ static void floppy_sync_flux(void)
     if (dma_rd->prod < ARRAY_SIZE(dma_rd->buf)/2)
         return;
 
-    ticks = stk_delta(stk_now(), sync_time) - stk_us(1);
-    if (ticks > stk_ms(5)) /* ages to wait; go do other work */
-        return;
-
-    if (ticks > 0)
-        delay_ticks(ticks);
-    ticks = stk_delta(stk_now(), sync_time); /* XXX */
+    if (drv->index_suppressed) {
+        /* Re-enable index timing, snapped to the new read stream. */
+        timer_cancel(&index.timer);
+        IRQ_global_disable();
+        index.prev_time = stk_add(stk_now(), sync_time);
+        drv->index_suppressed = FALSE;
+        ticks = 0; /* XXX */
+    } else {
+        ticks = stk_delta(stk_now(), sync_time) - stk_us(1);
+        if (ticks > stk_ms(5)) /* ages to wait; go do other work */
+            return;
+        if (ticks > 0)
+            delay_ticks(ticks);
+        ticks = stk_delta(stk_now(), sync_time); /* XXX */
+    }
     rdata_start();
     printk("Trk %u: sync_ticks=%d\n", drv->image->cur_track, ticks);
 }
@@ -567,10 +575,15 @@ static bool_t dma_rd_handle(struct drive *drv)
         if (image_seek_track(drv->image, track, &read_start_pos))
             return TRUE;
         read_start_pos /= SYSCLK_MHZ/STK_MHZ;
-        /* Set the deadline. */
-        sync_time = stk_add(index_time, read_start_pos);
-        if (stk_delta(stk_now(), sync_time) < 0)
-            sync_time = stk_add(sync_time, stk_ms(DRIVE_MS_PER_REV));
+        if (drv->index_suppressed) {
+            /* Index timing will be resynced when read stream starts. */
+            sync_time = read_start_pos;
+        } else {
+            /* Set the deadline to match existing index timing. */
+            sync_time = stk_add(index_time, read_start_pos);
+            if (stk_delta(stk_now(), sync_time) < 0)
+                sync_time = stk_add(sync_time, stk_ms(DRIVE_MS_PER_REV));
+        }
         /* Change state /then/ check for race against step or side change. */
         dma_rd->state = DMA_starting;
         barrier();
@@ -686,20 +699,24 @@ bool_t floppy_handle(void)
     return FALSE;
 }
 
-static void index_pulse(void *dat)
+static void index_assert(void *dat)
 {
     struct drive *drv = &drive;
-
-    index.active ^= 1;
-    if (index.active) {
-        index.prev_time = index.timer.deadline;
-        drive_change_output(drv, outp_index, !drv->index_suppressed);
-        timer_set(&index.timer, stk_add(index.prev_time, stk_ms(2)));
-    } else {
-        drive_change_output(drv, outp_index, FALSE);
-        if (dma_rd->state != DMA_active) /* timer set from input flux stream */
-            timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
+    index.active = TRUE;
+    index.prev_time = index.timer.deadline;
+    if (!drv->index_suppressed) {
+        drive_change_output(drv, outp_index, TRUE);
+        timer_set(&index.timer_deassert, stk_add(index.prev_time, stk_ms(2)));
     }
+}
+
+static void index_deassert(void *dat)
+{
+    struct drive *drv = &drive;
+    index.active = FALSE;
+    drive_change_output(drv, outp_index, FALSE);
+    if (dma_rd->state != DMA_active) /* timer set from input flux stream */
+        timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
 }
 
 static void drive_step_timer(void *_drv)
