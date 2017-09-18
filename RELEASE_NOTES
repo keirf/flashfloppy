@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.6.3a - 18 September 2017
+ - Remove Amiga AUTOBOOT.HFE and config files from the distribution.
+   The HxC original files work fine, so forking is unnecessary.
+ - Resync index pulse after write handling: this dramatically
+   speeds up FAT filesystem access in the AUTOBOOT file selectors.
+ - Reorganise and update the documentation.
+
 ** v0.6.2a - 13 September 2017
  - Prettier 7x16 'narrow' LED font (Kingstener)
  - Remember last-selected slot in no-config mode (LASTDISK.IDX file
