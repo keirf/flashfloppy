@@ -3,6 +3,7 @@
 - [Speaker](#speaker)
 - [LCD Display](#lcd-display)
 - [OLED Display](#oled-display)
+- [Rotary Encoder](#rotary-encoder)
 
 ## Speaker
 
@@ -65,3 +66,20 @@ reusing the existing jumper wires, as in the pictires below.
 ![OLED Display Front](assets/oled1.jpg)
 
 ![OLED Display Rear](assets/oled2.jpg)
+
+## Rotary Encoder
+
+As an alternative to using the up/down buttons, you can instead connect
+a KY040 rotary encoder. The picture below shows how to connect it.
+
+![KY040 Connection](assets/rotenc.jpg)
+
+Rotating the dial should now have the same effect as pushing the
+buttons: anti-clockwise for down, and clockwise for up.
+
+Troubleshooting:
+- Directional controls are inverted: swap the CLK and DT (aka A and B) wires.
+- Both directions move up (or down):
+  - Connect + to 3.3V (marked in picture above); or
+  - Remove pull-up resistors from the back of the KY040 PCB; or
+  - Remove the encoder from the PCB and solder wires directly.

@@ -153,6 +153,7 @@ static volatile uint8_t buttons;
 static void button_timer_fn(void *unused)
 {
     static uint16_t bl, br;
+    static uint8_t rotary;
     uint8_t b = 0;
 
     /* We debounce the switches by waiting for them to be pressed continuously 
@@ -167,6 +168,13 @@ static void button_timer_fn(void *unused)
     br |= gpio_read_pin(gpioc, 7);
     if (br == 0)
         b |= B_RIGHT;
+
+    /* Rotary encoder: we look for a 1->0 edge (falling edge) on pin A. 
+     * Pin B then tells us the direction (left or right). */
+    rotary <<= 1;
+    rotary |= gpio_read_pin(gpioc, 10);
+    if ((rotary & 0x03) == 0x02)
+        b |= (gpio_read_pin(gpioc, 11) == 0) ? B_LEFT : B_RIGHT;
 
     b = lcd_handle_backlight(b);
 
