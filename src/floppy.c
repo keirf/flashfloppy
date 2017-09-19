@@ -85,7 +85,7 @@ static struct drive {
 } drive;
 
 static struct image *image;
-static stk_time_t sync_time;
+static stk_time_t sync_time, sync_pos;
 
 static struct {
     struct timer timer, timer_deassert;
@@ -504,23 +504,29 @@ static void floppy_sync_flux(void)
     if (dma_rd->prod < ARRAY_SIZE(dma_rd->buf)/2)
         return;
 
-    if (drv->index_suppressed) {
-        /* Re-enable index timing, snapped to the new read stream. */
-        timer_cancel(&index.timer);
-        IRQ_global_disable();
-        index.prev_time = stk_add(stk_now(), sync_time);
-        drv->index_suppressed = FALSE;
-        ticks = 0; /* XXX */
-    } else {
+    if (!drv->index_suppressed) {
         ticks = stk_delta(stk_now(), sync_time) - stk_us(1);
         if (ticks > stk_ms(5)) /* ages to wait; go do other work */
             return;
         if (ticks > 0)
             delay_ticks(ticks);
-        ticks = stk_delta(stk_now(), sync_time); /* XXX */
+        /* If we're out of sync then forcibly re-sync index timing. */
+        ticks = stk_delta(stk_now(), sync_time);
+        if (ticks < -100) {
+            drv->index_suppressed = TRUE;
+            printk("Trk %u: OOS\n", drv->image->cur_track);
+        }
     }
+
+    if (drv->index_suppressed) {
+        /* Re-enable index timing, snapped to the new read stream. */
+        timer_cancel(&index.timer);
+        IRQ_global_disable();
+        index.prev_time = stk_add(stk_now(), sync_pos);
+        drv->index_suppressed = FALSE;
+    }
+
     rdata_start();
-    printk("Trk %u: sync_ticks=%d\n", drv->image->cur_track, ticks);
 }
 
 static void floppy_read_data(struct drive *drv)
@@ -575,10 +581,8 @@ static bool_t dma_rd_handle(struct drive *drv)
         if (image_seek_track(drv->image, track, &read_start_pos))
             return TRUE;
         read_start_pos /= SYSCLK_MHZ/STK_MHZ;
-        if (drv->index_suppressed) {
-            /* Index timing will be resynced when read stream starts. */
-            sync_time = read_start_pos;
-        } else {
+        sync_pos = read_start_pos;
+        if (!drv->index_suppressed) {
             /* Set the deadline to match existing index timing. */
             sync_time = stk_add(index_time, read_start_pos);
             if (stk_delta(stk_now(), sync_time) < 0)
