@@ -1,8 +1,11 @@
 # FlashFloppy
 
 A retro floppy emulator for the ubiquitous Gotek hardware.
-Most code is public domain; the rest is MIT/BSD (see the
-[COPYING](COPYING) file).
+- Directly supports HFE, ADF, IMG and ST image formats.
+- Supports usage with no configuration! Just dump images into the root
+  of an empty USB stick.
+- Compatible with the HxC ecosystem: Autoboot and Indexed
+  modes supported, and HFE image files.
 
 Binaries can be downloaded from the
 [Releases page](https://github.com/keirf/FlashFloppy/releases).
@@ -11,6 +14,9 @@ The latest documentation is
 [on Github](https://github.com/keirf/FlashFloppy/blob/master/doc/README.md).
 
 ## Redistribution
+
+Most code is public domain; the rest is MIT/BSD (see the
+[COPYING](COPYING) file).
 
 The source code, and all binary releases, are freely redistributable
 in any form. Because FlashFloppy includes third-party code under
