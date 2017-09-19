@@ -423,6 +423,7 @@ static void wdata_start(void)
     start_pos %= stk_ms(DRIVE_MS_PER_REV);
     start_pos *= SYSCLK_MHZ / STK_MHZ;
     image->write_start = start_pos;
+    image->write_mfm_window = 0;
     printk("Write start %u us\n", start_pos / SYSCLK_MHZ);
     delay_us(100); /* XXX X-Copy workaround -- fix me properly!!!! */
 
@@ -863,8 +864,7 @@ static void IRQ_wdata_dma(void)
     /* Process the flux timings into the MFM raw buffer. */
     prev = dma_wr->prev_sample;
     mfmprod = image->bufs.write_mfm.prod;
-    if (mfmprod & 31)
-        mfm = be32toh(mfmbuf[(mfmprod / 32) % mfmbuflen]) >> (-mfmprod&31);
+    mfm = image->write_mfm_window;
     for (cons = dma_wr->cons; cons != prod; cons = (cons+1) & buf_mask) {
         next = dma_wr->buf[cons];
         curr = next - prev;
@@ -887,6 +887,7 @@ static void IRQ_wdata_dma(void)
     /* Save our progress for next time. */
     if (mfmprod & 31)
         mfmbuf[(mfmprod / 32) % mfmbuflen] = htobe32(mfm << (-mfmprod&31));
+    image->write_mfm_window = mfm;
     image->bufs.write_mfm.prod = mfmprod;
     dma_wr->cons = cons;
     dma_wr->prev_sample = prev;

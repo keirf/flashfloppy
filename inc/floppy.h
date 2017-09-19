@@ -85,6 +85,7 @@ struct image {
     uint32_t cur_ticks; /* Offset from index, in 'ticks' */
     uint32_t ticks_since_flux; /* Ticks since last flux sample/reversal */
     uint32_t write_start; /* Ticks past index when current write started */
+    uint32_t write_mfm_window; /* Sliding window at head of MFM write stream */
 
     struct directaccess da;
 
