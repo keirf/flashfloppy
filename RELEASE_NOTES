@@ -3,6 +3,15 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.7.0a - 19 September 2017
+** IMG/ST image handling. Rotary Encoder support.
+ - IMG and ST image files directly supported for read and write.
+   Please report any issues!
+ - Connect a KY040 rotary encoder to use in place of directional
+   buttons (Fook42/EAB). Documentation describes how to connect.
+
+-------------------------------------------------------------------------
+
 ** v0.6.3a - 18 September 2017
  - Remove Amiga AUTOBOOT.HFE and config files from the distribution.
    The HxC original files work fine, so forking is unnecessary.
@@ -15,7 +24,7 @@
  - Remember last-selected slot in no-config mode (LASTDISK.IDX file
    must exist).
  - Ignore glitches on SIDE-select signal (fix for Eric Gustafson's A3000)
- - Various fixes for file selector on Atari ST and Amstard CPC
+ - Various fixes for file selector on Atari ST and Amstrad CPC
  - Suppress index pulse when writing to USB stick. Makes slow writes
    more reliable (avoids timeouts on the host).
  - Optimised memory copying and clearing
