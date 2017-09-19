@@ -484,6 +484,12 @@ static void img_write_track(struct image *im, bool_t flush)
                 break;
             }
 
+            if (im->img.write_sector < 0) {
+                printk("IMG DAM for unknown sector (%d)\n",
+                       im->img.write_sector);
+                break;
+            }
+
             /* All good: write out to mass storage. */
             printk("Write %u[%u]/%u... ", im->img.write_sector,
                    im->img.write_sector + im->img.sec_base,
