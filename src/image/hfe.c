@@ -100,6 +100,11 @@ static bool_t hfe_seek_track(
     im->ticks_since_flux = 0;
     im->cur_track = track;
 
+    im->write_bc_ticks = (im->tracklen_bc < 55000) ? sysclk_us(4) /* SD */
+        : (im->tracklen_bc < 105000) ? sysclk_us(2) /* DD */
+        : (im->tracklen_bc < 205000) ? sysclk_us(1) /* HD */
+        : sysclk_ns(500); /* ED */
+
     im->cur_bc = (sys_ticks * 16) / im->hfe.ticks_per_cell;
     im->cur_bc &= ~7;
     if (im->cur_bc >= im->tracklen_bc)
