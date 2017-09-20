@@ -40,10 +40,10 @@ static uint32_t amigados_checksum(void *dat, unsigned int bytes)
 
 static bool_t adf_open(struct image *im)
 {
-    if (f_size(&im->fp) != BYTES_PER_TRACK*TRACKS_PER_DISK)
+    if (f_size(&im->fp) % BYTES_PER_TRACK)
         return FALSE;
 
-    im->nr_cyls = TRACKS_PER_DISK/2;
+    im->nr_cyls = f_size(&im->fp) / (2 * BYTES_PER_TRACK);
     im->nr_sides = 2;
 
     return TRUE;
