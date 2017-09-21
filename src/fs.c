@@ -82,7 +82,12 @@ void F_read(FIL *fp, void *buff, UINT btr, UINT *br)
 void F_write(FIL *fp, const void *buff, UINT btw, UINT *bw)
 {
     UINT _bw;
-    FRESULT fr = f_write(fp, buff, btw, &_bw);
+    FRESULT fr;
+    if (!fp->dir_ptr) {
+        /* File cannot be resized. Clip the write size. */
+        btw = min_t(UINT, btw, f_size(fp) - f_tell(fp));
+    }
+    fr = f_write(fp, buff, btw, &_bw);
     if (bw != NULL) {
         *bw = _bw;
     } else if ((fr == FR_OK) && (_bw < btw)) {
@@ -100,6 +105,11 @@ void F_sync(FIL *fp)
 void F_lseek(FIL *fp, DWORD ofs)
 {
     FRESULT fr = f_lseek(fp, ofs);
+    if (!fp->dir_ptr) {
+        /* File cannot be resized. Clip the seek offset. */
+        ofs = min(ofs, f_size(fp));
+    }
+    fr = f_lseek(fp, ofs);
     handle_fr(fr);
 }
 

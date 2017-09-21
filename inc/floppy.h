@@ -44,6 +44,17 @@ struct img_image {
     uint32_t idx_sz, idam_sz, dam_sz;
 };
 
+struct dsk_image {
+    uint32_t trk_off;
+    uint16_t trk_pos;
+    int32_t decode_pos;
+    bool_t extended;
+    int8_t write_sector;
+    uint16_t gap4;
+    uint32_t ticks_per_cell;
+    uint32_t idx_sz, idam_sz, dam_sz;
+};
+
 struct directaccess {
     uint32_t lba;
 };
@@ -94,6 +105,7 @@ struct image {
         struct adf_image adf;
         struct hfe_image hfe;
         struct img_image img;
+        struct dsk_image dsk;
     };
 };
 
