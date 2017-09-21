@@ -224,34 +224,38 @@ static uint8_t cfg_init(void)
 {
     struct hxcsdfe_cfg hxc_cfg;
     FRESULT fr;
+    char slot[10];
 
     fr = F_try_open(&fs->file, "HXCSDFE.CFG", FA_READ);
-    if (fr) {
-        char slot[10];
-        cfg.slot_nr = 0;
-        fr = F_try_open(&fs->file, "LASTDISK.IDX", FA_READ|FA_WRITE);
-        if (fr)
-            return CFG_none;
-        F_read(&fs->file, slot, sizeof(slot), NULL);
-        F_close(&fs->file);
-        cfg.slot_nr = strtol(slot, NULL, 10);
-        return CFG_lastidx;
-    }
+    if (fr)
+        goto no_config;
     fatfs_to_slot(&cfg.hxcsdfe, &fs->file, "HXCSDFE.CFG");
     F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
     F_close(&fs->file);
 
-    /* Indexed mode (DSKAxxxx.HFE) does not neeed AUTOBOOT.HFE. */
+    /* Indexed mode (DSKAxxxx.HFE) does not need AUTOBOOT.HFE. */
     if (!strncmp("HXCFECFGV", hxc_cfg.signature, 9) && hxc_cfg.index_mode) {
         memset(&cfg.autoboot, 0, sizeof(cfg.autoboot));
         return CFG_hxc;
     }
 
-    F_open(&fs->file, "AUTOBOOT.HFE", FA_READ);
+    fr = F_try_open(&fs->file, "AUTOBOOT.HFE", FA_READ);
+    if (fr)
+        goto no_config;
     fatfs_to_slot(&cfg.autoboot, &fs->file, "AUTOBOOT.HFE");
     F_close(&fs->file);
 
     return CFG_hxc;
+
+no_config:
+    cfg.slot_nr = 0;
+    fr = F_try_open(&fs->file, "LASTDISK.IDX", FA_READ|FA_WRITE);
+    if (fr)
+        return CFG_none;
+    F_read(&fs->file, slot, sizeof(slot), NULL);
+    F_close(&fs->file);
+    cfg.slot_nr = strtol(slot, NULL, 10);
+    return CFG_lastidx;
 }
 
 #define CFG_KEEP_SLOT_NR  0 /* Do not re-read slot number from config */
