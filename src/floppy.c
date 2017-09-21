@@ -58,7 +58,7 @@ static struct dma_ring *dma_wr; /* WDATA DMA buffer */
  * side changes at all times, even when the drive is empty. */
 static struct drive {
     struct v2_slot *slot;
-    uint8_t cyl, head;
+    uint8_t cyl, head, nr_sides;
     bool_t sel;
     bool_t index_suppressed; /* disable IDX while writing to USB stick */
 #define outp_dskchg 0
@@ -551,6 +551,12 @@ static void floppy_read_data(struct drive *drv)
     }
 }
 
+static unsigned int drive_calc_track(struct drive *drv)
+{
+    drv->nr_sides = (drv->cyl == 255) ? 1 : drv->image->nr_sides;
+    return drv->cyl*2 + (drv->head & (drv->nr_sides - 1));
+}
+
 static bool_t dma_rd_handle(struct drive *drv)
 {
     switch (dma_rd->state) {
@@ -577,7 +583,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         if (read_start_pos > stk_ms(DRIVE_MS_PER_REV))
             read_start_pos -= stk_ms(DRIVE_MS_PER_REV);
         /* Seek to the new track. */
-        track = drv->cyl*2 + drv->head;
+        track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
         if (image_seek_track(drv->image, track, &read_start_pos))
             return TRUE;
@@ -593,7 +599,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         dma_rd->state = DMA_starting;
         barrier();
         if ((drv->step.state & STEP_active)
-            || (track != (drv->cyl*2 + drv->head))
+            || (track != drive_calc_track(drv))
             || (dma_wr->state != DMA_inactive))
             dma_rd->state = DMA_stopping;
         break;
@@ -634,7 +640,7 @@ void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 void floppy_get_track(uint8_t *p_cyl, uint8_t *p_side, uint8_t *p_sel)
 {
     *p_cyl = drive.cyl;
-    *p_side = drive.head;
+    *p_side = drive.head & (drive.nr_sides - 1);
     *p_sel = drive.sel;
 }
 
@@ -659,7 +665,6 @@ bool_t floppy_handle(void)
         break;
 
     case DMA_starting: {
-        unsigned int track;
         /* Bail out of read mode. */
         if (dma_rd->state != DMA_inactive) {
             ASSERT(dma_rd->state == DMA_stopping);
@@ -668,8 +673,7 @@ bool_t floppy_handle(void)
             ASSERT(dma_rd->state == DMA_inactive);
         }
         /* Make sure we're on the correct track. */
-        track = drv->cyl*2 + drv->head;
-        if (image_seek_track(drv->image, track, NULL))
+        if (image_seek_track(drv->image, drive_calc_track(drv), NULL))
             return TRUE;
         /* May race wdata_stop(). */
         cmpxchg(&dma_wr->state, DMA_starting, DMA_active);

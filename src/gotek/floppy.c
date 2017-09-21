@@ -191,7 +191,7 @@ static void IRQ_SIDE_changed(void)
         return;
 
     drv->head = hd;
-    if (dma_rd != NULL)
+    if ((dma_rd != NULL) && (drv->nr_sides == 2))
         rdata_stop();
 }
 
