@@ -123,7 +123,6 @@ static bool_t hfe_seek_track(
         im->hfe.ticks_per_cell = im->write_bc_ticks * 16;
 
     im->cur_bc = (sys_ticks * 16) / im->hfe.ticks_per_cell;
-    im->cur_bc &= ~7;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
     im->cur_ticks = im->cur_bc * im->hfe.ticks_per_cell;
@@ -144,22 +143,24 @@ static bool_t hfe_seek_track(
 
 static bool_t hfe_read_track(struct image *im)
 {
-    const UINT nr = 256;
     struct image_buf *rd = &im->bufs.read_data;
     uint8_t *buf = rd->p;
-    unsigned int buflen = rd->len & ~511;
+    unsigned int buflen = (rd->len-256) & ~255;
 
-    if ((uint32_t)(rd->prod - rd->cons) > (buflen-256)*8)
+    if ((uint32_t)(rd->prod - rd->cons) > (buflen-512)*8)
         return FALSE;
 
-    F_lseek(&im->fp,
-            im->hfe.trk_off * 512
-            + (im->cur_track & 1) * 256
-            + ((im->hfe.trk_pos & ~255) << 1)
-            + (im->hfe.trk_pos & 255));
-    F_read(&im->fp, &buf[(rd->prod/8) % buflen], nr, NULL);
-    rd->prod += nr * 8;
-    im->hfe.trk_pos += nr;
+    F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.trk_pos * 2);
+    F_read(&im->fp, &buf[(rd->prod/8) % buflen], 512, NULL);
+    if (im->cur_track & 1) {
+        /* Shift track 1 data up to correct position in the ring buffer. */
+        memcpy(&buf[(rd->prod/8) % buflen],
+               &buf[(rd->prod/8) % buflen] + 256,
+               256);
+    }
+    barrier(); /* write data /then/ update producer */
+    rd->prod += 256 * 8;
+    im->hfe.trk_pos += 256;
     if (im->hfe.trk_pos >= im->hfe.trk_len)
         im->hfe.trk_pos = 0;
 
@@ -173,7 +174,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     uint32_t ticks_per_cell = im->hfe.ticks_per_cell;
     uint32_t y = 8, todo = nr;
     uint8_t x, *buf = rd->p;
-    unsigned int buflen = rd->len & ~511;
+    unsigned int buflen = (rd->len-256) & ~255;
     bool_t is_v3 = im->hfe.is_v3;
 
     while ((rd->prod - rd->cons) >= 3*8) {
