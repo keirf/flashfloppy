@@ -27,6 +27,7 @@ struct hfe_image {
     uint16_t trk_off;
     uint16_t trk_pos, trk_len;
     uint32_t ticks_per_cell;
+    bool_t is_v3;
 };
 
 struct img_image {

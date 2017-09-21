@@ -60,18 +60,33 @@ struct track_header {
     uint16_t len;
 };
 
+/* HFEv3 opcodes */
+enum {
+    OP_nop = 0,     /* no effect */
+    OP_index = 8,   /* index mark */
+    OP_bitrate = 4, /* +1byte: new bitrate */
+    OP_skip = 12    /* +1byte: skip 0-8 bits in next byte */
+};
+
 static bool_t hfe_open(struct image *im)
 {
     struct disk_header dhdr;
 
     F_read(&im->fp, &dhdr, sizeof(dhdr), NULL);
-    if (strncmp(dhdr.sig, "HXCPICFE", sizeof(dhdr.sig))
-        || (dhdr.formatrevision != 0))
+    if (dhdr.formatrevision != 0)
         return FALSE;
+    if (!strncmp(dhdr.sig, "HXCHFEV3", sizeof(dhdr.sig))) {
+        im->hfe.is_v3 = TRUE;
+    } else if (!strncmp(dhdr.sig, "HXCPICFE", sizeof(dhdr.sig))) {
+        im->hfe.is_v3 = FALSE;
+    } else {
+        return FALSE;
+    }
 
     im->hfe.tlut_base = le16toh(dhdr.track_list_offset);
     im->nr_cyls = dhdr.nr_tracks;
     im->nr_sides = dhdr.nr_sides;
+    im->write_bc_ticks = sysclk_us(500) / le16toh(dhdr.bitrate);
 
     return TRUE;
 }
@@ -100,10 +115,12 @@ static bool_t hfe_seek_track(
     im->ticks_since_flux = 0;
     im->cur_track = track;
 
-    im->write_bc_ticks = (im->tracklen_bc < 55000) ? sysclk_us(4) /* SD */
-        : (im->tracklen_bc < 105000) ? sysclk_us(2) /* DD */
-        : (im->tracklen_bc < 205000) ? sysclk_us(1) /* HD */
-        : sysclk_ns(500); /* ED */
+    /* HFEv3: the track data length is not the same as track bit length as 
+     * it contains opcode metadata in the stream. Instead use a sensible 
+     * default (based on the kB/s bitrate in the image header) and expect this 
+     * to be updated via the opcode stream as necessary. */
+    if (im->hfe.is_v3)
+        im->hfe.ticks_per_cell = im->write_bc_ticks * 16;
 
     im->cur_bc = (sys_ticks * 16) / im->hfe.ticks_per_cell;
     im->cur_bc &= ~7;
@@ -157,8 +174,9 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     uint32_t y = 8, todo = nr;
     uint8_t x, *buf = rd->p;
     unsigned int buflen = rd->len & ~511;
+    bool_t is_v3 = im->hfe.is_v3;
 
-    while (rd->cons != rd->prod) {
+    while ((rd->prod - rd->cons) >= 3*8) {
         ASSERT(y == 8);
         if (im->cur_bc >= im->tracklen_bc) {
             ASSERT(im->cur_bc == im->tracklen_bc);
@@ -170,6 +188,35 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
         }
         y = rd->cons % 8;
         x = buf[(rd->cons/8) % buflen] >> y;
+        if (is_v3 && (y == 0) && ((x & 0xf) == 0xf)) {
+            /* V3 byte-aligned opcode processing. */
+            switch (x >> 4) {
+            case OP_nop:
+            case OP_index:
+                rd->cons += 8;
+                im->cur_bc += 8;
+                y = 8;
+                continue;
+            case OP_bitrate:
+                x = _rbit32(buf[(rd->cons/8+1) % buflen]) >> 24;
+                im->hfe.ticks_per_cell = ticks_per_cell = 
+                    (sysclk_us(2) * 16 * x) / 72;
+                rd->cons += 2*8;
+                im->cur_bc += 2*8;
+                y = 8;
+                continue;
+            case OP_skip:
+                x = (_rbit32(buf[(rd->cons/8+1) % buflen]) >> 24) & 7;
+                rd->cons += 2*8 + x;
+                im->cur_bc += 2*8 + x;
+                y = rd->cons % 8;
+                x = buf[(rd->cons/8) % buflen] >> y;
+                break;
+            default:
+                /* ignore and process as normal data */
+                break;
+            }
+        }
         rd->cons += 8 - y;
         im->cur_bc += 8 - y;
         im->cur_ticks += (8 - y) * ticks_per_cell;
