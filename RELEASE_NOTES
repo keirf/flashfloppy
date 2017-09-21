@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.7.2a - 21 September 2017
+ - Fixes to track timing and index position
+ - Properly emulate a single-headed drive
+
 ** v0.7.1a - 21 September 2017
  - HFE: HFEv3 support
  - HFE: Correctly set bitcell size for writes
