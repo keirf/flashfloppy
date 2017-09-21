@@ -11,18 +11,13 @@ A speaker can be attached to the Gotek to sound whenever the floppy
 drive heads are stepped. A piezo sounder can be connected directly
 between jumper JB and Ground, marked respectively as SPEAKER and GND
 in the picture below.
+
 ![Piezo speaker](assets/jumpers.jpg)
 
-A magnetic speaker should be buffered via an NPN transistor (eg
-2N3904) as follows:
-- **Base**: connected to JB (SPEAKER) via a 1k resistor
-- **Collector**: connected to one terminal of the speaker (the other
-    connected to 5v)
-- **Emitter**: connected to Ground (GND)
-
-Pinout for the 2N3904 is shown below (note that the leg arrangement
-can differ on other NPN transistors).
-![2N3904 legs](assets/2n3904.jpg)
+If you want to connect a magnetic speaker instead, you must buffer via
+an NPN transistor. If you don't know what this means just be sure to
+use a piezo sounder, easily found on Ebay, and connect it directly as
+shown above.
 
 ## LCD Display
 
@@ -34,10 +29,12 @@ Gotek firmware, including pullup resistors (if required - see below).
 You can locate SCL, SDA, and GND on your Gotek PCB as below. These
 connect to the corresponding header pins on your LCD I2C backpack
 module.
+
 ![LCD data/clock interface](assets/header_closeup.jpg)
 
 VCC (aka 5V) can be found in various places, including just behind the
 floppy power connector.
+
 ![LCD VCC](assets/jumpers.jpg)
 
 The SCL and SDA lines must be connected to VCC ("pulled up" to VCC)
@@ -51,6 +48,7 @@ If you do require the pullup resistors, these can be soldered to the
 backside of the Gotek PCB between VCC and each of SDA and
 SCL. Alternatively can be soldered to the back of the I2C module
 header as below.
+
 ![LCD Pullup Resistors](assets/pullups.jpg)
 
 ## OLED Display
@@ -69,17 +67,23 @@ reusing the existing jumper wires, as in the pictires below.
 
 ## Rotary Encoder
 
-As an alternative to using the up/down buttons, you can instead connect
-a KY040 rotary encoder. The picture below shows how to connect it.
+As an alternative to using the up/down buttons you can instead connect
+a rotary encoder. The picture below shows how to connect it, either
+directly (to pins A,B,C) or via a PCB module (eg KY040 pins CLK,DT,GND).
 
-![KY040 Connection](assets/rotenc.jpg)
+If connecting directly note that by convention pin C is always the
+middle pin in the row of three: A-C-B. If there is a further row of
+two pins then these are connected to an internal push switch: you can
+wire these pins to jumper JA to use the switch as a third button.
+
+![Rotary Encoder Connection](assets/rotenc.jpg)
 
 Rotating the dial should now have the same effect as pushing the
 buttons: anti-clockwise for down, and clockwise for up.
 
 Troubleshooting:
-- Directional controls are inverted: swap the CLK and DT (aka A and B) wires.
-- Both directions move up (or down):
+- Directional controls are inverted: swap the A and B (aka CLK, DT) wires.
+- PCB modules only: Both directions move up (or down):
   - Connect + to 3.3V (marked in picture above); or
-  - Remove pull-up resistors from the back of the KY040 PCB; or
+  - Remove pull-up resistors from the back of the PCB; or
   - Remove the encoder from the PCB and solder wires directly.
