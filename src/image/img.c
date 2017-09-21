@@ -273,13 +273,13 @@ static uint16_t img_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     uint32_t ticks_per_cell = im->img.ticks_per_cell;
     uint32_t x, y = 32, todo = nr;
     struct image_buf *mfm = &im->bufs.read_mfm;
-    uint32_t *mfmb = mfm->p;
+    uint32_t *mfmb = mfm->p, mfmc = mfm->cons, mfmp = mfm->prod & ~31;
 
     /* Convert pre-generated MFM into flux timings. */
-    while (mfm->cons != mfm->prod) {
-        y = mfm->cons % 32;
-        x = be32toh(mfmb[(mfm->cons/32)%(mfm->len/4)]) << y;
-        mfm->cons += 32 - y;
+    while (mfmc != mfmp) {
+        y = mfmc % 32;
+        x = be32toh(mfmb[(mfmc/32)%(mfm->len/4)]) << y;
+        mfmc += 32 - y;
         im->cur_bc += 32 - y;
         im->cur_ticks += (32 - y) * ticks_per_cell;
         while (y < 32) {
@@ -305,7 +305,7 @@ out:
         im->cur_ticks -= im->tracklen_ticks;
     }
 
-    mfm->cons -= 32 - y;
+    mfm->cons = mfmc - (32 - y);
     im->cur_bc -= 32 - y;
     im->cur_ticks -= (32 - y) * ticks_per_cell;
     im->ticks_since_flux = ticks;
