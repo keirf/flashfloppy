@@ -507,15 +507,24 @@ static void floppy_sync_flux(void)
 
     if (!drv->index_suppressed) {
         ticks = stk_delta(stk_now(), sync_time) - stk_us(1);
-        if (ticks > stk_ms(5)) /* ages to wait; go do other work */
-            return;
-        if (ticks > 0)
-            delay_ticks(ticks);
-        /* If we're out of sync then forcibly re-sync index timing. */
-        ticks = stk_delta(stk_now(), sync_time);
-        if (ticks < -100) {
+        if (ticks > stk_ms(15)) {
+            /* Too long to wait. Immediately re-sync index timing. */
             drv->index_suppressed = TRUE;
-            printk("Trk %u: OOS\n", drv->image->cur_track);
+            printk("Trk %u: skip %ums\n",
+                   drv->image->cur_track, (ticks+stk_us(500))/stk_ms(1));
+        } else if (ticks > stk_ms(5)) {
+            /* A while to wait. Go do other work. */
+            return;
+        } else {
+            if (ticks > 0)
+                delay_ticks(ticks);
+            /* If we're out of sync then forcibly re-sync index timing. */
+            ticks = stk_delta(stk_now(), sync_time);
+            if (ticks < -100) {
+                drv->index_suppressed = TRUE;
+                printk("Trk %u: late %uus\n",
+                       drv->image->cur_track, -ticks/stk_us(1));
+            }
         }
     }
 
@@ -523,7 +532,7 @@ static void floppy_sync_flux(void)
         /* Re-enable index timing, snapped to the new read stream. */
         timer_cancel(&index.timer);
         IRQ_global_disable();
-        index.prev_time = stk_add(stk_now(), sync_pos);
+        index.prev_time = stk_sub(stk_now(), sync_pos);
         drv->index_suppressed = FALSE;
     }
 
