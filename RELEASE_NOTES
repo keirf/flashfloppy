@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.7.1a - 21 September 2017
+ - HFE: HFEv3 support
+ - HFE: Correctly set bitcell size for writes
+ - HFE: Reliability fix, read whole USB-disk sectors
+ - ADF: Support a wider range of ADF sizes
+
 ** v0.7.0a - 19 September 2017
 ** IMG/ST image handling. Rotary Encoder support.
  - IMG and ST image files directly supported for read and write.
