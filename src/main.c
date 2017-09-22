@@ -26,6 +26,8 @@ static struct {
     struct v2_slot autoboot, hxcsdfe, slot;
 } cfg;
 
+static bool_t first_startup = TRUE;
+
 static uint8_t cfg_mode;
 #define CFG_none      0 /* Iterate through all images in root. */
 #define CFG_hxc       1 /* Operation based on HXCSDFE.CFG. */
@@ -226,11 +228,17 @@ static uint8_t cfg_init(void)
     FRESULT fr;
     char slot[10];
 
-    fr = F_try_open(&fs->file, "HXCSDFE.CFG", FA_READ);
+    fr = F_try_open(&fs->file, "HXCSDFE.CFG", FA_READ|FA_WRITE);
     if (fr)
         goto no_config;
     fatfs_to_slot(&cfg.hxcsdfe, &fs->file, "HXCSDFE.CFG");
     F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+    if (first_startup && (hxc_cfg.startup_mode & HXCSTARTUP_slot0)) {
+        /* Startup mode: slot 0. */
+        hxc_cfg.slot_index = hxc_cfg.cur_slot_number = 0;
+        F_lseek(&fs->file, 0);
+        F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+    }
     F_close(&fs->file);
 
     /* Indexed mode (DSKAxxxx.HFE) does not need AUTOBOOT.HFE. */
@@ -564,6 +572,7 @@ int floppy_main(void)
     
     cfg_mode = cfg_init();
     cfg_update(CFG_READ_SLOT_NR);
+    first_startup = FALSE;
 
     for (;;) {
 

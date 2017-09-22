@@ -69,6 +69,9 @@ struct __packed hxcsdfe_cfg {
     uint32_t ihm_mode;
 };
 
+#define HXCSTARTUP_slot0   0x04
+#define HXCSTARTUP_ejected 0x10
+
 /* HXCFECFGV1.x slots start at offset 0x400: */
 struct __packed v1_slot {
     char     name[12];
