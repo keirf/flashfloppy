@@ -1,6 +1,7 @@
 # Hardware Mods
 
 - [Speaker](#speaker)
+- [Eject/Select Button](#ejectselect-button)
 - [LCD Display](#lcd-display)
 - [OLED Display](#oled-display)
 - [Rotary Encoder](#rotary-encoder)
@@ -18,6 +19,17 @@ If you want to connect a magnetic speaker instead, you must buffer via
 an NPN transistor. If you don't know what this means just be sure to
 use a piezo sounder, easily found on Ebay, and connect it directly as
 shown above.
+
+## Eject/Select Button
+
+FlashFloppy supports a third button in addition to the basic up/down
+controls. This should be a standard momentary microswitch, connected
+to the header pins JA.
+
+The button's effect depends on the current state of operation:
+- When an image is loaded, the button will immediately eject it
+- When selecting an image, the button will immediately confirm the
+  currently-selected image
 
 ## LCD Display
 
@@ -74,7 +86,12 @@ directly (to pins A,B,C) or via a PCB module (eg KY040 pins CLK,DT,GND).
 If connecting directly note that by convention pin C is always the
 middle pin in the row of three: A-C-B. If there is a further row of
 two pins then these are connected to an internal push switch: you can
-wire these pins to jumper JA to use the switch as a third button.
+wire these pins to jumper JA to use the switch as an
+[eject/select button](#ejectselect-button).
+
+If connecting the KY040 module's internal switch to JA, connect GND as
+shown below and connect SW to the remaining pin of JA. It is important
+that the connections are made the correct way round.
 
 ![Rotary Encoder Connection](assets/rotenc.jpg)
 
