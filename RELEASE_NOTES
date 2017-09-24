@@ -22,8 +22,9 @@
 ** IMG/ST image handling. Rotary Encoder support.
  - IMG and ST image files directly supported for read and write.
    Please report any issues!
- - Connect a KY040 rotary encoder to use in place of directional
-   buttons (Fook42/EAB). Documentation describes how to connect.
+ - Connect a rotary encoder to use in place of directional
+   buttons: Thanks to Fook42 (A1K/EAB). Documentation describes
+   how to connect.
 
 -------------------------------------------------------------------------
 
@@ -37,7 +38,7 @@
 ** v0.6.2a - 13 September 2017
  - Prettier 7x16 'narrow' LED font (Kingstener)
  - Remember last-selected slot in no-config mode (LASTDISK.IDX file
-   must exist).
+   must exist). Thanks to Fook42 (A1K/EAB).
  - Ignore glitches on SIDE-select signal (fix for Eric Gustafson's A3000)
  - Various fixes for file selector on Atari ST and Amstrad CPC
  - Suppress index pulse when writing to USB stick. Makes slow writes
