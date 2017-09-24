@@ -10,7 +10,7 @@
  */
 
 #define TRACKS_PER_DISK 160
-#define BYTES_PER_TRACK 11*512
+#define BYTES_PER_TRACK (11*512)
 #define TRACKLEN_BC 100160 /* multiple of 32 */
 #define TICKS_PER_CELL ((sysclk_ms(DRIVE_MS_PER_REV) * 16u) / TRACKLEN_BC)
 
