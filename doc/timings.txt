@@ -10,6 +10,7 @@ Citizen Z1DE-58A (a generic HD PC drive):
   - RDDAT asserted after 18ms
  DSKCHG: deasserted immediately on falling edge of STEP,
          even if STEP is to be ignored (eg. on min/max cyl already)
+ Side change: within 20us, read stream not halted meanwhile.
 
 Cortex-M3 STM32F1xx Timings:
 ----------------------------
@@ -63,6 +64,15 @@ Sequential 8192-byte writes (8MB total):
 Random 8192-byte writes (8MB total):
   Min: 4460us Max: 199727us Mean: 6843us
   Histo: 0-9ms:1008 10-19ms:9 20-29ms:5 30-39ms:1 100-199ms:1 >50ms: 0.09%
+
+USB Reads:
+----------
+ 1 sector:  1.2 -  2.5ms
+ 2 sector:  2.0 -  3.2ms (+0.8ms)
+ 4 sector:  3.3 -  4.5ms (+1.3ms)
+ 8 sector:  6.0 -  7.2ms (+2.7ms)
+16 sector: 11.4 - 12.6ms (+5.4ms)
+> Read time ~= 0.4-1.7ms + 0.8ms*nr_secs
 
 BEST USB STICKS:
 ----------------

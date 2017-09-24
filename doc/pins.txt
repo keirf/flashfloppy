@@ -37,9 +37,9 @@ Jumpers & Switches:
 -------------------
 All are OFF=floating, ON=ground. Must be pulled up.
 GPIn:
- PC6   JUMPER_JA
- PA2   JUMPER_JB
- PB1   JUMPER_JC
+ PC6   JUMPER_JA / BT_SELECT
+ PA2   JUMPER_JB / SPEAKER
+ PB1   JUMPER_JC / INTF_SELECT
  PC8   BT_LEFT
  PC7   BT_RIGHT
  PC10  J7_PIN1 / ROTARY_A(CLK)
