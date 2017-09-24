@@ -27,6 +27,7 @@ static struct {
 } cfg;
 
 static bool_t first_startup = TRUE;
+static bool_t ejected;
 
 static uint8_t cfg_mode;
 #define CFG_none      0 /* Iterate through all images in root. */
@@ -152,9 +153,10 @@ static struct timer button_timer;
 static volatile uint8_t buttons;
 #define B_LEFT 1
 #define B_RIGHT 2
+#define B_SELECT 4
 static void button_timer_fn(void *unused)
 {
-    static uint16_t bl, br;
+    static uint16_t bl, br, bs;
     static uint8_t rotary;
     uint8_t b = 0;
 
@@ -170,6 +172,11 @@ static void button_timer_fn(void *unused)
     br |= gpio_read_pin(gpioc, 7);
     if (br == 0)
         b |= B_RIGHT;
+
+    bs <<= 1;
+    bs |= gpio_read_pin(gpioc, 6);
+    if (bs == 0)
+        b |= B_SELECT;
 
     /* Rotary encoder: we look for a 1->0 edge (falling edge) on pin A. 
      * Pin B then tells us the direction (left or right). */
@@ -239,6 +246,11 @@ static uint8_t cfg_init(void)
         F_lseek(&fs->file, 0);
         F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
     }
+    if (first_startup && (hxc_cfg.startup_mode & HXCSTARTUP_ejected)) {
+        /* Startup mode: eject. */
+        ejected = TRUE;
+    }
+        
     F_close(&fs->file);
 
     /* Indexed mode (DSKAxxxx.HFE) does not need AUTOBOOT.HFE. */
@@ -503,9 +515,12 @@ static void choose_new_image(uint8_t init_b)
 {
     uint8_t b, prev_b;
     stk_time_t last_change = 0;
-    uint32_t i, changes = 0;
+    int i, changes = 0;
 
-    for (prev_b = 0, b = init_b; b != 0; prev_b = b, b = buttons) {
+    for (prev_b = 0, b = init_b;
+         (b &= (B_LEFT|B_RIGHT)) != 0;
+         prev_b = b, b = buttons) {
+
         if (prev_b == b) {
             /* Decaying delay between image steps while button pressed. */
             stk_time_t delay = stk_ms(1000) / (changes + 1);
@@ -520,6 +535,7 @@ static void choose_new_image(uint8_t init_b)
             changes = 0;
         }
         last_change = stk_now();
+
         i = cfg.slot_nr;
         if (!(b ^ (B_LEFT|B_RIGHT))) {
             i = cfg.slot_nr = 0;
@@ -537,16 +553,19 @@ static void choose_new_image(uint8_t init_b)
                    && buttons)
                 continue;
         } else if (b & B_LEFT) {
+        b_left:
             do {
                 if (i-- == 0)
-                    i = cfg.max_slot_nr;
+                    goto b_right;
             } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
         } else { /* b & B_RIGHT */
+        b_right:
             do {
                 if (i++ >= cfg.max_slot_nr)
-                    i = 0;
+                    goto b_left;
             } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
         }
+
         cfg.slot_nr = i;
         switch (display_mode) {
         case DM_LED_7SEG:
@@ -557,6 +576,7 @@ static void choose_new_image(uint8_t init_b)
             lcd_write_slot();
             break;
         }
+
     }
 }
 
@@ -607,35 +627,70 @@ int floppy_main(void)
         printk("Attr: %02x Clus: %08x Size: %u\n",
                cfg.slot.attributes, cfg.slot.firstCluster, cfg.slot.size);
 
-        floppy_insert(0, &cfg.slot);
+        if (ejected) {
 
-        lcd_update_ticks = stk_ms(20);
-        lcd_scroll_ticks = stk_ms(LCD_SCROLL_PAUSE_MSEC);
-        lcd_scroll_off = 0;
-        lcd_scroll_end = max_t(
-            int, strnlen(cfg.slot.name, sizeof(cfg.slot.name)) - 16, 0);
-        t_prev = stk_now();
-        while (((b = buttons) == 0) && !floppy_handle()) {
-            t_now = stk_now();
-            t_diff = stk_diff(t_prev, t_now);
-            if (display_mode == DM_LCD_1602) {
-                lcd_update_ticks -= t_diff;
-                if (lcd_update_ticks <= 0) {
-                    lcd_write_track_info(FALSE);
-                    lcd_update_ticks = stk_ms(20);
+            ejected = FALSE;
+            b = B_SELECT;
+
+        } else {
+
+            floppy_insert(0, &cfg.slot);
+
+            lcd_update_ticks = stk_ms(20);
+            lcd_scroll_ticks = stk_ms(LCD_SCROLL_PAUSE_MSEC);
+            lcd_scroll_off = 0;
+            lcd_scroll_end = max_t(
+                int, strnlen(cfg.slot.name, sizeof(cfg.slot.name)) - 16, 0);
+            t_prev = stk_now();
+            while (((b = buttons) == 0) && !floppy_handle()) {
+                t_now = stk_now();
+                t_diff = stk_diff(t_prev, t_now);
+                if (display_mode == DM_LCD_1602) {
+                    lcd_update_ticks -= t_diff;
+                    if (lcd_update_ticks <= 0) {
+                        lcd_write_track_info(FALSE);
+                        lcd_update_ticks = stk_ms(20);
+                    }
+                    lcd_scroll_ticks -= t_diff;
+                    lcd_scroll_name();
                 }
-                lcd_scroll_ticks -= t_diff;
-                lcd_scroll_name();
+                canary_check();
+                if (!usbh_msc_connected())
+                    F_die();
+                t_prev = t_now;
             }
-            canary_check();
-            if (!usbh_msc_connected())
-                F_die();
-            t_prev = t_now;
+
+            floppy_cancel();
+
         }
 
-        floppy_cancel();
         arena_init();
         fs = arena_alloc(sizeof(*fs));
+
+        /* When an image is loaded, select button means eject. */
+        if (b & B_SELECT) {
+            /* ** EJECT STATE ** */
+            switch (display_mode) {
+            case DM_LED_7SEG:
+                led_7seg_write_string("EJECT");
+                break;
+            case DM_LCD_1602:
+                lcd_write(0, 1, 8, "EJECT");
+                break;
+            }
+            /* Wait for eject button to be released. */
+            while (buttons & B_SELECT)
+                continue;
+            /* Wait for any button to be pressed. */
+            while ((b = buttons) == 0)
+                continue;
+            /* Reload same image immediately if eject pressed again. */
+            if (b & B_SELECT) {
+                while (buttons & B_SELECT)
+                    continue;
+                continue;
+            }
+        }
 
         /* No buttons pressed: re-read config and carry on. */
         if (b == 0) {
@@ -658,12 +713,17 @@ int floppy_main(void)
             }
 
             /* Flash the LED display to indicate loading the new image. */
-            if ((b == 0) && (display_mode == DM_LED_7SEG)) {
+            if (!(b & (B_LEFT|B_RIGHT)) && (display_mode == DM_LED_7SEG)) {
                 led_7seg_display_setting(FALSE);
                 delay_ms(200);
                 led_7seg_display_setting(TRUE);
                 b = buttons;
             }
+
+            /* Wait for select button to be released. */
+            while ((b = buttons) & B_SELECT)
+                continue;
+
         } while (b != 0);
 
         /* Write the slot number resulting from the latest round of button 
