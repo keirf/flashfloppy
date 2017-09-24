@@ -22,7 +22,7 @@ def main(argv):
     crc16 = crcmod.predefined.Crc('crc-ccitt-false')
     out_f.write(in_dat)
     crc16.update(in_dat)
-    in_dat = struct.pack("cc", 'F', 'Y')
+    in_dat = struct.pack("cc", b'F', b'Y')
     out_f.write(in_dat)
     crc16.update(in_dat)
     in_dat = struct.pack(">H", crc16.crcValue)
