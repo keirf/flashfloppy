@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.7.3a - 24 September 2017
+ - HxC: Respect autoboot- and ejected-on-startup flags
+ - Support 3rd button for eject and for immediate (re-)insert
+ - Do not wrap slot number at 0 and max.
+
 ** v0.7.2a - 21 September 2017
  - Fixes to track timing and index position
  - Properly emulate a single-headed drive
