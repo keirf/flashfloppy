@@ -11,7 +11,7 @@
 
 #define GPI_bus GPI_floating
 #define GPO_bus GPO_pushpull(_2MHz,O_FALSE)
-#define AFO_bus AFO_pushpull(_2MHz)
+#define AFO_bus (AFO_pushpull(_2MHz) | (O_FALSE<<4))
 
 #define m(bitnr) (1u<<(bitnr))
 

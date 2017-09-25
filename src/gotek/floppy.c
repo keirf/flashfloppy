@@ -116,17 +116,17 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
         /* Set pin_rdata as timer output (AFO_bus). */
         if (dma_rd && (dma_rd->state == DMA_active))
             gpio_data->crl = (gpio_data->crl & ~(0xfu<<(pin_rdata<<2)))
-                | (AFO_bus<<(pin_rdata<<2));
+                | ((AFO_bus&0xfu)<<(pin_rdata<<2));
         /* Let main code know it can drive the bus until further notice. */
         drive.sel = 1;
     } else {
         /* SELA is deasserted (this drive is not selected).
          * Relinquish the bus by disabling all our asserted outputs. */
         gpio_out->bsrr = _gpio_out_active;
-        /* Set pin_rdata to GPO_pushpull(_2MHz). */
+        /* Set pin_rdata as quiescent (GPO_bus). */
         if (dma_rd && (dma_rd->state == DMA_active))
             gpio_data->crl = (gpio_data->crl & ~(0xfu<<(pin_rdata<<2)))
-                | (2<<(pin_rdata<<2));
+                | ((GPO_bus&0xfu)<<(pin_rdata<<2));
         /* Tell main code to leave the bus alone. */
         drive.sel = 0;
     }
