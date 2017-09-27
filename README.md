@@ -10,8 +10,8 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
 Binaries can be downloaded from the
 [Releases page](https://github.com/keirf/FlashFloppy/releases).
 
-The latest documentation is
-[on Github](https://github.com/keirf/FlashFloppy/blob/master/doc/README.md).
+The latest documentation is on the
+[wiki](https://github.com/keirf/FlashFloppy/wiki).
 
 ## Redistribution
 
