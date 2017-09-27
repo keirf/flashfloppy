@@ -265,11 +265,6 @@ void lcd_write(int col, int row, int min, const char *str)
     IRQ_restore(oldpri);
 }
 
-bool_t lcd_has_backlight(void)
-{
-    return (i2c_addr != OLED_ADDR);
-}
-
 void lcd_backlight(bool_t on)
 {
     /* Will be picked up the next time text[] is rendered. */
@@ -487,6 +482,10 @@ static unsigned int oled_start_i2c(uint8_t *buf)
         *p++ = setup_addr_cmds[i];
     }
 
+    /* Display on/off according to backlight setting. */
+    *p++ = 0x80;
+    *p++ = _bl ? 0xaf : 0xae;
+
     /* All subsequent bytes are data bytes. */
     *p++ = 0x40;
     oled_row = 0;
@@ -543,7 +542,6 @@ static void oled_init(void)
         0xa4,       /* output follows ram contents */
         0xa6,       /* normal display output (inverse=off) */
         0x2e,       /* deactivate scroll */
-        0xaf        /* display on */
     };
     /* NB. Changes for 128x64 display: 0xa8, 63, 0xda, 0x12, 0x81, 0xcf. 
      * Otherwise above settings create a double-height 128x32 viewport

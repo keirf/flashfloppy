@@ -117,7 +117,6 @@ static void lcd_scroll_name(void)
 static uint8_t lcd_handle_backlight(uint8_t b)
 {
     if ((display_mode != DM_LCD_1602)
-        || !lcd_has_backlight()
         || (cfg.backlight_on_secs == 0)
         || (cfg.backlight_on_secs == 0xff))
         return b;
@@ -783,7 +782,7 @@ int main(void)
 
     usbh_msc_init();
 
-    cfg.backlight_on_secs = 0xff;
+    cfg.backlight_on_secs = BACKLIGHT_ON_SECS;
     timer_init(&button_timer, button_timer_fn, NULL);
     timer_set(&button_timer, stk_now());
 
