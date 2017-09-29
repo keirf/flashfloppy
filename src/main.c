@@ -78,12 +78,15 @@ static bool_t slot_type(const char *str)
     return !strcmp(ext, str);
 }
 
-/* Write slot info to LCD. */
-static void lcd_write_slot(void)
+/* Write slot info to display. */
+static void display_write_slot(void)
 {
     char msg[17], *type;
-    if (display_mode != DM_LCD_1602)
+    if (display_mode != DM_LCD_1602) {
+        if (display_mode == DM_LED_7SEG)
+            led_7seg_write_decimal(cfg.slot_nr);
         return;
+    }
     snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
     lcd_write(0, 0, 16, msg);
     type = (cfg.slot.attributes & AM_DIR) ? "DIR"
@@ -352,30 +355,24 @@ no_config:
         printk("%u:D: '%s'\n", cfg.depth, fs->buf);
         cfg.cdir_stack[cfg.depth++] = fatfs.cdir;
         fr = f_chdir(fs->buf);
-        if (fr) {
-            /* Error! Clear the LASTDISK.IDX file. */
-            printk("LASTDISK.IDX is bad: clearing it\n");
-            F_lseek(&fs->file, 0);
-            F_truncate(&fs->file);
-            F_close(&fs->file);
-            fatfs.cdir = cfg.cur_cdir;
-            cfg.depth = 0;
-            type = CFG_lastidx;
-            goto out;
-        }
+        if (fr)
+            goto clear_lastdisk;
         /* Seek on to next pathname section. */
         sofar += p - fs->buf;
         F_lseek(&fs->file, sofar);
     }
-    F_close(&fs->file);
-    cfg.cur_cdir = fatfs.cdir;
-    type = CFG_lastidx;
+    if (cfg.depth != 0) {
+        /* No subfolder support on LED display. */
+        if (display_mode != DM_LCD_1602)
+            goto clear_lastdisk; /* no subfolder support on LED display */
+        /* Skip '..' entry. */
+        cfg.slot_nr = 1;
+    }
     if (p != fs->buf) {
         /* If there was a non-empty non-terminated pathname section, it 
          * must be the name of the currently-selected image file. */
         printk("%u:F: '%s'\n", cfg.depth, fs->buf);
         F_opendir(&fs->dp, "");
-        cfg.slot_nr = cfg.depth ? 1 : 0;
         while (no_cfg_dir_next()) {
             if (!strcmp(fs->fp.fname, fs->buf)) {
                 /* Yes, last disk image was committed. Tell our caller to load 
@@ -386,14 +383,26 @@ no_config:
             cfg.slot_nr++;
         }
         F_closedir(&fs->dp);
+        if (!cfg.lastdisk_committed)
+            goto clear_lastdisk;
     }
-    /* Sensible default slot to hover over in the selector. */
-    if (!cfg.lastdisk_committed)
-        cfg.slot_nr = cfg.depth ? 1 : 0;
+    F_close(&fs->file);
+    cfg.cur_cdir = fatfs.cdir;
+    type = CFG_lastidx;
 
 out:
     fatfs.cdir = cfg.cur_cdir;
     return type;
+
+clear_lastdisk:
+    /* Error! Clear the LASTDISK.IDX file. */
+    printk("LASTDISK.IDX is bad: clearing it\n");
+    F_lseek(&fs->file, 0);
+    F_truncate(&fs->file);
+    F_close(&fs->file);
+    cfg.depth = 0;
+    type = CFG_lastidx;
+    goto out;
 }
 
 #define CFG_KEEP_SLOT_NR  0 /* Do not re-read slot number from config */
@@ -423,7 +432,6 @@ static void no_cfg_update(uint8_t slot_mode)
         cfg.max_slot_nr--;
         F_closedir(&fs->dp);
         /* Select last disk_index if not greater than available slots. */
-        printk("READ: %u %u/%u\n", cfg.depth, cfg.slot_nr, cfg.max_slot_nr);
         cfg.slot_nr = (cfg.slot_nr <= cfg.max_slot_nr) ? cfg.slot_nr : 0;
     }
 
@@ -701,15 +709,8 @@ static void choose_new_image(uint8_t init_b)
         i = cfg.slot_nr;
         if (!(b ^ (B_LEFT|B_RIGHT))) {
             i = cfg.slot_nr = 0;
-            switch (display_mode) {
-            case DM_LED_7SEG:
-                led_7seg_write_decimal(0);
-                break;
-            case DM_LCD_1602:
-                cfg_update(CFG_KEEP_SLOT_NR);
-                lcd_write_slot();
-                break;
-            }
+            cfg_update(CFG_KEEP_SLOT_NR);
+            display_write_slot();
             /* Ignore changes while user is releasing the buttons. */
             while ((stk_diff(last_change, stk_now()) < stk_ms(1000))
                    && buttons)
@@ -735,15 +736,8 @@ static void choose_new_image(uint8_t init_b)
         }
 
         cfg.slot_nr = i;
-        switch (display_mode) {
-        case DM_LED_7SEG:
-            led_7seg_write_decimal(cfg.slot_nr);
-            break;
-        case DM_LCD_1602:
-            cfg_update(CFG_KEEP_SLOT_NR);
-            lcd_write_slot();
-            break;
-        }
+        cfg_update(CFG_KEEP_SLOT_NR);
+        display_write_slot();
 
     }
 }
@@ -764,7 +758,7 @@ int floppy_main(void)
 
     /* In lastdisk mode, go straight into selector if nothing selected. */
     if ((cfg_mode == CFG_lastidx) && !cfg.lastdisk_committed) {
-        lcd_write_slot();
+        display_write_slot();
         b = buttons;
         goto select;
     }
@@ -794,22 +788,16 @@ int floppy_main(void)
                 cfg.slot_nr = 1;
             }
             cfg_update(CFG_READ_SLOT_NR);
-            lcd_write_slot();
+            display_write_slot();
             b = buttons;
             goto select;
         }
 
         fs = NULL;
 
-        switch (display_mode) {
-        case DM_LED_7SEG:
-            led_7seg_write_decimal(cfg.slot_nr);
-            break;
-        case DM_LCD_1602:
-            lcd_write_slot();
+        display_write_slot();
+        if (display_mode == DM_LCD_1602)
             lcd_write_track_info(TRUE);
-            break;
-        }
 
         printk("Current slot: %u/%u\n", cfg.slot_nr, cfg.max_slot_nr);
         memcpy(msg, cfg.slot.type, 3);
@@ -873,8 +861,10 @@ int floppy_main(void)
             while (buttons & B_SELECT)
                 continue;
             /* Wait for any button to be pressed. */
-            while ((b = buttons) == 0)
-                continue;
+            while ((b = buttons) == 0) {
+                if (!usbh_msc_connected())
+                    F_die();
+            }
             /* Reload same image immediately if eject pressed again. */
             if (b & B_SELECT) {
                 while (buttons & B_SELECT)
@@ -901,6 +891,8 @@ int floppy_main(void)
                 b = buttons;
                 if (b != 0)
                     break;
+                if (!usbh_msc_connected())
+                    F_die();
                 delay_ms(1);
             }
 
