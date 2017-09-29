@@ -36,6 +36,8 @@ static bool_t ejected;
 
 /* Wrap slot number at 0 and max? */
 #define config_nav_loop TRUE
+/* Turn display on when there is drive activity? */
+#define config_display_on_activity TRUE
 
 static uint8_t cfg_mode;
 #define CFG_none      0 /* Iterate through all images in root. */
@@ -117,6 +119,8 @@ static void lcd_write_track_info(bool_t force)
     if (force || (cyl != lcd_cyl) || ((side != lcd_side) && sel)) {
         snprintf(msg, sizeof(msg), "T:%02u S:%u", cyl, side);
         lcd_write(8, 1, 0, msg);
+        if (config_display_on_activity)
+            lcd_on();
         lcd_cyl = cyl;
         lcd_side = side;
     }
