@@ -3,6 +3,17 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.8.0a - 29 September 2017
+** Subfolder support
+ - Navigate subfolders in config-less mode
+ - All config files can now be stored in FF subfolder
+ - LASTDISK.IDX file now stores full path to the selected image
+ - OLED: Display turns off after timeout (same as LCD backlight)
+ - Wrap slot number at 0 and max when navigating
+ - Easter egg for Anders Kling. Thanks for your support!
+
+-------------------------------------------------------------------------
+
 ** v0.7.4a - 25 September 2017
  - Fix RDATA handling, specifically when drive B on an Amstrad CPC.
    Reported by ikonsgr (EAB / Ebay) -- Thanks!
