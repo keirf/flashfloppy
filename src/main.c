@@ -341,6 +341,7 @@ no_config:
     for (;;) {
         /* Read next pathname section, search for its terminating slash. */
         F_read(&fs->file, fs->buf, sizeof(fs->buf), NULL);
+        fs->buf[sizeof(fs->buf)-1] = '\0';
         for (p = fs->buf; *p && (*p != '/'); p++)
             continue;
         /* No terminating slash: we're done. */
@@ -350,7 +351,18 @@ no_config:
         *p++ = '\0';
         printk("%u:D: '%s'\n", cfg.depth, fs->buf);
         cfg.cdir_stack[cfg.depth++] = fatfs.cdir;
-        F_chdir(fs->buf);
+        fr = f_chdir(fs->buf);
+        if (fr) {
+            /* Error! Clear the LASTDISK.IDX file. */
+            printk("LASTDISK.IDX is bad: clearing it\n");
+            F_lseek(&fs->file, 0);
+            F_truncate(&fs->file);
+            F_close(&fs->file);
+            fatfs.cdir = cfg.cur_cdir;
+            cfg.depth = 0;
+            type = CFG_lastidx;
+            goto out;
+        }
         /* Seek on to next pathname section. */
         sofar += p - fs->buf;
         F_lseek(&fs->file, sofar);
