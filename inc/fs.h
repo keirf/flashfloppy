@@ -29,6 +29,7 @@ void F_unlink(const TCHAR *path);
 void F_findfirst(DIR *dp, FILINFO *fno, const TCHAR *path,
                  const TCHAR *pattern);
 void F_findnext(DIR *dp, FILINFO *fno);
+void F_chdir(const TCHAR *path);
 
 #if 0
 FRESULT f_mkdir(const TCHAR *path);
@@ -36,7 +37,6 @@ FRESULT f_rename(const TCHAR *path_old, const TCHAR *path_new);
 FRESULT f_stat(const TCHAR *path, FILINFO *fno);
 FRESULT f_chmod(const TCHAR *path, BYTE attr, BYTE mask);
 FRESULT f_utime(const TCHAR *path, const FILINFO *fno);
-FRESULT f_chdir(const TCHAR *path);
 FRESULT f_getcwd(TCHAR *buff, UINT len);
 FRESULT f_getfree(const TCHAR *path, DWORD *nclst, FATFS* *fatfs);
 FRESULT f_mount(FATFS *fs, const TCHAR *path, BYTE opt);

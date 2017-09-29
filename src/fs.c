@@ -146,6 +146,12 @@ void F_findnext(DIR *dp, FILINFO *fno)
     handle_fr(fr);
 }
 
+void F_chdir(const TCHAR *path)
+{
+    FRESULT fr = f_chdir(path);
+    handle_fr(fr);
+}
+
 /*
  * Local variables:
  * mode: C

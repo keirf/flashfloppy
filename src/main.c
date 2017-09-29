@@ -16,6 +16,7 @@ static struct {
     FIL file;
     DIR dp;
     FILINFO fp;
+    char buf[512];
 } *fs;
 
 static struct {
@@ -24,6 +25,10 @@ static struct {
     uint8_t backlight_on_secs;
     uint16_t lcd_scroll_msec;
     struct v2_slot autoboot, hxcsdfe, slot;
+    uint32_t cfg_cdir, cur_cdir;
+    uint16_t cdir_stack[20];
+    uint8_t depth;
+    bool_t lastdisk_committed;
 } cfg;
 
 static bool_t first_startup = TRUE;
@@ -62,15 +67,34 @@ static void lcd_on(void)
     lcd_backlight(cfg.backlight_on_secs != 0);
 }
 
+static bool_t slot_type(const char *str)
+{
+    char ext[4];
+    filename_extension(cfg.slot.name, ext, sizeof(ext));
+    if (!strcmp(ext, str))
+        return TRUE;
+    memcpy(ext, cfg.slot.type, 3);
+    ext[3] = '\0';
+    return !strcmp(ext, str);
+}
+
 /* Write slot info to LCD. */
 static void lcd_write_slot(void)
 {
-    char msg[17];
+    char msg[17], *type;
     if (display_mode != DM_LCD_1602)
         return;
     snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
     lcd_write(0, 0, 16, msg);
-    snprintf(msg, sizeof(msg), "%03u/%03u", cfg.slot_nr, cfg.max_slot_nr);
+    type = (cfg.slot.attributes & AM_DIR) ? "DIR"
+        : slot_type("adf") ? "ADF"
+        : slot_type("hfe") ? "HFE"
+        : slot_type("img") ? "IMG"
+        : slot_type("ima") ? "IMA"
+        : slot_type("st") ? "ST "
+        : "UNK";
+    snprintf(msg, sizeof(msg), "%03u/%03u %s D:%u",
+             cfg.slot_nr, cfg.max_slot_nr, type, cfg.depth);
     lcd_write(0, 1, 16, msg);
     lcd_on();
 }
@@ -231,11 +255,44 @@ static void fatfs_to_slot(struct v2_slot *slot, FIL *file, const char *name)
         slot->type[i] = tolower(slot->type[i]);
 }
 
+static void dump_file(void)
+{
+    F_lseek(&fs->file, 0);
+    printk("[");
+    do {
+        F_read(&fs->file, fs->buf, sizeof(fs->buf), NULL);
+        printk("%s", fs->buf);
+    } while (!f_eof(&fs->file));
+    printk("]\n");
+}
+
+static bool_t no_cfg_dir_next(void)
+{
+    do {
+        F_readdir(&fs->dp, &fs->fp);
+        if (fs->fp.fname[0] == '\0')
+            return FALSE;
+        if ((fs->fp.fattrib & AM_DIR) && (display_mode == DM_LCD_1602)
+            && ((cfg.depth != 0) || strcmp(fs->fp.fname, "FF")))
+            break;
+    } while (!image_valid(&fs->fp));
+    return TRUE;
+}
+
 static uint8_t cfg_init(void)
 {
     struct hxcsdfe_cfg hxc_cfg;
+    unsigned int sofar;
+    char *p;
+    uint8_t type;
     FRESULT fr;
-    char slot[10];
+
+    cfg.slot_nr = cfg.depth = 0;
+    cfg.lastdisk_committed = FALSE;
+    cfg.cur_cdir = fatfs.cdir;
+
+    fr = f_chdir("FF");
+    cfg.cfg_cdir = fatfs.cdir;
 
     fr = F_try_open(&fs->file, "HXCSDFE.CFG", FA_READ|FA_WRITE);
     if (fr)
@@ -258,7 +315,8 @@ static uint8_t cfg_init(void)
     /* Indexed mode (DSKAxxxx.HFE) does not need AUTOBOOT.HFE. */
     if (!strncmp("HXCFECFGV", hxc_cfg.signature, 9) && hxc_cfg.index_mode) {
         memset(&cfg.autoboot, 0, sizeof(cfg.autoboot));
-        return CFG_hxc;
+        type = CFG_hxc;
+        goto out;
     }
 
     fr = F_try_open(&fs->file, "AUTOBOOT.HFE", FA_READ);
@@ -267,17 +325,63 @@ static uint8_t cfg_init(void)
     fatfs_to_slot(&cfg.autoboot, &fs->file, "AUTOBOOT.HFE");
     F_close(&fs->file);
 
-    return CFG_hxc;
+    type = CFG_hxc;
+    goto out;
 
 no_config:
-    cfg.slot_nr = 0;
     fr = F_try_open(&fs->file, "LASTDISK.IDX", FA_READ|FA_WRITE);
-    if (fr)
-        return CFG_none;
-    F_read(&fs->file, slot, sizeof(slot), NULL);
+    if (fr) {
+        type = CFG_none;
+        goto out;
+    }
+
+    /* Process LASTDISK.IDX file. */
+    sofar = 0; /* bytes consumed so far */
+    fatfs.cdir = cfg.cur_cdir;
+    for (;;) {
+        /* Read next pathname section, search for its terminating slash. */
+        F_read(&fs->file, fs->buf, sizeof(fs->buf), NULL);
+        for (p = fs->buf; *p && (*p != '/'); p++)
+            continue;
+        /* No terminating slash: we're done. */
+        if ((p == fs->buf) || !*p)
+            break;
+        /* Terminate the name section, push curdir onto stack, then chdir. */
+        *p++ = '\0';
+        printk("%u:D: '%s'\n", cfg.depth, fs->buf);
+        cfg.cdir_stack[cfg.depth++] = fatfs.cdir;
+        F_chdir(fs->buf);
+        /* Seek on to next pathname section. */
+        sofar += p - fs->buf;
+        F_lseek(&fs->file, sofar);
+    }
     F_close(&fs->file);
-    cfg.slot_nr = strtol(slot, NULL, 10);
-    return CFG_lastidx;
+    cfg.cur_cdir = fatfs.cdir;
+    type = CFG_lastidx;
+    if (p != fs->buf) {
+        /* If there was a non-empty non-terminated pathname section, it 
+         * must be the name of the currently-selected image file. */
+        printk("%u:F: '%s'\n", cfg.depth, fs->buf);
+        F_opendir(&fs->dp, "");
+        cfg.slot_nr = cfg.depth ? 1 : 0;
+        while (no_cfg_dir_next()) {
+            if (!strcmp(fs->fp.fname, fs->buf)) {
+                /* Yes, last disk image was committed. Tell our caller to load 
+                 * it immediately rather than jumping to the selector. */
+                cfg.lastdisk_committed = TRUE;
+                break;
+            }
+            cfg.slot_nr++;
+        }
+        F_closedir(&fs->dp);
+    }
+    /* Sensible default slot to hover over in the selector. */
+    if (!cfg.lastdisk_committed)
+        cfg.slot_nr = cfg.depth ? 1 : 0;
+
+out:
+    fatfs.cdir = cfg.cur_cdir;
+    return type;
 }
 
 #define CFG_KEEP_SLOT_NR  0 /* Do not re-read slot number from config */
@@ -297,48 +401,91 @@ static void no_cfg_update(uint8_t slot_mode)
 
         /* Populate slot_map[]. */
         memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
-        cfg.max_slot_nr = 0;
-        for (F_findfirst(&fs->dp, &fs->fp, "", "*.*");
-             fs->fp.fname[0] != '\0';
-             F_findnext(&fs->dp, &fs->fp)) {
-            if (!image_valid(&fs->fp))
-                continue;
-            /* All is fine, populate the 'slot'. */
+        cfg.max_slot_nr = cfg.depth ? 1 : 0;
+        F_opendir(&fs->dp, "");
+        while (no_cfg_dir_next())
             cfg.max_slot_nr++;
-        }
-        F_closedir(&fs->dp);
         /* Adjust max_slot_nr. Must be at least one 'slot'. */
         if (!cfg.max_slot_nr)
             F_die();
         cfg.max_slot_nr--;
+        F_closedir(&fs->dp);
         /* Select last disk_index if not greater than available slots. */
+        printk("READ: %u %u/%u\n", cfg.depth, cfg.slot_nr, cfg.max_slot_nr);
         cfg.slot_nr = (cfg.slot_nr <= cfg.max_slot_nr) ? cfg.slot_nr : 0;
     }
 
     if ((cfg_mode == CFG_lastidx) && (slot_mode == CFG_WRITE_SLOT_NR)) {
-        char slot[10];
+        char slot[10], *p, *q;
         snprintf(slot, sizeof(slot), "%u", cfg.slot_nr);
-        F_open(&fs->file, "LASTDISK.IDX", FA_WRITE);
-        F_write(&fs->file, slot, strnlen(slot, sizeof(slot)), NULL);
+        fatfs.cdir = cfg.cfg_cdir;
+        F_open(&fs->file, "LASTDISK.IDX", FA_READ|FA_WRITE);
+        printk("Before: "); dump_file(); F_lseek(&fs->file, 0);
+        /* Read final section of the file. */
+        if (f_size(&fs->file) > sizeof(fs->buf))
+            F_lseek(&fs->file, f_size(&fs->file) - sizeof(fs->buf));
+        F_read(&fs->file, fs->buf, sizeof(fs->buf), NULL);
+        F_lseek(&fs->file, (f_size(&fs->file) > sizeof(fs->buf)
+                            ? f_size(&fs->file) - sizeof(fs->buf) : 0));
+        /* Find end of last subfolder name, if any. */
+        if ((p = strrchr(fs->buf, '/')) != NULL) {
+            /* Found: seek to after the trailing '/'. */
+            F_lseek(&fs->file, f_tell(&fs->file) + (p+1 - fs->buf));
+        } else {
+            /* No subfolder: we overwrite the entire file. */
+            F_lseek(&fs->file, 0);
+        }
+        if (cfg.slot.attributes & AM_DIR) {
+            if (!strcmp(fs->fp.fname, "..")) {
+                /* Strip back to next '/' */
+                if (!p) F_die(); /* must exist */
+                *p = '\0';
+                if ((q = strrchr(fs->buf, '/')) != NULL) {
+                    F_lseek(&fs->file, f_tell(&fs->file) - (p-q));
+                } else {
+                    F_lseek(&fs->file, 0);
+                }
+            } else {
+                /* Add name plus '/' */
+                F_write(&fs->file, fs->fp.fname,
+                        strnlen(fs->fp.fname, sizeof(fs->fp.fname)), NULL);
+                F_write(&fs->file, "/", 1, NULL);
+            }
+        } else {
+            /* Add name */
+            F_write(&fs->file, fs->fp.fname,
+                    strnlen(fs->fp.fname, sizeof(fs->fp.fname)), NULL);
+        }
         F_truncate(&fs->file);
+        printk("After: "); dump_file(); F_lseek(&fs->file, 0);
         F_close(&fs->file);
+        fatfs.cdir = cfg.cur_cdir;
     }
     
     /* Populate current slot. */
-    i = 0;
-    for (F_findfirst(&fs->dp, &fs->fp, "", "*.*");
-         fs->fp.fname[0] != '\0';
-         F_findnext(&fs->dp, &fs->fp)) {
-        if (!image_valid(&fs->fp))
-            continue;
-        if (i == cfg.slot_nr)
+    i = cfg.depth ? 1 : 0;
+    F_opendir(&fs->dp, "");
+    while (no_cfg_dir_next()) {
+        if (i >= cfg.slot_nr)
             break;
         i++;
     }
     F_closedir(&fs->dp);
-    F_open(&fs->file, fs->fp.fname, FA_READ);
-    fatfs_to_slot(&cfg.slot, &fs->file, fs->fp.fname);
-    F_close(&fs->file);
+    if (i > cfg.slot_nr) {
+        /* Must be the ".." folder. */
+        snprintf(fs->fp.fname, sizeof(fs->fp.fname), "..");
+        fs->fp.fattrib = AM_DIR;
+    }
+    if (fs->fp.fattrib & AM_DIR) {
+        /* Leave the full pathname cached in fs->fp. */
+        cfg.slot.attributes = fs->fp.fattrib;
+        snprintf(cfg.slot.name, sizeof(cfg.slot.name), "%s", fs->fp.fname);
+    } else {
+        F_open(&fs->file, fs->fp.fname, FA_READ);
+        fs->file.obj.attr = fs->fp.fattrib;
+        fatfs_to_slot(&cfg.slot, &fs->file, fs->fp.fname);
+        F_close(&fs->file);
+    }
 }
 
 static void hxc_cfg_update(uint8_t slot_mode)
@@ -490,6 +637,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
         F_closedir(&fs->dp);
         if (fs->fp.fname[0]) {
             F_open(&fs->file, fs->fp.fname, FA_READ);
+            fs->file.obj.attr = fs->fp.fattrib;
             fatfs_to_slot(&cfg.slot, &fs->file, fs->fp.fname);
             F_close(&fs->file);
         }
@@ -602,6 +750,13 @@ int floppy_main(void)
     cfg_update(CFG_READ_SLOT_NR);
     first_startup = FALSE;
 
+    /* In lastdisk mode, go straight into selector if nothing selected. */
+    if ((cfg_mode == CFG_lastidx) && !cfg.lastdisk_committed) {
+        lcd_write_slot();
+        b = buttons;
+        goto select;
+    }
+
     for (;;) {
 
         /* Make sure slot index is on a valid slot. Find next valid slot if 
@@ -614,6 +769,22 @@ int floppy_main(void)
             printk("Updated slot %u -> %u\n", cfg.slot_nr, i);
             cfg.slot_nr = i;
             cfg_update(CFG_WRITE_SLOT_NR);
+        }
+
+        if (cfg.slot.attributes & AM_DIR) {
+            if (!strcmp(fs->fp.fname, "..")) {
+                fatfs.cdir = cfg.cur_cdir = cfg.cdir_stack[--cfg.depth];
+                cfg.slot_nr = 0;
+            } else {
+                cfg.cdir_stack[cfg.depth++] = cfg.cur_cdir;
+                F_chdir(fs->fp.fname);
+                cfg.cur_cdir = fatfs.cdir;
+                cfg.slot_nr = 1;
+            }
+            cfg_update(CFG_READ_SLOT_NR);
+            lcd_write_slot();
+            b = buttons;
+            goto select;
         }
 
         fs = NULL;
@@ -706,6 +877,7 @@ int floppy_main(void)
             continue;
         }
 
+    select:
         do {
             /* While buttons are pressed we poll them and update current image
              * accordingly. */
