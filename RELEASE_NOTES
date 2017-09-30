@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.8.1a - 30 September 2017
+ - Fix config-less navigation with simple digit displays
+ - Respond to USB stick pull when in ejected state
+ - LCD/OLED: Increase activity timeout to 60 seconds
+ - LCD/OLED: Turn on display on drive activity
+
 ** v0.8.0a - 29 September 2017
 ** Subfolder support
  - Navigate subfolders in config-less mode
