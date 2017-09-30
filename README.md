@@ -7,11 +7,11 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
 - Compatible with the HxC ecosystem: Autoboot and Indexed
   modes supported, and HFE image files.
 
-Binaries can be downloaded from the
-[Releases page](https://github.com/keirf/FlashFloppy/releases).
+## Download
+- [**Download FlashFloppy**](https://github.com/keirf/FlashFloppy/wiki/Downloads)
 
-The latest documentation is on the
-[wiki](https://github.com/keirf/FlashFloppy/wiki).
+## Documentation
+- [**Read the GitHub Wiki**](https://github.com/keirf/FlashFloppy/wiki)
 
 ## Redistribution
 
