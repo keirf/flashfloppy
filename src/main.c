@@ -47,7 +47,7 @@ static uint8_t cfg_mode;
 uint8_t board_id;
 
 #define IMAGE_SELECT_WAIT_SECS 2
-#define BACKLIGHT_ON_SECS      20
+#define BACKLIGHT_ON_SECS      60
 #define LCD_SCROLL_MSEC        400
 #define LCD_SCROLL_PAUSE_MSEC  2000
 
