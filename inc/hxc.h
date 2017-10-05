@@ -28,6 +28,8 @@ struct __packed da_status_sector {
     uint16_t current_index;
 };
 
+extern struct da_status_sector dass;
+
 /* Direct-Access Mode: Sent to us in sector 0 of cylinder 255, side 0. */
 struct __packed da_cmd_sector {
     char sig[8];

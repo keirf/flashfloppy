@@ -148,6 +148,7 @@ void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
 void floppy_set_cyl(uint8_t unit, uint8_t cyl);
 void floppy_get_track(uint8_t *p_cyl, uint8_t *p_side, uint8_t *p_sel);
+void floppy_set_fintf_mode(uint8_t fintf_mode);
 
 /*
  * Local variables:

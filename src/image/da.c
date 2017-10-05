@@ -11,7 +11,7 @@
 
 #include "../fatfs/diskio.h"
 
-static struct da_status_sector dass = {
+struct da_status_sector dass = {
     .sig = "HxCFEDA",
     .fw_ver = "FF-v"FW_VER,
 };

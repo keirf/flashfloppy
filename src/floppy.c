@@ -190,7 +190,7 @@ static struct dma_ring *dma_ring_alloc(void)
     return dma;
 }
 
-static void floppy_set_fintf_mode(uint8_t fintf_mode)
+void floppy_set_fintf_mode(uint8_t fintf_mode)
 {
     static const char * const fintf_name[] = { "Shugart", "PC" };
     struct drive *drv = &drive;

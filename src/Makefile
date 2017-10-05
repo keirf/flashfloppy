@@ -1,5 +1,6 @@
 OBJS += arena.o
 OBJS += cancellation.o
+OBJS += config.o
 OBJS += crc.o
 OBJS += display.o
 OBJS += vectors.o
