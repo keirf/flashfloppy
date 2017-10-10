@@ -52,6 +52,7 @@ dist:
 	cp -a COPYING flashfloppy_$(VER)/
 	cp -a README.md flashfloppy_$(VER)/
 	cp -a RELEASE_NOTES flashfloppy_$(VER)/
+	cp -a examples flashfloppy_$(VER)/
 	zip -r flashfloppy_$(VER).zip flashfloppy_$(VER)
 
 mrproper: clean
