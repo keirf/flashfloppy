@@ -106,8 +106,13 @@ static void display_write_slot(void)
         : slot_type("ima") ? "IMA"
         : slot_type("st") ? "ST "
         : "UNK";
-    snprintf(msg, sizeof(msg), "%03u/%03u %s D:%u",
-             cfg.slot_nr, cfg.max_slot_nr, type, cfg.depth);
+    if (cfg_mode == CFG_hxc) {
+        snprintf(msg, sizeof(msg), "%03u/%03u %s",
+                 cfg.slot_nr, cfg.max_slot_nr, type);
+    } else {
+        snprintf(msg, sizeof(msg), "%03u/%03u %s D:%u",
+                 cfg.slot_nr, cfg.max_slot_nr, type, cfg.depth);
+    }
     lcd_write(0, 1, 16, msg);
     lcd_on();
 }
