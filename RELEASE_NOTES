@@ -3,6 +3,9 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.8.2a - 10 October 2017
+ - Parse FF.CFG file (see examples/FF.CFG for options)
+
 ** v0.8.1a - 30 September 2017
  - Fix config-less navigation with simple digit displays
  - Respond to USB stick pull when in ejected state
