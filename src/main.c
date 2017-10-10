@@ -422,6 +422,7 @@ static uint8_t cfg_init(void)
     fr = f_chdir("FF");
     cfg.cfg_cdir = fatfs.cdir;
 
+    fatfs.cdir = cfg.cur_cdir;
     fr = F_try_open(&fs->file, "HXCSDFE.CFG", FA_READ|FA_WRITE);
     if (fr)
         goto no_config;
@@ -457,6 +458,7 @@ static uint8_t cfg_init(void)
     goto out;
 
 no_config:
+    fatfs.cdir = cfg.cfg_cdir;
     fr = F_try_open(&fs->file, "LASTDISK.IDX", FA_READ|FA_WRITE);
     if (fr) {
         type = CFG_none;
