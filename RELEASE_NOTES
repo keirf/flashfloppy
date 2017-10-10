@@ -116,9 +116,7 @@
 
 ** v0.4.0a - 10 August 2017
 ** 128x32 I2C OLED Display support
- - Support for 0.91" I2C OLED (128x32, SSD1306 controller). Connect in
-   the same way as a 1602 LCD module, including 4.7k pullups to VCC on
-   the SCL and SDA lines.
+ - Support for 0.91" I2C OLED (128x32, SSD1306 controller).
  - Various optimisations and bug fixes.
 
 -------------------------------------------------------------------------
