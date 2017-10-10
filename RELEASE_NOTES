@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.8.3a - 10 October 2017
+ - Always search for HXCSDFE.CFG/AUTOBOOT.HFE in root folder, even
+   when FF/ subfolder exists
+
 ** v0.8.2a - 10 October 2017
  - Parse FF.CFG file (see examples/FF.CFG for options)
  - LCD/OLED: Don't display bogus 'folder depth' in Autoboot mode
