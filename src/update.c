@@ -299,6 +299,8 @@ int main(void)
         break;
     }
 
+    display_setting(TRUE);
+
     usbh_msc_init();
 
     /* Wait for buttons to be pressed. */
@@ -344,8 +346,6 @@ int main(void)
     }
 
     /* Clear the display. */
-    if (display_mode == DM_LCD_1602)
-        lcd_clear();
     display_setting(FALSE);
 
     /* All done. Reset. */
