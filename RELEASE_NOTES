@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.8.4a - 11 October 2017
+ - Bootloader OLED Display Fix (display was not enabled in update mode)
+ - Integrate 7x16 OLED font into main build, configurable in FF.CFG
+
 ** v0.8.3a - 10 October 2017
  - Always search for HXCSDFE.CFG/AUTOBOOT.HFE in root folder, even
    when FF/ subfolder exists
