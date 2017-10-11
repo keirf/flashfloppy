@@ -38,6 +38,8 @@ static bool_t ejected;
 static bool_t config_nav_loop = TRUE;
 /* Turn display on when there is drive activity? */
 static bool_t config_display_on_activity = TRUE;
+/* OLED display uses narrower 7x16 font? */
+bool_t config_oled_7x16;
 
 /* Have certain settings been specified in FF.CFG? Then they cannot be later 
  * overridden. */
@@ -311,6 +313,7 @@ static void read_ff_cfg(void)
         C_display_off_secs,
         C_display_on_activity,
         C_display_scroll_rate,
+        C_oled_font,
         C_step_volume,
         C_nr
     };
@@ -325,6 +328,7 @@ static void read_ff_cfg(void)
         [C_display_off_secs] = { "display-off-secs" },
         [C_display_on_activity] = { "display-on-activity" },
         [C_display_scroll_rate] = { "display-scroll-rate" },
+        [C_oled_font] = { "oled-font" },
         [C_step_volume] = { "step-volume" }
     };
 
@@ -390,6 +394,10 @@ static void read_ff_cfg(void)
             cfg.lcd_scroll_msec = strtol(opts.arg, NULL, 10);
             if (cfg.lcd_scroll_msec < 100) cfg.lcd_scroll_msec = 100;
             ffcfg_display_scroll_rate = TRUE;
+            break;
+
+        case C_oled_font:
+            config_oled_7x16 = !strcmp(opts.arg, "7x16");
             break;
 
         case C_step_volume: {

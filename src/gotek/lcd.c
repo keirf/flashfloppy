@@ -418,9 +418,10 @@ fail:
 
 #ifdef font_7x16
 
+extern bool_t config_oled_7x16;
 extern const uint8_t oled_font_7x16[];
 
-static void oled_convert_text_row(char *pc)
+static void oled_convert_text_row_7x16(char *pc)
 {
     unsigned int i, c;
     const uint8_t *p;
@@ -440,11 +441,10 @@ static void oled_convert_text_row(char *pc)
     memset(q+128, 0, 16);
 }
 
-#else
+#endif
 
 extern const uint32_t oled_font_8x16[];
-
-static void oled_convert_text_row(char *pc)
+static void oled_convert_text_row_8x16(char *pc)
 {
     unsigned int i, c;
     const uint32_t *p;
@@ -461,7 +461,15 @@ static void oled_convert_text_row(char *pc)
     }
 }
 
+static void oled_convert_text_row(char *pc)
+{
+#ifdef font_7x16
+    if (config_oled_7x16)
+        oled_convert_text_row_7x16(pc);
+    else
 #endif
+        oled_convert_text_row_8x16(pc);
+}
 
 static uint8_t oled_row;
 
