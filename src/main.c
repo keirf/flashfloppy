@@ -22,8 +22,6 @@ static struct {
 static struct {
     uint16_t slot_nr, max_slot_nr;
     uint8_t slot_map[1000/8];
-    uint8_t backlight_on_secs;
-    uint16_t lcd_scroll_msec;
     struct v2_slot autoboot, hxcsdfe, slot;
     uint32_t cfg_cdir, cur_cdir;
     uint16_t cdir_stack[20];
@@ -34,18 +32,42 @@ static struct {
 static bool_t first_startup = TRUE;
 static bool_t ejected;
 
-/* Wrap slot number at 0 and max? */
-static bool_t config_nav_loop = TRUE;
-/* Turn display on when there is drive activity? */
-static bool_t config_display_on_activity = TRUE;
 /* OLED display uses narrower 7x16 font? */
 bool_t config_oled_7x16;
 
-/* Have certain settings been specified in FF.CFG? Then they cannot be later 
- * overridden. */
-static bool_t ffcfg_display_off_secs;
-static bool_t ffcfg_display_scroll_rate;
-static bool_t ffcfg_step_volume;
+/* Options available from FF.CFG */
+enum {
+#define x(n,o,v) FFCFG_##o,
+#include "ff_cfg_defaults.h"
+#undef x
+    FFCFG_nr
+};
+
+/* Which options have been overridden by FF.CFG?  */
+static bool_t ff_cfg_override[FFCFG_nr];
+
+/* Settings from FF.CFG (or default values if not specified in FF.CFG). */
+static struct ff_cfg {
+    /* interface: FINTF_* interface mode */
+#define FINTF_DEFAULT 255 /* default mode (jumper JC) */
+    uint8_t interface; /* FINTF_* interface mode */
+    bool_t ejected_on_startup;
+    char da_report_version[16]; 
+    uint8_t autoselect_file_secs;
+    uint8_t autoselect_folder_secs;
+    bool_t nav_loop; /* Wrap slot number at 0 and max? */
+    uint8_t display_off_secs;
+    bool_t display_on_activity; /* Display on when there is drive activity? */
+    uint16_t display_scroll_rate;
+#define FONT_7x16 7
+#define FONT_8x16 8
+    uint8_t oled_font; /* FONT_* oled font specifier */
+    uint8_t step_volume;
+} ff_cfg = {
+#define x(n,o,v) .o = v,
+#include "ff_cfg_defaults.h"
+#undef x
+};
 
 static uint8_t cfg_mode;
 #define CFG_none      0 /* Iterate through all images in root. */
@@ -57,8 +79,6 @@ uint8_t board_id;
 static uint8_t autoselect_file_secs = 2;
 static uint8_t autoselect_folder_secs = 2;
 
-#define BACKLIGHT_ON_SECS      60
-#define LCD_SCROLL_MSEC        400
 #define LCD_SCROLL_PAUSE_MSEC  2000
 
 static uint32_t backlight_ticks;
@@ -76,7 +96,7 @@ static void lcd_on(void)
     barrier();
     backlight_state = BACKLIGHT_ON;
     barrier();
-    lcd_backlight(cfg.backlight_on_secs != 0);
+    lcd_backlight(ff_cfg.display_off_secs != 0);
 }
 
 static bool_t slot_type(const char *str)
@@ -134,7 +154,7 @@ static void lcd_write_track_info(bool_t force)
     if (force || (cyl != lcd_cyl) || ((side != lcd_side) && sel)) {
         snprintf(msg, sizeof(msg), "T:%02u S:%u", cyl, side);
         lcd_write(8, 1, 0, msg);
-        if (config_display_on_activity)
+        if (ff_cfg.display_on_activity)
             lcd_on();
         lcd_cyl = cyl;
         lcd_side = side;
@@ -156,15 +176,15 @@ static void lcd_scroll_name(void)
     lcd_scroll_ticks =
         ((lcd_scroll_off == 0)
          || (lcd_scroll_off == lcd_scroll_end))
-        ? stk_ms(LCD_SCROLL_PAUSE_MSEC) : stk_ms(cfg.lcd_scroll_msec);
+        ? stk_ms(LCD_SCROLL_PAUSE_MSEC) : stk_ms(ff_cfg.display_scroll_rate);
 }
 
 /* Handle switching the LCD backlight. */
 static uint8_t lcd_handle_backlight(uint8_t b)
 {
     if ((display_mode != DM_LCD_1602)
-        || (cfg.backlight_on_secs == 0)
-        || (cfg.backlight_on_secs == 0xff))
+        || (ff_cfg.display_off_secs == 0)
+        || (ff_cfg.display_off_secs == 0xff))
         return b;
 
     switch (backlight_state) {
@@ -187,7 +207,7 @@ static uint8_t lcd_handle_backlight(uint8_t b)
         /* After a period with no button activity we turn the backlight off. */
         if (b)
             backlight_ticks = 0;
-        if (backlight_ticks++ >= 200*cfg.backlight_on_secs) {
+        if (backlight_ticks++ >= 200*ff_cfg.display_off_secs) {
             lcd_backlight(FALSE);
             backlight_state = BACKLIGHT_OFF;
         }
@@ -303,40 +323,17 @@ static bool_t no_cfg_dir_next(void)
 
 static void read_ff_cfg(void)
 {
-    enum {
-        C_interface,
-        C_ejected_on_startup,
-        C_da_report_version,
-        C_autoselect_file_secs,
-        C_autoselect_folder_secs,
-        C_nav_loop,
-        C_display_off_secs,
-        C_display_on_activity,
-        C_display_scroll_rate,
-        C_oled_font,
-        C_step_volume,
-        C_nr
-    };
-
-    const static struct opt config_opts[C_nr+1] = {
-        [C_interface] = { "interface" },
-        [C_ejected_on_startup] = { "ejected-on-startup" },
-        [C_da_report_version] = { "da-report-version" },
-        [C_autoselect_file_secs] = { "autoselect-file-secs" },
-        [C_autoselect_folder_secs] = { "autoselect-folder-secs" },
-        [C_nav_loop] = { "nav-loop" },
-        [C_display_off_secs] = { "display-off-secs" },
-        [C_display_on_activity] = { "display-on-activity" },
-        [C_display_scroll_rate] = { "display-scroll-rate" },
-        [C_oled_font] = { "oled-font" },
-        [C_step_volume] = { "step-volume" }
+    const static struct opt ff_cfg_opts[FFCFG_nr+1] = {
+#define x(n,o,v) [FFCFG_##o] = { #n },
+#include "ff_cfg_defaults.h"
+#undef x
     };
 
     FRESULT fr;
     int option;
     struct opts opts = {
         .file = &fs->file,
-        .opts = config_opts,
+        .opts = ff_cfg_opts,
         .arg = fs->buf,
         .argmax = sizeof(fs->buf)-1
     };
@@ -348,64 +345,67 @@ static void read_ff_cfg(void)
 
     while ((option = get_next_opt(&opts)) != -1) {
 
+        ff_cfg_override[option] = TRUE;
+
         switch (option) {
 
-        case C_interface: {
+        case FFCFG_interface: {
             int mode = !strcmp(opts.arg, "pc") ? FINTF_PC
                 : !strcmp(opts.arg, "shugart") ? FINTF_SHUGART
-                : -1;
-            if (mode != -1)
-                floppy_set_fintf_mode(mode);
+                : FINTF_DEFAULT;
+            if (mode != FINTF_DEFAULT)
+                ff_cfg.interface = mode;
             break;
         }
 
-        case C_ejected_on_startup:
-            if (first_startup && !strcmp(opts.arg, "yes"))
-                ejected = TRUE;
+        case FFCFG_ejected_on_startup:
+            ff_cfg.ejected_on_startup = !strcmp(opts.arg, "yes");
             break;
 
-        case C_da_report_version:
-            memset(dass.fw_ver, 0, sizeof(dass.fw_ver));
-            snprintf(dass.fw_ver, sizeof(dass.fw_ver), "%s", opts.arg);
+        case FFCFG_da_report_version:
+            memset(ff_cfg.da_report_version, 0,
+                   sizeof(ff_cfg.da_report_version));
+            snprintf(ff_cfg.da_report_version,
+                     sizeof(ff_cfg.da_report_version),
+                     "%s", opts.arg);
             break;
 
-        case C_autoselect_file_secs:
-            autoselect_file_secs = strtol(opts.arg, NULL, 10);
+        case FFCFG_autoselect_file_secs:
+            ff_cfg.autoselect_file_secs = strtol(opts.arg, NULL, 10);
             break;
 
-        case C_autoselect_folder_secs:
-            autoselect_folder_secs = strtol(opts.arg, NULL, 10);
+        case FFCFG_autoselect_folder_secs:
+            ff_cfg.autoselect_folder_secs = strtol(opts.arg, NULL, 10);
             break;
 
-        case C_nav_loop:
-            config_nav_loop = !strcmp(opts.arg, "yes");
+        case FFCFG_nav_loop:
+            ff_cfg.nav_loop = !strcmp(opts.arg, "yes");
             break;
 
-        case C_display_off_secs:
-            cfg.backlight_on_secs = strtol(opts.arg, NULL, 10);
-            ffcfg_display_off_secs = TRUE;
+        case FFCFG_display_off_secs:
+            ff_cfg.display_off_secs = strtol(opts.arg, NULL, 10);
             break;
 
-        case C_display_on_activity:
-            config_display_on_activity = !strcmp(opts.arg, "yes");
+        case FFCFG_display_on_activity:
+            ff_cfg.display_on_activity = !strcmp(opts.arg, "yes");
             break;
 
-        case C_display_scroll_rate:
-            cfg.lcd_scroll_msec = strtol(opts.arg, NULL, 10);
-            if (cfg.lcd_scroll_msec < 100) cfg.lcd_scroll_msec = 100;
-            ffcfg_display_scroll_rate = TRUE;
+        case FFCFG_display_scroll_rate:
+            ff_cfg.display_scroll_rate = strtol(opts.arg, NULL, 10);
+            if (ff_cfg.display_scroll_rate < 100)
+                ff_cfg.display_scroll_rate = 100;
             break;
 
-        case C_oled_font:
-            config_oled_7x16 = !strcmp(opts.arg, "7x16");
+        case FFCFG_oled_font:
+            ff_cfg.oled_font = !strcmp(opts.arg, "7x16")
+                ? FONT_7x16 : FONT_8x16;
             break;
 
-        case C_step_volume: {
+        case FFCFG_step_volume: {
             int volume = strtol(opts.arg, NULL, 10);
             if (volume <= 0) volume = 0;
             if (volume >= 20) volume = 20;
-            speaker_volume(volume);
-            ffcfg_step_volume = TRUE;
+            ff_cfg.step_volume = volume;
             break;
 
         }
@@ -413,6 +413,29 @@ static void read_ff_cfg(void)
     }
 
     F_close(&fs->file);
+}
+
+static void process_ff_cfg_opts(void)
+{
+    /* interface: Inform the floppy subsystem. */
+    floppy_set_fintf_mode(ff_cfg.interface);
+
+    /* ejected-on-startup: Set the ejected state appropriately. */
+    if (first_startup && ff_cfg.ejected_on_startup)
+        ejected = TRUE;
+
+    /* da-report-version: Inform the D-A protocol handler. */
+    if (ff_cfg.da_report_version[0] != '\0') {
+        memset(dass.fw_ver, 0, sizeof(dass.fw_ver));
+        snprintf(dass.fw_ver, sizeof(dass.fw_ver),
+                 "%s", ff_cfg.da_report_version);
+    }
+
+    /* oled-font: Inform the OLED driver. */
+    config_oled_7x16 = (ff_cfg.oled_font == FONT_7x16);
+
+    /* step-volume: Inform the speaker driver. */
+    speaker_volume(ff_cfg.step_volume);
 }
 
 static uint8_t cfg_init(void)
@@ -527,6 +550,7 @@ no_config:
 
 out:
     read_ff_cfg();
+    process_ff_cfg_opts();
     fatfs.cdir = cfg.cur_cdir;
     return type;
 
@@ -550,15 +574,6 @@ static void no_cfg_update(uint8_t slot_mode)
     int i;
 
     if (slot_mode == CFG_READ_SLOT_NR) {
-
-        /* Default settings. */
-        if (!ffcfg_step_volume)
-            speaker_volume(10);
-        if (!ffcfg_display_off_secs)
-            cfg.backlight_on_secs = BACKLIGHT_ON_SECS;
-        if (!ffcfg_display_scroll_rate)
-            cfg.lcd_scroll_msec = LCD_SCROLL_MSEC;
-
         /* Populate slot_map[]. */
         memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
         cfg.max_slot_nr = cfg.depth ? 1 : 0;
@@ -663,17 +678,15 @@ static void hxc_cfg_update(uint8_t slot_mode)
 
     if (slot_mode == CFG_READ_SLOT_NR) {
         /* buzzer_step_duration seems to range 0xFF-0xD8. */
-        if (!ffcfg_step_volume)
+        if (!ff_cfg_override[FFCFG_step_volume])
             speaker_volume(hxc_cfg.step_sound
                            ? (0x100 - hxc_cfg.buzzer_step_duration) / 2 : 0);
-        if (!ffcfg_display_off_secs)
-            cfg.backlight_on_secs = hxc_cfg.back_light_tmr;
+        if (!ff_cfg_override[FFCFG_display_off_secs])
+            ff_cfg.display_off_secs = hxc_cfg.back_light_tmr;
         /* Interpret HxC scroll speed as updates per minute. */
-        if (!ffcfg_display_scroll_rate) {
-            cfg.lcd_scroll_msec = LCD_SCROLL_MSEC;
-            if (hxc_cfg.lcd_scroll_speed)
-                cfg.lcd_scroll_msec = 60000u / hxc_cfg.lcd_scroll_speed;
-        }
+        if (!ff_cfg_override[FFCFG_display_scroll_rate]
+            && hxc_cfg.lcd_scroll_speed)
+            ff_cfg.display_scroll_rate = 60000u / hxc_cfg.lcd_scroll_speed;
     }
 
     switch (hxc_cfg.signature[9]-'0') {
@@ -862,7 +875,7 @@ static void choose_new_image(uint8_t init_b)
         b_left:
             do {
                 if (i-- == 0) {
-                    if (!config_nav_loop)
+                    if (!ff_cfg.nav_loop)
                         goto b_right;
                     i = cfg.max_slot_nr;
                 }
@@ -871,7 +884,7 @@ static void choose_new_image(uint8_t init_b)
         b_right:
             do {
                 if (i++ >= cfg.max_slot_nr) {
-                    if (!config_nav_loop)
+                    if (!ff_cfg.nav_loop)
                         goto b_left;
                     i = 0;
                 }
@@ -1104,7 +1117,6 @@ int main(void)
 
     usbh_msc_init();
 
-    cfg.backlight_on_secs = BACKLIGHT_ON_SECS;
     timer_init(&button_timer, button_timer_fn, NULL);
     timer_set(&button_timer, stk_now());
 

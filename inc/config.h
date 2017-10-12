@@ -22,7 +22,6 @@ struct opts {
 
 int get_next_opt(struct opts *opts);
 
-
 /*
  * Local variables:
  * mode: C
