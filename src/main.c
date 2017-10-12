@@ -334,14 +334,12 @@ static void read_ff_cfg(void)
 
         switch (option) {
 
-        case FFCFG_interface: {
-            int mode = !strcmp(opts.arg, "pc") ? FINTF_PC
+        case FFCFG_interface:
+            ff_cfg.interface =
+                !strcmp(opts.arg, "pc") ? FINTF_PC
                 : !strcmp(opts.arg, "shugart") ? FINTF_SHUGART
                 : FINTF_DEFAULT;
-            if (mode != FINTF_DEFAULT)
-                ff_cfg.interface = mode;
             break;
-        }
 
         case FFCFG_ejected_on_startup:
             ff_cfg.ejected_on_startup = !strcmp(opts.arg, "yes");
@@ -403,7 +401,8 @@ static void read_ff_cfg(void)
 static void process_ff_cfg_opts(void)
 {
     /* interface: Inform the floppy subsystem. */
-    floppy_set_fintf_mode(ff_cfg.interface);
+    if (ff_cfg.interface != FINTF_DEFAULT)
+        floppy_set_fintf_mode(ff_cfg.interface);
 
     /* Do the rest of processing only on initial power-on. */
     if (!first_startup)
