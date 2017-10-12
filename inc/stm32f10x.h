@@ -124,6 +124,12 @@ void fpec_init(void);
 void fpec_page_erase(uint32_t flash_address);
 void fpec_write(const void *data, unsigned int size, uint32_t flash_address);
 
+#if BUILD_GOTEK
+#define FLASH_PAGE_SIZE 2048
+#elif BUILD_TOUCH
+#define FLASH_PAGE_SIZE 1024
+#endif
+
 /*
  * Local variables:
  * mode: C

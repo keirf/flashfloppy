@@ -35,7 +35,7 @@
 #ifndef RELOADER
 /* Main bootloader: flashes the main firmware (last 96kB of Flash). */
 #define FIRMWARE_START 0x08008000
-#define FIRMWARE_END   0x08020000
+#define FIRMWARE_END   (0x08020000 - FLASH_PAGE_SIZE)
 #define FILE_PATTERN   "ff_gotek*.upd"
 #define is_reloader    FALSE
 #else
@@ -44,12 +44,6 @@
 #define FIRMWARE_END   0x08008000
 #define FILE_PATTERN   "ff_gotek*.rld"
 #define is_reloader    TRUE
-#endif
-
-#if BUILD_GOTEK
-#define FLASH_PAGE_SIZE 2048
-#elif BUILD_TOUCH
-#define FLASH_PAGE_SIZE 1024
 #endif
 
 int EXC_reset(void) __attribute__((alias("main")));

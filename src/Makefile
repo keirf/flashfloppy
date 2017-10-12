@@ -5,6 +5,7 @@ OBJS += crc.o
 OBJS += display.o
 OBJS += vectors.o
 OBJS += floppy.o
+OBJS += fpec.o
 OBJS += fs.o
 OBJS += main.o
 OBJS += spi.o

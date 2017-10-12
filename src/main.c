@@ -43,12 +43,18 @@ enum {
 /* FF.CFG: Which options have been overridden by user setting?  */
 static bool_t ff_cfg_override[FFCFG_nr];
 
-/* FF.CFG: User settings, or default values where not specified. */
-struct ff_cfg ff_cfg = {
+/* FF.CFG: Compiled default values, and Flashed default values. */
+#define FF_CFG_VER 1
+const static struct ff_cfg *flash_ff_cfg =
+    (struct ff_cfg *)(0x8020000 - FLASH_PAGE_SIZE);
+const static struct ff_cfg dfl_ff_cfg = {
 #define x(n,o,v) .o = v,
 #include "ff_cfg_defaults.h"
 #undef x
 };
+
+/* FF.CFG: User-specified values, and defaults where not specified. */
+struct ff_cfg ff_cfg;
 
 /* cfg_mode: Are we in HxC config mode, or direct navigation? */
 static uint8_t cfg_mode;
@@ -399,9 +405,25 @@ static void process_ff_cfg_opts(void)
     /* interface: Inform the floppy subsystem. */
     floppy_set_fintf_mode(ff_cfg.interface);
 
+    /* Do the rest of processing only on initial power-on. */
+    if (!first_startup)
+        return;
+
     /* ejected-on-startup: Set the ejected state appropriately. */
-    if (first_startup && ff_cfg.ejected_on_startup)
+    if (ff_cfg.ejected_on_startup)
         ejected = TRUE;
+
+    /* Store the configuration in Flash, if it's out of date. */
+    if (memcmp(flash_ff_cfg, &ff_cfg, sizeof(ff_cfg))
+        || crc16_ccitt(flash_ff_cfg, sizeof(ff_cfg)+2, ~FF_CFG_VER)) {
+        uint16_t crc = crc16_ccitt(&ff_cfg, sizeof(ff_cfg), ~FF_CFG_VER);
+        crc = htobe16(crc);
+        fpec_init();
+        fpec_page_erase((uint32_t)flash_ff_cfg);
+        fpec_write(&ff_cfg, sizeof(ff_cfg), (uint32_t)flash_ff_cfg);
+        fpec_write(&crc, sizeof(crc), (uint32_t)(flash_ff_cfg+1));
+        printk("Config: Written to Flash\n");
+    }
 }
 
 static uint8_t cfg_init(void)
@@ -1044,10 +1066,59 @@ int floppy_main(void)
     return 0;
 }
 
+static void flash_ff_cfg_reset(void)
+{
+    unsigned int i;
+
+    for (i = 0; i < 3000; i++)
+        if (buttons != (B_LEFT|B_RIGHT))
+            break;
+    if (i != 3000)
+        return;
+
+    switch (display_mode) {
+    case DM_LED_7SEG:
+        led_7seg_write_string("RST");
+        break;
+    case DM_LCD_1602:
+        lcd_clear();
+        lcd_write(2, 0, 0, "Reset Flash");
+        lcd_write(1, 1, 0, "Configuration");
+        lcd_on();
+        break;
+    }
+
+    while (buttons == (B_LEFT|B_RIGHT))
+        continue;
+
+    fpec_init();
+    fpec_page_erase((uint32_t)flash_ff_cfg);
+
+    /* Linger so user sees it is done. */
+    delay_ms(2000);
+}
+
+static void banner(void)
+{
+    switch (display_mode) {
+    case DM_LED_7SEG:
+        led_7seg_write_string((led_7seg_nr_digits() == 3) ? "F-F" : "FF");
+        break;
+    case DM_LCD_1602:
+        lcd_clear();
+        lcd_write(0, 0, 0, "FlashFloppy");
+        lcd_write(0, 1, 0, "v");
+        lcd_write(1, 1, 0, FW_VER);
+        lcd_on();
+        break;
+    }
+}
+
 int main(void)
 {
     FRESULT fres;
     uint8_t fintf_mode;
+    uint16_t crc;
 
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
@@ -1073,10 +1144,15 @@ int main(void)
 
     speaker_init();
 
+    crc = crc16_ccitt(flash_ff_cfg, sizeof(ff_cfg)+2, ~FF_CFG_VER);
+    ff_cfg = crc ? dfl_ff_cfg : *flash_ff_cfg;
+    printk("Config: Loaded from %s\n", crc ? "Defaults" : "Flash");
+
     /* Jumper JC selects default floppy interface configuration:
      *   - No Jumper: Shugart
      *   - Jumpered:  PC */
-    fintf_mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_PC;
+    fintf_mode = (ff_cfg.interface != FINTF_DEFAULT) ? ff_cfg.interface
+        : gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_PC;
     floppy_init(fintf_mode);
 
     display_init();
@@ -1088,21 +1164,15 @@ int main(void)
 
     for (;;) {
 
-        switch (display_mode) {
-        case DM_LED_7SEG:
-            led_7seg_write_string((led_7seg_nr_digits() == 3) ? "F-F" : "FF");
-            break;
-        case DM_LCD_1602:
-            lcd_clear();
-            lcd_write(0, 0, 0, "FlashFloppy");
-            lcd_write(0, 1, 0, "v");
-            lcd_write(1, 1, 0, FW_VER);
-            lcd_on();
-            break;
-        }
+        banner();
 
-        while (f_mount(&fatfs, "", 1) != FR_OK)
+        while (f_mount(&fatfs, "", 1) != FR_OK) {
+            if (buttons == (B_LEFT|B_RIGHT)) {
+                flash_ff_cfg_reset();
+                banner();
+            }
             usbh_msc_process();
+        }
 
         arena_init();
         fres = F_call_cancellable(floppy_main);
