@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.8.5a - 12 October 2017
+ - Cache FF.CFG values in Flash memory for next power on, replacing
+   'factory defaults'. Restore defaults by pressing both buttons.
+ - Glitch filter for SIDE-select signal (Kingstener)
+ - Small improvements to FF.CFG option and value naming
+
 ** v0.8.4a - 11 October 2017
  - Bootloader OLED Display Fix (display was not enabled in update mode)
  - Integrate 7x16 OLED font into main build, configurable in FF.CFG

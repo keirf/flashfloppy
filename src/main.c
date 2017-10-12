@@ -1145,7 +1145,7 @@ int main(void)
 
     crc = crc16_ccitt(flash_ff_cfg, sizeof(ff_cfg)+2, ~FF_CFG_VER);
     ff_cfg = crc ? dfl_ff_cfg : *flash_ff_cfg;
-    printk("Config: Loaded from %s\n", crc ? "Defaults" : "Flash");
+    printk("Config: %s\n", crc ? "Factory" : "Flash");
 
     fintf_mode = ff_cfg.interface;
     if (fintf_mode == FINTF_JC) {
