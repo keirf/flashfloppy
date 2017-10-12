@@ -123,7 +123,7 @@ const static uint8_t *fintf, fintfs[][outp_nr] = {
         [outp_trk0]   = pin_26,
         [outp_wrprot] = pin_28,
         [outp_rdy]    = pin_34 },
-    [FINTF_PC] = {
+    [FINTF_IBMPC] = {
         [outp_dskchg] = pin_34,
         [outp_index]  = pin_08,
         [outp_trk0]   = pin_26,
@@ -192,7 +192,7 @@ static struct dma_ring *dma_ring_alloc(void)
 
 void floppy_set_fintf_mode(uint8_t fintf_mode)
 {
-    static const char * const fintf_name[] = { "Shugart", "PC" };
+    static const char * const fintf_name[] = { "Shugart", "IBM PC" };
     struct drive *drv = &drive;
     uint32_t old_active;
     uint8_t outp;

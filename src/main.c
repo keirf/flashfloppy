@@ -336,7 +336,7 @@ static void read_ff_cfg(void)
 
         case FFCFG_interface:
             ff_cfg.interface =
-                !strcmp(opts.arg, "pc") ? FINTF_PC
+                !strcmp(opts.arg, "ibmpc") ? FINTF_IBMPC
                 : !strcmp(opts.arg, "shugart") ? FINTF_SHUGART
                 : FINTF_JC;
             break;
@@ -1151,8 +1151,8 @@ int main(void)
     if (fintf_mode == FINTF_JC) {
         /* Jumper JC selects default floppy interface configuration:
          *   - No Jumper: Shugart
-         *   - Jumpered:  PC */
-        fintf_mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_PC;
+         *   - Jumpered:  IBM PC */
+        fintf_mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_IBMPC;
     }
     floppy_init(fintf_mode);
 

@@ -14,7 +14,7 @@
 #define DRIVE_SETTLE_MS 12
 
 #define FINTF_SHUGART 0
-#define FINTF_PC      1
+#define FINTF_IBMPC   1
 
 struct adf_image {
     uint32_t trk_off;
