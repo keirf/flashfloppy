@@ -338,7 +338,7 @@ static void read_ff_cfg(void)
             ff_cfg.interface =
                 !strcmp(opts.arg, "pc") ? FINTF_PC
                 : !strcmp(opts.arg, "shugart") ? FINTF_SHUGART
-                : FINTF_DEFAULT;
+                : FINTF_JC;
             break;
 
         case FFCFG_ejected_on_startup:
@@ -401,7 +401,7 @@ static void read_ff_cfg(void)
 static void process_ff_cfg_opts(void)
 {
     /* interface: Inform the floppy subsystem. */
-    if (ff_cfg.interface != FINTF_DEFAULT)
+    if (ff_cfg.interface != FINTF_JC)
         floppy_set_fintf_mode(ff_cfg.interface);
 
     /* Do the rest of processing only on initial power-on. */
@@ -1147,11 +1147,13 @@ int main(void)
     ff_cfg = crc ? dfl_ff_cfg : *flash_ff_cfg;
     printk("Config: Loaded from %s\n", crc ? "Defaults" : "Flash");
 
-    /* Jumper JC selects default floppy interface configuration:
-     *   - No Jumper: Shugart
-     *   - Jumpered:  PC */
-    fintf_mode = (ff_cfg.interface != FINTF_DEFAULT) ? ff_cfg.interface
-        : gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_PC;
+    fintf_mode = ff_cfg.interface;
+    if (fintf_mode == FINTF_JC) {
+        /* Jumper JC selects default floppy interface configuration:
+         *   - No Jumper: Shugart
+         *   - Jumpered:  PC */
+        fintf_mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_PC;
+    }
     floppy_init(fintf_mode);
 
     display_init();

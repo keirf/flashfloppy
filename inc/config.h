@@ -25,7 +25,7 @@ int get_next_opt(struct opts *opts);
 /* FF.CFG options structure. */
 extern struct ff_cfg {
     /* interface: FINTF_* interface mode */
-#define FINTF_DEFAULT 255 /* default mode (jumper JC) */
+#define FINTF_JC 255 /* mode specified by jumper JC */
     uint8_t interface; /* FINTF_* interface mode */
     bool_t ejected_on_startup;
     char da_report_version[16]; 
