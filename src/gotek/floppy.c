@@ -180,6 +180,7 @@ static void IRQ_STEP_changed(void)
 static void IRQ_SIDE_changed(void)
 {
     stk_time_t t = stk_now();
+    unsigned int filter = stk_us(ff_cfg.side_select_glitch_filter);
     struct drive *drv = &drive;
     uint8_t hd;
 
@@ -191,11 +192,11 @@ static void IRQ_SIDE_changed(void)
         hd = !(gpiob->idr & m(pin_side));
         if (hd == drv->head)
             return;
-        
-        /* Wait a few microseconds to ensure this isn't a glitch (eg. signal 
-         * is mistaken for the archaic Fault-Reset line by old CP/M
-         * loaders, and pulsed LOW when starting a read). */
-    } while (stk_diff(t, stk_now()) < stk_us(15));
+
+        /* If configured to do so, wait a few microseconds to ensure this isn't
+         * a glitch (eg. signal is mistaken for the archaic Fault-Reset line by
+         * old CP/M loaders, and pulsed LOW when starting a read). */
+    } while (stk_diff(t, stk_now()) < filter);
 
     drv->head = hd;
     if ((dma_rd != NULL) && (drv->nr_sides == 2))

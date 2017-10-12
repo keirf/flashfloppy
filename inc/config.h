@@ -39,6 +39,7 @@ extern struct ff_cfg {
 #define FONT_8x16 8
     uint8_t oled_font; /* FONT_* oled font specifier */
     uint8_t step_volume;
+    uint8_t side_select_glitch_filter;
 } ff_cfg;
 
 /*
