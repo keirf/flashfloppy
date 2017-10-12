@@ -197,6 +197,14 @@ void floppy_set_fintf_mode(uint8_t fintf_mode)
     uint32_t old_active;
     uint8_t outp;
 
+    /* Invalid interface mode? Do nothing. */
+    if (fintf_mode >= ARRAY_SIZE(fintf_name))
+        return;
+
+    /* This mode is already set? Do nothing. */
+    if (fintf == fintfs[fintf_mode])
+        return;
+
     printk("Interface: %s\n", fintf_name[fintf_mode]);
 
     IRQ_global_disable();
