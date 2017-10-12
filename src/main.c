@@ -32,7 +32,7 @@ static struct {
 static bool_t first_startup = TRUE;
 static bool_t ejected;
 
-/* Options available from FF.CFG */
+/* FF.CFG: Options enumaeration. */
 enum {
 #define x(n,o,v) FFCFG_##o,
 #include "ff_cfg_defaults.h"
@@ -40,25 +40,23 @@ enum {
     FFCFG_nr
 };
 
-/* Which options have been overridden by FF.CFG?  */
+/* FF.CFG: Which options have been overridden by user setting?  */
 static bool_t ff_cfg_override[FFCFG_nr];
 
-/* Settings from FF.CFG (or default values if not specified in FF.CFG). */
+/* FF.CFG: User settings, or default values where not specified. */
 struct ff_cfg ff_cfg = {
 #define x(n,o,v) .o = v,
 #include "ff_cfg_defaults.h"
 #undef x
 };
 
+/* cfg_mode: Are we in HxC config mode, or direct navigation? */
 static uint8_t cfg_mode;
 #define CFG_none      0 /* Iterate through all images in root. */
 #define CFG_hxc       1 /* Operation based on HXCSDFE.CFG. */
 #define CFG_lastidx   2 /* remember last image but dont store any config. */
 
 uint8_t board_id;
-
-static uint8_t autoselect_file_secs = 2;
-static uint8_t autoselect_folder_secs = 2;
 
 #define LCD_SCROLL_PAUSE_MSEC  2000
 
@@ -1013,7 +1011,7 @@ int floppy_main(void)
             /* Wait a few seconds for further button presses before acting on 
              * the new image selection. */
             wait_secs = (cfg.slot.attributes & AM_DIR) ?
-                autoselect_folder_secs : autoselect_file_secs;
+                ff_cfg.autoselect_folder_secs : ff_cfg.autoselect_file_secs;
             for (i = 0; (wait_secs == 0) || (i < wait_secs*1000); i++) {
                 b = buttons;
                 if (b != 0)
