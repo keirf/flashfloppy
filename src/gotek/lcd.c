@@ -418,9 +418,7 @@ fail:
 
 #ifdef font_7x16
 
-extern bool_t config_oled_7x16;
 extern const uint8_t oled_font_7x16[];
-
 static void oled_convert_text_row_7x16(char *pc)
 {
     unsigned int i, c;
@@ -464,7 +462,7 @@ static void oled_convert_text_row_8x16(char *pc)
 static void oled_convert_text_row(char *pc)
 {
 #ifdef font_7x16
-    if (config_oled_7x16)
+    if (ff_cfg.oled_font == FONT_7x16)
         oled_convert_text_row_7x16(pc);
     else
 #endif

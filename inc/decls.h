@@ -26,7 +26,6 @@
 #include "timer.h"
 #include "fs.h"
 #include "floppy.h"
-#include "speaker.h"
 #include "touch_panel.h"
 #include "config.h"
 

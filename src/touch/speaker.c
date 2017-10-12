@@ -22,7 +22,7 @@
 #define TICK_MHZ 8  /* Controls volume range */
 #define ARR (TICK_MHZ*1000/MAX_KHZ-1)
 
-static uint8_t pulse_volume;
+static void _speaker_pulse(unsigned int volume);
 
 void speaker_init(void)
 {
@@ -38,20 +38,14 @@ void speaker_init(void)
                   TIM_CCMR2_OC4M(TIM_OCM_PWM2)); /* PWM2: low then high */
     tim->ccer = TIM_CCER_CC1E|TIM_CCER_CC4E;
     tim->cr2 = tim->dier = 0;
-    speaker_pulse(); /* ensures output LOW */
+    _speaker_pulse(0); /* ensures output LOW */
 
     /* Set up the output pin. */
     afio->mapr |= AFIO_MAPR_TIM3_REMAP_PARTIAL;
     gpio_configure_pin(gpio_spk, pin_spk, AFO_pushpull(_2MHz));
 }
 
-/* Volume: 0 (silence) - 20 (loudest) */
-void speaker_volume(uint8_t volume)
-{
-    pulse_volume = volume;
-}
-
-void speaker_pulse(void)
+static void _speaker_pulse(unsigned int volume)
 {
     volatile uint32_t *pwm_ccr =
         (board_id == BRDREV_LC150) ? &tim->ccr4 : &tim->ccr1;
@@ -61,8 +55,13 @@ void speaker_pulse(void)
         return;
 
     /* Quadratic scaling of pulse width seems to give linear-ish volume. */
-    *pwm_ccr = ARR + 1 - pulse_volume*pulse_volume;
+    *pwm_ccr = ARR + 1 - volume*volume;
     tim->cr1 = TIM_CR1_OPM | TIM_CR1_CEN;
+}
+
+void speaker_pulse(void)
+{
+    _speaker_pulse(ff_cfg.step_volume);
 }
 
 /*

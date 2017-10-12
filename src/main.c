@@ -32,9 +32,6 @@ static struct {
 static bool_t first_startup = TRUE;
 static bool_t ejected;
 
-/* OLED display uses narrower 7x16 font? */
-bool_t config_oled_7x16;
-
 /* Options available from FF.CFG */
 enum {
 #define x(n,o,v) FFCFG_##o,
@@ -47,23 +44,7 @@ enum {
 static bool_t ff_cfg_override[FFCFG_nr];
 
 /* Settings from FF.CFG (or default values if not specified in FF.CFG). */
-static struct ff_cfg {
-    /* interface: FINTF_* interface mode */
-#define FINTF_DEFAULT 255 /* default mode (jumper JC) */
-    uint8_t interface; /* FINTF_* interface mode */
-    bool_t ejected_on_startup;
-    char da_report_version[16]; 
-    uint8_t autoselect_file_secs;
-    uint8_t autoselect_folder_secs;
-    bool_t nav_loop; /* Wrap slot number at 0 and max? */
-    uint8_t display_off_secs;
-    bool_t display_on_activity; /* Display on when there is drive activity? */
-    uint16_t display_scroll_rate;
-#define FONT_7x16 7
-#define FONT_8x16 8
-    uint8_t oled_font; /* FONT_* oled font specifier */
-    uint8_t step_volume;
-} ff_cfg = {
+struct ff_cfg ff_cfg = {
 #define x(n,o,v) .o = v,
 #include "ff_cfg_defaults.h"
 #undef x
@@ -423,19 +404,6 @@ static void process_ff_cfg_opts(void)
     /* ejected-on-startup: Set the ejected state appropriately. */
     if (first_startup && ff_cfg.ejected_on_startup)
         ejected = TRUE;
-
-    /* da-report-version: Inform the D-A protocol handler. */
-    if (ff_cfg.da_report_version[0] != '\0') {
-        memset(dass.fw_ver, 0, sizeof(dass.fw_ver));
-        snprintf(dass.fw_ver, sizeof(dass.fw_ver),
-                 "%s", ff_cfg.da_report_version);
-    }
-
-    /* oled-font: Inform the OLED driver. */
-    config_oled_7x16 = (ff_cfg.oled_font == FONT_7x16);
-
-    /* step-volume: Inform the speaker driver. */
-    speaker_volume(ff_cfg.step_volume);
 }
 
 static uint8_t cfg_init(void)
@@ -679,8 +647,8 @@ static void hxc_cfg_update(uint8_t slot_mode)
     if (slot_mode == CFG_READ_SLOT_NR) {
         /* buzzer_step_duration seems to range 0xFF-0xD8. */
         if (!ff_cfg_override[FFCFG_step_volume])
-            speaker_volume(hxc_cfg.step_sound
-                           ? (0x100 - hxc_cfg.buzzer_step_duration) / 2 : 0);
+            ff_cfg.step_volume = hxc_cfg.step_sound
+                ? (0x100 - hxc_cfg.buzzer_step_duration) / 2 : 0;
         if (!ff_cfg_override[FFCFG_display_off_secs])
             ff_cfg.display_off_secs = hxc_cfg.back_light_tmr;
         /* Interpret HxC scroll speed as updates per minute. */

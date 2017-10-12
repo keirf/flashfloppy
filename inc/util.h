@@ -129,6 +129,10 @@ extern uint8_t display_mode;
 #define DM_LCD_1602 1
 #define DM_LED_7SEG 2
 
+/* Speaker. */
+void speaker_init(void);
+void speaker_pulse(void);
+
 #ifdef BUILD_GOTEK
 
 /* Gotek: 3-digit 7-segment display */

@@ -14,8 +14,6 @@
 #define pin_spk 2
 
 static struct timer pulse_timer;
-static uint8_t pulse_volume;
-
 static void pulse_timer_fn(void *unused)
 {
     gpio_write_pin(gpio_spk, pin_spk, FALSE);
@@ -27,18 +25,13 @@ void speaker_init(void)
     timer_init(&pulse_timer, pulse_timer_fn, NULL);
 }
 
-/* Volume: 0 (silence) - 20 (loudest) */
-void speaker_volume(uint8_t volume)
-{
-    pulse_volume = volume;
-}
-
 void speaker_pulse(void)
 {
-    if (!pulse_volume)
+    unsigned int volume = ff_cfg.step_volume;
+    if (!volume)
         return;
     gpio_write_pin(gpio_spk, pin_spk, TRUE);
-    timer_set(&pulse_timer, stk_add(stk_now(), pulse_volume*pulse_volume*3));
+    timer_set(&pulse_timer, stk_add(stk_now(), volume*volume*3));
 }
 
 /*

@@ -11,7 +11,7 @@
 
 #include "../fatfs/diskio.h"
 
-struct da_status_sector dass = {
+static struct da_status_sector dass = {
     .sig = "HxCFEDA",
     .fw_ver = "FF-v"FW_VER,
 };
@@ -45,6 +45,12 @@ static bool_t da_seek_track(
     if (start_pos) {
         memset(da, 0, 512);
         memcpy(da, &dass, sizeof(dass));
+        if (ff_cfg.da_report_version[0] != '\0') {
+            /* Report the user-configured version string. */
+            memset(da->fw_ver, 0, sizeof(da->fw_ver));
+            snprintf(da->fw_ver, sizeof(da->fw_ver),
+                     "%s", ff_cfg.da_report_version);
+        }
         image_read_track(im);
         *start_pos = 0;
     }
