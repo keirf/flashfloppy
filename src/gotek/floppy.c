@@ -179,16 +179,23 @@ static void IRQ_STEP_changed(void)
 
 static void IRQ_SIDE_changed(void)
 {
+    stk_time_t t = stk_now();
     struct drive *drv = &drive;
     uint8_t hd;
 
-    /* Clear SIDE-changed flag. */
-    exti->pr = m(pin_side);
+    do {
+        /* Clear SIDE-changed flag. */
+        exti->pr = m(pin_side);
 
-    /* Has SIDE actually changed? */
-    hd = !(gpiob->idr & m(pin_side));
-    if (hd == drv->head)
-        return;
+        /* Has SIDE actually changed? */
+        hd = !(gpiob->idr & m(pin_side));
+        if (hd == drv->head)
+            return;
+        
+        /* Wait a few microseconds to ensure this isn't a glitch (eg. signal 
+         * is mistaken for the archaic Fault-Reset line by old CP/M
+         * loaders, and pulsed LOW when starting a read). */
+    } while (stk_diff(t, stk_now()) < stk_us(15));
 
     drv->head = hd;
     if ((dma_rd != NULL) && (drv->nr_sides == 2))
