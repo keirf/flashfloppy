@@ -27,21 +27,14 @@ static struct {
     uint16_t cdir_stack[20];
     uint8_t depth;
     bool_t lastdisk_committed;
+    /* FF.CFG values which override HXCSDFE.CFG. */
+    uint8_t ffcfg_has_step_volume:1;
+    uint8_t ffcfg_has_display_off_secs:1;
+    uint8_t ffcfg_has_display_scroll_rate:1;
 } cfg;
 
 static bool_t first_startup = TRUE;
 static bool_t ejected;
-
-/* FF.CFG: Options enumaeration. */
-enum {
-#define x(n,o,v) FFCFG_##o,
-#include "ff_cfg_defaults.h"
-#undef x
-    FFCFG_nr
-};
-
-/* FF.CFG: Which options have been overridden by user setting?  */
-static bool_t ff_cfg_override[FFCFG_nr];
 
 /* FF.CFG: Compiled default values, and Flashed default values. */
 #define FF_CFG_VER 1
@@ -308,6 +301,13 @@ static bool_t no_cfg_dir_next(void)
 
 static void read_ff_cfg(void)
 {
+    enum {
+#define x(n,o,v) FFCFG_##o,
+#include "ff_cfg_defaults.h"
+#undef x
+        FFCFG_nr
+    };
+
     const static struct opt ff_cfg_opts[FFCFG_nr+1] = {
 #define x(n,o,v) [FFCFG_##o] = { #n },
 #include "ff_cfg_defaults.h"
@@ -329,8 +329,6 @@ static void read_ff_cfg(void)
         return;
 
     while ((option = get_next_opt(&opts)) != -1) {
-
-        ff_cfg_override[option] = TRUE;
 
         switch (option) {
 
@@ -367,6 +365,7 @@ static void read_ff_cfg(void)
 
         case FFCFG_display_off_secs:
             ff_cfg.display_off_secs = strtol(opts.arg, NULL, 10);
+            cfg.ffcfg_has_display_off_secs = TRUE;
             break;
 
         case FFCFG_display_on_activity:
@@ -377,6 +376,7 @@ static void read_ff_cfg(void)
             ff_cfg.display_scroll_rate = strtol(opts.arg, NULL, 10);
             if (ff_cfg.display_scroll_rate < 100)
                 ff_cfg.display_scroll_rate = 100;
+            cfg.ffcfg_has_display_scroll_rate = TRUE;
             break;
 
         case FFCFG_oled_font:
@@ -389,6 +389,7 @@ static void read_ff_cfg(void)
             if (volume <= 0) volume = 0;
             if (volume >= 20) volume = 20;
             ff_cfg.step_volume = volume;
+            cfg.ffcfg_has_step_volume = TRUE;
             break;
 
         }
@@ -665,14 +666,13 @@ static void hxc_cfg_update(uint8_t slot_mode)
 
     if (slot_mode == CFG_READ_SLOT_NR) {
         /* buzzer_step_duration seems to range 0xFF-0xD8. */
-        if (!ff_cfg_override[FFCFG_step_volume])
+        if (!cfg.ffcfg_has_step_volume)
             ff_cfg.step_volume = hxc_cfg.step_sound
                 ? (0x100 - hxc_cfg.buzzer_step_duration) / 2 : 0;
-        if (!ff_cfg_override[FFCFG_display_off_secs])
+        if (!cfg.ffcfg_has_display_off_secs)
             ff_cfg.display_off_secs = hxc_cfg.back_light_tmr;
         /* Interpret HxC scroll speed as updates per minute. */
-        if (!ff_cfg_override[FFCFG_display_scroll_rate]
-            && hxc_cfg.lcd_scroll_speed)
+        if (!cfg.ffcfg_has_display_scroll_rate && hxc_cfg.lcd_scroll_speed)
             ff_cfg.display_scroll_rate = 60000u / hxc_cfg.lcd_scroll_speed;
     }
 
@@ -1069,9 +1069,11 @@ static void flash_ff_cfg_reset(void)
 {
     unsigned int i;
 
-    for (i = 0; i < 3000; i++)
+    for (i = 0; i < 3000; i++) {
         if (buttons != (B_LEFT|B_RIGHT))
             break;
+        delay_ms(1);
+    }
     if (i != 3000)
         return;
 
@@ -1081,8 +1083,8 @@ static void flash_ff_cfg_reset(void)
         break;
     case DM_LCD_1602:
         lcd_clear();
-        lcd_write(2, 0, 0, "Reset Flash");
-        lcd_write(1, 1, 0, "Configuration");
+        lcd_write(0, 0, 0, "Reset Flash");
+        lcd_write(0, 1, 0, "Configuration");
         lcd_on();
         break;
     }
