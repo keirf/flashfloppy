@@ -27,7 +27,6 @@ extern struct ff_cfg {
     /* interface: FINTF_* interface mode */
 #define FINTF_JC 255 /* mode specified by jumper JC */
     uint8_t interface; /* FINTF_* interface mode */
-    bool_t ejected_on_startup;
     char da_report_version[16]; 
     uint8_t autoselect_file_secs;
     uint8_t autoselect_folder_secs;
@@ -40,6 +39,11 @@ extern struct ff_cfg {
     uint8_t oled_font; /* FONT_* oled font specifier */
     uint8_t step_volume;
     uint8_t side_select_glitch_filter;
+    bool_t ejected_on_startup;
+#define IMGS_last   0
+#define IMGS_static 1
+#define IMGS_init   2
+    uint8_t image_on_startup;
 } ff_cfg;
 
 /*

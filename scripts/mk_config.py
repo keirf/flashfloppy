@@ -23,6 +23,8 @@ def main(argv):
                 val = "FINTF_" + val.upper()
             elif opt == "oled-font":
                 val = "FONT_" + val
+            elif opt == "image-on-startup":
+                val = "IMGS_" + val
             else:
                 val = {
                     'no': 'FALSE',

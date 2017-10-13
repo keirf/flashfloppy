@@ -26,15 +26,13 @@ static struct {
     uint32_t cfg_cdir, cur_cdir;
     uint16_t cdir_stack[20];
     uint8_t depth;
-    bool_t lastdisk_committed;
+    uint8_t hxc_mode:1;
+    uint8_t ejected:1;
     /* FF.CFG values which override HXCSDFE.CFG. */
     uint8_t ffcfg_has_step_volume:1;
     uint8_t ffcfg_has_display_off_secs:1;
     uint8_t ffcfg_has_display_scroll_rate:1;
 } cfg;
-
-static bool_t first_startup = TRUE;
-static bool_t ejected;
 
 /* FF.CFG: Compiled default values, and Flashed default values. */
 #define FF_CFG_VER 1
@@ -48,12 +46,6 @@ const static struct ff_cfg dfl_ff_cfg = {
 
 /* FF.CFG: User-specified values, and defaults where not specified. */
 struct ff_cfg ff_cfg;
-
-/* cfg_mode: Are we in HxC config mode, or direct navigation? */
-static uint8_t cfg_mode;
-#define CFG_none      0 /* Iterate through all images in root. */
-#define CFG_hxc       1 /* Operation based on HXCSDFE.CFG. */
-#define CFG_lastidx   2 /* remember last image but dont store any config. */
 
 uint8_t board_id;
 
@@ -106,7 +98,7 @@ static void display_write_slot(void)
         : slot_type("ima") ? "IMA"
         : slot_type("st") ? "ST "
         : "UNK";
-    if (cfg_mode == CFG_hxc) {
+    if (cfg.hxc_mode) {
         snprintf(msg, sizeof(msg), "%03u/%03u %s",
                  cfg.slot_nr, cfg.max_slot_nr, type);
     } else {
@@ -286,7 +278,7 @@ static void dump_file(void)
     printk("]\n");
 }
 
-static bool_t no_cfg_dir_next(void)
+static bool_t native_dir_next(void)
 {
     do {
         F_readdir(&fs->dp, &fs->fp);
@@ -405,13 +397,9 @@ static void process_ff_cfg_opts(void)
     if (ff_cfg.interface != FINTF_JC)
         floppy_set_fintf_mode(ff_cfg.interface);
 
-    /* Do the rest of processing only on initial power-on. */
-    if (!first_startup)
-        return;
-
     /* ejected-on-startup: Set the ejected state appropriately. */
     if (ff_cfg.ejected_on_startup)
-        ejected = TRUE;
+        cfg.ejected = TRUE;
 
     /* Store the configuration in Flash, if it's out of date. */
     if (memcmp(flash_ff_cfg, &ff_cfg, sizeof(ff_cfg))
@@ -426,36 +414,40 @@ static void process_ff_cfg_opts(void)
     }
 }
 
-static uint8_t cfg_init(void)
+static void cfg_init(void)
 {
     struct hxcsdfe_cfg hxc_cfg;
     unsigned int sofar;
     char *p;
-    uint8_t type;
+    BYTE mode;
     FRESULT fr;
 
+    cfg.hxc_mode = FALSE;
     cfg.slot_nr = cfg.depth = 0;
-    cfg.lastdisk_committed = FALSE;
     cfg.cur_cdir = fatfs.cdir;
 
     fr = f_chdir("FF");
     cfg.cfg_cdir = fatfs.cdir;
 
+    read_ff_cfg();
+    process_ff_cfg_opts();
+
+    /* Probe for HxC compatibility mode. */
     fatfs.cdir = cfg.cur_cdir;
     fr = F_try_open(&fs->file, "HXCSDFE.CFG", FA_READ|FA_WRITE);
     if (fr)
-        goto no_config;
+        goto native_mode;
     fatfs_to_slot(&cfg.hxcsdfe, &fs->file, "HXCSDFE.CFG");
     F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
-    if (first_startup && (hxc_cfg.startup_mode & HXCSTARTUP_slot0)) {
+    if (hxc_cfg.startup_mode & HXCSTARTUP_slot0) {
         /* Startup mode: slot 0. */
         hxc_cfg.slot_index = hxc_cfg.cur_slot_number = 0;
         F_lseek(&fs->file, 0);
         F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
     }
-    if (first_startup && (hxc_cfg.startup_mode & HXCSTARTUP_ejected)) {
+    if (hxc_cfg.startup_mode & HXCSTARTUP_ejected) {
         /* Startup mode: eject. */
-        ejected = TRUE;
+        cfg.ejected = TRUE;
     }
         
     F_close(&fs->file);
@@ -463,28 +455,33 @@ static uint8_t cfg_init(void)
     /* Indexed mode (DSKAxxxx.HFE) does not need AUTOBOOT.HFE. */
     if (!strncmp("HXCFECFGV", hxc_cfg.signature, 9) && hxc_cfg.index_mode) {
         memset(&cfg.autoboot, 0, sizeof(cfg.autoboot));
-        type = CFG_hxc;
+        cfg.hxc_mode = TRUE;
         goto out;
     }
 
     fr = F_try_open(&fs->file, "AUTOBOOT.HFE", FA_READ);
     if (fr)
-        goto no_config;
+        goto native_mode;
     fatfs_to_slot(&cfg.autoboot, &fs->file, "AUTOBOOT.HFE");
     F_close(&fs->file);
 
-    type = CFG_hxc;
+    cfg.hxc_mode = TRUE;
     goto out;
 
-no_config:
-    fatfs.cdir = cfg.cfg_cdir;
-    fr = F_try_open(&fs->file, "LASTDISK.IDX", FA_READ|FA_WRITE);
-    if (fr) {
-        type = CFG_none;
+native_mode:
+    /* Native mode (direct navigation). */
+    if (ff_cfg.image_on_startup == IMGS_init)
         goto out;
-    }
 
-    /* Process LASTDISK.IDX file. */
+    fatfs.cdir = cfg.cfg_cdir;
+    mode = FA_READ;
+    if (ff_cfg.image_on_startup == IMGS_last)
+        mode |= FA_WRITE | FA_OPEN_ALWAYS;
+    fr = F_try_open(&fs->file, "IMAGE_A.CFG", mode);
+    if (fr)
+        goto out;
+
+    /* Process IMAGE_A.CFG file. */
     sofar = 0; /* bytes consumed so far */
     fatfs.cdir = cfg.cur_cdir;
     for (;;) {
@@ -502,7 +499,7 @@ no_config:
         cfg.cdir_stack[cfg.depth++] = fatfs.cdir;
         fr = f_chdir(fs->buf);
         if (fr)
-            goto clear_lastdisk;
+            goto clear_image_a;
         /* Seek on to next pathname section. */
         sofar += p - fs->buf;
         F_lseek(&fs->file, sofar);
@@ -510,46 +507,39 @@ no_config:
     if (cfg.depth != 0) {
         /* No subfolder support on LED display. */
         if (display_mode != DM_LCD_1602)
-            goto clear_lastdisk; /* no subfolder support on LED display */
+            goto clear_image_a; /* no subfolder support on LED display */
         /* Skip '..' entry. */
         cfg.slot_nr = 1;
     }
     if (p != fs->buf) {
         /* If there was a non-empty non-terminated pathname section, it 
          * must be the name of the currently-selected image file. */
+        bool_t ok;
         printk("%u:F: '%s'\n", cfg.depth, fs->buf);
         F_opendir(&fs->dp, "");
-        while (no_cfg_dir_next()) {
-            if (!strcmp(fs->fp.fname, fs->buf)) {
-                /* Yes, last disk image was committed. Tell our caller to load 
-                 * it immediately rather than jumping to the selector. */
-                cfg.lastdisk_committed = TRUE;
-                break;
-            }
+        while ((ok = native_dir_next()) && strcmp(fs->fp.fname, fs->buf))
             cfg.slot_nr++;
-        }
         F_closedir(&fs->dp);
-        if (!cfg.lastdisk_committed)
-            goto clear_lastdisk;
+        if (!ok)
+            goto clear_image_a;
     }
     F_close(&fs->file);
     cfg.cur_cdir = fatfs.cdir;
-    type = CFG_lastidx;
 
 out:
-    read_ff_cfg();
-    process_ff_cfg_opts();
+    printk("Mode: %s\n", cfg.hxc_mode ? "HxC" : "Native");
     fatfs.cdir = cfg.cur_cdir;
-    return type;
+    return;
 
-clear_lastdisk:
-    /* Error! Clear the LASTDISK.IDX file. */
-    printk("LASTDISK.IDX is bad: clearing it\n");
+clear_image_a:
+    /* Error! Clear the IMAGE_A.CFG file. */
+    printk("IMAGE_A.CFG is bad: %sring it\n",
+           (ff_cfg.image_on_startup == IMGS_last) ? "clea" : "igno");
     F_lseek(&fs->file, 0);
-    F_truncate(&fs->file);
+    if (ff_cfg.image_on_startup == IMGS_last)
+        F_truncate(&fs->file);
     F_close(&fs->file);
-    cfg.depth = 0;
-    type = CFG_lastidx;
+    cfg.slot_nr = cfg.depth = 0;
     goto out;
 }
 
@@ -557,7 +547,7 @@ clear_lastdisk:
 #define CFG_READ_SLOT_NR  1 /* Read slot number afresh from config */
 #define CFG_WRITE_SLOT_NR 2 /* Write new slot number to config */
 
-static void no_cfg_update(uint8_t slot_mode)
+static void native_update(uint8_t slot_mode)
 {
     int i;
 
@@ -566,7 +556,7 @@ static void no_cfg_update(uint8_t slot_mode)
         memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
         cfg.max_slot_nr = cfg.depth ? 1 : 0;
         F_opendir(&fs->dp, "");
-        while (no_cfg_dir_next())
+        while (native_dir_next())
             cfg.max_slot_nr++;
         /* Adjust max_slot_nr. Must be at least one 'slot'. */
         if (!cfg.max_slot_nr)
@@ -577,11 +567,12 @@ static void no_cfg_update(uint8_t slot_mode)
         cfg.slot_nr = (cfg.slot_nr <= cfg.max_slot_nr) ? cfg.slot_nr : 0;
     }
 
-    if ((cfg_mode == CFG_lastidx) && (slot_mode == CFG_WRITE_SLOT_NR)) {
+    if ((ff_cfg.image_on_startup == IMGS_last)
+        && (slot_mode == CFG_WRITE_SLOT_NR)) {
         char slot[10], *p, *q;
         snprintf(slot, sizeof(slot), "%u", cfg.slot_nr);
         fatfs.cdir = cfg.cfg_cdir;
-        F_open(&fs->file, "LASTDISK.IDX", FA_READ|FA_WRITE);
+        F_open(&fs->file, "IMAGE_A.CFG", FA_READ|FA_WRITE);
         printk("Before: "); dump_file(); F_lseek(&fs->file, 0);
         /* Read final section of the file. */
         if (f_size(&fs->file) > sizeof(fs->buf))
@@ -627,7 +618,7 @@ static void no_cfg_update(uint8_t slot_mode)
     /* Populate current slot. */
     i = cfg.depth ? 1 : 0;
     F_opendir(&fs->dp, "");
-    while (no_cfg_dir_next()) {
+    while (native_dir_next()) {
         if (i >= cfg.slot_nr)
             break;
         i++;
@@ -812,15 +803,10 @@ static void hxc_cfg_update(uint8_t slot_mode)
 
 static void cfg_update(uint8_t slot_mode)
 {
-    switch (cfg_mode) {
-    case CFG_none:
-    case CFG_lastidx:
-        no_cfg_update(slot_mode);
-        break;
-    case CFG_hxc:
+    if (cfg.hxc_mode)
         hxc_cfg_update(slot_mode);
-        break;
-    }
+    else
+        native_update(slot_mode);
 }
 
 /* Based on button presses, change which floppy image is selected. */
@@ -894,13 +880,11 @@ int floppy_main(void)
     arena_init();
     fs = arena_alloc(sizeof(*fs));
     
-    cfg_mode = cfg_init();
+    cfg_init();
     cfg_update(CFG_READ_SLOT_NR);
-    first_startup = FALSE;
 
-    /* In direct navigation mode go straight into selector if no image is
-     * already selected (in LASTDISK.IDX). */
-    if ((cfg_mode != CFG_hxc) && !cfg.lastdisk_committed) {
+    /* If we start on a folder, go directly into the image selector. */
+    if (cfg.slot.attributes & AM_DIR) {
         display_write_slot();
         b = buttons;
         goto select;
@@ -949,9 +933,9 @@ int floppy_main(void)
         printk("Attr: %02x Clus: %08x Size: %u\n",
                cfg.slot.attributes, cfg.slot.firstCluster, cfg.slot.size);
 
-        if (ejected) {
+        if (cfg.ejected) {
 
-            ejected = FALSE;
+            cfg.ejected = FALSE;
             b = B_SELECT;
 
         } else {
