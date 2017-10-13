@@ -271,12 +271,15 @@ static void fatfs_to_slot(struct v2_slot *slot, FIL *file, const char *name)
 static void dump_file(void)
 {
     F_lseek(&fs->file, 0);
+#ifndef NDEBUG
     printk("[");
     do {
         F_read(&fs->file, fs->buf, sizeof(fs->buf), NULL);
         printk("%s", fs->buf);
     } while (!f_eof(&fs->file));
     printk("]\n");
+    F_lseek(&fs->file, 0);
+#endif
 }
 
 static bool_t native_dir_next(void)
@@ -570,11 +573,10 @@ static void native_update(uint8_t slot_mode)
 
     if ((ff_cfg.image_on_startup == IMGS_last)
         && (slot_mode == CFG_WRITE_SLOT_NR)) {
-        char slot[10], *p, *q;
-        snprintf(slot, sizeof(slot), "%u", cfg.slot_nr);
+        char *p, *q;
         fatfs.cdir = cfg.cfg_cdir;
         F_open(&fs->file, "IMAGE_A.CFG", FA_READ|FA_WRITE);
-        printk("Before: "); dump_file(); F_lseek(&fs->file, 0);
+        printk("Before: "); dump_file();
         /* Read final section of the file. */
         if (f_size(&fs->file) > sizeof(fs->buf))
             F_lseek(&fs->file, f_size(&fs->file) - sizeof(fs->buf));
@@ -611,7 +613,7 @@ static void native_update(uint8_t slot_mode)
                     strnlen(fs->fp.fname, sizeof(fs->fp.fname)), NULL);
         }
         F_truncate(&fs->file);
-        printk("After: "); dump_file(); F_lseek(&fs->file, 0);
+        printk("After: "); dump_file();
         F_close(&fs->file);
         fatfs.cdir = cfg.cur_cdir;
     }
