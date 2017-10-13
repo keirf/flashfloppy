@@ -26,6 +26,7 @@ static struct {
     uint32_t cfg_cdir, cur_cdir;
     uint16_t cdir_stack[20];
     uint8_t depth;
+    uint8_t flashcfg_bad:1;
     uint8_t hxc_mode:1;
     uint8_t ejected:1;
     /* FF.CFG values which override HXCSDFE.CFG. */
@@ -35,10 +36,10 @@ static struct {
 } cfg;
 
 /* FF.CFG: Compiled default values, and Flashed default values. */
-#define FF_CFG_VER 1
 const static struct ff_cfg *flash_ff_cfg =
     (struct ff_cfg *)(0x8020000 - FLASH_PAGE_SIZE);
 const static struct ff_cfg dfl_ff_cfg = {
+    .ver = 1,
 #define x(n,o,v) .o = v,
 #include "ff_cfg_defaults.h"
 #undef x
@@ -389,6 +390,18 @@ static void read_ff_cfg(void)
     }
 
     F_close(&fs->file);
+
+    /* Store the configuration in Flash, if it's bad or out of date. */
+    if (cfg.flashcfg_bad || memcmp(flash_ff_cfg, &ff_cfg, sizeof(ff_cfg))) {
+        uint16_t crc = crc16_ccitt(&ff_cfg, sizeof(ff_cfg), 0xffff);
+        crc = htobe16(crc);
+        fpec_init();
+        fpec_page_erase((uint32_t)flash_ff_cfg);
+        fpec_write(&ff_cfg, sizeof(ff_cfg), (uint32_t)flash_ff_cfg);
+        fpec_write(&crc, sizeof(crc), (uint32_t)(flash_ff_cfg+1));
+        printk("Config: Written to Flash\n");
+        cfg.flashcfg_bad = FALSE;
+    }
 }
 
 static void process_ff_cfg_opts(void)
@@ -400,18 +413,6 @@ static void process_ff_cfg_opts(void)
     /* ejected-on-startup: Set the ejected state appropriately. */
     if (ff_cfg.ejected_on_startup)
         cfg.ejected = TRUE;
-
-    /* Store the configuration in Flash, if it's out of date. */
-    if (memcmp(flash_ff_cfg, &ff_cfg, sizeof(ff_cfg))
-        || crc16_ccitt(flash_ff_cfg, sizeof(ff_cfg)+2, ~FF_CFG_VER)) {
-        uint16_t crc = crc16_ccitt(&ff_cfg, sizeof(ff_cfg), ~FF_CFG_VER);
-        crc = htobe16(crc);
-        fpec_init();
-        fpec_page_erase((uint32_t)flash_ff_cfg);
-        fpec_write(&ff_cfg, sizeof(ff_cfg), (uint32_t)flash_ff_cfg);
-        fpec_write(&crc, sizeof(crc), (uint32_t)(flash_ff_cfg+1));
-        printk("Config: Written to Flash\n");
-    }
 }
 
 static void cfg_init(void)
@@ -1104,7 +1105,6 @@ int main(void)
 {
     FRESULT fres;
     uint8_t fintf_mode;
-    uint16_t crc;
 
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
@@ -1130,9 +1130,10 @@ int main(void)
 
     speaker_init();
 
-    crc = crc16_ccitt(flash_ff_cfg, sizeof(ff_cfg)+2, ~FF_CFG_VER);
-    ff_cfg = crc ? dfl_ff_cfg : *flash_ff_cfg;
-    printk("Config: %s\n", crc ? "Factory" : "Flash");
+    cfg.flashcfg_bad = (flash_ff_cfg->ver != dfl_ff_cfg.ver)
+        || !!crc16_ccitt(flash_ff_cfg, sizeof(ff_cfg)+2, 0xffff);
+    ff_cfg = cfg.flashcfg_bad ? dfl_ff_cfg : *flash_ff_cfg;
+    printk("Config: %s\n", cfg.flashcfg_bad ? "Factory" : "Flash");
 
     fintf_mode = ff_cfg.interface;
     if (fintf_mode == FINTF_JC) {

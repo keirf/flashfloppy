@@ -24,6 +24,7 @@ int get_next_opt(struct opts *opts);
 
 /* FF.CFG options structure. */
 extern struct ff_cfg {
+    uint8_t ver;
     /* interface: FINTF_* interface mode */
 #define FINTF_JC 255 /* mode specified by jumper JC */
     uint8_t interface; /* FINTF_* interface mode */
