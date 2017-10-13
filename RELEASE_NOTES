@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.8.6a - 13 October 2017
+ - New FF.CFG option image-on-startup
+ - Rename LASTDISK.IDX to IMAGE_A.CFG
+ - If image-on-startup is a folder, go directly into image selector
+
 ** v0.8.5a - 13 October 2017
  - Cache FF.CFG values in Flash memory for next power on, replacing
    'factory defaults'. Restore defaults by pressing both buttons.
