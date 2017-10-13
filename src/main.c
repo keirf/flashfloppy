@@ -898,8 +898,9 @@ int floppy_main(void)
     cfg_update(CFG_READ_SLOT_NR);
     first_startup = FALSE;
 
-    /* In lastdisk mode, go straight into selector if nothing selected. */
-    if ((cfg_mode == CFG_lastidx) && !cfg.lastdisk_committed) {
+    /* In direct navigation mode go straight into selector if no image is
+     * already selected (in LASTDISK.IDX). */
+    if ((cfg_mode != CFG_hxc) && !cfg.lastdisk_committed) {
         display_write_slot();
         b = buttons;
         goto select;
