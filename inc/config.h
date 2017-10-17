@@ -47,6 +47,10 @@ extern struct ff_cfg {
     uint8_t image_on_startup;
 } ff_cfg;
 
+void flash_ff_cfg_update(void);
+void flash_ff_cfg_erase(void);
+void flash_ff_cfg_read(void);
+
 /*
  * Local variables:
  * mode: C
