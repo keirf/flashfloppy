@@ -23,7 +23,7 @@ struct opts {
 int get_next_opt(struct opts *opts);
 
 /* FF.CFG options structure. */
-extern struct ff_cfg {
+struct ff_cfg {
     uint8_t ver;
     /* interface: FINTF_* interface mode */
 #define FINTF_JC 255 /* mode specified by jumper JC */
@@ -45,7 +45,10 @@ extern struct ff_cfg {
 #define IMGS_static 1
 #define IMGS_init   2
     uint8_t image_on_startup;
-} ff_cfg;
+};
+
+extern struct ff_cfg ff_cfg;
+extern const struct ff_cfg dfl_ff_cfg;
 
 void flash_ff_cfg_update(void);
 void flash_ff_cfg_erase(void);

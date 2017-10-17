@@ -21,17 +21,6 @@ union flash_ff_cfg {
 #define CFG_BLANK(_cfg) ((_cfg)->words[0] == 0xffff)
 #define CFG_VALID(_cfg) (((_cfg) != NULL) && !CFG_BLANK(_cfg))
 
-/* FF.CFG: Compiled default values. */
-const static struct ff_cfg dfl_ff_cfg = {
-    .ver = 1,
-#define x(n,o,v) .o = v,
-#include "ff_cfg_defaults.h"
-#undef x
-};
-
-/* FF.CFG: User-specified values, and defaults where not specified. */
-struct ff_cfg ff_cfg;
-
 static void erase_slot(union flash_ff_cfg *cfg)
 {
     uint16_t zero = 0;

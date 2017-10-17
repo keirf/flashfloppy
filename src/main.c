@@ -34,6 +34,17 @@ static struct {
     uint8_t ffcfg_has_display_scroll_rate:1;
 } cfg;
 
+/* FF.CFG: Compiled default values. */
+const struct ff_cfg dfl_ff_cfg = {
+    .ver = 1,
+#define x(n,o,v) .o = v,
+#include "ff_cfg_defaults.h"
+#undef x
+};
+
+/* FF.CFG: User-specified values, and defaults where not specified. */
+struct ff_cfg ff_cfg;
+
 uint8_t board_id;
 
 #define LCD_SCROLL_PAUSE_MSEC  2000
