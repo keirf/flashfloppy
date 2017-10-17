@@ -9,44 +9,46 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-union flash_ff_cfg {
+#define SLOTW_NR   64           /* Number of 16-bit words per slot */
+#define SLOTW_DEAD (SLOTW_NR-2) /* If != 0xffff: this slot is deleted */
+#define SLOTW_CRC  (SLOTW_NR-1) /* CRC over entire config slot */
+union cfg_slot {
     struct ff_cfg ff_cfg;
-    uint16_t words[64];
+    uint16_t words[SLOTW_NR];
 };
 
-#define FLASH_FF_CFG_BASE (union flash_ff_cfg *)(0x8020000 - FLASH_PAGE_SIZE)
-#define FLASH_FF_CFG_NR   (FLASH_PAGE_SIZE / sizeof(union flash_ff_cfg))
+#define SLOT_BASE (union cfg_slot *)(0x8020000 - FLASH_PAGE_SIZE)
+#define SLOT_NR   (FLASH_PAGE_SIZE / sizeof(union cfg_slot))
 
-#define CFG_DEAD(_cfg)  ((_cfg)->words[0] == 0)
-#define CFG_BLANK(_cfg) ((_cfg)->words[0] == 0xffff)
-#define CFG_VALID(_cfg) (((_cfg) != NULL) && !CFG_BLANK(_cfg))
+#define slot_is_blank(_slot) ((_slot)->words[0] == 0xffff)
+#define slot_is_valid(_slot) (((_slot) != NULL) && !slot_is_blank(_slot))
 
-static void erase_slot(union flash_ff_cfg *cfg)
+static void erase_slot(union cfg_slot *slot)
 {
     uint16_t zero = 0;
     fpec_init();
-    fpec_write(&zero, 2, (uint32_t)&cfg->words[0]);
-    printk("Config: Erased Slot %u\n", cfg - FLASH_FF_CFG_BASE);
+    fpec_write(&zero, 2, (uint32_t)&slot->words[SLOTW_DEAD]);
+    printk("Config: Erased Slot %u\n", slot - SLOT_BASE);
 }
 
 /* Find first blank or valid config slot in Flash memory.
  * Returns NULL if none. */
-static union flash_ff_cfg *flash_ff_cfg_find(void)
+static union cfg_slot *cfg_slot_find(void)
 {
     unsigned int idx;
-    union flash_ff_cfg *cfg;
+    union cfg_slot *slot;
 
-    for (idx = 0; idx < FLASH_FF_CFG_NR; idx++) {
-        cfg = FLASH_FF_CFG_BASE + idx;
-        if (CFG_DEAD(cfg))
+    for (idx = 0; idx < SLOT_NR; idx++) {
+        slot = SLOT_BASE + idx;
+        if (slot->words[SLOTW_DEAD] != 0xffff)
             continue;
-        if (CFG_BLANK(cfg))
-            return cfg;
-        if ((cfg->ff_cfg.version == dfl_ff_cfg.version)
-            && !crc16_ccitt(cfg, sizeof(*cfg), 0xffff))
-            return cfg;
+        if (slot_is_blank(slot))
+            return slot;
+        if ((slot->ff_cfg.version == dfl_ff_cfg.version)
+            && !crc16_ccitt(slot, sizeof(*slot), 0xffff))
+            return slot;
         /* Bad, non-blank config slot. Mark it dead. */
-        erase_slot(cfg);
+        erase_slot(slot);
     }
 
     return NULL;
@@ -54,57 +56,61 @@ static union flash_ff_cfg *flash_ff_cfg_find(void)
 
 void flash_ff_cfg_update(void)
 {
-    union flash_ff_cfg new_cfg, *cfg = flash_ff_cfg_find();
+    union cfg_slot new_slot, *slot = cfg_slot_find();
+    uint16_t crc;
 
     /* Nothing to do if Flashed configuration is valid and up to date. */
-    if (CFG_VALID(cfg) && !memcmp(&cfg->ff_cfg, &ff_cfg, sizeof(ff_cfg)))
+    if (slot_is_valid(slot) && !memcmp(&slot->ff_cfg, &ff_cfg, sizeof(ff_cfg)))
         return;
 
     fpec_init();
 
-    if ((cfg != NULL) && CFG_BLANK(cfg)) {
+    if ((slot != NULL) && slot_is_blank(slot)) {
         /* Slot is blank: no erase needed. */
-    } else if ((cfg != NULL)
-               && ((cfg - FLASH_FF_CFG_BASE) < (FLASH_FF_CFG_NR - 1))) {
+    } else if ((slot != NULL)
+               && ((slot - SLOT_BASE) < (SLOT_NR - 1))) {
         /* There's at least one blank slot available. Erase current slot. */
-        erase_slot(cfg);
-        cfg++;
+        erase_slot(slot);
+        slot++;
     } else {
         /* No blank slots available. Erase whole page. */
-        fpec_page_erase((uint32_t)FLASH_FF_CFG_BASE);
-        cfg = FLASH_FF_CFG_BASE;
+        fpec_page_erase((uint32_t)SLOT_BASE);
+        slot = SLOT_BASE;
         printk("Config: Erased Whole Page\n");
     }
 
-    memset(&new_cfg, 0, sizeof(new_cfg));
-    memcpy(&new_cfg.ff_cfg, &ff_cfg, sizeof(ff_cfg));
-    new_cfg.words[ARRAY_SIZE(new_cfg.words)-1] = htobe16(
-        crc16_ccitt(&new_cfg, sizeof(new_cfg)-2, 0xffff));
-    fpec_write(&new_cfg, sizeof(new_cfg), (uint32_t)cfg);
-    printk("Config: Written to Flash Slot %u\n", cfg - FLASH_FF_CFG_BASE);
+    memset(&new_slot, 0, sizeof(new_slot));
+    memcpy(&new_slot.ff_cfg, &ff_cfg, sizeof(ff_cfg));
+    new_slot.words[SLOTW_DEAD] = 0xffff;
+    crc = htobe16(crc16_ccitt(&new_slot, sizeof(new_slot)-2, 0xffff));
+    /* Write up to but excluding SLOTW_DEAD. */
+    fpec_write(&new_slot, sizeof(new_slot)-4, (uint32_t)slot);
+    /* Write SLOTW_CRC. */
+    fpec_write(&crc, 2, (uint32_t)&slot->words[SLOTW_CRC]);
+    printk("Config: Written to Flash Slot %u\n", slot - SLOT_BASE);
 }
 
 void flash_ff_cfg_erase(void)
 {
-    union flash_ff_cfg *cfg = flash_ff_cfg_find();
-    if (CFG_VALID(cfg))
-        erase_slot(cfg);
+    union cfg_slot *slot = cfg_slot_find();
+    if (slot_is_valid(slot))
+        erase_slot(slot);
 }
 
 void flash_ff_cfg_read(void)
 {
-    union flash_ff_cfg *cfg = flash_ff_cfg_find();
-    bool_t found = CFG_VALID(cfg);
+    union cfg_slot *slot = cfg_slot_find();
+    bool_t found = slot_is_valid(slot);
 
     ff_cfg = dfl_ff_cfg;
     printk("Config: ");
     if (found) {
-        unsigned int sz = min_t(uint8_t, cfg->ff_cfg.size, ff_cfg.size);
+        unsigned int sz = min_t(unsigned int, slot->ff_cfg.size, ff_cfg.size);
         printk("Flash Slot %u (ver %u, size %u)\n",
-               cfg - FLASH_FF_CFG_BASE, cfg->ff_cfg.version, sz);
+               slot - SLOT_BASE, slot->ff_cfg.version, sz);
         /* Copy over all options that are present in Flash. */
         if (sz > offsetof(struct ff_cfg, interface))
-            memcpy(&ff_cfg.interface, &cfg->ff_cfg.interface,
+            memcpy(&ff_cfg.interface, &slot->ff_cfg.interface,
                    sz - offsetof(struct ff_cfg, interface));
     } else {
         printk("Factory Defaults\n");
