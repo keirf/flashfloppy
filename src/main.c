@@ -374,6 +374,12 @@ static void read_ff_cfg(void)
             cfg.ffcfg_has_step_volume = TRUE;
             break;
 
+        case FFCFG_image_on_startup:
+            ff_cfg.image_on_startup =
+                !strcmp(opts.arg, "static") ? IMGS_static
+                : !strcmp(opts.arg, "last") ? IMGS_last : IMGS_init;
+            break;
+
         }
         }
     }
@@ -491,6 +497,8 @@ native_mode:
         /* Skip '..' entry. */
         cfg.slot_nr = 1;
     }
+    while ((p != fs->buf) && isspace(p[-1]))
+        *--p = '\0'; /* Strip trailing whitespace */
     if (p != fs->buf) {
         /* If there was a non-empty non-terminated pathname section, it 
          * must be the name of the currently-selected image file. */
