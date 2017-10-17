@@ -28,6 +28,7 @@ static struct {
     uint8_t depth;
     uint8_t hxc_mode:1;
     uint8_t ejected:1;
+    uint8_t ima_ej_flag:1; /* "\\EJ" flag in IMAGE_A.CFG? */
     /* FF.CFG values which override HXCSDFE.CFG. */
     uint8_t ffcfg_has_step_volume:1;
     uint8_t ffcfg_has_display_off_secs:1;
@@ -421,6 +422,7 @@ static void cfg_init(void)
     FRESULT fr;
 
     cfg.hxc_mode = FALSE;
+    cfg.ima_ej_flag = FALSE;
     cfg.slot_nr = cfg.depth = 0;
     cfg.cur_cdir = fatfs.cdir;
 
@@ -511,11 +513,19 @@ native_mode:
     }
     while ((p != fs->buf) && isspace(p[-1]))
         *--p = '\0'; /* Strip trailing whitespace */
+    if (((p - fs->buf) >= 3) && !strcmp(p-3, "\\EJ")) {
+        /* Eject flag "\\EJ" is found. Act on it and then skip over it. */
+        cfg.ejected = TRUE;
+        cfg.ima_ej_flag = TRUE;
+        p -= 3;
+        *p = '\0';
+    }
     if (p != fs->buf) {
         /* If there was a non-empty non-terminated pathname section, it 
          * must be the name of the currently-selected image file. */
         bool_t ok;
-        printk("%u:F: '%s'\n", cfg.depth, fs->buf);
+        printk("%u:F: '%s' %s\n", cfg.depth, fs->buf,
+               cfg.ima_ej_flag ? "(EJ)" : "");
         F_opendir(&fs->dp, "");
         while ((ok = native_dir_next()) && strcmp(fs->fp.fname, fs->buf))
             cfg.slot_nr++;
@@ -540,6 +550,7 @@ clear_image_a:
         F_truncate(&fs->file);
     F_close(&fs->file);
     cfg.slot_nr = cfg.depth = 0;
+    cfg.ima_ej_flag = FALSE;
     goto out;
 }
 
@@ -612,6 +623,7 @@ static void native_update(uint8_t slot_mode)
         printk("After: "); dump_file();
         F_close(&fs->file);
         fatfs.cdir = cfg.cur_cdir;
+        cfg.ima_ej_flag = FALSE;
     }
     
     /* Populate current slot. */
@@ -638,6 +650,28 @@ static void native_update(uint8_t slot_mode)
         fatfs_to_slot(&cfg.slot, &fs->file, fs->fp.fname);
         F_close(&fs->file);
     }
+}
+
+static void ima_mark_ejected(bool_t ej)
+{
+    if (cfg.hxc_mode || (ff_cfg.image_on_startup != IMGS_last)
+        || (cfg.ima_ej_flag == ej))
+        return;
+
+    fatfs.cdir = cfg.cfg_cdir;
+    F_open(&fs->file, "IMAGE_A.CFG", FA_READ|FA_WRITE);
+    printk("Before: "); dump_file();
+    if (ej) {
+        F_lseek(&fs->file, f_size(&fs->file));
+        F_write(&fs->file, "\\EJ", 3, NULL);
+    } else {
+        F_lseek(&fs->file, max_t(int, f_size(&fs->file)-3, 0));
+        F_truncate(&fs->file);
+    }
+    printk("After: "); dump_file();
+    F_close(&fs->file);
+    fatfs.cdir = cfg.cur_cdir;
+    cfg.ima_ej_flag = ej;
 }
 
 static void hxc_cfg_update(uint8_t slot_mode)
@@ -876,6 +910,11 @@ int floppy_main(void)
     uint8_t b;
     uint32_t i;
 
+    /* If any buttons are pressed when USB drive is mounted then we start 
+     * in ejected state. */
+    if (buttons)
+        cfg.ejected = TRUE;
+
     arena_init();
     fs = arena_alloc(sizeof(*fs));
     
@@ -983,8 +1022,9 @@ int floppy_main(void)
                 lcd_write(0, 1, 8, "EJECT");
                 break;
             }
-            /* Wait for eject button to be released. */
-            while (buttons & B_SELECT)
+            ima_mark_ejected(TRUE);
+            /* Wait for buttons to be released. */
+            while (buttons != 0)
                 continue;
             /* Wait for any button to be pressed. */
             while ((b = buttons) == 0) {
@@ -995,6 +1035,7 @@ int floppy_main(void)
             if (b & B_SELECT) {
                 while (buttons & B_SELECT)
                     continue;
+                ima_mark_ejected(FALSE);
                 continue;
             }
         }
