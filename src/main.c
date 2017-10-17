@@ -1053,6 +1053,7 @@ static void cfg_factory_reset(void)
 {
     unsigned int i;
 
+    /* Buttons must be pressed for three seconds. */
     for (i = 0; i < 3000; i++) {
         if (buttons != (B_LEFT|B_RIGHT))
             break;
@@ -1061,6 +1062,7 @@ static void cfg_factory_reset(void)
     if (i != 3000)
         return;
 
+    /* Inform user that factory reset is about to occur. */
     switch (display_mode) {
     case DM_LED_7SEG:
         led_7seg_write_string("RST");
@@ -1073,13 +1075,18 @@ static void cfg_factory_reset(void)
         break;
     }
 
+    /* Wait for buttons to be released... */
     while (buttons == (B_LEFT|B_RIGHT))
         continue;
 
+    /* ...and then do the Flash erase. */
     flash_ff_cfg_erase();
 
     /* Linger so user sees it is done. */
     delay_ms(2000);
+
+    /* Reset so that changes take effect. */
+    system_reset();
 }
 
 static void banner(void)
@@ -1150,10 +1157,8 @@ int main(void)
         banner();
 
         while (f_mount(&fatfs, "", 1) != FR_OK) {
-            if (buttons == (B_LEFT|B_RIGHT)) {
+            if (buttons == (B_LEFT|B_RIGHT))
                 cfg_factory_reset();
-                system_reset();
-            }
             usbh_msc_process();
         }
 
