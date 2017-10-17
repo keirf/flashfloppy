@@ -23,8 +23,14 @@ struct opts {
 int get_next_opt(struct opts *opts);
 
 /* FF.CFG options structure. */
-struct ff_cfg {
-    uint8_t ver;
+struct __packed ff_cfg {
+    /* Bump version for every incompatible change to structure layout. 
+     * No need to bump for new fields appended to this structure. */
+#define FFCFG_VERSION 2
+    uint8_t version;
+    /* Size of this structure. This allows simple backward compatibility 
+     * by merging old and new structures of different sizes. */
+    uint8_t size;
     /* interface: FINTF_* interface mode */
 #define FINTF_JC 255 /* mode specified by jumper JC */
     uint8_t interface; /* FINTF_* interface mode */

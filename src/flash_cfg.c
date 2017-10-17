@@ -42,7 +42,7 @@ static union flash_ff_cfg *flash_ff_cfg_find(void)
             continue;
         if (CFG_BLANK(cfg))
             return cfg;
-        if ((cfg->ff_cfg.ver == dfl_ff_cfg.ver)
+        if ((cfg->ff_cfg.version == dfl_ff_cfg.version)
             && !crc16_ccitt(cfg, sizeof(*cfg), 0xffff))
             return cfg;
         /* Bad, non-blank config slot. Mark it dead. */
@@ -78,7 +78,7 @@ void flash_ff_cfg_update(void)
 
     memset(&new_cfg, 0, sizeof(new_cfg));
     memcpy(&new_cfg.ff_cfg, &ff_cfg, sizeof(ff_cfg));
-    new_cfg.words[63] = htobe16(
+    new_cfg.words[ARRAY_SIZE(new_cfg.words)-1] = htobe16(
         crc16_ccitt(&new_cfg, sizeof(new_cfg)-2, 0xffff));
     fpec_write(&new_cfg, sizeof(new_cfg), (uint32_t)cfg);
     printk("Config: Written to Flash Slot %u\n", cfg - FLASH_FF_CFG_BASE);
@@ -96,10 +96,16 @@ void flash_ff_cfg_read(void)
     union flash_ff_cfg *cfg = flash_ff_cfg_find();
     bool_t found = CFG_VALID(cfg);
 
-    ff_cfg = found ? cfg->ff_cfg : dfl_ff_cfg;
+    ff_cfg = dfl_ff_cfg;
     printk("Config: ");
     if (found) {
-        printk("Flash Slot %u\n", cfg - FLASH_FF_CFG_BASE);
+        unsigned int sz = min_t(uint8_t, cfg->ff_cfg.size, ff_cfg.size);
+        printk("Flash Slot %u (ver %u, size %u)\n",
+               cfg - FLASH_FF_CFG_BASE, cfg->ff_cfg.version, sz);
+        /* Copy over all options that are present in Flash. */
+        if (sz > offsetof(struct ff_cfg, interface))
+            memcpy(&ff_cfg.interface, &cfg->ff_cfg.interface,
+                   sz - offsetof(struct ff_cfg, interface));
     } else {
         printk("Factory Defaults\n");
     }

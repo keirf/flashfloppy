@@ -36,7 +36,8 @@ static struct {
 
 /* FF.CFG: Compiled default values. */
 const struct ff_cfg dfl_ff_cfg = {
-    .ver = 1,
+    .version = FFCFG_VERSION,
+    .size = sizeof(struct ff_cfg),
 #define x(n,o,v) .o = v,
 #include "ff_cfg_defaults.h"
 #undef x
