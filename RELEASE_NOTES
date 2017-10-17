@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.8.7a - 17 October 2017
+ - Start in ejected state if button pressed or image previously
+   ejected (when "image-on-startup = last")
+ - Divide the configuration flash page into multiple slots to
+   reduce the number of erase cycles when FF.CFG is repeatedly
+   modified
+
 ** v0.8.6a - 13 October 2017
  - New FF.CFG option image-on-startup
  - Rename LASTDISK.IDX to IMAGE_A.CFG
