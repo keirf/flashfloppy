@@ -1081,6 +1081,8 @@ int floppy_main(void)
 
         } while (b != 0);
 
+        cfg.ejected = FALSE;
+
         /* Write the slot number resulting from the latest round of button 
          * presses back to the config file. */
         cfg_update(CFG_WRITE_SLOT_NR);
