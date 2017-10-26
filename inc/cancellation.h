@@ -16,7 +16,7 @@ struct cancellation {
 #define cancellation_is_active(c) ((c)->sp != NULL)
 
 /* Execute fn() in a wrapped cancellable environment. */
-int call_cancellable_fn(struct cancellation *c, int (*fn)(void));
+int call_cancellable_fn(struct cancellation *c, int (*fn)(void *), void *arg);
 
 /* From IRQ content: stop running fn() and immediately return -1. */
 void cancel_call(struct cancellation *c);

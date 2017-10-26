@@ -95,7 +95,7 @@ static void msg_display(const char *p)
     }
 }
 
-int update(void)
+int update(void *unused)
 {
     /* FatFS state, local to this function, but off stack. */
     static FIL file;
@@ -314,7 +314,7 @@ int main(void)
     }
 
     /* Do the update. */
-    fres = F_call_cancellable(update);
+    fres = F_call_cancellable(update, NULL);
 
     if (fres || fail_code) {
 

@@ -9,31 +9,31 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-static struct cancellation fs_cancellation;
+static struct cancellation fs_cancellation[2];
+static struct cancellation *next_cancellation = &fs_cancellation[0];
 static FRESULT fs_fresult;
 
-FRESULT F_call_cancellable(int (*fn)(void))
+FRESULT F_call_cancellable(int (*fn)(void *), void *arg)
 {
     FRESULT res;
-    ASSERT(!cancellation_is_active(&fs_cancellation));
-    (void)call_cancellable_fn(&fs_cancellation, fn);
+    struct cancellation *c = next_cancellation++;
+    ASSERT((c - fs_cancellation) < ARRAY_SIZE(fs_cancellation));
+    ASSERT(!cancellation_is_active(c));
+    (void)call_cancellable_fn(c, fn, arg);
+    next_cancellation--;
     res = fs_fresult;
     fs_fresult = FR_OK;
     return res;
 }
 
-FRESULT F_fresult(void)
-{
-    return fs_fresult;
-}
-
 static void handle_fr(FRESULT fr)
 {
-    ASSERT(!fs_fresult && cancellation_is_active(&fs_cancellation));
+    struct cancellation *c = next_cancellation - 1;
+    ASSERT(!fs_fresult && (c >= fs_cancellation));
     if (fr == FR_OK)
         return;
     fs_fresult = fr;
-    cancel_call(&fs_cancellation);
+    cancel_call(c);
 }
 
 void F_die(void)

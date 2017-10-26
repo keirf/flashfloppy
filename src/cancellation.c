@@ -15,7 +15,8 @@ asm (
     "call_cancellable_fn:\n"
     "    stmdb.w sp!, {r0, r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"
     "    str     sp, [r0]\n" /* c->sp = PSP */
-    "    blx     r1\n"       /* (*fn)() */
+    "    mov     r0, r2\n"   /* r0 = arg */
+    "    blx     r1\n"       /* (*fn)(arg) */
     "    ldr     r2, [sp]\n"
     "    movs    r1, #0\n"
     "    str     r1, [r2]\n" /* c->sp = NULL */

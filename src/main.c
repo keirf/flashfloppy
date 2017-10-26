@@ -26,6 +26,7 @@ static struct {
     uint32_t cfg_cdir, cur_cdir;
     uint16_t cdir_stack[20];
     uint8_t depth;
+    uint8_t usb_power_fault:1;
     uint8_t hxc_mode:1;
     uint8_t ejected:1;
     uint8_t ima_ej_flag:1; /* "\\EJ" flag in IMAGE_A.CFG? */
@@ -200,12 +201,9 @@ static void button_timer_fn(void *unused)
 
     /* Check PA5 (USBFLT, active low). */
     if ((board_id == BRDREV_Gotek_enhanced) && !gpio_read_pin(gpioa, 5)) {
-        printk("USB Power Fault detected!\n");
-        /* Disable USBENA for a while. */
+        /* Latch the error and disable USBENA. */
+        cfg.usb_power_fault = TRUE;
         gpio_write_pin(gpioa, 4, HIGH);
-        delay_ms(500);
-        /* Reset everything. */
-        system_reset();
     }
 
     /* We debounce the switches by waiting for them to be pressed continuously 
@@ -297,6 +295,10 @@ static bool_t native_dir_next(void)
         F_readdir(&fs->dp, &fs->fp);
         if (fs->fp.fname[0] == '\0')
             return FALSE;
+        /* Skip dot files. */
+        if (fs->fp.fname[0] == '.')
+            continue;
+        /* Allow folder navigation when LCD/OLED display is attached. */
         if ((fs->fp.fattrib & AM_DIR) && (display_mode == DM_LCD_1602)
             && ((cfg.depth != 0) || strcmp(fs->fp.fname, "FF")))
             break;
@@ -913,10 +915,49 @@ static void choose_new_image(uint8_t init_b)
     }
 }
 
-int floppy_main(void)
+static void assert_usbh_msc_connected(void)
 {
+    if (!usbh_msc_connected() || cfg.usb_power_fault)
+        F_die();
+}
+
+static int run_floppy(void *_b)
+{
+    volatile uint8_t *pb = _b;
     stk_time_t t_now, t_prev, t_diff;
-    char msg[4];
+
+    floppy_insert(0, &cfg.slot);
+
+    lcd_update_ticks = stk_ms(20);
+    lcd_scroll_ticks = stk_ms(LCD_SCROLL_PAUSE_MSEC);
+    lcd_scroll_off = 0;
+    lcd_scroll_end = max_t(
+        int, strnlen(cfg.slot.name, sizeof(cfg.slot.name)) - 16, 0);
+    t_prev = stk_now();
+    while (((*pb = buttons) == 0) && !floppy_handle()) {
+        t_now = stk_now();
+        t_diff = stk_diff(t_prev, t_now);
+        if (display_mode == DM_LCD_1602) {
+            lcd_update_ticks -= t_diff;
+            if (lcd_update_ticks <= 0) {
+                lcd_write_track_info(FALSE);
+                lcd_update_ticks = stk_ms(20);
+            }
+            lcd_scroll_ticks -= t_diff;
+            lcd_scroll_name();
+        }
+        canary_check();
+        assert_usbh_msc_connected();
+        t_prev = t_now;
+    }
+
+    return 0;
+}
+
+static int floppy_main(void *unused)
+{
+    FRESULT fres;
+    char msg[17];
     uint8_t b;
     uint32_t i;
 
@@ -982,64 +1023,68 @@ int floppy_main(void)
                cfg.slot.attributes, cfg.slot.firstCluster, cfg.slot.size);
 
         if (cfg.ejected) {
-
             cfg.ejected = FALSE;
             b = B_SELECT;
-
         } else {
-
-            floppy_insert(0, &cfg.slot);
-
-            lcd_update_ticks = stk_ms(20);
-            lcd_scroll_ticks = stk_ms(LCD_SCROLL_PAUSE_MSEC);
-            lcd_scroll_off = 0;
-            lcd_scroll_end = max_t(
-                int, strnlen(cfg.slot.name, sizeof(cfg.slot.name)) - 16, 0);
-            t_prev = stk_now();
-            while (((b = buttons) == 0) && !floppy_handle()) {
-                t_now = stk_now();
-                t_diff = stk_diff(t_prev, t_now);
-                if (display_mode == DM_LCD_1602) {
-                    lcd_update_ticks -= t_diff;
-                    if (lcd_update_ticks <= 0) {
-                        lcd_write_track_info(FALSE);
-                        lcd_update_ticks = stk_ms(20);
-                    }
-                    lcd_scroll_ticks -= t_diff;
-                    lcd_scroll_name();
-                }
-                canary_check();
-                if (!usbh_msc_connected())
-                    F_die();
-                t_prev = t_now;
-            }
-
+            fres = F_call_cancellable(run_floppy, &b);
             floppy_cancel();
-
+            assert_usbh_msc_connected();
         }
 
         arena_init();
         fs = arena_alloc(sizeof(*fs));
 
         /* When an image is loaded, select button means eject. */
-        if (b & B_SELECT) {
+        if (fres || (b & B_SELECT)) {
             /* ** EJECT STATE ** */
+            unsigned int wait = 0;
+            snprintf(msg, sizeof(msg), "EJECTED");
             switch (display_mode) {
             case DM_LED_7SEG:
-                led_7seg_write_string("EJECT");
+                if (fres)
+                    snprintf(msg, sizeof(msg), "E%02u", fres);
+                led_7seg_write_string(msg);
                 break;
             case DM_LCD_1602:
-                lcd_write(0, 1, 8, "EJECT");
+                if (fres)
+                    snprintf(msg, sizeof(msg), "*ERROR* %02u", fres);
+                lcd_write(0, 1, 16, msg);
+                lcd_on();
                 break;
             }
-            ima_mark_ejected(TRUE);
+            if (fres == FR_OK)
+                ima_mark_ejected(TRUE);
+            fres = FR_OK;
             /* Wait for buttons to be released. */
             while (buttons != 0)
                 continue;
             /* Wait for any button to be pressed. */
             while ((b = buttons) == 0) {
-                if (!usbh_msc_connected())
-                    F_die();
+                /* Bail if USB disconnects. */
+                assert_usbh_msc_connected();
+                /* Update the display. */
+                delay_ms(1);
+                switch (display_mode) {
+                case DM_LED_7SEG:
+                    /* Alternate the 7-segment display. */
+                    if ((++wait % 1000) == 0) {
+                        switch (wait / 1000) {
+                        case 1:
+                            led_7seg_write_decimal(cfg.slot_nr);
+                            break;
+                        default:
+                            led_7seg_write_string(msg);
+                            wait = 0;
+                            break;
+                        }
+                    }
+                    break;
+                case DM_LCD_1602:
+                    /* Continue to scroll long filename. */
+                    lcd_scroll_ticks -= stk_ms(1);
+                    lcd_scroll_name();
+                    break;
+                }
             }
             /* Reload same image immediately if eject pressed again. */
             if (b & B_SELECT) {
@@ -1072,8 +1117,7 @@ int floppy_main(void)
                 b = buttons;
                 if (b != 0)
                     break;
-                if (!usbh_msc_connected())
-                    F_die();
+                assert_usbh_msc_connected();
                 delay_ms(1);
             }
 
@@ -1158,6 +1202,48 @@ static void banner(void)
     }
 }
 
+static void handle_errors(FRESULT fres)
+{
+    char msg[17];
+    bool_t pwr = cfg.usb_power_fault;
+
+    if (pwr) {
+        printk("USB Power Fault detected!\n");
+        snprintf(msg, sizeof(msg), "USB Power Fault");
+    } else if (usbh_msc_connected() && (fres != FR_OK)) {
+        printk("FATFS RETURN CODE: %u\n", fres);
+        snprintf(msg, sizeof(msg),
+                 (display_mode == DM_LED_7SEG) ? "E%02u" : "*ERROR* %02u",
+                 fres);
+    } else {
+        /* No error. Do nothing. */
+        return;
+    }
+
+    switch (display_mode) {
+    case DM_LED_7SEG:
+        led_7seg_write_string(msg);
+        break;
+    case DM_LCD_1602:
+        lcd_write(0, 0, 16, "***************");
+        lcd_write(0, 1, 16, msg);
+        lcd_on();
+        break;
+    }
+
+    /* Wait for buttons to be released, pressed and released again. */
+    while (buttons)
+        continue;
+    while (!buttons)
+        continue;
+    while (buttons)
+        continue;
+
+    /* On USB power fault we simply reset. */
+    if (pwr)
+        system_reset();
+}
+
 int main(void)
 {
     FRESULT fres;
@@ -1180,7 +1266,6 @@ int main(void)
 
     /* Wait for 5v power to stabilise before initing external peripherals. */
     delay_ms(200);
-
     printk("\n** FlashFloppy v%s for Gotek\n", FW_VER);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
@@ -1212,16 +1297,17 @@ int main(void)
 
         banner();
 
-        while (f_mount(&fatfs, "", 1) != FR_OK) {
+        while ((f_mount(&fatfs, "", 1) != FR_OK) && !cfg.usb_power_fault) {
             if (buttons == (B_LEFT|B_RIGHT))
                 cfg_factory_reset();
             usbh_msc_process();
         }
 
         arena_init();
-        fres = F_call_cancellable(floppy_main);
+        fres = F_call_cancellable(floppy_main, NULL);
         floppy_cancel();
-        printk("FATFS RETURN CODE: %u\n", fres);
+
+        handle_errors(fres);
     }
 
     return 0;

@@ -9,8 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-FRESULT F_call_cancellable(int (*fn)(void));
-FRESULT F_fresult(void);
+FRESULT F_call_cancellable(int (*fn)(void *), void *arg);
 
 void F_die(void);
 
