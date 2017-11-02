@@ -9,9 +9,10 @@ GPIn: (all must be 5v tolerant, *=not)
  PA8   DIR                              PB0*
  PA11  STEP                             PA1*
  PA12  SELA                             PA0*
- PA13  SELB [PB8:Taobao]                n/a
+ PA13  SELB [PB8:Taobao]                PA3* [Enhanced Boards only]
  PA14  WGATE [PB9:Taobao]               PB9
  PA15  SIDE                             PB4
+ n/a   MOTOR                            PA15 [Enhanced Boards only]
 GPOut:
  PB3   CHNG                             PB7
  PB4   INDEX [PB2:MMini; PB1:Taobao]    PB8
@@ -32,6 +33,15 @@ USART1: (Rx:DMA1/5, Tx:DMA1/4)
 
 GOTEK-ONLY PINS
 ***************
+
+Enhanced Gotek Pin Assignments:
+-------------------------------
+GPIn:
+ PA3     SELB (if unused, connect to VDD/3.3v)
+ PA4     USB_ENA (active-low push-pull output to power switch)
+ PA5     USB_FAULT (active-low open-drain signal from power switch)
+ PA15    MOTOR (connect to floppy pin 16, and to 5v via 1K)
+ PC15-12 Board ID (connect to VSS/GND)
 
 Jumpers & Switches:
 -------------------
