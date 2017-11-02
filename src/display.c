@@ -21,9 +21,10 @@ void display_init(void)
     } else {
         led_7seg_init();
         display_mode = DM_LED_7SEG;
-        snprintf(name, sizeof(name), "%u-Digit 7-Seg LED");
+        snprintf(name, sizeof(name), "%u-Digit 7-Seg LED",
+                 led_7seg_nr_digits());
     }
-    printk("** Display: %s\n\n", name);
+    printk("Display: %s\n\n", name);
 }
 
 /*
