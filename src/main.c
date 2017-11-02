@@ -198,6 +198,16 @@ static void button_timer_fn(void *unused)
     static uint8_t rotary;
     uint8_t b = 0;
 
+    /* Check PA5 (USBFLT, active low). */
+    if ((board_id == BRDREV_Gotek_enhanced) && !gpio_read_pin(gpioa, 5)) {
+        printk("USB Power Fault detected!\n");
+        /* Disable USBENA for a while. */
+        gpio_write_pin(gpioa, 4, HIGH);
+        delay_ms(500);
+        /* Reset everything. */
+        system_reset();
+    }
+
     /* We debounce the switches by waiting for them to be pressed continuously 
      * for 16 consecutive sample periods (16 * 5ms == 80ms) */
 
@@ -1174,6 +1184,9 @@ int main(void)
     printk("\n** FlashFloppy v%s for Gotek\n", FW_VER);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
+
+    printk("Board: %s\n",
+           (board_id == BRDREV_Gotek_standard) ? "Standard" : "Enhanced");
 
     speaker_init();
 

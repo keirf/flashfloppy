@@ -12,12 +12,15 @@
 #define O_FALSE 1
 #define O_TRUE  0
 
-/* Input pins: DIR=PB0, STEP=PA1, SELA=PA0, WGATE=PB9, SIDE=PB4 */
+/* Input pins: DIR=PB0, STEP=PA1, SELA=PA0, SELB=PA3, WGATE=PB9, SIDE=PB4, 
+ *             MOTOR=PA15 */
 #define pin_dir     0 /* PB0 */
 #define pin_step    1 /* PA1 */
 #define pin_sel0    0 /* PA0 */
+#define pin_sel1    3 /* PA3 */
 #define pin_wgate   9 /* PB9 */
 #define pin_side    4 /* PB4 */
+#define pin_motor  15 /* PA15 */
 
 /* Output pins. */
 #define gpio_out gpiob
@@ -62,6 +65,10 @@ static void board_floppy_init(void)
     gpio_configure_pin(gpioa, pin_sel0,  GPI_bus);
     gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
     gpio_configure_pin(gpiob, pin_side,  GPI_bus);
+    if (board_id == BRDREV_Gotek_enhanced) {
+        gpio_configure_pin(gpioa, pin_sel1,  GPI_bus);
+        gpio_configure_pin(gpioa, pin_motor, GPI_bus);
+    }
 
     /* PB[15:2] -> EXT[15:2], PA[1:0] -> EXT[1:0] */
     afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x1111;

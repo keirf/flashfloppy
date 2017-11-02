@@ -9,6 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+/* Pull up currently unused and possibly-floating pins. */
 static void gpio_pull_up_pins(GPIO gpio, uint16_t mask)
 {
     unsigned int i;
@@ -21,15 +22,37 @@ static void gpio_pull_up_pins(GPIO gpio, uint16_t mask)
 
 void board_init(void)
 {
-    board_id = BRDREV_Gotek;
+    uint16_t pa_skip, pb_skip;
+    uint8_t id;
 
-    /* Pull up all currently unused and possibly-floating pins. */
-    /* Skip PA0-1,8 (floppy inputs), PA2 (speaker), PA9-10 (serial console). */
-    gpio_pull_up_pins(gpioa, ~0x0707);
-    /* Skip PB0,4,9 (floppy inputs). */
-    gpio_pull_up_pins(gpiob, ~0x0211);
-    /* Don't skip any PCx pins. */
+    /* PA0-1,8 (floppy inputs), PA2 (speaker), PA9-10 (serial console). */
+    pa_skip = 0x0707;
+
+    /* PB0,4,9 (floppy inputs). */
+    pb_skip = 0x0211;
+
+    /* Pull up all PCx pins. */
     gpio_pull_up_pins(gpioc, ~0x0000);
+
+    /* Wait for ID to stabilise at PC[15:12]. */
+    delay_us(5);
+    id = (gpioc->idr >> 12) & 0xf;
+
+    switch (board_id = id) {
+    case BRDREV_Gotek_standard:
+        break;
+    case BRDREV_Gotek_enhanced:
+        /* PA3,15 (floppy inputs), PA4 (USBENA). */
+        pa_skip |= 0x8018;
+        /* PA4: /USBENA */
+        gpio_configure_pin(gpioa, 4, GPO_pushpull(_2MHz, LOW));
+        break;
+    default:
+        ASSERT(0);
+    }
+
+    gpio_pull_up_pins(gpioa, ~pa_skip);
+    gpio_pull_up_pins(gpiob, ~pb_skip);
 }
 
 /*
