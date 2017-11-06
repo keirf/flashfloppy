@@ -214,6 +214,14 @@ static void display_setting(bool_t on)
     }
 }
 
+static bool_t buttons_pressed(void)
+{
+    /* Check for both LEFT and RIGHT buttons pressed. */
+    return ((!gpio_read_pin(gpioc, 8) && !gpio_read_pin(gpioc, 7))
+            /* Also respond to third (SELECT) button on its own. */
+            || !gpio_read_pin(gpioc, 6));
+}
+
 /* Wait for both buttons to be pressed (LOW) or not pressed (HIGH). Perform 
  * debouncing by sampling the buttons every 5ms and checking for same state 
  * over 16 consecutive samples. */
@@ -224,8 +232,14 @@ static void wait_buttons(uint8_t level)
     do {
         delay_ms(5);
         x <<= 1;
-        x |= ((gpio_read_pin(gpioc, 8) == level) &&
-              (gpio_read_pin(gpioc, 7) == level));
+        if (level) {
+            /* All buttons must be released. */
+            x |= gpio_read_pin(gpioc, 8)
+                && gpio_read_pin(gpioc, 7)
+                && gpio_read_pin(gpioc, 6);
+        } else {
+            x |= buttons_pressed();
+        }
     } while (x != 0xffff);
 }
 
@@ -246,9 +260,8 @@ int main(void)
     gpioc->crh = 0x88888888u;
     gpioc->crl = 0x88888888u;
 
-    /* Check the two Gotek buttons. Only when both are pressed do we enter
-     * update mode. */
-    if (gpio_read_pin(gpioc, 8) || gpio_read_pin(gpioc, 7)) {
+    /* Enter update mode only if buttons are pressed. */
+    if (!buttons_pressed()) {
         /* Nope, so jump straight at the main firmware. */
         uint32_t sp = *(uint32_t *)FIRMWARE_START;
         uint32_t pc = *(uint32_t *)(FIRMWARE_START + 4);

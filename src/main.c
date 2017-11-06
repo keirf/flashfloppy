@@ -1146,17 +1146,19 @@ static int floppy_main(void *unused)
     return 0;
 }
 
-static void cfg_factory_reset(void)
+static void cfg_maybe_factory_reset(void)
 {
     unsigned int i;
+    uint8_t b = buttons;
 
-    /* Buttons must be pressed for three seconds. */
-    for (i = 0; i < 3000; i++) {
-        if (buttons != (B_LEFT|B_RIGHT))
-            break;
+    /* Need both LEFT and RIGHT pressed, or SELECT alone. */
+    if ((b != (B_LEFT|B_RIGHT)) && (b != B_SELECT))
+        return;
+
+    /* Buttons must be continuously pressed for three seconds. */
+    for (i = 0; (i < 3000) && (buttons == b); i++)
         delay_ms(1);
-    }
-    if (i != 3000)
+    if (buttons != b)
         return;
 
     /* Inform user that factory reset is about to occur. */
@@ -1173,7 +1175,7 @@ static void cfg_factory_reset(void)
     }
 
     /* Wait for buttons to be released... */
-    while (buttons == (B_LEFT|B_RIGHT))
+    while (buttons)
         continue;
 
     /* ...and then do the Flash erase. */
@@ -1298,8 +1300,7 @@ int main(void)
         banner();
 
         while ((f_mount(&fatfs, "", 1) != FR_OK) && !cfg.usb_power_fault) {
-            if (buttons == (B_LEFT|B_RIGHT))
-                cfg_factory_reset();
+            cfg_maybe_factory_reset();
             usbh_msc_process();
         }
 
