@@ -583,7 +583,7 @@ static void native_update(uint8_t slot_mode)
             cfg.max_slot_nr++;
         /* Adjust max_slot_nr. Must be at least one 'slot'. */
         if (!cfg.max_slot_nr)
-            F_die();
+            F_die(FR_DISK_ERR);
         cfg.max_slot_nr--;
         F_closedir(&fs->dp);
         /* Select last disk_index if not greater than available slots. */
@@ -613,7 +613,7 @@ static void native_update(uint8_t slot_mode)
         if (cfg.slot.attributes & AM_DIR) {
             if (!strcmp(fs->fp.fname, "..")) {
                 /* Strip back to next '/' */
-                if (!p) F_die(); /* must exist */
+                if (!p) F_die(FR_DISK_ERR); /* must exist */
                 *p = '\0';
                 if ((q = strrchr(fs->buf, '/')) != NULL) {
                     F_lseek(&fs->file, f_tell(&fs->file) - (p-q));
@@ -782,7 +782,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
     bad_signature:
         hxc_cfg.signature[15] = '\0';
         printk("Bad signature '%s'\n", hxc_cfg.signature);
-        F_die();
+        F_die(FR_DISK_ERR);
 
     }
 
@@ -918,7 +918,7 @@ static void choose_new_image(uint8_t init_b)
 static void assert_usbh_msc_connected(void)
 {
     if (!usbh_msc_connected() || cfg.usb_power_fault)
-        F_die();
+        F_die(FR_DISK_ERR);
 }
 
 static int run_floppy(void *_b)

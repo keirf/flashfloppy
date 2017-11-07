@@ -111,7 +111,7 @@ struct image_handler {
 bool_t image_valid(FILINFO *fp);
 
 /* Open specified image file on mass storage device. */
-bool_t image_open(struct image *im, const struct v2_slot *slot);
+void image_open(struct image *im, const struct v2_slot *slot);
 
 /* Seek to given track and start reading track data at specified rotational
  * position (specified as number of SYSCLK ticks past the index mark).

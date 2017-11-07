@@ -72,7 +72,7 @@ static bool_t da_read_track(struct image *im)
     /* Read some sectors. */
     if (!rd->prod) {
         if (disk_read(0, buf + sec_sz, dass.lba_base, nr_sec-1) != RES_OK)
-            F_die();
+            F_die(FR_DISK_ERR);
         rd->prod = nr_sec * sec_sz;
     }
 
@@ -263,7 +263,7 @@ static void da_write_track(struct image *im, bool_t flush)
             printk("Write %08x+%u... ", dass.lba_base, sect-1);
             t = stk_now();
             if (disk_write(0, wrbuf, dass.lba_base+sect-1, 1) != RES_OK)
-                F_die();
+                F_die(FR_DISK_ERR);
             printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
         }
     }

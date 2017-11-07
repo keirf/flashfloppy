@@ -36,9 +36,9 @@ static void handle_fr(FRESULT fr)
     cancel_call(c);
 }
 
-void F_die(void)
+void F_die(FRESULT fr)
 {
-    handle_fr(FR_DISK_ERR);
+    handle_fr(fr);
 }
 
 FRESULT F_try_open(FIL *fp, const TCHAR *path, BYTE mode)

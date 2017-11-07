@@ -232,7 +232,8 @@ typedef enum {
 	FR_NOT_ENOUGH_CORE,		/* (17) LFN working buffer could not be allocated */
 	FR_TOO_MANY_OPEN_FILES,	/* (18) Number of open files > FF_FS_LOCK */
 	FR_INVALID_PARAMETER,	/* (19) Given parameter is invalid */
-	FR_DISK_FULL		/* (20) Disk full during write */
+	FR_DISK_FULL = 30,	/* (30) Disk full during write */
+	FR_BAD_IMAGE,		/* (31) Bad disk image file */
 } FRESULT;
 
 

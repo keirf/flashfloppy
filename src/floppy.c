@@ -666,8 +666,7 @@ bool_t floppy_handle(void)
     struct drive *drv = &drive;
 
     if (!drv->image) {
-        if (!image_open(image, drv->slot))
-            return TRUE;
+        image_open(image, drv->slot);
         drv->image = image;
         dma_rd->state = DMA_stopping;
         if (image->handler->write_track)

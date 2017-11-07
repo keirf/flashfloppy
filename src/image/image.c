@@ -52,7 +52,7 @@ static bool_t try_handler(struct image *im, const struct v2_slot *slot,
     return handler->open(im);
 }
 
-bool_t image_open(struct image *im, const struct v2_slot *slot)
+void image_open(struct image *im, const struct v2_slot *slot)
 {
     static const struct image_handler * const image_handlers[] = {
         &hfe_image_handler, &adf_image_handler, &img_image_handler
@@ -80,15 +80,16 @@ bool_t image_open(struct image *im, const struct v2_slot *slot)
             : !strcmp(ext, "st") ? &st_image_handler
             : NULL);
     if (hint && try_handler(im, slot, hint))
-        return TRUE;
+        return;
 
     /* Filename extension hinting failed: walk the handler list. */
     for (i = 0; i < ARRAY_SIZE(image_handlers); i++) {
         if (try_handler(im, slot, image_handlers[i]))
-            return TRUE;
+            return;
     }
 
-    return FALSE;
+    /* No handler found: bad image. */
+    F_die(FR_BAD_IMAGE);
 }
 
 bool_t image_seek_track(
