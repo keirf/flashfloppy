@@ -108,7 +108,7 @@ static bool_t st_open(struct image *im)
     return _img_open(im, FALSE);
 }
 
-static bool_t img_seek_track(
+static void img_seek_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
@@ -163,8 +163,6 @@ static bool_t img_seek_track(
         mfm->cons = decode_off * 16;
         *start_pos = sys_ticks;
     }
-
-    return FALSE;
 }
 
 static bool_t img_read_track(struct image *im)

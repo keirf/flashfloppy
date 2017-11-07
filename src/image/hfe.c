@@ -91,7 +91,7 @@ static bool_t hfe_open(struct image *im)
     return TRUE;
 }
 
-static bool_t hfe_seek_track(
+static void hfe_seek_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
@@ -137,8 +137,6 @@ static bool_t hfe_seek_track(
         rd->cons = im->cur_bc & 2047;
         *start_pos = sys_ticks;
     }
-
-    return FALSE;
 }
 
 static bool_t hfe_read_track(struct image *im)

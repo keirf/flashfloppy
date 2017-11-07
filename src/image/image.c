@@ -109,7 +109,9 @@ bool_t image_seek_track(
         ? &da_image_handler
         : im->_handler;
 
-    return im->handler->seek_track(im, track, start_pos);
+    im->handler->seek_track(im, track, start_pos);
+
+    return FALSE;
 }
 
 bool_t image_read_track(struct image *im)

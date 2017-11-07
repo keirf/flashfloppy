@@ -99,7 +99,7 @@ struct image {
 
 struct image_handler {
     bool_t (*open)(struct image *im);
-    bool_t (*seek_track)(
+    void (*seek_track)(
         struct image *im, uint16_t track, stk_time_t *start_pos);
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);

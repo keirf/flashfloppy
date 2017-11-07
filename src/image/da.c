@@ -25,7 +25,7 @@ static struct da_status_sector dass = {
 #define TRACKLEN_BC 100160 /* multiple of 32 */
 #define TICKS_PER_CELL ((sysclk_ms(DRIVE_MS_PER_REV) * 16u) / TRACKLEN_BC)
 
-static bool_t da_seek_track(
+static void da_seek_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
@@ -54,8 +54,6 @@ static bool_t da_seek_track(
         image_read_track(im);
         *start_pos = 0;
     }
-
-    return FALSE;
 }
 
 static bool_t da_read_track(struct image *im)

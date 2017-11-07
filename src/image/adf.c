@@ -49,7 +49,7 @@ static bool_t adf_open(struct image *im)
     return TRUE;
 }
 
-static bool_t adf_seek_track(
+static void adf_seek_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
@@ -84,8 +84,6 @@ static bool_t adf_seek_track(
         image_read_track(im);
         *start_pos = sys_ticks;
     }
-
-    return FALSE;
 }
 
 static bool_t adf_read_track(struct image *im)
