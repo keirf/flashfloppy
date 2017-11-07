@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.8.8a - 7 November 2017
+ - Better error reporting (filesystem, media, power, image handling)
+ - Optional feature enhancements for Gotek clones
+ - Third button (select) may be used instead of prev/next for firmware
+   update and factory reset
+
 ** v0.8.7a - 17 October 2017
  - Start in ejected state if button pressed or image previously
    ejected (when "image-on-startup = last")

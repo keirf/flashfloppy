@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define FW_VER "0.8.7a"
+#define FW_VER "0.8.8a"
 
 #ifndef NDEBUG
 #define ASSERT(p) do { if (!(p)) illegal(); } while (0)
