@@ -1047,8 +1047,8 @@ static int floppy_main(void *unused)
                 break;
             case DM_LCD_1602:
                 if (fres)
-                    snprintf(msg, sizeof(msg), "*ERROR* %02u", fres);
-                lcd_write(0, 1, 16, msg);
+                    snprintf(msg, sizeof(msg), "*ERR*%02u*", fres);
+                lcd_write(8, 1, 8, msg);
                 lcd_on();
                 break;
             }
