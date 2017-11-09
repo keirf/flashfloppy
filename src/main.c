@@ -1034,12 +1034,14 @@ static int floppy_main(void *unused)
             switch (display_mode) {
             case DM_LED_7SEG:
                 if (fres)
-                    snprintf(msg, sizeof(msg), "E%02u", fres);
+                    snprintf(msg, sizeof(msg), "%c%02u",
+                             (fres >= 30) ? 'E' : 'F', fres);
                 led_7seg_write_string(msg);
                 break;
             case DM_LCD_1602:
                 if (fres)
-                    snprintf(msg, sizeof(msg), "*ERR*%02u*", fres);
+                    snprintf(msg, sizeof(msg), "*%s*%02u*",
+                             (fres >= 30) ? "ERR" : "FAT", fres);
                 lcd_write(8, 1, 8, msg);
                 lcd_on();
                 break;
@@ -1207,7 +1209,9 @@ static void handle_errors(FRESULT fres)
     } else if (usbh_msc_connected() && (fres != FR_OK)) {
         printk("FATFS RETURN CODE: %u\n", fres);
         snprintf(msg, sizeof(msg),
-                 (display_mode == DM_LED_7SEG) ? "E%02u" : "*ERROR* %02u",
+                 (display_mode == DM_LED_7SEG)
+                 ? ((fres >= 30) ? "E%02u" : "F%02u")
+                 : ((fres >= 30) ? "*ERROR* %02u" : "*FATFS* %02u"),
                  fres);
     } else {
         /* No error. Do nothing. */
