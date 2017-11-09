@@ -22,7 +22,7 @@ SUBDIRS += image
 SUBDIRS-$(gotek) += gotek
 SUBDIRS-$(touch) += touch
 
-main.o: ff_cfg_defaults.h
+flash_cfg.o: ff_cfg_defaults.h
 
 ff_cfg_defaults.h: ../examples/FF.CFG
 	python ../scripts/mk_config.py $< $@

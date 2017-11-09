@@ -291,6 +291,10 @@ int main(void)
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
 
+    flash_ff_cfg_read();
+
+    delay_ms(ff_cfg.startup_delay);
+
     display_init();
     switch (display_mode) {
     case DM_LED_7SEG:

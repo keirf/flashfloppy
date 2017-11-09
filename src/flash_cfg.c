@@ -9,6 +9,18 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+/* FF.CFG: Compiled default values. */
+const struct ff_cfg dfl_ff_cfg = {
+    .version = FFCFG_VERSION,
+    .size = sizeof(struct ff_cfg),
+#define x(n,o,v) .o = v,
+#include "ff_cfg_defaults.h"
+#undef x
+};
+
+/* FF.CFG: User-specified values, and defaults where not specified. */
+struct ff_cfg ff_cfg;
+
 #define SLOTW_NR   64           /* Number of 16-bit words per slot */
 #define SLOTW_DEAD (SLOTW_NR-2) /* If != 0xffff: this slot is deleted */
 #define SLOTW_CRC  (SLOTW_NR-1) /* CRC over entire config slot */

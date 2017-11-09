@@ -36,18 +36,6 @@ static struct {
     uint8_t ffcfg_has_display_scroll_rate:1;
 } cfg;
 
-/* FF.CFG: Compiled default values. */
-const struct ff_cfg dfl_ff_cfg = {
-    .version = FFCFG_VERSION,
-    .size = sizeof(struct ff_cfg),
-#define x(n,o,v) .o = v,
-#include "ff_cfg_defaults.h"
-#undef x
-};
-
-/* FF.CFG: User-specified values, and defaults where not specified. */
-struct ff_cfg ff_cfg;
-
 uint8_t board_id;
 
 #define LCD_SCROLL_PAUSE_MSEC  2000
@@ -398,6 +386,7 @@ static void read_ff_cfg(void)
             ff_cfg.step_volume = volume;
             cfg.ffcfg_has_step_volume = TRUE;
             break;
+        }
 
         case FFCFG_image_on_startup:
             ff_cfg.image_on_startup =
@@ -405,7 +394,10 @@ static void read_ff_cfg(void)
                 : !strcmp(opts.arg, "last") ? IMGS_last : IMGS_init;
             break;
 
-        }
+        case FFCFG_startup_delay:
+            ff_cfg.startup_delay = strtol(opts.arg, NULL, 10);
+            break;
+
         }
     }
 
@@ -1287,6 +1279,8 @@ int main(void)
         fintf_mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_IBMPC;
     }
     floppy_init(fintf_mode);
+
+    delay_ms(ff_cfg.startup_delay);
 
     display_init();
 
