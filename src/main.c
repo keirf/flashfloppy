@@ -575,7 +575,7 @@ static void native_update(uint8_t slot_mode)
             cfg.max_slot_nr++;
         /* Adjust max_slot_nr. Must be at least one 'slot'. */
         if (!cfg.max_slot_nr)
-            F_die(FR_DISK_ERR);
+            F_die(FR_NO_DIRENTS);
         cfg.max_slot_nr--;
         F_closedir(&fs->dp);
         /* Select last disk_index if not greater than available slots. */
@@ -605,7 +605,7 @@ static void native_update(uint8_t slot_mode)
         if (cfg.slot.attributes & AM_DIR) {
             if (!strcmp(fs->fp.fname, "..")) {
                 /* Strip back to next '/' */
-                if (!p) F_die(FR_DISK_ERR); /* must exist */
+                if (!p) F_die(FR_BAD_IMAGECFG); /* must exist */
                 *p = '\0';
                 if ((q = strrchr(fs->buf, '/')) != NULL) {
                     F_lseek(&fs->file, f_tell(&fs->file) - (p-q));
@@ -774,7 +774,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
     bad_signature:
         hxc_cfg.signature[15] = '\0';
         printk("Bad signature '%s'\n", hxc_cfg.signature);
-        F_die(FR_DISK_ERR);
+        F_die(FR_BAD_HXCSDFE);
 
     }
 
@@ -1232,7 +1232,7 @@ static void handle_errors(FRESULT fres)
     /* Wait for buttons to be released, pressed and released again. */
     while (buttons)
         continue;
-    while (!buttons)
+    while (!buttons && (pwr || usbh_msc_connected()))
         continue;
     while (buttons)
         continue;

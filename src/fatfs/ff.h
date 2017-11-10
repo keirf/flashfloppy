@@ -232,8 +232,12 @@ typedef enum {
 	FR_NOT_ENOUGH_CORE,		/* (17) LFN working buffer could not be allocated */
 	FR_TOO_MANY_OPEN_FILES,	/* (18) Number of open files > FF_FS_LOCK */
 	FR_INVALID_PARAMETER,	/* (19) Given parameter is invalid */
+/* FlashFloppy error codes: */
 	FR_DISK_FULL = 30,	/* (30) Disk full during write */
 	FR_BAD_IMAGE,		/* (31) Bad disk image file */
+	FR_BAD_HXCSDFE,		/* (32) Bad HXCSDFE.CFG file */
+	FR_BAD_IMAGECFG,	/* (33) Bad IMAGE_A.CFG file */
+	FR_NO_DIRENTS,		/* (34) No valid directory entries */
 } FRESULT;
 
 
