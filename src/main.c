@@ -87,6 +87,8 @@ static void display_write_slot(void)
         : slot_type("img") ? "IMG"
         : slot_type("ima") ? "IMA"
         : slot_type("st") ? "ST "
+        : slot_type("adl") ? "ADL"
+        : slot_type("adm") ? "ADM"
         : "UNK";
     if (cfg.hxc_mode) {
         snprintf(msg, sizeof(msg), "%03u/%03u %s",

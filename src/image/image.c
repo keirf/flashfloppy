@@ -15,6 +15,7 @@ extern const struct image_handler img_image_handler;
 extern const struct image_handler st_image_handler;
 extern const struct image_handler dsk_image_handler;
 extern const struct image_handler da_image_handler;
+extern const struct image_handler adl_image_handler;
 
 bool_t image_valid(FILINFO *fp)
 {
@@ -28,11 +29,13 @@ bool_t image_valid(FILINFO *fp)
     filename_extension(fp->fname, ext, sizeof(ext));
     if (!strcmp(ext, "adf")) {
         return !(fp->fsize % (11*512));
-    } else if (!strcmp(ext, "hfe")
+    } else if (!strcmp(ext, "dsk")
+               || !strcmp(ext, "hfe")
                || !strcmp(ext, "img")
                || !strcmp(ext, "ima")
                || !strcmp(ext, "st")
-               || !strcmp(ext, "dsk")) {
+               || !strcmp(ext, "adl")
+               || !strcmp(ext, "adm")) {
         return TRUE;
     }
 
@@ -86,6 +89,8 @@ void image_open(struct image *im, const struct v2_slot *slot)
             : !strcmp(ext, "img") ? &img_image_handler
             : !strcmp(ext, "ima") ? &img_image_handler
             : !strcmp(ext, "st") ? &st_image_handler
+            : !strcmp(ext, "adl") ? &adl_image_handler
+            : !strcmp(ext, "adm") ? &adl_image_handler
             : NULL);
     if (hint) {
         if (try_handler(im, slot, hint))
