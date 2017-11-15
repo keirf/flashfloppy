@@ -40,6 +40,7 @@ struct img_image {
     uint8_t sec_base, sec_map[64];
     uint8_t nr_sectors;
     uint16_t data_rate, gap4;
+    uint16_t sec_sz;
     uint32_t ticks_per_cell;
     uint32_t idx_sz, idam_sz, dam_sz;
 };

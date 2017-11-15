@@ -1,7 +1,8 @@
 /*
  * img.c
  * 
- * IBM sector image (IMG) and Atari ST sector image (ST) files.
+ * IBM sector image (IMG), Atari ST sector image (ST) files
+ * and Acorn 8bit ADFS sector image (ADL/ADM) files
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -14,29 +15,32 @@
 #define GAP_4A   80 /* Post-Index */
 #define GAP_SYNC 12
 
-const unsigned int sec_sz = 512;
+//const unsigned int sec_sz = 512;
 
 const static struct img_type {
     uint8_t nr_secs:6;
     uint8_t nr_sides:2;
     uint8_t gap3;
     uint8_t interleave;
+    uint8_t no;
 } img_type[] = {
-    {  9, 1, 84, 1 },
-    { 10, 1, 30, 1 },
-    { 11, 1,  3, 2 },
-    {  8, 2, 84, 1 },
-    {  9, 2, 84, 1 },
-    { 10, 2, 30, 1 },
-    { 11, 2,  3, 2 },
-    { 18, 2, 84, 1 },
-    { 19, 2, 70, 1 },
-    { 21, 2, 18, 1 },
-    { 20, 2, 40, 1 },
-    { 36, 2, 84, 1 }
+    {  9, 1, 84, 1, 2 },
+    { 10, 1, 30, 1, 2 },
+    { 11, 1,  3, 2, 2 },
+    {  8, 2, 84, 1, 2 },
+    {  9, 2, 84, 1, 2 },
+    { 10, 2, 30, 1, 2 },
+    { 11, 2,  3, 2, 2 },
+    { 18, 2, 84, 1, 2 },
+    { 19, 2, 70, 1, 2 },
+    { 21, 2, 18, 1, 2 },
+    { 20, 2, 40, 1, 2 },
+    { 36, 2, 84, 1, 2 },
+    { 16, 2, 57, 1, 1 }, /*ADFS L 640k */
+    { 16, 1, 57, 1, 1 }  /*ADFS M 320k */
 };
 
-static bool_t _img_open(struct image *im, bool_t has_iam)
+static bool_t _img_open(struct image *im, bool_t has_iam, uint8_t sec_base)
 {
     const struct img_type *type;
     unsigned int i, nr_cyls, cyl_sz;
@@ -45,7 +49,7 @@ static bool_t _img_open(struct image *im, bool_t has_iam)
     /* Walk the layout/type hints looking for a match on file size. */
     for (i = 0; i < ARRAY_SIZE(img_type); i++) {
         type = &img_type[i];
-        cyl_sz = type->nr_secs * sec_sz * type->nr_sides;
+        cyl_sz = type->nr_secs * (128 << type->no) * type->nr_sides;
         for (nr_cyls = 77; nr_cyls <= 85; nr_cyls++)
             if ((nr_cyls * cyl_sz) == f_size(&im->fp))
                 goto found;
@@ -56,8 +60,9 @@ static bool_t _img_open(struct image *im, bool_t has_iam)
 found:
     im->nr_cyls = nr_cyls;
     im->nr_sides = type->nr_sides;
+    im->img.sec_sz = 128 << type->no;
 
-    im->img.sec_base = 1;
+    im->img.sec_base = sec_base;
     im->img.nr_sectors = type->nr_secs;
     for (i = 0; i < im->img.nr_sectors; i++) {
         /* Create logical sector map in rotational order. */
@@ -70,7 +75,7 @@ found:
     if (im->img.has_iam)
         im->img.idx_sz += GAP_SYNC + 4 + GAP_1;
     im->img.idam_sz = GAP_SYNC + 8 + 2 + GAP_2;
-    im->img.dam_sz = GAP_SYNC + 4 + sec_sz + 2 + im->img.gap3;
+    im->img.dam_sz = GAP_SYNC + 4 + im->img.sec_sz + 2 + im->img.gap3;
 
     /* Work out minimum track length (with no pre-index track gap). */
     tracklen = (im->img.idam_sz + im->img.dam_sz) * im->img.nr_sectors;
@@ -100,12 +105,17 @@ found:
 
 static bool_t img_open(struct image *im)
 {
-    return _img_open(im, TRUE);
+    return _img_open(im, TRUE, 1);
 }
 
 static bool_t st_open(struct image *im)
 {
-    return _img_open(im, FALSE);
+    return _img_open(im, FALSE, 1);
+}
+
+static bool_t adl_open(struct image *im)
+{
+    return _img_open(im, FALSE, 0);
 }
 
 static void img_seek_track(
@@ -122,7 +132,7 @@ static void img_seek_track(
     track = cyl*2 + side;
 
     im->img.write_sector = -1;
-    im->img.trk_len = im->img.nr_sectors * sec_sz;
+    im->img.trk_len = im->img.nr_sectors * im->img.sec_sz;
     im->img.trk_off = ((uint32_t)cyl * im->nr_sides + side) * im->img.trk_len;
     im->img.trk_pos = 0;
     im->ticks_since_flux = 0;
@@ -141,7 +151,7 @@ static void img_seek_track(
         decode_off -= im->img.idx_sz;
         im->img.decode_pos = decode_off / (im->img.idam_sz + im->img.dam_sz);
         if (im->img.decode_pos < im->img.nr_sectors) {
-            im->img.trk_pos = im->img.decode_pos * sec_sz;
+            im->img.trk_pos = im->img.decode_pos * im->img.sec_sz;
             im->img.decode_pos = im->img.decode_pos * 2 + 1;
             decode_off %= im->img.idam_sz + im->img.dam_sz;
             if (decode_off >= im->img.idam_sz) {
@@ -177,9 +187,9 @@ static bool_t img_read_track(struct image *im)
 
     if (rd->prod == rd->cons) {
         F_lseek(&im->fp, im->img.trk_off + im->img.trk_pos);
-        F_read(&im->fp, &buf[(rd->prod/8) % buflen], sec_sz, NULL);
-        rd->prod += sec_sz * 8;
-        im->img.trk_pos += sec_sz;
+        F_read(&im->fp, &buf[(rd->prod/8) % buflen], im->img.sec_sz, NULL);
+        rd->prod += im->img.sec_sz * 8;
+        im->img.trk_pos += im->img.sec_sz;
         if (im->img.trk_pos >= im->img.trk_len)
             im->img.trk_pos = 0;
     }
@@ -240,7 +250,7 @@ static bool_t img_read_track(struct image *im)
         /* DAM */
         uint8_t *dat = &buf[(rd->cons/8)%buflen];
         uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
-        if ((mfmlen - (mfmp - mfmc)) < (GAP_SYNC + 4 + sec_sz + 2
+        if ((mfmlen - (mfmp - mfmc)) < (GAP_SYNC + 4 + im->img.sec_sz + 2
                                         + im->img.gap3))
             return FALSE;
         for (i = 0; i < GAP_SYNC; i++)
@@ -248,15 +258,15 @@ static bool_t img_read_track(struct image *im)
         for (i = 0; i < 3; i++)
             emit_raw(0x4489);
         emit_byte(dam[3]);
-        for (i = 0; i < sec_sz; i++)
+        for (i = 0; i < im->img.sec_sz; i++)
             emit_byte(dat[i]);
         crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
-        crc = crc16_ccitt(dat, sec_sz, crc);
+        crc = crc16_ccitt(dat, im->img.sec_sz, crc);
         emit_byte(crc >> 8);
         emit_byte(crc);
         for (i = 0; i < im->img.gap3; i++)
             emit_byte(0x4e);
-        rd->cons += sec_sz * 8;
+        rd->cons += im->img.sec_sz * 8;
     }
 
     im->img.decode_pos++;
@@ -346,7 +356,7 @@ static void img_write_track(struct image *im, bool_t flush)
     if (flush && (wr->prod & 15))
         p++;
 
-    while ((p - c) >= (3 + sec_sz + 2)) {
+    while ((p - c) >= (3 + im->img.sec_sz + 2)) {
 
         /* Scan for sync words and IDAM. Because of the way we sync we expect
          * to see only 2*4489 and thus consume only 3 words for the header. */
@@ -377,10 +387,10 @@ static void img_write_track(struct image *im, bool_t flush)
             break;
 
         case 0xfb: /* DAM */
-            for (i = 0; i < (sec_sz + 2); i++)
+            for (i = 0; i < (im->img.sec_sz + 2); i++)
                 wrbuf[i] = mfmtobin(buf[c++ % buflen]);
 
-            crc = crc16_ccitt(wrbuf, sec_sz + 2,
+            crc = crc16_ccitt(wrbuf, im->img.sec_sz + 2,
                               crc16_ccitt(header, 4, 0xffff));
             if (crc != 0) {
                 printk("IMG Bad CRC %04x, sector %u[%u]\n",
@@ -400,8 +410,8 @@ static void img_write_track(struct image *im, bool_t flush)
                    im->img.write_sector + im->img.sec_base,
                    im->img.nr_sectors);
             t = stk_now();
-            F_lseek(&im->fp, im->img.trk_off + im->img.write_sector*sec_sz);
-            F_write(&im->fp, wrbuf, sec_sz, NULL);
+            F_lseek(&im->fp, im->img.trk_off + im->img.write_sector*im->img.sec_sz);
+            F_write(&im->fp, wrbuf, im->img.sec_sz, NULL);
             printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
             break;
         }
@@ -424,6 +434,15 @@ const struct image_handler img_image_handler = {
 
 const struct image_handler st_image_handler = {
     .open = st_open,
+    .seek_track = img_seek_track,
+    .read_track = img_read_track,
+    .rdata_flux = img_rdata_flux,
+    .write_track = img_write_track,
+    .syncword = 0x44894489
+};
+
+const struct image_handler adl_image_handler = {
+    .open = adl_open,
     .seek_track = img_seek_track,
     .read_track = img_read_track,
     .rdata_flux = img_rdata_flux,
