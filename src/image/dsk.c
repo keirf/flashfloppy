@@ -47,7 +47,7 @@ static struct dib *dib_p(struct image *im)
 static struct tib *tib_p(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    return (struct tib *)((char *)rd->p + 128);
+    return (struct tib *)((char *)rd->p + 256);
 }
 
 static bool_t dsk_open(struct image *im)
@@ -59,7 +59,7 @@ static bool_t dsk_open(struct image *im)
     ASSERT(im->bufs.read_data.p == im->bufs.write_data.p);
 
     /* Read the Disk Information Block. */
-    F_read(&im->fp, dib, 128, NULL);
+    F_read(&im->fp, dib, 256, NULL);
 
     /* Check the header signature. */
     if (!strncmp(dib->sig, "MV - CPC", 8)) {
