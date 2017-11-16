@@ -87,8 +87,14 @@ void image_open(struct image *im, const struct v2_slot *slot)
             : !strcmp(ext, "ima") ? &img_image_handler
             : !strcmp(ext, "st") ? &st_image_handler
             : NULL);
-    if (hint && try_handler(im, slot, hint))
-        return;
+    if (hint) {
+        if (try_handler(im, slot, hint))
+            return;
+        /* Hint failed. Try a secondary hint (allows DSK fallback to IMG). */
+        hint = !strcmp(ext, "dsk") ? &img_image_handler : NULL;
+        if (hint && try_handler(im, slot, hint))
+            return;
+    }
 
     /* Filename extension hinting failed: walk the handler list. */
     for (i = 0; i < ARRAY_SIZE(image_handlers); i++) {
