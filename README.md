@@ -1,8 +1,14 @@
 # FlashFloppy
 
 A retro floppy emulator for the ubiquitous Gotek hardware.
-- Directly supports HFE, ADF, DSK, IMG and ST image formats.
-- Supports usage with no configuration! Just dump images into the root
+- Directly supports a wide range of image formats:
+  - HFE, HFEv3 (Universal)
+  - ADF (Commodore Amiga)
+  - DSK (Amstrad CPC, Spectrum +3)
+  - IMG/IMA (IBM MFM Raw Sector)
+  - ST (Atari ST)
+  - ADM, ADL (Acorn ADFS)
+- No configuration required! Just dump images into the root
   of an empty USB stick.
 - Compatible with the HxC ecosystem: Autoboot and Indexed
   modes supported, and HFE image files.
