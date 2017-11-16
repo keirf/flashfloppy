@@ -4,7 +4,7 @@
 ************************************
 
 ** v0.9.1a - 16 November 2017
- - Acorn ADFS image support (ADM, ADL)
+ - Acorn ADFS image support (ADM, ADL) [Daniel Jameson]
  - Better detection of DSK image type (CPC-DSK vs raw sector file)
 
 ** v0.9.0a - 15 November 2017
