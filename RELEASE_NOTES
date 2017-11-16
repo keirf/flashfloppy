@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.1a - 16 November 2017
+ - Acorn ADFS image support (ADM, ADL)
+ - Better detection of DSK image type (CPC-DSK vs raw sector file)
+
 ** v0.9.0a - 15 November 2017
 ** Amstrad CPC / Spectrum +3 DSK support
  - DSK directly supported for read and write. Please report any issues!
