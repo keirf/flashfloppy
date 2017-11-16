@@ -57,7 +57,12 @@ static bool_t try_handler(struct image *im, const struct v2_slot *slot,
 void image_open(struct image *im, const struct v2_slot *slot)
 {
     static const struct image_handler * const image_handlers[] = {
-        &hfe_image_handler, &adf_image_handler, &img_image_handler
+        /* Formats with an identifying header. */
+        &dsk_image_handler,
+        &hfe_image_handler,
+        /* Header-less formats in some semblance of priority order. */
+        &adf_image_handler,
+        &img_image_handler
     };
 
     char ext[4];
@@ -76,11 +81,11 @@ void image_open(struct image *im, const struct v2_slot *slot)
 
     /* Use the extension as a hint to the correct image handler. */
     hint = (!strcmp(ext, "adf") ? &adf_image_handler
+            : !strcmp(ext, "dsk") ? &dsk_image_handler
             : !strcmp(ext, "hfe") ? &hfe_image_handler
             : !strcmp(ext, "img") ? &img_image_handler
             : !strcmp(ext, "ima") ? &img_image_handler
             : !strcmp(ext, "st") ? &st_image_handler
-            : !strcmp(ext, "dsk") ? &dsk_image_handler
             : NULL);
     if (hint && try_handler(im, slot, hint))
         return;
