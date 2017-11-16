@@ -69,6 +69,7 @@ found:
     im->nr_cyls = nr_cyls;
     im->nr_sides = type->nr_sides;
     im->img.sec_sz = 128 << type->no;
+    im->img.no = type->no;
 
     im->img.sec_base = sec_base;
     im->img.nr_sectors = type->nr_secs;
@@ -239,7 +240,7 @@ static bool_t img_read_track(struct image *im)
     } else if (im->img.decode_pos & 1) {
         /* IDAM */
         uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
-        uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 1], no = 2;
+        uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 1], no = im->img.no;
         uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe, cyl, hd, sec, no };
         if ((mfmlen - (mfmp - mfmc)) < (GAP_SYNC + 8 + 2 + GAP_2))
             return FALSE;
