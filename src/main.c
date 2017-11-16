@@ -82,6 +82,7 @@ static void display_write_slot(void)
     lcd_write(0, 0, 16, msg);
     type = (cfg.slot.attributes & AM_DIR) ? "DIR"
         : slot_type("adf") ? "ADF"
+        : slot_type("dsk") ? "DSK"
         : slot_type("hfe") ? "HFE"
         : slot_type("img") ? "IMG"
         : slot_type("ima") ? "IMA"
