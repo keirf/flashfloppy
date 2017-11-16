@@ -88,6 +88,7 @@ static void display_write_slot(void)
         : slot_type("st") ? "ST "
         : slot_type("adl") ? "ADL"
         : slot_type("adm") ? "ADM"
+        : slot_type("dsk") ? "DSK"
         : "UNK";
     if (cfg.hxc_mode) {
         snprintf(msg, sizeof(msg), "%03u/%03u %s",

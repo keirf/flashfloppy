@@ -17,6 +17,8 @@
 
 //const unsigned int sec_sz = 512;
 
+const unsigned int acorn_types = 12; /* array index for acorn types */
+
 const static struct img_type {
     uint8_t nr_secs:6;
     uint8_t nr_sides:2;
@@ -27,7 +29,7 @@ const static struct img_type {
     {  9, 1, 84, 1, 2 },
     { 10, 1, 30, 1, 2 },
     { 11, 1,  3, 2, 2 },
-    {  8, 2, 84, 1, 2 },
+    {  8, 2, 84, 1, 2 }, /* clash with ADFS L */
     {  9, 2, 84, 1, 2 },
     { 10, 2, 30, 1, 2 },
     { 11, 2,  3, 2, 2 },
@@ -40,14 +42,20 @@ const static struct img_type {
     { 16, 1, 57, 1, 1 }  /*ADFS M 320k */
 };
 
-static bool_t _img_open(struct image *im, bool_t has_iam, uint8_t sec_base)
+static bool_t _img_open(struct image *im, bool_t has_iam, uint8_t sec_base, bool_t is_acorn)
 {
     const struct img_type *type;
-    unsigned int i, nr_cyls, cyl_sz;
+    unsigned int i, nr_cyls, cyl_sz, type_start;
     uint32_t tracklen;
-
+    
+    if (is_acorn) {  /*start looking for acorn types later in array to avoid clash */
+        type_start=acorn_types;
+    } else {
+        type_start=0; 
+    }
+        
     /* Walk the layout/type hints looking for a match on file size. */
-    for (i = 0; i < ARRAY_SIZE(img_type); i++) {
+    for (i = type_start; i < ARRAY_SIZE(img_type); i++) {
         type = &img_type[i];
         cyl_sz = type->nr_secs * (128 << type->no) * type->nr_sides;
         for (nr_cyls = 77; nr_cyls <= 85; nr_cyls++)
@@ -105,17 +113,17 @@ found:
 
 static bool_t img_open(struct image *im)
 {
-    return _img_open(im, TRUE, 1);
+    return _img_open(im, TRUE, 1, FALSE);
 }
 
 static bool_t st_open(struct image *im)
 {
-    return _img_open(im, FALSE, 1);
+    return _img_open(im, FALSE, 1, FALSE);
 }
 
 static bool_t adl_open(struct image *im)
 {
-    return _img_open(im, FALSE, 0);
+    return _img_open(im, FALSE, 0, TRUE);
 }
 
 static void img_seek_track(
