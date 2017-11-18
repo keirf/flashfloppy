@@ -292,6 +292,8 @@ static bool_t dsk_read_track(struct image *im)
         uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe };
         if ((mfmlen - (mfmp - mfmc)) < (GAP_SYNC + 8 + 2 + GAP_2))
             return FALSE;
+        if ((tib->sib[sec].stat1 & 0x01) && !(tib->sib[sec].stat2 & 0x01))
+            idam[3] = 0x00; /* Missing Address Mark (ID) */
         memcpy(&idam[4], &tib->sib[sec].c, 4);
         for (i = 0; i < GAP_SYNC; i++)
             emit_byte(0x00);
@@ -315,8 +317,10 @@ static bool_t dsk_read_track(struct image *im)
         if ((mfmlen - (mfmp - mfmc)) < (GAP_SYNC + 4 + sec_sz + 2
                                         + tib->gap3))
             return FALSE;
-        if (tib->sib[sec].stat2 & 0x40)
-            dam[3] = 0xf8; /* CM: Found DDAM */
+        if ((tib->sib[sec].stat1 & 0x01) && (tib->sib[sec].stat2 & 0x01))
+            dam[3] = 0x00; /* Missing Address Mark (Data) */
+        else if (tib->sib[sec].stat2 & 0x40)
+            dam[3] = 0xf8; /* Found DDAM */
         for (i = 0; i < GAP_SYNC; i++)
             emit_byte(0x00);
         for (i = 0; i < 3; i++)
