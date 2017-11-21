@@ -46,6 +46,17 @@ static uint8_t backlight_state;
 #define BACKLIGHT_SWITCHING_ON 1
 #define BACKLIGHT_ON           2
 
+static bool_t slot_valid(unsigned int i)
+{
+    if (i > cfg.max_slot_nr)
+        return FALSE;
+    if (!cfg.hxc_mode)
+        return TRUE;
+    if (i >= (sizeof(cfg.slot_map)*8))
+        return FALSE;
+    return !!(cfg.slot_map[i/8] & (0x80>>(i&7)));
+}
+
 /* Turn the LCD backlight on, reset the switch-off handler and ticker. */
 static void lcd_on(void)
 {
@@ -759,8 +770,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
             F_read(&fs->file, &cfg.slot_map, sizeof(cfg.slot_map), NULL);
             cfg.slot_map[0] |= 0x80; /* slot 0 always available */
             /* Find true max_slot_nr: */
-            while (!(cfg.slot_map[cfg.max_slot_nr/8]
-                     & (0x80>>(cfg.max_slot_nr&7))))
+            while (!slot_valid(cfg.max_slot_nr))
                 cfg.max_slot_nr--;
         }
         /* Slot mode: read current slot file info. */
@@ -892,7 +902,7 @@ static void choose_new_image(uint8_t init_b)
                         goto b_right;
                     i = cfg.max_slot_nr;
                 }
-            } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
+            } while (!slot_valid(i));
         } else { /* b & B_RIGHT */
         b_right:
             do {
@@ -901,7 +911,7 @@ static void choose_new_image(uint8_t init_b)
                         goto b_left;
                     i = 0;
                 }
-            } while (!(cfg.slot_map[i/8] & (0x80>>(i&7))));
+            } while (!slot_valid(i));
         }
 
         cfg.slot_nr = i;
@@ -979,8 +989,8 @@ static int floppy_main(void *unused)
         /* Make sure slot index is on a valid slot. Find next valid slot if 
          * not (and update config). */
         i = cfg.slot_nr;
-        if (!(cfg.slot_map[i/8] & (0x80>>(i&7)))) {
-            while (!(cfg.slot_map[i/8] & (0x80>>(i&7))))
+        if (!slot_valid(i)) {
+            while (!slot_valid(i))
                 if (i++ >= cfg.max_slot_nr)
                     i = 0;
             printk("Updated slot %u -> %u\n", cfg.slot_nr, i);
