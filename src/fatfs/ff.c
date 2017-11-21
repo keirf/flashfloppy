@@ -3538,6 +3538,7 @@ FRESULT f_open (
 		FREE_NAMBUF();
 	}
 
+	fp->obj.attr = dj.obj.attr; /* FlashFloppy: cache attrs from dirent */
 	if (res != FR_OK) fp->obj.fs = 0;	/* Invalidate file object on error */
 
 	LEAVE_FF(fs, res);
