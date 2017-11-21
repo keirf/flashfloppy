@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.2a - 21 November 2017
+ - DSK: Improve handling of per-sector status codes
+ - Fix bugs in front-end file handling & folder navigation
+
 ** v0.9.1a - 16 November 2017
  - Acorn ADFS image support (ADM, ADL) [Daniel Jameson]
  - Better detection of DSK image type (CPC-DSK vs raw sector file)
