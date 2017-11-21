@@ -10,9 +10,9 @@ ifneq ($(RULES_MK),y)
 export ROOT := $(CURDIR)
 all:
 	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
-	$(MAKE) -C bootloader -f $(ROOT)/Rules.mk \
+	bootloader=y $(MAKE) -C bootloader -f $(ROOT)/Rules.mk \
 		Bootloader.elf Bootloader.bin Bootloader.hex
-	$(MAKE) -C reloader -f $(ROOT)/Rules.mk \
+	reloader=y $(MAKE) -C reloader -f $(ROOT)/Rules.mk \
 		Reloader.elf Reloader.bin Reloader.hex
 	srec_cat bootloader/Bootloader.hex -Intel src/$(PROJ).hex -Intel \
 	-o FF.hex -Intel

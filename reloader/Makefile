@@ -20,5 +20,3 @@ OBJS-$(debug) += console.o
 SUBDIRS += fatfs
 SUBDIRS-$(gotek) += gotek
 SUBDIRS-$(touch) += touch
-
-CFLAGS += -DRELOADER=1

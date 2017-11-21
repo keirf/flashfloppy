@@ -24,7 +24,6 @@ void F_truncate(FIL *fp);
 void F_opendir(DIR *dp, const TCHAR *path);
 void F_closedir(DIR *dp);
 void F_readdir(DIR *dp, FILINFO *fno);
-void F_unlink(const TCHAR *path);
 void F_findfirst(DIR *dp, FILINFO *fno, const TCHAR *path,
                  const TCHAR *pattern);
 void F_findnext(DIR *dp, FILINFO *fno);
@@ -39,6 +38,7 @@ FRESULT f_utime(const TCHAR *path, const FILINFO *fno);
 FRESULT f_getcwd(TCHAR *buff, UINT len);
 FRESULT f_getfree(const TCHAR *path, DWORD *nclst, FATFS* *fatfs);
 FRESULT f_mount(FATFS *fs, const TCHAR *path, BYTE opt);
+FRESULT f_unlink(const TCHAR *path);
 #endif
 
 /*

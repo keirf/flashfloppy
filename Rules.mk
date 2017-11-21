@@ -18,6 +18,14 @@ ifneq ($(debug),y)
 FLAGS += -DNDEBUG
 endif
 
+ifeq ($(reloader),y)
+FLAGS += -DRELOADER=1
+endif
+
+ifeq ($(bootloader),y)
+FLAGS += -DBOOTLOADER=1
+endif
+
 FLAGS-$(gotek) += -DBUILD_GOTEK=1
 FLAGS-$(touch) += -DBUILD_TOUCH=1
 

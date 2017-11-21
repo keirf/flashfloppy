@@ -8,14 +8,22 @@
 / Function Configurations
 /---------------------------------------------------------------------------*/
 
+#if defined(BOOTLOADER) || defined(RELOADER)
+#define FF_FS_READONLY	1
+#else
 #define FF_FS_READONLY	0
+#endif
 /* This option switches read-only configuration. (0:Read/Write or 1:Read-only)
 /  Read-only configuration removes writing API functions, f_write(), f_sync(),
 /  f_unlink(), f_mkdir(), f_chmod(), f_rename(), f_truncate(), f_getfree()
 /  and optional writing functions as well. */
 
 
+#if defined(BOOTLOADER) || defined(RELOADER)
+#define FF_FS_MINIMIZE	1
+#else
 #define FF_FS_MINIMIZE	0
+#endif
 /* This option defines minimization level to remove some basic API functions.
 /
 /   0: All basic functions are enabled.

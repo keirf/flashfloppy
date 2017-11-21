@@ -79,6 +79,8 @@ void F_read(FIL *fp, void *buff, UINT btr, UINT *br)
     handle_fr(fr);
 }
 
+#if !FF_FS_READONLY
+
 void F_write(FIL *fp, const void *buff, UINT btw, UINT *bw)
 {
     UINT _bw;
@@ -102,20 +104,24 @@ void F_sync(FIL *fp)
     handle_fr(fr);
 }
 
+void F_truncate(FIL *fp)
+{
+    FRESULT fr = f_truncate(fp);
+    handle_fr(fr);
+}
+
+#endif /* !FF_FS_READONLY */
+
 void F_lseek(FIL *fp, DWORD ofs)
 {
     FRESULT fr = f_lseek(fp, ofs);
+#if !FF_FS_READONLY
     if (!fp->dir_ptr) {
         /* File cannot be resized. Clip the seek offset. */
         ofs = min(ofs, f_size(fp));
     }
+#endif
     fr = f_lseek(fp, ofs);
-    handle_fr(fr);
-}
-
-void F_truncate(FIL *fp)
-{
-    FRESULT fr = f_truncate(fp);
     handle_fr(fr);
 }
 
@@ -134,12 +140,6 @@ void F_closedir(DIR *dp)
 void F_readdir(DIR *dp, FILINFO *fno)
 {
     FRESULT fr = f_readdir(dp, fno);
-    handle_fr(fr);
-}
-
-void F_unlink(const TCHAR *path)
-{
-    FRESULT fr = f_unlink(path);
     handle_fr(fr);
 }
 
