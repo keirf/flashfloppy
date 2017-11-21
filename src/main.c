@@ -514,6 +514,8 @@ native_mode:
         /* Terminate the name section, push curdir onto stack, then chdir. */
         *p++ = '\0';
         printk("%u:D: '%s'\n", cfg.depth, fs->buf);
+        if (cfg.depth == ARRAY_SIZE(cfg.cdir_stack))
+            F_die(FR_PATH_TOO_DEEP);
         cfg.cdir_stack[cfg.depth++] = fatfs.cdir;
         fr = f_chdir(fs->buf);
         if (fr)
@@ -1000,9 +1002,13 @@ static int floppy_main(void *unused)
 
         if (cfg.slot.attributes & AM_DIR) {
             if (!strcmp(fs->fp.fname, "..")) {
+                if (cfg.depth == 0)
+                    F_die(FR_BAD_IMAGECFG);
                 fatfs.cdir = cfg.cur_cdir = cfg.cdir_stack[--cfg.depth];
                 cfg.slot_nr = 0;
             } else {
+                if (cfg.depth == ARRAY_SIZE(cfg.cdir_stack))
+                    F_die(FR_PATH_TOO_DEEP);
                 cfg.cdir_stack[cfg.depth++] = cfg.cur_cdir;
                 F_chdir(fs->fp.fname);
                 cfg.cur_cdir = fatfs.cdir;

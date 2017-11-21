@@ -238,6 +238,7 @@ typedef enum {
 	FR_BAD_HXCSDFE,		/* (32) Bad HXCSDFE.CFG file */
 	FR_BAD_IMAGECFG,	/* (33) Bad IMAGE_A.CFG file */
 	FR_NO_DIRENTS,		/* (34) No valid directory entries */
+	FR_PATH_TOO_DEEP,	/* (35) Folders nested too deeply */
 } FRESULT;
 
 
