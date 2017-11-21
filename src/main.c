@@ -26,7 +26,7 @@ static struct {
     uint32_t cfg_cdir, cur_cdir;
     uint16_t cdir_stack[20];
     uint8_t depth;
-    uint8_t usb_power_fault:1;
+    bool_t usb_power_fault;
     uint8_t hxc_mode:1;
     uint8_t ejected:1;
     uint8_t ima_ej_flag:1; /* "\\EJ" flag in IMAGE_A.CFG? */
