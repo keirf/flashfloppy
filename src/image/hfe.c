@@ -132,6 +132,10 @@ static void hfe_seek_track(
     im->hfe.trk_pos = (im->cur_bc/8) & ~255;
     rd->prod = rd->cons = 0;
 
+    /* Aggressively batch our reads at HD data rate, as that can be faster 
+     * than some USB drives will serve up a single block.*/
+    im->hfe.batch_secs = (im->hfe.ticks_per_cell > 1700) ? 2 : 8;
+
     if (start_pos) {
         image_read_track(im);
         rd->cons = im->cur_bc & 2047;
@@ -143,22 +147,26 @@ static bool_t hfe_read_track(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
     uint8_t *buf = rd->p;
-    unsigned int buflen = (rd->len-256) & ~255;
+    unsigned int i, nr_sec = im->hfe.batch_secs;
+    unsigned int buflen = (rd->len & ~255) - im->hfe.batch_secs*512;
 
-    if ((uint32_t)(rd->prod - rd->cons) > (buflen-512)*8)
+    nr_sec = min_t(unsigned int, im->hfe.batch_secs,
+                   (im->hfe.trk_len+255 - im->hfe.trk_pos) / 256);
+    if ((uint32_t)(rd->prod - rd->cons) > (buflen - nr_sec*256) * 8)
         return FALSE;
 
     F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.trk_pos * 2);
-    F_read(&im->fp, &buf[(rd->prod/8) % buflen], 512, NULL);
-    if (im->cur_track & 1) {
-        /* Shift track 1 data up to correct position in the ring buffer. */
+    F_read(&im->fp, &buf[buflen], nr_sec*512, NULL);
+
+    for (i = 0; i < nr_sec; i++) {
         memcpy(&buf[(rd->prod/8) % buflen],
-               &buf[(rd->prod/8) % buflen] + 256,
+               &buf[buflen + i*512 + (im->cur_track&1)*256],
                256);
+        barrier(); /* write data /then/ update producer */
+        rd->prod += 256*8;
     }
-    barrier(); /* write data /then/ update producer */
-    rd->prod += 256 * 8;
-    im->hfe.trk_pos += 256;
+
+    im->hfe.trk_pos += nr_sec * 256;
     if (im->hfe.trk_pos >= im->hfe.trk_len)
         im->hfe.trk_pos = 0;
 
@@ -172,7 +180,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     uint32_t ticks_per_cell = im->hfe.ticks_per_cell;
     uint32_t y = 8, todo = nr;
     uint8_t x, *buf = rd->p;
-    unsigned int buflen = (rd->len-256) & ~255;
+    unsigned int buflen = (rd->len & ~255) - im->hfe.batch_secs*512;
     bool_t is_v3 = im->hfe.is_v3;
 
     while ((rd->prod - rd->cons) >= 3*8) {
