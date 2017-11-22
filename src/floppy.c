@@ -510,7 +510,7 @@ static void floppy_sync_flux(void)
         dma_rd->prod += image_rdata_flux(
             drv->image, &dma_rd->buf[dma_rd->prod], nr);
 
-    if (dma_rd->prod < ARRAY_SIZE(dma_rd->buf)/2)
+    if (dma_rd->prod < ARRAY_SIZE(dma_rd->buf) - 1)
         return;
 
     if (!drv->index_suppressed) {
@@ -623,9 +623,8 @@ static bool_t dma_rd_handle(struct drive *drv)
     }
 
     case DMA_starting:
-        floppy_read_data(drv);
         floppy_sync_flux();
-        break;
+        /* fall through */
 
     case DMA_active:
         floppy_read_data(drv);
