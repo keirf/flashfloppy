@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.3a - 22 November 2017
+ - DSK: Fix disk write handling
+ - HFE: Improve read speed for HD images, reduce buffer underruns
+
 ** v0.9.2a - 21 November 2017
  - DSK: Improve handling of per-sector status codes
  - Fix bugs in front-end file handling & folder navigation
