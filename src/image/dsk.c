@@ -396,9 +396,9 @@ static void dsk_write_track(struct image *im, bool_t flush)
 
     struct tib *tib = tib_p(im);
     struct image_buf *wr = &im->bufs.write_mfm;
-    uint16_t *buf = (uint16_t *)((uint8_t *)wr->p + 512); /* skip DIB/TIB */
+    uint16_t *buf = wr->p;
     unsigned int buflen = wr->len / 2;
-    uint8_t *wrbuf = im->bufs.write_data.p;
+    uint8_t *wrbuf = (uint8_t *)im->bufs.write_data.p + 512; /* skip DIB/TIB */
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     int32_t base = im->write_start / (im->write_bc_ticks * 16);
     unsigned int i;
@@ -436,7 +436,7 @@ static void dsk_write_track(struct image *im, bool_t flush)
     for (;;) {
 
         sec_sz = (im->dsk.write_sector >= 0)
-            ? tib->sib[im->dsk.write_sector].actual_length : 0;
+            ? tib->sib[im->dsk.write_sector].actual_length : 128;
         if ((p - c) < (3 + sec_sz + 2))
             break;
 
