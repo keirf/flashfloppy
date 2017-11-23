@@ -147,7 +147,7 @@ static bool_t hfe_read_track(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
     uint8_t *buf = rd->p;
-    unsigned int i, nr_sec = im->hfe.batch_secs;
+    unsigned int i, nr_sec;
     unsigned int buflen = (rd->len & ~255) - im->hfe.batch_secs*512;
 
     nr_sec = min_t(unsigned int, im->hfe.batch_secs,
