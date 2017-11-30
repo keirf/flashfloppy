@@ -412,6 +412,11 @@ static void read_ff_cfg(void)
             ff_cfg.display_probe_ms = strtol(opts.arg, NULL, 10);
             break;
 
+        case FFCFG_twobutton_action:
+            ff_cfg.twobutton_action =
+                !strcmp(opts.arg, "eject") ? TWOBUTTON_eject : TWOBUTTON_zero;
+            break;
+
         }
     }
 
@@ -866,7 +871,7 @@ static void choose_new_image(uint8_t init_b)
 {
     uint8_t b, prev_b;
     stk_time_t last_change = 0;
-    int i, changes = 0;
+    int old_slot = cfg.slot_nr, i, changes = 0;
 
     for (prev_b = 0, b = init_b;
          (b &= (B_LEFT|B_RIGHT)) != 0;
@@ -889,6 +894,12 @@ static void choose_new_image(uint8_t init_b)
 
         i = cfg.slot_nr;
         if (!(b ^ (B_LEFT|B_RIGHT))) {
+            if (ff_cfg.twobutton_action == TWOBUTTON_eject) {
+                cfg.slot_nr = old_slot;
+                cfg.ejected = TRUE;
+                cfg_update(CFG_KEEP_SLOT_NR);
+                break;
+            }
             i = cfg.slot_nr = 0;
             cfg_update(CFG_KEEP_SLOT_NR);
             display_write_slot();
@@ -1099,10 +1110,27 @@ static int floppy_main(void *unused)
                     break;
                 }
             }
+            if (ff_cfg.twobutton_action == TWOBUTTON_eject) {
+                /* Wait 50ms for 2-button press. */
+                for (wait = 0; wait < 50; wait++) {
+                    b = buttons;
+                    if ((b & (B_LEFT|B_RIGHT)) == (B_LEFT|B_RIGHT))
+                        b = B_SELECT;
+                    if (b & B_SELECT)
+                        break;
+                    delay_ms(1);
+                }
+            }
             /* Reload same image immediately if eject pressed again. */
             if (b & B_SELECT) {
-                while (buttons & B_SELECT)
-                    continue;
+                /* Wait for eject button to be released. */
+                while (b & B_SELECT) {
+                    b = buttons;
+                    if ((ff_cfg.twobutton_action == TWOBUTTON_eject) && b) {
+                        /* Wait for 2-button release. */
+                        b = B_SELECT;
+                    }
+                }
                 ima_mark_ejected(FALSE);
                 continue;
             }
@@ -1120,7 +1148,10 @@ static int floppy_main(void *unused)
 
             /* While buttons are pressed we poll them and update current image
              * accordingly. */
+            cfg.ejected = FALSE;
             choose_new_image(b);
+            if (cfg.ejected)
+                break;
 
             /* Wait a few seconds for further button presses before acting on 
              * the new image selection. */
@@ -1147,8 +1178,6 @@ static int floppy_main(void *unused)
                 continue;
 
         } while (b != 0);
-
-        cfg.ejected = FALSE;
 
         /* Write the slot number resulting from the latest round of button 
          * presses back to the config file. */
