@@ -51,7 +51,7 @@ struct __packed ff_cfg {
 #define IMGS_static 1
 #define IMGS_init   2
     uint8_t image_on_startup;
-    uint16_t startup_delay;
+    uint16_t display_probe_ms;
 };
 
 extern struct ff_cfg ff_cfg;

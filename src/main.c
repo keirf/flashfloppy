@@ -408,8 +408,8 @@ static void read_ff_cfg(void)
                 : !strcmp(opts.arg, "last") ? IMGS_last : IMGS_init;
             break;
 
-        case FFCFG_startup_delay:
-            ff_cfg.startup_delay = strtol(opts.arg, NULL, 10);
+        case FFCFG_display_probe_ms:
+            ff_cfg.display_probe_ms = strtol(opts.arg, NULL, 10);
             break;
 
         }
@@ -1302,8 +1302,6 @@ int main(void)
         fintf_mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_IBMPC;
     }
     floppy_init(fintf_mode);
-
-    delay_ms(ff_cfg.startup_delay);
 
     display_init();
 
