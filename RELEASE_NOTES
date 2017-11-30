@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.4a - 30 November 2017
+ - Automatic support for crippled 'diymore' OLED displays
+   - FF.CFG: New option display-probe-ms (replaces startup-delay)
+ - FF.CFG: New option twobutton-action allows eject on two-button press
+
 ** v0.9.3a - 22 November 2017
  - DSK: Fix disk write handling
  - HFE: Improve read speed for HD images, reduce buffer underruns
