@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.5a - 1 December 2017
+ - FF.CFG: New button assignment for rotary-encoder setup
+   - twobutton-action = rotary
+ - FF.CFG: Allow navigation mode to be specified
+   - nav-mode = native | indexed | default
+
 ** v0.9.4a - 30 November 2017
  - Automatic support for crippled 'diymore' OLED displays
    - FF.CFG: New option display-probe-ms (replaces startup-delay)
