@@ -1,7 +1,7 @@
 /*
  * main.c
  * 
- * Bootstrap the STM32F103C8T6 and get things moving.
+ * System initialisation and navigation main loop.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
