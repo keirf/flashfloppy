@@ -370,6 +370,13 @@ static void read_ff_cfg(void)
             ff_cfg.autoselect_folder_secs = strtol(opts.arg, NULL, 10);
             break;
 
+        case FFCFG_nav_mode:
+            ff_cfg.nav_mode =
+                !strcmp(opts.arg, "native") ? NAVMODE_native
+                : !strcmp(opts.arg, "indexed") ? NAVMODE_indexed
+                : NAVMODE_default;
+            break;
+
         case FFCFG_nav_loop:
             ff_cfg.nav_loop = !strcmp(opts.arg, "yes");
             break;
@@ -458,6 +465,16 @@ static void cfg_init(void)
 
     read_ff_cfg();
     process_ff_cfg_opts();
+
+    switch (ff_cfg.nav_mode) {
+    case NAVMODE_native:
+        goto native_mode;
+    case NAVMODE_indexed:
+        cfg.hxc_mode = TRUE;
+        goto out;
+    default:
+        break;
+    }
 
     /* Probe for HxC compatibility mode. */
     fatfs.cdir = cfg.cur_cdir;
@@ -712,6 +729,37 @@ static void hxc_cfg_update(uint8_t slot_mode)
     if (slot_mode == CFG_WRITE_SLOT_NR)
         mode |= FA_WRITE;
 
+    if (ff_cfg.nav_mode == NAVMODE_indexed) {
+        FRESULT fr;
+        char slot[10];
+        hxc_cfg.index_mode = TRUE;
+        fatfs.cdir = cfg.cfg_cdir;
+        switch (slot_mode) {
+        case CFG_READ_SLOT_NR:
+            cfg.slot_nr = 0;
+            if (ff_cfg.image_on_startup == IMGS_init)
+                break;
+            if ((fr = F_try_open(&fs->file, "IMAGE_A.CFG", FA_READ)) != FR_OK)
+                break;
+            F_read(&fs->file, slot, sizeof(slot), NULL);
+            F_close(&fs->file);
+            slot[sizeof(slot)-1] = '\0';
+            cfg.slot_nr = strtol(slot, NULL, 10);
+            break;
+        case CFG_WRITE_SLOT_NR:
+            if (ff_cfg.image_on_startup != IMGS_last)
+                break;
+            snprintf(slot, sizeof(slot), "%u", cfg.slot_nr);
+            F_open(&fs->file, "IMAGE_A.CFG", FA_WRITE | FA_OPEN_ALWAYS);
+            F_write(&fs->file, slot, strnlen(slot, sizeof(slot)), NULL);
+            F_truncate(&fs->file);
+            F_close(&fs->file);
+            break;
+        }
+        fatfs.cdir = cfg.cur_cdir;
+        goto indexed_mode;
+    }
+
     fatfs_from_slot(&fs->file, &cfg.hxcsdfe, mode);
     F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
     if (strncmp("HXCFECFGV", hxc_cfg.signature, 9))
@@ -804,6 +852,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
 
     F_close(&fs->file);
 
+indexed_mode:
     if (hxc_cfg.index_mode) {
 
         char name[16];
@@ -847,15 +896,22 @@ static void hxc_cfg_update(uint8_t slot_mode)
         }
 
         /* Index mode: populate current slot. */
-        snprintf(name, sizeof(name), "DSKA%04u.*", cfg.slot_nr);
-        F_findfirst(&fs->dp, &fs->fp, "", name);
-        F_closedir(&fs->dp);
-        if (fs->fp.fname[0]) {
-            F_open(&fs->file, fs->fp.fname, FA_READ);
-            fs->file.obj.attr = fs->fp.fattrib;
-            fatfs_to_slot(&cfg.slot, &fs->file, fs->fp.fname);
-            F_close(&fs->file);
+        for (;;) {
+            snprintf(name, sizeof(name), "DSKA%04u.*", cfg.slot_nr);
+            F_findfirst(&fs->dp, &fs->fp, "", name);
+            F_closedir(&fs->dp);
+            /* Found a valid image? */
+            if (fs->fp.fname[0])
+                break;
+            /* Fall back to slot 0. If already there, bail with error. */
+            if (cfg.slot_nr == 0)
+                F_die(FR_BAD_IMAGE);
+            cfg.slot_nr = 0;
         }
+        F_open(&fs->file, fs->fp.fname, FA_READ);
+        fs->file.obj.attr = fs->fp.fattrib;
+        fatfs_to_slot(&cfg.slot, &fs->file, fs->fp.fname);
+        F_close(&fs->file);
     }
 
     for (i = 0; i < 3; i++)

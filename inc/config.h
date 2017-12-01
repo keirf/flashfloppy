@@ -56,6 +56,10 @@ struct __packed ff_cfg {
 #define TWOBUTTON_eject  1
 #define TWOBUTTON_rotary 2
     uint8_t twobutton_action;
+#define NAVMODE_default 0
+#define NAVMODE_indexed 1
+#define NAVMODE_native  2
+    uint8_t nav_mode;
 };
 
 extern struct ff_cfg ff_cfg;
