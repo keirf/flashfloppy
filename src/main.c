@@ -214,12 +214,14 @@ static void button_timer_fn(void *unused)
     bl <<= 1;
     bl |= gpio_read_pin(gpioc, 8);
     if (bl == 0)
-        b |= B_LEFT;
+        b |= (ff_cfg.twobutton_action == TWOBUTTON_rotary)
+            ? B_LEFT|B_RIGHT : B_LEFT;
 
     br <<= 1;
     br |= gpio_read_pin(gpioc, 7);
     if (br == 0)
-        b |= B_RIGHT;
+        b |= (ff_cfg.twobutton_action == TWOBUTTON_rotary)
+            ? B_SELECT : B_RIGHT;
 
     bs <<= 1;
     bs |= gpio_read_pin(gpioc, 6);
@@ -414,7 +416,9 @@ static void read_ff_cfg(void)
 
         case FFCFG_twobutton_action:
             ff_cfg.twobutton_action =
-                !strcmp(opts.arg, "eject") ? TWOBUTTON_eject : TWOBUTTON_zero;
+                !strcmp(opts.arg, "rotary") ? TWOBUTTON_rotary
+                : !strcmp(opts.arg, "eject") ? TWOBUTTON_eject
+                : TWOBUTTON_zero;
             break;
 
         }
@@ -867,7 +871,7 @@ static void cfg_update(uint8_t slot_mode)
 }
 
 /* Based on button presses, change which floppy image is selected. */
-static void choose_new_image(uint8_t init_b)
+static bool_t choose_new_image(uint8_t init_b)
 {
     uint8_t b, prev_b;
     stk_time_t last_change = 0;
@@ -902,6 +906,14 @@ static void choose_new_image(uint8_t init_b)
             }
             i = cfg.slot_nr = 0;
             cfg_update(CFG_KEEP_SLOT_NR);
+            if (ff_cfg.twobutton_action == TWOBUTTON_rotary) {
+                /* Wait for button release, then update display, then
+                 * immediately enter parent-dir (if we're in a subfolder). */
+                while (buttons)
+                    continue;
+                display_write_slot();
+                return (cfg.depth != 0);
+            }
             display_write_slot();
             /* Ignore changes while user is releasing the buttons. */
             while ((stk_diff(last_change, stk_now()) < stk_ms(1000))
@@ -931,6 +943,8 @@ static void choose_new_image(uint8_t init_b)
         cfg_update(CFG_KEEP_SLOT_NR);
         display_write_slot();
     }
+
+    return FALSE;
 }
 
 static void assert_usbh_msc_connected(void)
@@ -1149,8 +1163,7 @@ static int floppy_main(void *unused)
             /* While buttons are pressed we poll them and update current image
              * accordingly. */
             cfg.ejected = FALSE;
-            choose_new_image(b);
-            if (cfg.ejected)
+            if (choose_new_image(b) || cfg.ejected)
                 break;
 
             /* Wait a few seconds for further button presses before acting on 

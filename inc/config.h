@@ -52,8 +52,9 @@ struct __packed ff_cfg {
 #define IMGS_init   2
     uint8_t image_on_startup;
     uint16_t display_probe_ms;
-#define TWOBUTTON_zero  0
-#define TWOBUTTON_eject 1
+#define TWOBUTTON_zero   0
+#define TWOBUTTON_eject  1
+#define TWOBUTTON_rotary 2
     uint8_t twobutton_action;
 };
 
