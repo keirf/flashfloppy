@@ -668,8 +668,13 @@ bool_t floppy_handle(void)
         image_open(image, drv->slot);
         drv->image = image;
         dma_rd->state = DMA_stopping;
-        if (image->handler->write_track)
-            drive_change_output(drv, outp_wrprot, FALSE);
+        if (! (drv->slot->attributes & AM_RDO))
+            if (image->handler->write_track)
+                drive_change_output(drv, outp_wrprot, FALSE);
+            else
+                printk("Image is R/O (no write handler)\n");
+        else
+            printk("Image is R/O (attrib)\n");
     }
 
     switch (dma_wr->state) {
