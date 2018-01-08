@@ -302,6 +302,9 @@ static bool_t native_dir_next(void)
         /* Skip dot files. */
         if (fs->fp.fname[0] == '.')
             continue;
+        /* Skip hidden files/folders. */
+        if (fs->fp.fattrib & AM_HID)
+            continue;
         /* Allow folder navigation when LCD/OLED display is attached. */
         if ((fs->fp.fattrib & AM_DIR) && (display_mode == DM_LCD_1602)
             && ((cfg.depth != 0) || strcmp(fs->fp.fname, "FF")))
