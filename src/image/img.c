@@ -140,7 +140,7 @@ static void img_seek_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *mfm = &im->bufs.read_mfm;
-    uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
+    uint32_t trk_len, decode_off, sys_ticks = start_pos ? *start_pos : 0;
     uint8_t cyl = track/2, side = track&1;
 
     /* TODO: Fake out unformatted tracks. */
@@ -149,9 +149,9 @@ static void img_seek_track(
     track = cyl*2 + side;
 
     im->img.write_sector = -1;
-    im->img.trk_len = im->img.nr_sectors * sec_sz(im);
-    im->img.trk_off = ((uint32_t)cyl * im->nr_sides + side) * im->img.trk_len;
-    im->img.trk_pos = 0;
+    trk_len = im->img.nr_sectors * sec_sz(im);
+    im->img.trk_off = ((uint32_t)cyl * im->nr_sides + side) * trk_len;
+    im->img.trk_sec = 0;
     im->ticks_since_flux = 0;
     im->cur_track = track;
 
@@ -168,7 +168,7 @@ static void img_seek_track(
         decode_off -= im->img.idx_sz;
         im->img.decode_pos = decode_off / (im->img.idam_sz + im->img.dam_sz);
         if (im->img.decode_pos < im->img.nr_sectors) {
-            im->img.trk_pos = im->img.decode_pos * sec_sz(im);
+            im->img.trk_sec = im->img.decode_pos;
             im->img.decode_pos = im->img.decode_pos * 2 + 1;
             decode_off %= im->img.idam_sz + im->img.dam_sz;
             if (decode_off >= im->img.idam_sz) {
@@ -203,12 +203,12 @@ static bool_t img_read_track(struct image *im)
     unsigned int buflen = rd->len & ~511;
 
     if (rd->prod == rd->cons) {
-        F_lseek(&im->fp, im->img.trk_off + im->img.trk_pos);
+        uint8_t sec = im->img.sec_map[im->img.trk_sec] - im->img.sec_base;
+        F_lseek(&im->fp, im->img.trk_off + sec * sec_sz(im));
         F_read(&im->fp, &buf[(rd->prod/8) % buflen], sec_sz(im), NULL);
         rd->prod += sec_sz(im) * 8;
-        im->img.trk_pos += sec_sz(im);
-        if (im->img.trk_pos >= im->img.trk_len)
-            im->img.trk_pos = 0;
+        if (++im->img.trk_sec >= im->img.nr_sectors)
+            im->img.trk_sec = 0;
     }
 
     /* Generate some MFM if there is space in the MFM ring buffer. */
