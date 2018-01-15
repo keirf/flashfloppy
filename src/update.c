@@ -282,8 +282,8 @@ int main(void)
     stm32_init();
     timers_init();
     console_init();
-    delay_ms(200); /* 5v settle */
     board_init();
+    delay_ms(200); /* 5v settle */
 
     printk("\n** FF %s v%s for Gotek\n",
            is_reloader ? "Reloader" : "Update Bootloader",

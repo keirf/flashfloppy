@@ -31,6 +31,11 @@ void board_init(void)
     /* PB0,4,9 (floppy inputs). */
     pb_skip = 0x0211;
 
+    /* Pull down PA11 (USB_DM) and PA12 (USB_DP). */
+    pa_skip |= 0x1800;
+    gpio_configure_pin(gpioa, 11, GPI_pull_down);
+    gpio_configure_pin(gpioa, 12, GPI_pull_down);
+
     /* Pull up all PCx pins. */
     gpio_pull_up_pins(gpioc, ~0x0000);
 

@@ -1373,17 +1373,13 @@ int main(void)
     memset(_sbss, 0, _ebss-_sbss);
 
     canary_init();
-
     stm32_init();
     timers_init();
-
     console_init();
     console_crash_on_input();
-
     board_init();
+    delay_ms(200); /* 5v settle */
 
-    /* Wait for 5v power to stabilise before initing external peripherals. */
-    delay_ms(200);
     printk("\n** FlashFloppy v%s for Gotek\n", FW_VER);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
