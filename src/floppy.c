@@ -402,10 +402,22 @@ static void wdata_start(void)
 {
     uint32_t start_pos;
 
-    if (dma_wr->state != DMA_inactive) {
+    switch (dma_wr->state) {
+    case DMA_starting:
+    case DMA_active:
+        /* Already active: ignore WGATE glitch. */
+        printk("*** WGATE glitch\n");
+        return;
+    case DMA_stopping:
+        /* We are still processing the previous write and so we lose this new 
+         * write. Complain to the log. */
         printk("*** Missed write\n");
         return;
+    case DMA_inactive:
+        /* The write path is quiescent and ready to process this new write. */
+        break;
     }
+
     dma_wr->state = DMA_starting;
 
     /* Start DMA to circular buffer. */
