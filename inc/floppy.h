@@ -36,7 +36,7 @@ struct img_image {
     uint16_t trk_pos, trk_len;
     int32_t decode_pos;
     bool_t has_iam;
-    uint8_t gap3;
+    uint8_t gap3, gap_4a;
     int8_t write_sector;
     uint8_t sec_base, sec_map[64];
     uint8_t nr_sectors, sec_no;

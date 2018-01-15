@@ -15,6 +15,9 @@
 #define GAP_4A   80 /* Post-Index */
 #define GAP_SYNC 12
 
+/* Shrink the IDAM pre-sync gap if sectors are close together. */
+#define idam_gap_sync(im) min_t(uint8_t, (im)->img.gap3, GAP_SYNC)
+
 #define sec_sz(im) (128u << (im)->img.sec_no)
 
 const static struct img_type {
@@ -28,7 +31,7 @@ const static struct img_type {
     {  9, 1, 84, 1, 2, 1 },
     { 10, 1, 30, 1, 2, 1 },
     { 11, 1,  3, 2, 2, 1 },
-    {  8, 2, 84, 1, 2, 1 }, /* clash with ADFS L */
+    {  8, 2, 84, 1, 2, 1 },
     {  9, 2, 84, 1, 2, 1 },
     { 10, 2, 30, 1, 2, 1 },
     { 11, 2,  3, 2, 2, 1 },
@@ -74,10 +77,10 @@ found:
     }
     im->img.gap3 = type->gap3;
     im->img.has_iam = has_iam;
-    im->img.idx_sz = GAP_4A;
+    im->img.idx_sz = im->img.gap_4a = GAP_4A;
     if (im->img.has_iam)
         im->img.idx_sz += GAP_SYNC + 4 + GAP_1;
-    im->img.idam_sz = GAP_SYNC + 8 + 2 + GAP_2;
+    im->img.idam_sz = idam_gap_sync(im) + 8 + 2 + GAP_2;
     im->img.dam_sz = GAP_SYNC + 4 + sec_sz(im) + 2 + im->img.gap3;
 
     /* Work out minimum track length (with no pre-index track gap). */
@@ -92,9 +95,20 @@ found:
         : 2000; /* ED */
     im->tracklen_bc = im->img.data_rate * 200;
 
-    /* Extend the track length if it's too short, and round it up. */
-    if (im->tracklen_bc < tracklen)
-        im->tracklen_bc += 5000;
+    /* Does the track data fit within standard track length? */
+    if (im->tracklen_bc < tracklen) {
+        if ((tracklen - im->img.gap_4a*16) <= im->tracklen_bc) {
+            /* Eliminate the post-index gap 4a if that suffices. */
+            tracklen -= im->img.gap_4a*16;
+            im->img.idx_sz -= im->img.gap_4a;
+            im->img.gap_4a = 0;
+        } else {
+            /* Extend the track length ("long track"). */
+            im->tracklen_bc = tracklen + 100;
+        }
+    }
+
+    /* Round the track length up to a multiple of 32 bitcells. */
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
 
     im->img.ticks_per_cell = ((sysclk_ms(DRIVE_MS_PER_REV) * 16u)
@@ -210,9 +224,9 @@ static bool_t img_read_track(struct image *im)
 
     if (im->img.decode_pos == 0) {
         /* Post-index track gap */
-        if ((mfmlen - (mfmp - mfmc)) < (GAP_4A + GAP_SYNC + 4 + GAP_1))
+        if ((mfmlen - (mfmp - mfmc)) < im->img.idx_sz)
             return FALSE;
-        for (i = 0; i < GAP_4A; i++)
+        for (i = 0; i < im->img.gap_4a; i++)
             emit_byte(0x4e);
         if (im->img.has_iam) {
             /* IAM */
@@ -230,16 +244,16 @@ static bool_t img_read_track(struct image *im)
             return FALSE;
         for (i = 0; i < im->img.gap4; i++)
             emit_byte(0x4e);
-        im->img.decode_pos = -1;
+        im->img.decode_pos = (im->img.idx_sz != 0) ? -1 : 0;
     } else if (im->img.decode_pos & 1) {
         /* IDAM */
         uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
         uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 1];
         uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe, cyl, hd, sec,
                             im->img.sec_no };
-        if ((mfmlen - (mfmp - mfmc)) < (GAP_SYNC + 8 + 2 + GAP_2))
+        if ((mfmlen - (mfmp - mfmc)) < im->img.idam_sz)
             return FALSE;
-        for (i = 0; i < GAP_SYNC; i++)
+        for (i = 0; i < idam_gap_sync(im); i++)
             emit_byte(0x00);
         for (i = 0; i < 3; i++)
             emit_raw(0x4489);
@@ -254,8 +268,7 @@ static bool_t img_read_track(struct image *im)
         /* DAM */
         uint8_t *dat = &buf[(rd->cons/8)%buflen];
         uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
-        if ((mfmlen - (mfmp - mfmc)) < (GAP_SYNC + 4 + sec_sz(im) + 2
-                                        + im->img.gap3))
+        if ((mfmlen - (mfmp - mfmc)) < im->img.dam_sz)
             return FALSE;
         for (i = 0; i < GAP_SYNC; i++)
             emit_byte(0x00);
