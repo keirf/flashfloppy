@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.6a - 17 January 2018
+ - USB: Fix power-on initialisation for some USB sticks
+ - FAT: Write-protect image files marked with read-only attribute
+ - ST: Support 11-sector .ST images
+
 ** v0.9.5a - 1 December 2017
  - FF.CFG: New button assignment for rotary-encoder setup
    - twobutton-action = rotary
