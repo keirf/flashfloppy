@@ -81,6 +81,7 @@ static struct drive {
         stk_time_t start;
         struct timer timer;
     } step;
+    uint32_t write_end;
     struct image *image;
 } drive;
 
@@ -377,6 +378,7 @@ void floppy_insert(unsigned int unit, struct v2_slot *slot)
 static void wdata_stop(void)
 {
     uint8_t prev_state = dma_wr->state;
+    uint32_t pos;
 
     /* Already inactive? Nothing to do. */
     if ((prev_state == DMA_inactive) || (prev_state == DMA_stopping))
@@ -395,6 +397,14 @@ static void wdata_stop(void)
 
     /* No more IDX pulses until write-out is complete. */
     drive.index_suppressed = TRUE;
+    barrier();
+
+    /* Find rotational end position of the write. We will restart the read 
+     * stream at exactly this point. */
+    pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
+    pos %= stk_ms(DRIVE_MS_PER_REV);
+    drive.write_end = pos;
+    printk("Write end %u us\n", pos / STK_MHZ);
 }
 
 static void wdata_start(void)
@@ -607,9 +617,10 @@ static bool_t dma_rd_handle(struct drive *drv)
             break;
         /* Work out where in new track to start reading data from. */
         index_time = index.prev_time;
-        read_start_pos = stk_timesince(index_time) + delay;
-        if (read_start_pos > stk_ms(DRIVE_MS_PER_REV))
-            read_start_pos -= stk_ms(DRIVE_MS_PER_REV);
+        read_start_pos = drv->index_suppressed
+            ? drive.write_end /* start read exactly where write ended */
+            : stk_timesince(index_time) + delay;
+        read_start_pos %= stk_ms(DRIVE_MS_PER_REV);
         /* Seek to the new track. */
         track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
