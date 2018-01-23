@@ -89,7 +89,6 @@ static stk_time_t sync_time, sync_pos;
 
 static struct {
     struct timer timer, timer_deassert;
-    bool_t active;
     stk_time_t prev_time;
 } index;
 static void index_assert(void *);   /* index.timer */
@@ -178,7 +177,6 @@ void floppy_cancel(void)
 
     /* Set outputs for empty drive. */
     barrier();
-    index.active = FALSE;
     drive_change_output(drv, outp_index, FALSE);
     drive_change_output(drv, outp_dskchg, TRUE);
 }
@@ -324,7 +322,8 @@ void floppy_insert(unsigned int unit, struct v2_slot *slot)
 
     drv->index_suppressed = FALSE;
     index.prev_time = stk_now();
-    timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
+    timer_set(&index.timer, stk_add(index.prev_time,
+                                    stk_ms(DRIVE_MS_PER_REV)));
 
     /* Enable DMA interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch) | DMA_IFCR_CGIF(dma_wdata_ch);
@@ -647,8 +646,9 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Reinitialise the circular buffer to empty. */
         dma_rd->cons = dma_rd->prod = 0;
         /* Free-running index timer. */
-        if (!index.active)
-            timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
+        timer_cancel(&index.timer);
+        timer_set(&index.timer, stk_add(index.prev_time,
+                                        stk_ms(DRIVE_MS_PER_REV)));
         break;
     }
 
@@ -744,21 +744,20 @@ bool_t floppy_handle(void)
 static void index_assert(void *dat)
 {
     struct drive *drv = &drive;
-    index.active = TRUE;
     index.prev_time = index.timer.deadline;
     if (!drv->index_suppressed) {
         drive_change_output(drv, outp_index, TRUE);
         timer_set(&index.timer_deassert, stk_add(index.prev_time, stk_ms(2)));
     }
+    if (dma_rd->state != DMA_active) /* timer set from input flux stream */
+        timer_set(&index.timer, stk_add(index.prev_time,
+                                        stk_ms(DRIVE_MS_PER_REV)));
 }
 
 static void index_deassert(void *dat)
 {
     struct drive *drv = &drive;
-    index.active = FALSE;
     drive_change_output(drv, outp_index, FALSE);
-    if (dma_rd->state != DMA_active) /* timer set from input flux stream */
-        timer_set(&index.timer, stk_add(index.prev_time, stk_ms(200)));
 }
 
 static void drive_step_timer(void *_drv)
