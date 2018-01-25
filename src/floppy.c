@@ -81,7 +81,7 @@ static struct drive {
         stk_time_t start;
         struct timer timer;
     } step;
-    uint32_t write_end;
+    uint32_t restart_pos;
     struct image *image;
 } drive;
 
@@ -397,13 +397,12 @@ static void wdata_stop(void)
 
     /* No more IDX pulses until write-out is complete. */
     drive.index_suppressed = TRUE;
-    barrier();
 
     /* Find rotational end position of the write. We will restart the read 
      * stream at exactly this point. */
     pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
     pos %= stk_ms(DRIVE_MS_PER_REV);
-    drive.write_end = pos;
+    drive.restart_pos = pos;
     printk("Write end %u us\n", pos / STK_MHZ);
 }
 
@@ -464,6 +463,7 @@ static void wdata_start(void)
 static void rdata_stop(void)
 {
     uint8_t prev_state = dma_rd->state;
+    uint32_t pos;
 
     /* Already inactive? Nothing to do. */
     if (prev_state == DMA_inactive)
@@ -483,6 +483,16 @@ static void rdata_stop(void)
     tim_rdata->cr1 = 0;
     dma_rdata.ccr = 0;
     dma_rdata.cndtr = ARRAY_SIZE(dma_rd->buf);
+
+    if (ff_cfg.synced_track_changes && !drive.index_suppressed) {
+        /* Find rotational end position of the read. We will restart the read
+         * stream at exactly this point. */
+        pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
+        pos %= stk_ms(DRIVE_MS_PER_REV);
+        drive.restart_pos = pos;
+        printk("Read end %u us\n", pos / STK_MHZ);
+        drive.index_suppressed = TRUE;
+    }
 }
 
 /* Called from user context to start the read stream. */
@@ -618,7 +628,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Work out where in new track to start reading data from. */
         index_time = index.prev_time;
         read_start_pos = drv->index_suppressed
-            ? drive.write_end /* start read exactly where write ended */
+            ? drive.restart_pos /* start read exactly where write ended */
             : stk_timesince(index_time) + delay;
         read_start_pos %= stk_ms(DRIVE_MS_PER_REV);
         /* Seek to the new track. */

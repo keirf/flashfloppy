@@ -414,6 +414,10 @@ static void read_ff_cfg(void)
             ff_cfg.side_select_glitch_filter = strtol(opts.arg, NULL, 10);
             break;
 
+        case FFCFG_synced_track_changes:
+            ff_cfg.synced_track_changes = !strcmp(opts.arg, "yes");
+            break;
+
         case FFCFG_ejected_on_startup:
             ff_cfg.ejected_on_startup = !strcmp(opts.arg, "yes");
             break;
