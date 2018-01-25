@@ -141,6 +141,8 @@ bool_t image_read_track(struct image *im);
 
 /* Generate flux timings for the RDATA timer and output pin. */
 uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
+uint16_t mfm_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr,
+                        uint32_t ticks_per_cell);
 
 /* Write track data from memory to mass storage. If flush is TRUE then all 
  * remaining data must be written to mass storage. */

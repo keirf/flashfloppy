@@ -146,46 +146,7 @@ static bool_t da_read_track(struct image *im)
 
 static uint16_t da_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
-    uint32_t ticks = im->ticks_since_flux, ticks_per_cell = TICKS_PER_CELL;
-    uint32_t x, y = 32, todo = nr;
-    struct image_buf *mfm = &im->bufs.read_mfm;
-    uint32_t *mfmb = mfm->p, mfmc = mfm->cons, mfmp = mfm->prod & ~31;
-
-    /* Convert pre-generated MFM into flux timings. */
-    while (mfmc != mfmp) {
-        y = mfmc % 32;
-        x = be32toh(mfmb[(mfmc/32)%(mfm->len/4)]) << y;
-        mfmc += 32 - y;
-        im->cur_bc += 32 - y;
-        im->cur_ticks += (32 - y) * ticks_per_cell;
-        while (y < 32) {
-            y++;
-            ticks += ticks_per_cell;
-            if ((int32_t)x < 0) {
-                *tbuf++ = (ticks >> 4) - 1;
-                ticks &= 15;
-                if (!--todo)
-                    goto out;
-            }
-            x <<= 1;
-        }
-    }
-
-    ASSERT(y == 32);
-
-out:
-    if (im->cur_bc >= im->tracklen_bc) {
-        im->cur_bc -= im->tracklen_bc;
-        ASSERT(im->cur_bc < im->tracklen_bc);
-        im->tracklen_ticks = im->cur_ticks - im->cur_bc * ticks_per_cell;
-        im->cur_ticks -= im->tracklen_ticks;
-    }
-
-    mfm->cons = mfmc - (32 - y);
-    im->cur_bc -= 32 - y;
-    im->cur_ticks -= (32 - y) * ticks_per_cell;
-    im->ticks_since_flux = ticks;
-    return nr - todo;
+    return mfm_rdata_flux(im, tbuf, nr, TICKS_PER_CELL);
 }
 
 static void da_write_track(struct image *im, bool_t flush)
