@@ -40,6 +40,7 @@ struct img_image {
     int8_t write_sector;
     uint8_t sec_base, sec_map[64];
     uint8_t nr_sectors, sec_no;
+    uint8_t interleave:4, skew:4;
     uint16_t data_rate, gap4;
     uint32_t ticks_per_cell;
     uint32_t idx_sz, idam_sz, dam_sz;

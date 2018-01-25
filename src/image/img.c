@@ -27,30 +27,31 @@ const static struct img_type {
     uint8_t interleave:2;
     uint8_t no:2;
     uint8_t base:2;
+    uint8_t skew:2;
 } img_type[] = {
-    {  9, 1, 84, 1, 2, 1 },
-    { 10, 1, 30, 1, 2, 1 },
-    { 11, 1,  3, 2, 2, 1 },
-    {  8, 2, 84, 1, 2, 1 },
-    {  9, 2, 84, 1, 2, 1 },
-    { 10, 2, 30, 1, 2, 1 },
-    { 11, 2,  3, 2, 2, 1 },
-    { 18, 2, 84, 1, 2, 1 },
-    { 19, 2, 70, 1, 2, 1 },
-    { 21, 2, 18, 1, 2, 1 },
-    { 20, 2, 40, 1, 2, 1 },
-    { 36, 2, 84, 1, 2, 1 },
+    {  9, 1, 84, 1, 2, 1, 0 },
+    { 10, 1, 30, 1, 2, 1, 0 },
+    { 11, 1,  3, 2, 2, 1, 0 },
+    {  8, 2, 84, 1, 2, 1, 0 },
+    {  9, 2, 84, 1, 2, 1, 0 },
+    { 10, 2, 30, 1, 2, 1, 0 },
+    { 11, 2,  3, 2, 2, 1, 0 },
+    { 18, 2, 84, 1, 2, 1, 0 },
+    { 19, 2, 70, 1, 2, 1, 0 },
+    { 21, 2, 18, 1, 2, 1, 0 },
+    { 20, 2, 40, 1, 2, 1, 0 },
+    { 36, 2, 84, 1, 2, 1, 0 },
     { 0 }
 }, adfs_type[] = {
-    { 16, 2, 57, 1, 1, 0 }, /* ADFS L 640k */
-    { 16, 1, 57, 1, 1, 0 }, /* ADFS M 320k */
+    { 16, 2, 57, 1, 1, 0, 0 }, /* ADFS L 640k */
+    { 16, 1, 57, 1, 1, 0, 0 }, /* ADFS M 320k */
     { 0 }
 };
 
 static bool_t _img_open(struct image *im, bool_t has_iam,
                         const struct img_type *type)
 {
-    unsigned int i, nr_cyls, cyl_sz;
+    unsigned int nr_cyls, cyl_sz;
     uint32_t tracklen;
 
     /* Walk the layout/type hints looking for a match on file size. */
@@ -67,14 +68,10 @@ found:
     im->nr_cyls = nr_cyls;
     im->nr_sides = type->nr_sides;
     im->img.sec_no = type->no;
-
+    im->img.interleave = type->interleave;
+    im->img.skew = type->skew;
     im->img.sec_base = type->base;
     im->img.nr_sectors = type->nr_secs;
-    for (i = 0; i < im->img.nr_sectors; i++) {
-        /* Create logical sector map in rotational order. */
-        im->img.sec_map[(i * type->interleave) % im->img.nr_sectors]
-            = i + im->img.sec_base;
-    }
     im->img.gap3 = type->gap3;
     im->img.has_iam = has_iam;
     im->img.idx_sz = im->img.gap_4a = GAP_4A;
@@ -142,11 +139,22 @@ static void img_seek_track(
     struct image_buf *mfm = &im->bufs.read_mfm;
     uint32_t trk_len, decode_off, sys_ticks = start_pos ? *start_pos : 0;
     uint8_t cyl = track/2, side = track&1;
+    unsigned int i, pos;
 
     /* TODO: Fake out unformatted tracks. */
     cyl = min_t(uint8_t, cyl, im->nr_cyls-1);
     side = min_t(uint8_t, side, im->nr_sides-1);
     track = cyl*2 + side;
+
+    /* Create logical sector map in rotational order. */
+    memset(im->img.sec_map, 0xff, im->img.nr_sectors);
+    pos = track * (unsigned int)im->img.skew;
+    for (i = 0; i < im->img.nr_sectors; i++) {
+        while (im->img.sec_map[pos] != 0xff)
+            pos = (pos + 1) % im->img.nr_sectors;
+        im->img.sec_map[pos] = i + im->img.sec_base;
+        pos = (pos + im->img.interleave) % im->img.nr_sectors;
+    }
 
     im->img.write_sector = -1;
     trk_len = im->img.nr_sectors * sec_sz(im);
