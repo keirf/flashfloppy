@@ -353,10 +353,6 @@ static void read_ff_cfg(void)
                 : FINTF_JC;
             break;
 
-        case FFCFG_ejected_on_startup:
-            ff_cfg.ejected_on_startup = !strcmp(opts.arg, "yes");
-            break;
-
         case FFCFG_da_report_version:
             memset(ff_cfg.da_report_version, 0,
                    sizeof(ff_cfg.da_report_version));
@@ -413,6 +409,14 @@ static void read_ff_cfg(void)
             cfg.ffcfg_has_step_volume = TRUE;
             break;
         }
+
+        case FFCFG_side_select_glitch_filter:
+            ff_cfg.side_select_glitch_filter = strtol(opts.arg, NULL, 10);
+            break;
+
+        case FFCFG_ejected_on_startup:
+            ff_cfg.ejected_on_startup = !strcmp(opts.arg, "yes");
+            break;
 
         case FFCFG_image_on_startup:
             ff_cfg.image_on_startup =
