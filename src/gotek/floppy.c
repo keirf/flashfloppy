@@ -145,6 +145,18 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
         gpio_out_setreset |= 4; /* gpio_out->brr */
 }
 
+static bool_t drive_is_writing(void)
+{
+    if (!dma_wr)
+        return FALSE;
+    switch (dma_wr->state) {
+    case DMA_starting:
+    case DMA_active:
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static void IRQ_STEP_changed(void)
 {
     struct drive *drv = &drive;
@@ -166,7 +178,8 @@ static void IRQ_STEP_changed(void)
         drive_change_output(drv, outp_dskchg, FALSE);
 
     if (!(idr_a & m(pin_step))   /* Not rising edge on STEP? */
-        || (drv->step.state & STEP_active)) /* Already mid-step? */
+        || (drv->step.state & STEP_active) /* Already mid-step? */
+        || drive_is_writing())   /* Write in progress? */
         return;
 
     /* Latch the step direction and check bounds (0 <= cyl <= 255). */

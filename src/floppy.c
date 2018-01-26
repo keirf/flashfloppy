@@ -69,9 +69,6 @@ static struct drive {
 #define outp_nr     5
     uint8_t outp;
     struct {
-        bool_t started; /* set by hi-irq, cleared by lo-irq */
-        bool_t active;  /* set by hi-irq, cleared by step.timer */
-        bool_t settling; /* set by timer, cleared by timer or hi-irq */
 #define STEP_started  1 /* started by hi-pri IRQ */
 #define STEP_latched  2 /* latched by lo-pri IRQ */
 #define STEP_active   (STEP_started | STEP_latched)
@@ -457,6 +454,9 @@ static void wdata_start(void)
 
     /* Allow IDX pulses while handling a write. */
     drive.index_suppressed = FALSE;
+
+    /* Exit head-settling state. Ungates INDEX signal. */
+    cmpxchg(&drive.step.state, STEP_settling, 0);
 }
 
 /* Called from IRQ context to stop the read stream. */
@@ -525,6 +525,9 @@ static void rdata_start(void)
     /* Enable output. */
     if (drive.sel)
         gpio_configure_pin(gpio_data, pin_rdata, AFO_bus);
+
+    /* Exit head-settling state. Ungates INDEX signal. */
+    cmpxchg(&drive.step.state, STEP_settling, 0);
 
 out:
     IRQ_global_enable();
@@ -766,7 +769,7 @@ static void index_assert(void *dat)
 {
     struct drive *drv = &drive;
     index.prev_time = index.timer.deadline;
-    if (!drv->index_suppressed) {
+    if (!drv->index_suppressed && !drv->step.state) {
         drive_change_output(drv, outp_index, TRUE);
         timer_set(&index.timer_deassert, stk_add(index.prev_time, stk_ms(2)));
     }
