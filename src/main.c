@@ -382,6 +382,8 @@ static void read_ff_cfg(void)
 
         switch (option) {
 
+            /* DRIVE EMULATION */
+
         case FFCFG_interface:
             ff_cfg.interface =
                 !strcmp(opts.arg, "ibmpc") ? FINTF_IBMPC
@@ -389,13 +391,31 @@ static void read_ff_cfg(void)
                 : FINTF_JC;
             break;
 
-        case FFCFG_da_report_version:
-            memset(ff_cfg.da_report_version, 0,
-                   sizeof(ff_cfg.da_report_version));
-            snprintf(ff_cfg.da_report_version,
-                     sizeof(ff_cfg.da_report_version),
-                     "%s", opts.arg);
+        case FFCFG_side_select_glitch_filter:
+            ff_cfg.side_select_glitch_filter = strtol(opts.arg, NULL, 10);
             break;
+
+        case FFCFG_synced_track_changes:
+            ff_cfg.synced_track_changes = !strcmp(opts.arg, "yes");
+            break;
+
+            /* STARTUP / INITIALISATION */
+
+        case FFCFG_ejected_on_startup:
+            ff_cfg.ejected_on_startup = !strcmp(opts.arg, "yes");
+            break;
+
+        case FFCFG_image_on_startup:
+            ff_cfg.image_on_startup =
+                !strcmp(opts.arg, "static") ? IMGS_static
+                : !strcmp(opts.arg, "last") ? IMGS_last : IMGS_init;
+            break;
+
+        case FFCFG_display_probe_ms:
+            ff_cfg.display_probe_ms = strtol(opts.arg, NULL, 10);
+            break;
+
+            /* IMAGE NAVIGATION */
 
         case FFCFG_autoselect_file_secs:
             ff_cfg.autoselect_file_secs = strtol(opts.arg, NULL, 10);
@@ -415,6 +435,15 @@ static void read_ff_cfg(void)
         case FFCFG_nav_loop:
             ff_cfg.nav_loop = !strcmp(opts.arg, "yes");
             break;
+
+        case FFCFG_twobutton_action:
+            ff_cfg.twobutton_action =
+                !strcmp(opts.arg, "rotary") ? TWOBUTTON_rotary
+                : !strcmp(opts.arg, "eject") ? TWOBUTTON_eject
+                : TWOBUTTON_zero;
+            break;
+
+            /* DISPLAY */
 
         case FFCFG_display_off_secs:
             ff_cfg.display_off_secs = strtol(opts.arg, NULL, 10);
@@ -437,6 +466,8 @@ static void read_ff_cfg(void)
                 ? FONT_7x16 : FONT_8x16;
             break;
 
+            /* MISCELLANEOUS */
+
         case FFCFG_step_volume: {
             int volume = strtol(opts.arg, NULL, 10);
             if (volume <= 0) volume = 0;
@@ -446,33 +477,12 @@ static void read_ff_cfg(void)
             break;
         }
 
-        case FFCFG_side_select_glitch_filter:
-            ff_cfg.side_select_glitch_filter = strtol(opts.arg, NULL, 10);
-            break;
-
-        case FFCFG_synced_track_changes:
-            ff_cfg.synced_track_changes = !strcmp(opts.arg, "yes");
-            break;
-
-        case FFCFG_ejected_on_startup:
-            ff_cfg.ejected_on_startup = !strcmp(opts.arg, "yes");
-            break;
-
-        case FFCFG_image_on_startup:
-            ff_cfg.image_on_startup =
-                !strcmp(opts.arg, "static") ? IMGS_static
-                : !strcmp(opts.arg, "last") ? IMGS_last : IMGS_init;
-            break;
-
-        case FFCFG_display_probe_ms:
-            ff_cfg.display_probe_ms = strtol(opts.arg, NULL, 10);
-            break;
-
-        case FFCFG_twobutton_action:
-            ff_cfg.twobutton_action =
-                !strcmp(opts.arg, "rotary") ? TWOBUTTON_rotary
-                : !strcmp(opts.arg, "eject") ? TWOBUTTON_eject
-                : TWOBUTTON_zero;
+        case FFCFG_da_report_version:
+            memset(ff_cfg.da_report_version, 0,
+                   sizeof(ff_cfg.da_report_version));
+            snprintf(ff_cfg.da_report_version,
+                     sizeof(ff_cfg.da_report_version),
+                     "%s", opts.arg);
             break;
 
         }
