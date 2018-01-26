@@ -57,7 +57,7 @@ static struct dma_ring *dma_wr; /* WDATA DMA buffer */
 /* Statically-allocated floppy drive state. Tracks head movements and 
  * side changes at all times, even when the drive is empty. */
 static struct drive {
-    struct v2_slot *slot;
+    const struct slot *slot;
     uint8_t cyl, head, nr_sides;
     bool_t sel;
     bool_t index_suppressed; /* disable IDX while writing to USB stick */
@@ -278,7 +278,7 @@ void floppy_init(uint8_t fintf_mode)
     timer_init(&index.timer_deassert, index_deassert, NULL);
 }
 
-void floppy_insert(unsigned int unit, struct v2_slot *slot)
+void floppy_insert(unsigned int unit, const struct slot *slot)
 {
     struct drive *drv = &drive;
 

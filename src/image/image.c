@@ -42,7 +42,7 @@ bool_t image_valid(FILINFO *fp)
     return FALSE;
 }
 
-static bool_t try_handler(struct image *im, const struct v2_slot *slot,
+static bool_t try_handler(struct image *im, const struct slot *slot,
                           const struct image_handler *handler)
 {
     BYTE mode;
@@ -57,7 +57,7 @@ static bool_t try_handler(struct image *im, const struct v2_slot *slot,
     return handler->open(im);
 }
 
-void image_open(struct image *im, const struct v2_slot *slot)
+void image_open(struct image *im, const struct slot *slot)
 {
     static const struct image_handler * const image_handlers[] = {
         /* Formats with an identifying header. */
@@ -68,7 +68,7 @@ void image_open(struct image *im, const struct v2_slot *slot)
         &img_image_handler
     };
 
-    char ext[4];
+    char ext[sizeof(slot->type)+1];
     struct image_bufs bufs = im->bufs;
     const struct image_handler *hint;
     int i;
@@ -79,10 +79,11 @@ void image_open(struct image *im, const struct v2_slot *slot)
     im->write_bc_ticks = sysclk_us(2);
 
     /* Extract filename extension (if available). */
-    memcpy(ext, slot->type, 3);
-    ext[3] = '\0';
+    memcpy(ext, slot->type, sizeof(slot->type));
+    ext[sizeof(slot->type)] = '\0';
 
     /* Use the extension as a hint to the correct image handler. */
+    
     hint = (!strcmp(ext, "adf") ? &adf_image_handler
             : !strcmp(ext, "dsk") ? &dsk_image_handler
             : !strcmp(ext, "hfe") ? &hfe_image_handler

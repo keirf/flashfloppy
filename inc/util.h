@@ -49,7 +49,14 @@ typedef char bool_t;
 #define max_t(type,x,y) \
     ({ type __x = (x); type __y = (y); __x > __y ? __x: __y; })
 
-void fatfs_from_slot(FIL *file, const struct v2_slot *slot, BYTE mode);
+struct slot {
+    char name[FF_MAX_LFN+1];
+    char type[7];
+    uint8_t attributes;
+    uint32_t firstCluster;
+    uint32_t size;
+};
+void fatfs_from_slot(FIL *file, const struct slot *slot, BYTE mode);
 
 void filename_extension(const char *filename, char *extension, size_t size);
 

@@ -90,6 +90,8 @@ struct __packed v2_slot {
     char     name[52];
 };
 
+#define short_slot v2_slot
+
 /*
  * Local variables:
  * mode: C

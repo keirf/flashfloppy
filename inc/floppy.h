@@ -125,7 +125,7 @@ struct image_handler {
 bool_t image_valid(FILINFO *fp);
 
 /* Open specified image file on mass storage device. */
-void image_open(struct image *im, const struct v2_slot *slot);
+void image_open(struct image *im, const struct slot *slot);
 
 /* Seek to given track and start reading track data at specified rotational
  * position (specified as number of SYSCLK ticks past the index mark).
@@ -159,7 +159,7 @@ uint8_t mfmtobin(uint16_t x);
 
 /* External API. */
 void floppy_init(uint8_t fintf_mode);
-void floppy_insert(unsigned int unit, struct v2_slot *slot);
+void floppy_insert(unsigned int unit, const struct slot *slot);
 void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
 void floppy_set_cyl(uint8_t unit, uint8_t cyl);

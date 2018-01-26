@@ -22,7 +22,8 @@ static struct {
 static struct {
     uint16_t slot_nr, max_slot_nr;
     uint8_t slot_map[1000/8];
-    struct v2_slot autoboot, hxcsdfe, slot;
+    struct short_slot autoboot, hxcsdfe;
+    struct slot slot;
     uint32_t cfg_cdir, cur_cdir;
     uint16_t cdir_stack[20];
     uint8_t depth;
@@ -71,13 +72,11 @@ static void lcd_on(void)
 
 static bool_t slot_type(const char *str)
 {
-    char ext[4];
+    char ext[8];
     filename_extension(cfg.slot.name, ext, sizeof(ext));
     if (!strcmp(ext, str))
         return TRUE;
-    memcpy(ext, cfg.slot.type, 3);
-    ext[3] = '\0';
-    return !strcmp(ext, str);
+    return !strcmp(cfg.slot.type, str);
 }
 
 /* Write slot info to display. */
@@ -253,7 +252,39 @@ static void canary_check(void)
     ASSERT(_thread_stackbottom[0] == 0xdeadbeef);
 }
 
-void fatfs_from_slot(FIL *file, const struct v2_slot *slot, BYTE mode)
+static void slot_from_short_slot(
+    struct slot *slot, const struct short_slot *short_slot)
+{
+    memcpy(slot->name, short_slot->name, sizeof(short_slot->name));
+    slot->name[sizeof(short_slot->name)] = '\0';
+    memcpy(slot->type, short_slot->type, sizeof(short_slot->type));
+    slot->type[sizeof(short_slot->type)] = '\0';
+    slot->attributes = short_slot->attributes;
+    slot->firstCluster = short_slot->firstCluster;
+    slot->size = short_slot->size;
+}
+
+static void fatfs_to_short_slot(
+    struct short_slot *slot, FIL *file, const char *name)
+{
+    char *dot;
+    unsigned int i;
+
+    slot->attributes = file->obj.attr;
+    slot->firstCluster = file->obj.sclust;
+    slot->size = file->obj.objsize;
+    snprintf(slot->name, sizeof(slot->name), "%s", name);
+    if ((dot = strrchr(slot->name, '.')) != NULL) {
+        memcpy(slot->type, dot+1, sizeof(slot->type));
+        for (i = 0; i < sizeof(slot->type); i++)
+            slot->type[i] = tolower(slot->type[i]);
+        *dot = '\0';
+    } else {
+        memset(slot->type, 0, sizeof(slot->type));
+    }
+}
+
+void fatfs_from_slot(FIL *file, const struct slot *slot, BYTE mode)
 {
     memset(file, 0, sizeof(*file));
     file->obj.fs = &fatfs;
@@ -265,18 +296,23 @@ void fatfs_from_slot(FIL *file, const struct v2_slot *slot, BYTE mode)
     /* WARNING: dir_ptr, dir_sect are unknown. */
 }
 
-static void fatfs_to_slot(struct v2_slot *slot, FIL *file, const char *name)
+static void fatfs_to_slot(struct slot *slot, FIL *file, const char *name)
 {
-    const char *dot = strrchr(name, '.');
+    char *dot;
     unsigned int i;
 
     slot->attributes = file->obj.attr;
     slot->firstCluster = file->obj.sclust;
     slot->size = file->obj.objsize;
     snprintf(slot->name, sizeof(slot->name), "%s", name);
-    memcpy(slot->type, dot+1, 3);
-    for (i = 0; i < 3; i++)
-        slot->type[i] = tolower(slot->type[i]);
+    if ((dot = strrchr(slot->name, '.')) != NULL) {
+        snprintf(slot->type, sizeof(slot->type), "%s", dot+1);
+        for (i = 0; i < sizeof(slot->type); i++)
+            slot->type[i] = tolower(slot->type[i]);
+        *dot = '\0';
+    } else {
+        memset(slot->type, 0, sizeof(slot->type));
+    }
 }
 
 static void dump_file(void)
@@ -492,7 +528,7 @@ static void cfg_init(void)
     fr = F_try_open(&fs->file, "HXCSDFE.CFG", FA_READ|FA_WRITE);
     if (fr)
         goto native_mode;
-    fatfs_to_slot(&cfg.hxcsdfe, &fs->file, "HXCSDFE.CFG");
+    fatfs_to_short_slot(&cfg.hxcsdfe, &fs->file, "HXCSDFE.CFG");
     F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
     if (hxc_cfg.startup_mode & HXCSTARTUP_slot0) {
         /* Startup mode: slot 0. */
@@ -517,7 +553,7 @@ static void cfg_init(void)
     fr = F_try_open(&fs->file, "AUTOBOOT.HFE", FA_READ);
     if (fr)
         goto native_mode;
-    fatfs_to_slot(&cfg.autoboot, &fs->file, "AUTOBOOT.HFE");
+    fatfs_to_short_slot(&cfg.autoboot, &fs->file, "AUTOBOOT.HFE");
     F_close(&fs->file);
 
     cfg.hxc_mode = TRUE;
@@ -734,6 +770,8 @@ static void ima_mark_ejected(bool_t ej)
 static void hxc_cfg_update(uint8_t slot_mode)
 {
     struct hxcsdfe_cfg hxc_cfg;
+    struct v1_slot v1_slot;
+    struct v2_slot v2_slot;
     BYTE mode = FA_READ;
     int i;
 
@@ -771,7 +809,8 @@ static void hxc_cfg_update(uint8_t slot_mode)
         goto indexed_mode;
     }
 
-    fatfs_from_slot(&fs->file, &cfg.hxcsdfe, mode);
+    slot_from_short_slot(&cfg.slot, &cfg.hxcsdfe);
+    fatfs_from_slot(&fs->file, &cfg.slot, mode);
     F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
     if (strncmp("HXCFECFGV", hxc_cfg.signature, 9))
         goto bad_signature;
@@ -791,7 +830,6 @@ static void hxc_cfg_update(uint8_t slot_mode)
     switch (hxc_cfg.signature[9]-'0') {
 
     case 1: {
-        struct v1_slot v1_slot;
         if (slot_mode != CFG_READ_SLOT_NR) {
             /* Keep the already-configured slot number. */
             hxc_cfg.slot_index = cfg.slot_nr;
@@ -811,13 +849,14 @@ static void hxc_cfg_update(uint8_t slot_mode)
         }
         /* Slot mode: read current slot file info. */
         if (cfg.slot_nr == 0) {
-            memcpy(&cfg.slot, &cfg.autoboot, sizeof(cfg.slot));
+            slot_from_short_slot(&cfg.slot, &cfg.autoboot);
         } else {
             F_lseek(&fs->file, 1024 + cfg.slot_nr*128);
             F_read(&fs->file, &v1_slot, sizeof(v1_slot), NULL);
-            memcpy(&cfg.slot.type, &v1_slot.name[8], 3);
-            memcpy(&cfg.slot.attributes, &v1_slot.attributes, 1+4+4+17);
-            cfg.slot.name[17] = '\0';
+            memcpy(&v2_slot.type, &v1_slot.name[8], 3);
+            memcpy(&v2_slot.attributes, &v1_slot.attributes, 1+4+4+17);
+            v2_slot.name[17] = '\0';
+            slot_from_short_slot(&cfg.slot, &v2_slot);
         }
         break;
     }
@@ -845,11 +884,12 @@ static void hxc_cfg_update(uint8_t slot_mode)
         }
         /* Slot mode: read current slot file info. */
         if (cfg.slot_nr == 0) {
-            memcpy(&cfg.slot, &cfg.autoboot, sizeof(cfg.slot));
+            slot_from_short_slot(&cfg.slot, &cfg.autoboot);
         } else {
             F_lseek(&fs->file, hxc_cfg.slots_position*512
                     + cfg.slot_nr*64*hxc_cfg.number_of_drive_per_slot);
-            F_read(&fs->file, &cfg.slot, sizeof(cfg.slot), NULL);
+            F_read(&fs->file, &v2_slot, sizeof(v2_slot), NULL);
+            slot_from_short_slot(&cfg.slot, &v2_slot);
         }
         break;
 
@@ -925,7 +965,7 @@ indexed_mode:
         F_close(&fs->file);
     }
 
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < sizeof(cfg.slot.type); i++)
         cfg.slot.type[i] = tolower(cfg.slot.type[i]);
 }
 
@@ -1119,9 +1159,7 @@ static int floppy_main(void *unused)
             lcd_write_track_info(TRUE);
 
         printk("Current slot: %u/%u\n", cfg.slot_nr, cfg.max_slot_nr);
-        memcpy(msg, cfg.slot.type, 3);
-        msg[3] = '\0';
-        printk("Name: '%s' Type: %s\n", cfg.slot.name, msg);
+        printk("Name: '%s' Type: %s\n", cfg.slot.name, cfg.slot.type);
         printk("Attr: %02x Clus: %08x Size: %u\n",
                cfg.slot.attributes, cfg.slot.firstCluster, cfg.slot.size);
 
