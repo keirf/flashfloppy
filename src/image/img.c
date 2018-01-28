@@ -46,6 +46,9 @@ const static struct img_type {
     { 16, 2, 57, 1, 1, 0, 0 }, /* ADFS L 640k */
     { 16, 1, 57, 1, 1, 0, 0 }, /* ADFS M 320k */
     { 0 }
+}, akai_type[] = {
+    { 10, 2, 116, 1, 3, 1, 0 }, /* Akai HD: 10 * 1kB sectors */
+    { 0 }
 };
 
 static bool_t _img_open(struct image *im, bool_t has_iam,
@@ -119,7 +122,16 @@ found:
 
 static bool_t img_open(struct image *im)
 {
-    return _img_open(im, TRUE, img_type);
+    const struct img_type *type;
+    switch (ff_cfg.host) {
+    case HOST_akai:
+        type = akai_type;
+        break;
+    default:
+        type = img_type;
+        break;
+    }
+    return _img_open(im, TRUE, type);
 }
 
 static bool_t st_open(struct image *im)
