@@ -391,6 +391,12 @@ static void read_ff_cfg(void)
                 : FINTF_JC;
             break;
 
+        case FFCFG_host:
+            ff_cfg.host =
+                !strcmp(opts.arg, "akai") ? HOST_akai
+                : HOST_unspecified;
+            break;
+
         case FFCFG_side_select_glitch_filter:
             ff_cfg.side_select_glitch_filter = strtol(opts.arg, NULL, 10);
             break;

@@ -61,6 +61,9 @@ struct __packed ff_cfg {
 #define NAVMODE_native  2
     uint8_t nav_mode;
     bool_t synced_track_changes;
+#define HOST_unspecified 0
+#define HOST_akai        1
+    uint8_t host;
 };
 
 extern struct ff_cfg ff_cfg;
