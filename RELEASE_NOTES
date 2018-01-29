@@ -3,6 +3,14 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.7a - 29 January 2018
+ - Performance & reliability improvements (eg. Github issues #35, #44):
+   - Sync data read after writes, prevents host missing next sector
+   - FF.CFG: Sync data read after track change (track-change=instant)
+     - Prevents host missing the first sector
+     - Old behaviour is configurable (track-change=realtime)
+ - FF.CFG: host=akai, support Akai synths with 1.6MB HD IMG files
+
 ** v0.9.6a - 17 January 2018
  - USB: Fix power-on initialisation for some USB sticks
  - FAT: Write-protect image files marked with read-only attribute
