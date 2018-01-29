@@ -4,10 +4,13 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
 - Directly supports a wide range of image formats:
   - HFE, HFEv3 (Universal)
   - ADF (Commodore Amiga)
+  - ADM, ADL (Acorn ADFS)
   - DSK (Amstrad CPC, Spectrum +3)
   - IMG/IMA (IBM MFM Raw Sector)
   - ST (Atari ST)
-  - ADM, ADL (Acorn ADFS)
+- Pre-configured track layouts for Raw Sector Images:
+  - Akai synths (eg. Akai S01)
+  - IBM PC and many others
 - No configuration required! Just dump images into the root
   of an empty USB stick.
 - Compatible with the HxC ecosystem: Autoboot and Indexed
