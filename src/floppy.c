@@ -484,7 +484,7 @@ static void rdata_stop(void)
     dma_rdata.ccr = 0;
     dma_rdata.cndtr = ARRAY_SIZE(dma_rd->buf);
 
-    if (ff_cfg.synced_track_changes && !drive.index_suppressed) {
+    if ((ff_cfg.track_change == TRKCHG_instant) && !drive.index_suppressed) {
         /* Find rotational end position of the read. We will restart the read
          * stream at exactly this point. */
         pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));

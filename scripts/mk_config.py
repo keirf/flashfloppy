@@ -21,6 +21,8 @@ def main(argv):
             val = match.group(2)
             if opt == "interface":
                 val = "FINTF_" + val.upper()
+            elif opt == "track-change":
+                val = "TRKCHG_" + val
             elif opt == "host":
                 val = "HOST_" + val
             elif opt == "oled-font":

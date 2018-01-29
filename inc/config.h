@@ -60,7 +60,9 @@ struct __packed ff_cfg {
 #define NAVMODE_indexed 1
 #define NAVMODE_native  2
     uint8_t nav_mode;
-    bool_t synced_track_changes;
+#define TRKCHG_instant  0
+#define TRKCHG_realtime 1
+    uint8_t track_change;
 #define HOST_unspecified 0
 #define HOST_akai        1
     uint8_t host;

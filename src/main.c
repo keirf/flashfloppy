@@ -401,8 +401,10 @@ static void read_ff_cfg(void)
             ff_cfg.side_select_glitch_filter = strtol(opts.arg, NULL, 10);
             break;
 
-        case FFCFG_synced_track_changes:
-            ff_cfg.synced_track_changes = !strcmp(opts.arg, "yes");
+        case FFCFG_track_change:
+            ff_cfg.track_change =
+                !strcmp(opts.arg, "realtime") ? TRKCHG_realtime
+                : TRKCHG_instant;
             break;
 
             /* STARTUP / INITIALISATION */
