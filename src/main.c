@@ -474,6 +474,14 @@ static void read_ff_cfg(void)
                 ? FONT_7x16 : FONT_8x16;
             break;
 
+        case FFCFG_display_type:
+            ff_cfg.display_type =
+                !strcmp(opts.arg, "lcd-16x02") ? DISPLAY_lcd_16x02
+                : !strcmp(opts.arg, "oled-128x32") ? DISPLAY_oled_128x32
+                : !strcmp(opts.arg, "oled-128x32-rotate") ? DISPLAY_oled_128x32_rotate
+                : DISPLAY_auto;
+            break;
+
             /* MISCELLANEOUS */
 
         case FFCFG_step_volume: {

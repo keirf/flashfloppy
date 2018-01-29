@@ -49,6 +49,7 @@ void IRQ_14(void) __attribute__((alias("IRQ_dma1_ch4_tc")));
 static uint8_t _bl;
 static uint8_t i2c_addr;
 static uint8_t i2c_dead;
+static bool_t is_oled_display;
 
 #define OLED_ADDR 0x3c
 static void oled_init(void);
@@ -170,7 +171,7 @@ static void IRQ_dma1_ch4_tc(void)
     dma1->ifcr = DMA_IFCR_CGIF(4);
 
     /* Prepare the DMA buffer and start the next DMA sequence. */
-    dma_sz = (i2c_addr == OLED_ADDR) ? oled_prep_buffer() : lcd_prep_buffer();
+    dma_sz = is_oled_display ? oled_prep_buffer() : lcd_prep_buffer();
     dma_start(dma_sz);
 }
 
@@ -341,8 +342,12 @@ bool_t lcd_init(void)
             goto fail;
         }
 
+        is_oled_display = (ff_cfg.display_type & DISPLAY_lcd) ? FALSE
+            : (ff_cfg.display_type & DISPLAY_oled) ? TRUE
+            : (a == OLED_ADDR);
+
         printk("I2C: %s found at 0x%02x\n",
-               (a == OLED_ADDR) ? "OLED" : "LCD", a);
+               is_oled_display ? "OLED" : "LCD", a);
         i2c_addr = a;
 
         lcd_clear();
@@ -370,7 +375,7 @@ bool_t lcd_init(void)
     timer_init(&timeout_timer, timeout_fn, NULL);
     timer_set(&timeout_timer, stk_add(stk_now(), DMA_TIMEOUT));
 
-    if (i2c_addr == OLED_ADDR) {
+    if (is_oled_display) {
         oled_init();
         return TRUE;
     }
@@ -471,6 +476,19 @@ static void oled_convert_text_row(char *pc)
 
 static uint8_t oled_row;
 
+static unsigned int oled_queue_cmds(
+    uint8_t *buf, const uint8_t *cmds, unsigned int nr)
+{
+    uint8_t *p = buf;
+
+    while (nr--) {
+        *p++ = 0x80; /* Co=1, Command */
+        *p++ = *cmds++;
+    }
+
+    return p - buf;
+}
+
 static unsigned int oled_start_i2c(uint8_t *buf)
 {
     static const uint8_t setup_addr_cmds[] = {
@@ -480,13 +498,9 @@ static unsigned int oled_start_i2c(uint8_t *buf)
     };
 
     uint8_t *p = buf;
-    int i;
 
     /* Set up the display address range. */
-    for (i = 0; i < sizeof(setup_addr_cmds); i++) {
-        *p++ = 0x80; /* Co=1, Command */
-        *p++ = setup_addr_cmds[i];
-    }
+    p += oled_queue_cmds(p, setup_addr_cmds, sizeof(setup_addr_cmds));
 
     /* Display on/off according to backlight setting. */
     *p++ = 0x80;
@@ -539,8 +553,6 @@ static void oled_init(void)
         0xd3, 0x00, /* display offset = 0 */
         0x40,       /* display start line = 0 */
         0x8d, 0x14, /* enable charge pump */
-        0xa1,       /* segment mapping (reverse) */
-        0xc8,       /* com scan direction (decrement) */
         0xda, 0x02, /* com pins configuration */
         0x81, 0x8f, /* display contrast */
         0xd9, 0xf1, /* pre-charge period */
@@ -548,14 +560,20 @@ static void oled_init(void)
         0xa4,       /* output follows ram contents */
         0xa6,       /* normal display output (inverse=off) */
         0x2e,       /* deactivate scroll */
+    }, norot_cmds[] = {
+        0xa1,       /* segment mapping (reverse) */
+        0xc8,       /* com scan direction (decrement) */
+    }, rot_cmds[] = {
+        0xa0,       /* segment mapping (default) */
+        0xc0,       /* com scan direction (default) */
     };
+    const uint8_t *cmds;
     /* NB. Changes for 128x64 display: 0xa8, 63, 0xda, 0x12, 0x81, 0xcf. 
      * Otherwise above settings create a double-height 128x32 viewport
      * utilising alternate display lines (which is a sane fallback). 
      * NB. 128x64 displays may have I2C address 0x3c same as 128x32 display. */
 
     uint8_t *p = (uint8_t *)buffer;
-    int i;
 
     /* Disable I2C (currently in Standard Mode). */
     i2c->cr1 = 0;
@@ -568,10 +586,11 @@ static void oled_init(void)
     i2c->cr2 |= I2C_CR2_ITERREN;
 
     /* Initialisation sequence for SSD1306. */
-    for (i = 0; i < sizeof(init_cmds); i++) {
-        *p++ = 0x80; /* Co=1, Command */
-        *p++ = init_cmds[i];
-    }
+    p += oled_queue_cmds(p, init_cmds, sizeof(init_cmds));
+
+    /* Display is right-way-up, or rotated. */
+    cmds = (ff_cfg.display_type & DISPLAY_rotate) ? rot_cmds : norot_cmds;
+    p += oled_queue_cmds(p, cmds, sizeof(rot_cmds));
 
     /* Start off the I2C transaction. */
     p += oled_start_i2c(p);

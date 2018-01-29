@@ -16,6 +16,9 @@ void display_init(void)
     char name[20];
     int probe_ms = ff_cfg.display_probe_ms;
 
+    display_mode = DM_NONE;
+    snprintf(name, sizeof(name), "None");
+
     for (;;) {
 
         stk_time_t t = stk_now();
@@ -26,12 +29,17 @@ void display_init(void)
             break; /* positive identification */
         }
 
-        led_7seg_init();
-        display_mode = DM_LED_7SEG;
-        snprintf(name, sizeof(name), "%u-Digit 7-Seg LED",
-                 led_7seg_nr_digits());
-        if ((led_7seg_nr_digits() == 3) || (probe_ms <= 0))
-            break; /* positive identification, or probe timeout */
+        if (ff_cfg.display_type == DISPLAY_auto) {
+            led_7seg_init();
+            display_mode = DM_LED_7SEG;
+            snprintf(name, sizeof(name), "%u-Digit 7-Seg LED",
+                     led_7seg_nr_digits());
+            if (led_7seg_nr_digits() == 3)
+                break; /* positive identification */
+        }
+
+        if (probe_ms <= 0)
+            break; /* probe timeout */
 
         /* Wait 100ms between probes. */
         delay_ms(100);

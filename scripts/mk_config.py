@@ -27,6 +27,8 @@ def main(argv):
                 val = "HOST_" + val
             elif opt == "oled-font":
                 val = "FONT_" + val
+            elif opt == "display-type":
+                val = "DISPLAY_" + val.replace("-","_")
             elif opt == "image-on-startup":
                 val = "IMGS_" + val
             elif opt == "twobutton-action":

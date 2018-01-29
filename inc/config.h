@@ -66,6 +66,16 @@ struct __packed ff_cfg {
 #define HOST_unspecified 0
 #define HOST_akai        1
     uint8_t host;
+    /* Bitfields within display_type field. */
+#define DISPLAY_lcd    (1<<0)
+#define DISPLAY_oled   (1<<1)
+#define DISPLAY_rotate (1<<2)
+    /* User-configurable composite values. */
+#define DISPLAY_auto               0
+#define DISPLAY_lcd_16x02          DISPLAY_lcd
+#define DISPLAY_oled_128x32        DISPLAY_oled
+#define DISPLAY_oled_128x32_rotate (DISPLAY_oled | DISPLAY_rotate)
+    uint8_t display_type;
 };
 
 extern struct ff_cfg ff_cfg;
