@@ -101,7 +101,7 @@ static void dsk_seek_track(
 
     if (cyl >= im->nr_cyls) {
     unformatted:
-        printk("%u %u: Unformatted\n", cyl, side);
+        printk("T%u.%u: Unformatted\n", cyl, side);
         memset(tib, 0, sizeof(*tib));
         im->tracklen_bc = 100160;
         im->dsk.ticks_per_cell = ((sysclk_ms(DRIVE_MS_PER_REV) * 16u)
@@ -135,7 +135,7 @@ static void dsk_seek_track(
     if (strncmp(tib->sig, "Track-Info", 10) || !tib->nr_secs)
         goto unformatted;
 
-    printk("%u %u / %u %u: %u sectors\n", cyl, side, tib->track, tib->side,
+    printk("T%u.%u -> %u.%u: %u sectors\n", cyl, side, tib->track, tib->side,
            tib->nr_secs);
 
     /* Clamp number of sectors. */
