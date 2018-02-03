@@ -76,6 +76,7 @@ struct __packed ff_cfg {
 #define DISPLAY_oled_128x32        DISPLAY_oled
 #define DISPLAY_oled_128x32_rotate (DISPLAY_oled | DISPLAY_rotate)
     uint8_t display_type;
+    bool_t index_during_seek;
 };
 
 extern struct ff_cfg ff_cfg;

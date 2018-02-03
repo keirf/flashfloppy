@@ -769,7 +769,8 @@ static void index_assert(void *dat)
 {
     struct drive *drv = &drive;
     index.prev_time = index.timer.deadline;
-    if (!drv->index_suppressed && !drv->step.state) {
+    if (!drv->index_suppressed
+        && !(drv->step.state && !ff_cfg.index_during_seek)) {
         drive_change_output(drv, outp_index, TRUE);
         timer_set(&index.timer_deassert, stk_add(index.prev_time, stk_ms(2)));
     }

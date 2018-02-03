@@ -407,6 +407,10 @@ static void read_ff_cfg(void)
                 : TRKCHG_instant;
             break;
 
+        case FFCFG_index_during_seek:
+            ff_cfg.index_during_seek = !strcmp(opts.arg, "yes");
+            break;
+
             /* STARTUP / INITIALISATION */
 
         case FFCFG_ejected_on_startup:
