@@ -400,7 +400,6 @@ static void wdata_stop(void)
     pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
     pos %= stk_ms(DRIVE_MS_PER_REV);
     drive.restart_pos = pos;
-    printk("Write end %u us\n", pos / STK_MHZ);
 }
 
 static void wdata_start(void)
@@ -490,7 +489,6 @@ static void rdata_stop(void)
         pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
         pos %= stk_ms(DRIVE_MS_PER_REV);
         drive.restart_pos = pos;
-        printk("Read end %u us\n", pos / STK_MHZ);
         drive.index_suppressed = TRUE;
     }
 }
