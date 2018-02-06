@@ -149,25 +149,29 @@ static uint16_t da_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     return mfm_rdata_flux(im, tbuf, nr, TICKS_PER_CELL);
 }
 
-static void da_write_track(struct image *im, bool_t flush)
+static bool_t da_write_track(struct image *im)
 {
     const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
     const unsigned int sec_sz = 512;
 
+    bool_t flush;
+    struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_mfm;
     uint16_t *buf = wr->p;
     unsigned int buflen = wr->len / 2;
     uint8_t *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    uint32_t base = im->write_start / (sysclk_us(2) * 16);
+    uint32_t base = write->start / (sysclk_us(2) * 16);
     unsigned int sect, i;
     stk_time_t t;
     uint16_t crc;
     uint8_t x;
 
-    /* Round up the producer index if we are processing final data. */
-    if (flush && (wr->prod & 15))
-        p++;
+    /* If we are processing final data then use the end index, rounded up. */
+    barrier();
+    flush = (im->wr_cons != im->wr_mfm);
+    if (flush)
+        p = (write->mfm_end + 15) / 16;
 
     while ((p - c) >= (3 + sec_sz + 2)) {
 
@@ -230,6 +234,8 @@ static void da_write_track(struct image *im, bool_t flush)
     }
 
     wr->cons = c * 16;
+
+    return flush;
 }
 
 const struct image_handler da_image_handler = {

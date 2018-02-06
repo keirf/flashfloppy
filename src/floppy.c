@@ -59,6 +59,7 @@ static struct dma_ring *dma_wr; /* WDATA DMA buffer */
 static struct drive {
     const struct slot *slot;
     uint8_t cyl, head, nr_sides;
+    bool_t writing;
     bool_t sel;
     bool_t index_suppressed; /* disable IDX while writing to USB stick */
 #define outp_dskchg 0
@@ -395,6 +396,7 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
 /* Called from IRQ context to stop the write stream. */
 static void wdata_stop(void)
 {
+    struct write *write;
     uint8_t prev_state = dma_wr->state;
     uint32_t pos;
 
@@ -420,10 +422,16 @@ static void wdata_stop(void)
     pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
     pos %= stk_ms(DRIVE_MS_PER_REV);
     drive.restart_pos = pos;
+
+    /* Remember where this write's DMA stream ended. */
+    write = get_write(image, image->wr_prod);
+    write->dma_end = ARRAY_SIZE(dma_wr->buf) - dma_wdata.cndtr;
+    image->wr_prod++;
 }
 
 static void wdata_start(void)
 {
+    struct write *write;
     uint32_t start_pos;
 
     switch (dma_wr->state) {
@@ -433,10 +441,12 @@ static void wdata_start(void)
         printk("*** WGATE glitch\n");
         return;
     case DMA_stopping:
-        /* We are still processing the previous write and so we lose this new 
-         * write. Complain to the log. */
-        printk("*** Missed write\n");
-        return;
+        if ((image->wr_prod - image->wr_cons) >= ARRAY_SIZE(image->write)) {
+            /* The write pipeline is full. Complain to the log. */
+            printk("*** Missed write\n");
+            return;
+        }
+        break;
     case DMA_inactive:
         /* The write path is quiescent and ready to process this new write. */
         break;
@@ -454,10 +464,8 @@ static void wdata_start(void)
     start_pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
     start_pos %= stk_ms(DRIVE_MS_PER_REV);
     start_pos *= SYSCLK_MHZ / STK_MHZ;
-    image->write_start = start_pos;
-    image->write_mfm_window = 0;
-    printk("Write start %u us\n", start_pos / SYSCLK_MHZ);
-    delay_us(100); /* XXX X-Copy workaround -- fix me properly!!!! */
+    write = get_write(image, image->wr_prod);
+    write->start = start_pos;
 
     /* Allow IDX pulses while handling a write. */
     drive.index_suppressed = FALSE;
@@ -679,6 +687,64 @@ static bool_t dma_rd_handle(struct drive *drv)
     return FALSE;
 }
 
+static bool_t dma_wr_handle(struct drive *drv)
+{
+    struct image *im = drv->image;
+    struct write *write;
+    bool_t completed;
+
+    ASSERT((dma_wr->state == DMA_starting) || (dma_wr->state == DMA_stopping));
+
+    /* Start a write. */
+    if (!drv->writing) {
+
+        /* Bail out of read mode. */
+        if (dma_rd->state != DMA_inactive) {
+            ASSERT(dma_rd->state == DMA_stopping);
+            if (dma_rd_handle(drv))
+                return TRUE;
+            ASSERT(dma_rd->state == DMA_inactive);
+        }
+    
+        /* Make sure we're on the correct track. */
+        if (image_seek_track(im, drive_calc_track(drv), NULL))
+            return TRUE;
+
+        drv->writing = TRUE;
+
+    }
+
+    /* Continue a write. */
+    completed = image_write_track(im);
+
+    /* Is this write now completely processed? */
+    if (completed) {
+
+        /* Clear the staging buffer. */
+        im->bufs.write_data.cons = 0;
+        im->bufs.write_data.prod = 0;
+
+        /* Align the MFM consumer index for start of next write. */
+        write = get_write(im, im->wr_cons);
+        im->bufs.write_mfm.cons = (write->mfm_end + 31) & ~31;
+
+        /* Sync back to mass storage. */
+        F_sync(&im->fp);
+
+        /* Consume the write from the pipeline buffer. If the buffer is 
+         * empty then return to read operation. */
+        IRQ_global_disable();
+        if ((++im->wr_cons == im->wr_prod) && (dma_wr->state != DMA_starting))
+            dma_wr->state = DMA_inactive;
+        IRQ_global_enable();
+
+        /* This particular write is completed. */
+        drv->writing = FALSE;
+    }
+
+    return FALSE;
+}
+
 void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 {
     if (unit == 0) {
@@ -714,54 +780,8 @@ bool_t floppy_handle(void)
         }
     }
 
-    switch (dma_wr->state) {
-
-    case DMA_inactive:
-        if (dma_rd_handle(drv))
-            return TRUE;
-        break;
-
-    case DMA_starting: {
-        /* Bail out of read mode. */
-        if (dma_rd->state != DMA_inactive) {
-            ASSERT(dma_rd->state == DMA_stopping);
-            if (dma_rd_handle(drv))
-                return TRUE;
-            ASSERT(dma_rd->state == DMA_inactive);
-        }
-        /* Make sure we're on the correct track. */
-        if (image_seek_track(drv->image, drive_calc_track(drv), NULL))
-            return TRUE;
-        /* May race wdata_stop(). */
-        cmpxchg(&dma_wr->state, DMA_starting, DMA_active);
-        break;
-    }
-
-    case DMA_active:
-        image_write_track(drv->image, FALSE);
-        break;
-
-    case DMA_stopping: {
-        /* Wait for the flux ring to drain out into the MFM buffer. 
-         * Write data to mass storage meanwhile. */
-        uint16_t prod = ARRAY_SIZE(dma_wr->buf) - dma_wdata.cndtr;
-        uint16_t cons = dma_wr->cons;
-        barrier(); /* take dma indexes /then/ process data tail */
-        image_write_track(drv->image, cons == prod);
-        if (cons != prod)
-            break;
-        /* Clear the flux ring, flush dirty buffers. */
-        dma_wr->prev_sample = 0;
-        image->bufs.write_mfm.cons = image->bufs.write_data.cons = 0;
-        image->bufs.write_mfm.prod = image->bufs.write_data.prod = 0;
-        F_sync(&drv->image->fp);
-        barrier(); /* allow reactivation of write path /last/ */
-        dma_wr->state = DMA_inactive;
-        break;
-    }
-    }
-
-    return FALSE;
+    return ((dma_wr->state == DMA_inactive)
+            ? dma_rd_handle : dma_wr_handle)(drv);
 }
 
 static void index_assert(void *dat)
@@ -908,6 +928,7 @@ static void IRQ_wdata_dma(void)
     uint32_t mfm = 0, mfmprod, syncword = image->handler->syncword;
     uint32_t *mfmbuf = image->bufs.write_mfm.p;
     unsigned int mfmbuflen = image->bufs.write_mfm.len / 4;
+    struct write *write = NULL;
 
     window = cell + (cell >> 1);
 
@@ -920,6 +941,13 @@ static void IRQ_wdata_dma(void)
 
     /* Find out where the DMA engine's producer index has got to. */
     prod = ARRAY_SIZE(dma_wr->buf) - dma_wdata.cndtr;
+
+    /* Check if we are processing the tail end of a write. */
+    barrier(); /* interrogate peripheral /then/ check for write-end. */
+    if (image->wr_mfm != image->wr_prod) {
+        write = get_write(image, image->wr_mfm);
+        prod = write->dma_end;
+    }
 
     /* Process the flux timings into the MFM raw buffer. */
     prev = dma_wr->prev_sample;
@@ -942,6 +970,16 @@ static void IRQ_wdata_dma(void)
             mfmprod &= ~31;
         if (!(mfmprod&31))
             mfmbuf[((mfmprod-1) / 32) % mfmbuflen] = htobe32(mfm);
+    }
+
+    /* Processing the tail end of a write? */
+    if (write != NULL) {
+        /* Remember where this write's MFM ends. */
+        write->mfm_end = mfmprod;
+        image->wr_mfm++;
+        /* Initialise decoder state for the start of the next write. */
+        mfmprod = (mfmprod + 31) & ~31;
+        mfm = prev = 0;
     }
 
     /* Save our progress for next time. */

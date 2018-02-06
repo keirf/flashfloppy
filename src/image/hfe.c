@@ -248,13 +248,15 @@ out:
     return nr - todo;
 }
 
-static void hfe_write_track(struct image *im, bool_t flush)
+static bool_t hfe_write_track(struct image *im)
 {
+    bool_t flush;
+    struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_mfm;
     uint8_t *buf = wr->p;
     unsigned int buflen = wr->len;
     uint8_t *w, *wrbuf = im->bufs.write_data.p;
-    uint32_t base = (im->write_start*(16/8)) / im->hfe.ticks_per_cell;
+    uint32_t base = (write->start*(16/8)) / im->hfe.ticks_per_cell;
     uint32_t i, c = wr->cons / 8, p = wr->prod / 8;
     stk_time_t t;
 
@@ -263,9 +265,12 @@ static void hfe_write_track(struct image *im, bool_t flush)
      * suffer 30ms+ of latency as the track buffer is written out. */
     const bool_t write_whole_track = 0;
 
-    /* Round-to-nearest the producer index if we are processing final data. */
-    if (flush && (wr->prod & 4))
-        p++;
+    /* If we are processing final data then use the end index, rounded to
+     * nearest. */
+    barrier();
+    flush = (im->wr_cons != im->wr_mfm);
+    if (flush)
+        p = (write->mfm_end + 4) / 8;
 
     if (!im->bufs.write_data.prod) {
         /* How many bytes is the full track data? */
@@ -346,6 +351,8 @@ static void hfe_write_track(struct image *im, bool_t flush)
         F_write(&im->fp, wrbuf, im->bufs.write_data.prod, NULL);
         printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
     }
+
+    return flush;
 }
 
 const struct image_handler hfe_image_handler = {

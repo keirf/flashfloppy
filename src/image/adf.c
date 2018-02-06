@@ -196,8 +196,10 @@ static uint16_t adf_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     return mfm_rdata_flux(im, tbuf, nr, TICKS_PER_CELL);
 }
 
-static void adf_write_track(struct image *im, bool_t flush)
+static bool_t adf_write_track(struct image *im)
 {
+    bool_t flush;
+    struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_mfm;
     uint32_t *buf = wr->p;
     unsigned int buflen = wr->len / 4;
@@ -207,9 +209,11 @@ static void adf_write_track(struct image *im, bool_t flush)
     unsigned int i, sect;
     stk_time_t t;
 
-    /* Round up the producer index if we are processing final data. */
-    if (flush && (wr->prod & 31))
-        p++;
+    /* If we are processing final data then use the end index, rounded up. */
+    barrier();
+    flush = (im->wr_cons != im->wr_mfm);
+    if (flush)
+        p = (write->mfm_end + 31) / 32;
 
     while ((p - c) >= (542/2)) {
 
@@ -272,6 +276,8 @@ static void adf_write_track(struct image *im, bool_t flush)
     }
 
     wr->cons = c * 32;
+
+    return flush;
 }
 
 const struct image_handler adf_image_handler = {

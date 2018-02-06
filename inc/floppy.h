@@ -91,6 +91,13 @@ struct image {
     /* Data buffers. */
     struct image_bufs bufs;
 
+    struct write {
+        uint32_t start; /* Ticks past index when current write started */
+        uint32_t mfm_end; /* Final MFM buffer index */
+        uint16_t dma_end; /* Final DMA buffer index */
+    } write[8];
+    uint16_t wr_cons, wr_mfm, wr_prod;
+
     /* Info about current track. */
     uint16_t cur_track;
     uint16_t write_bc_ticks; /* Nr systicks per bitcell in write stream */
@@ -98,7 +105,6 @@ struct image {
     uint32_t tracklen_ticks; /* Timing of previous revolution, in 'ticks' */
     uint32_t cur_ticks; /* Offset from index, in 'ticks' */
     uint32_t ticks_since_flux; /* Ticks since last flux sample/reversal */
-    uint32_t write_start; /* Ticks past index when current write started */
     uint32_t write_mfm_window; /* Sliding window at head of MFM write stream */
 
     struct directaccess da;
@@ -111,13 +117,18 @@ struct image {
     };
 };
 
+static inline struct write *get_write(struct image *im, uint16_t idx)
+{
+    return &im->write[idx & (ARRAY_SIZE(im->write) - 1)];
+}
+
 struct image_handler {
     bool_t (*open)(struct image *im);
     void (*seek_track)(
         struct image *im, uint16_t track, stk_time_t *start_pos);
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
-    void (*write_track)(struct image *im, bool_t flush);
+    bool_t (*write_track)(struct image *im);
     uint32_t syncword;
 };
 
@@ -145,9 +156,9 @@ uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
 uint16_t mfm_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr,
                         uint32_t ticks_per_cell);
 
-/* Write track data from memory to mass storage. If flush is TRUE then all 
- * remaining data must be written to mass storage. */
-void image_write_track(struct image *im, bool_t flush);
+/* Write track data from memory to mass storage. Returns TRUE if processing
+ * was completed for the write at the tail of the pipeline. */
+bool_t image_write_track(struct image *im);
 
 /* Rotational position of last-generated flux (SYSCLK ticks past index). */
 uint32_t image_ticks_since_index(struct image *im);

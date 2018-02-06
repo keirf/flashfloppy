@@ -350,25 +350,33 @@ static uint16_t dsk_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     return mfm_rdata_flux(im, tbuf, nr, im->dsk.ticks_per_cell);
 }
 
-static void dsk_write_track(struct image *im, bool_t flush)
+static bool_t dsk_write_track(struct image *im)
 {
     const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
 
+    bool_t flush;
+    struct write *write = get_write(im, im->wr_cons);
     struct tib *tib = tib_p(im);
     struct image_buf *wr = &im->bufs.write_mfm;
     uint16_t *buf = wr->p;
     unsigned int buflen = wr->len / 2;
     uint8_t *wrbuf = (uint8_t *)im->bufs.write_data.p + 512; /* skip DIB/TIB */
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    int32_t base = im->write_start / (im->write_bc_ticks * 16);
+    int32_t base = write->start / (im->write_bc_ticks * 16);
     unsigned int i;
     stk_time_t t;
     uint16_t crc, sec_sz, off;
     uint8_t x;
 
+    /* If we are processing final data then use the end index, rounded up. */
+    barrier();
+    flush = (im->wr_cons != im->wr_mfm);
+    if (flush)
+        p = (write->mfm_end + 15) / 16;
+
     if (tib->nr_secs == 0) {
         /* Unformatted. */
-        return;
+        goto out;
     }
 
     if (im->dsk.write_sector == -1) {
@@ -388,10 +396,6 @@ static void dsk_write_track(struct image *im, bool_t flush)
             im->dsk.write_sector = -2;
         }
     }
-
-    /* Round up the producer index if we are processing final data. */
-    if (flush && (wr->prod & 15))
-        p++;
 
     for (;;) {
 
@@ -469,8 +473,10 @@ static void dsk_write_track(struct image *im, bool_t flush)
 
     wr->cons = c * 16;
 
+out:
     if (flush)
         im->dsk.write_sector = -1;
+    return flush;
 }
 
 const struct image_handler dsk_image_handler = {

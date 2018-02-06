@@ -317,20 +317,28 @@ static uint16_t img_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     return mfm_rdata_flux(im, tbuf, nr, im->img.ticks_per_cell);
 }
 
-static void img_write_track(struct image *im, bool_t flush)
+static bool_t img_write_track(struct image *im)
 {
     const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
 
+    bool_t flush;
+    struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_mfm;
     uint16_t *buf = wr->p;
     unsigned int buflen = wr->len / 2;
     uint8_t *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    uint32_t base = im->write_start / (im->write_bc_ticks * 16);
+    uint32_t base = write->start / (im->write_bc_ticks * 16);
     unsigned int i;
     stk_time_t t;
     uint16_t crc;
     uint8_t x;
+
+    /* If we are processing final data then use the end index, rounded up. */
+    barrier();
+    flush = (im->wr_cons != im->wr_mfm);
+    if (flush)
+        p = (write->mfm_end + 15) / 16;
 
     if (im->img.write_sector == -1) {
         /* Convert write offset to sector number (in rotational order). */
@@ -348,10 +356,6 @@ static void img_write_track(struct image *im, bool_t flush)
             im->img.write_sector -= im->img.sec_base;
         }
     }
-
-    /* Round up the producer index if we are processing final data. */
-    if (flush && (wr->prod & 15))
-        p++;
 
     while ((p - c) >= (3 + sec_sz(im) + 2)) {
 
@@ -419,6 +423,7 @@ static void img_write_track(struct image *im, bool_t flush)
 
     if (flush)
         im->img.write_sector = -1;
+    return flush;
 }
 
 const struct image_handler img_image_handler = {
