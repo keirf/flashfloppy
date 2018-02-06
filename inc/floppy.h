@@ -19,7 +19,7 @@
 struct adf_image {
     uint32_t trk_off;
     uint16_t trk_pos, trk_len;
-    uint32_t mfm[16], mfm_cons;
+    int32_t decode_pos;
 };
 
 struct hfe_image {
