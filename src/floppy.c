@@ -164,6 +164,8 @@ void floppy_cancel(void)
     timer_cancel(&index.timer_deassert);
     rdata_stop();
     wdata_stop();
+    dma_rdata.ccr = 0;
+    dma_wdata.ccr = 0;
 
     /* Clear soft state. */
     drive.index_suppressed = FALSE;
@@ -349,6 +351,15 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
     dma_rdata.cpar = (uint32_t)(unsigned long)&tim_rdata->arr;
     dma_rdata.cmar = (uint32_t)(unsigned long)dma_rd->buf;
     dma_rdata.cndtr = ARRAY_SIZE(dma_rd->buf);
+    dma_rdata.ccr = (DMA_CCR_PL_HIGH |
+                     DMA_CCR_MSIZE_16BIT |
+                     DMA_CCR_PSIZE_16BIT |
+                     DMA_CCR_MINC |
+                     DMA_CCR_CIRC |
+                     DMA_CCR_DIR_M2P |
+                     DMA_CCR_HTIE |
+                     DMA_CCR_TCIE |
+                     DMA_CCR_EN);
 
     /* WDATA Timer setup: 
      * The counter runs from 0x0000-0xFFFF inclusive at full SYSCLK rate.
@@ -366,6 +377,16 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
     /* DMA setup: From the WDATA Timer's CCRx into a circular buffer. */
     dma_wdata.cpar = (uint32_t)(unsigned long)&tim_wdata->ccr1;
     dma_wdata.cmar = (uint32_t)(unsigned long)dma_wr->buf;
+    dma_wdata.cndtr = ARRAY_SIZE(dma_wr->buf);
+    dma_wdata.ccr = (DMA_CCR_PL_HIGH |
+                     DMA_CCR_MSIZE_16BIT |
+                     DMA_CCR_PSIZE_16BIT |
+                     DMA_CCR_MINC |
+                     DMA_CCR_CIRC |
+                     DMA_CCR_DIR_P2M |
+                     DMA_CCR_HTIE |
+                     DMA_CCR_TCIE |
+                     DMA_CCR_EN);
 
     /* Drive is 'ready'. */
     drive_change_output(drv, outp_rdy, TRUE);
@@ -384,10 +405,9 @@ static void wdata_stop(void)
     /* Ok we're now stopping DMA activity. */
     dma_wr->state = DMA_stopping;
 
-    /* Turn off timer and DMA. */
+    /* Turn off timer. */
     tim_wdata->ccer = 0;
     tim_wdata->cr1 = 0;
-    dma_wdata.ccr = 0;
 
     /* Drain out the DMA buffer. */
     IRQx_set_pending(dma_wdata_irq);
@@ -423,18 +443,6 @@ static void wdata_start(void)
     }
 
     dma_wr->state = DMA_starting;
-
-    /* Start DMA to circular buffer. */
-    dma_wdata.cndtr = ARRAY_SIZE(dma_wr->buf);
-    dma_wdata.ccr = (DMA_CCR_PL_HIGH |
-                     DMA_CCR_MSIZE_16BIT |
-                     DMA_CCR_PSIZE_16BIT |
-                     DMA_CCR_MINC |
-                     DMA_CCR_CIRC |
-                     DMA_CCR_DIR_P2M |
-                     DMA_CCR_HTIE |
-                     DMA_CCR_TCIE |
-                     DMA_CCR_EN);
 
     /* Start timer. */
     tim_wdata->ccer = TIM_CCER_CC1E | TIM_CCER_CC1P;
@@ -478,10 +486,8 @@ static void rdata_stop(void)
     /* Turn off the output pin */
     gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
-    /* Turn off timer and DMA. */
+    /* Turn off timer. */
     tim_rdata->cr1 = 0;
-    dma_rdata.ccr = 0;
-    dma_rdata.cndtr = ARRAY_SIZE(dma_rd->buf);
 
     if ((ff_cfg.track_change == TRKCHG_instant) && !drive.index_suppressed) {
         /* Find rotational end position of the read. We will restart the read
@@ -504,17 +510,6 @@ static void rdata_start(void)
 
     dma_rd->state = DMA_active;
 
-    /* Start DMA from circular buffer. */
-    dma_rdata.ccr = (DMA_CCR_PL_HIGH |
-                     DMA_CCR_MSIZE_16BIT |
-                     DMA_CCR_PSIZE_16BIT |
-                     DMA_CCR_MINC |
-                     DMA_CCR_CIRC |
-                     DMA_CCR_DIR_M2P |
-                     DMA_CCR_HTIE |
-                     DMA_CCR_TCIE |
-                     DMA_CCR_EN);
-
     /* Start timer. */
     tim_rdata->egr = TIM_EGR_UG;
     tim_rdata->sr = 0; /* dummy write, gives h/w time to process EGR.UG=1 */
@@ -533,16 +528,22 @@ out:
 
 static void floppy_sync_flux(void)
 {
+    const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
     struct drive *drv = &drive;
+    uint16_t nr_to_wrap, nr_to_cons, nr;
     int32_t ticks;
-    uint32_t nr;
 
-    nr = ARRAY_SIZE(dma_rd->buf) - dma_rd->prod - 1;
-    if (nr)
+    nr_to_wrap = ARRAY_SIZE(dma_rd->buf) - dma_rd->prod;
+    nr_to_cons = (dma_rd->cons - dma_rd->prod - 1) & buf_mask;
+    nr = min(nr_to_wrap, nr_to_cons);
+    if (nr) {
         dma_rd->prod += image_rdata_flux(
             drv->image, &dma_rd->buf[dma_rd->prod], nr);
+        dma_rd->prod &= buf_mask;
+    }
 
-    if (dma_rd->prod < ARRAY_SIZE(dma_rd->buf) - 1)
+    nr = (dma_rd->prod - dma_rd->cons) & buf_mask;
+    if (nr < buf_mask)
         return;
 
     if (!drv->index_suppressed) {
@@ -666,7 +667,8 @@ static bool_t dma_rd_handle(struct drive *drv)
     case DMA_stopping:
         dma_rd->state = DMA_inactive;
         /* Reinitialise the circular buffer to empty. */
-        dma_rd->cons = dma_rd->prod = 0;
+        dma_rd->cons = dma_rd->prod =
+            ARRAY_SIZE(dma_rd->buf) - dma_rdata.cndtr;
         /* Free-running index timer. */
         timer_cancel(&index.timer);
         timer_set(&index.timer, stk_add(index.prev_time,
@@ -749,7 +751,6 @@ bool_t floppy_handle(void)
         if (cons != prod)
             break;
         /* Clear the flux ring, flush dirty buffers. */
-        dma_wr->cons = 0;
         dma_wr->prev_sample = 0;
         image->bufs.write_mfm.cons = image->bufs.write_data.cons = 0;
         image->bufs.write_mfm.prod = image->bufs.write_data.prod = 0;
