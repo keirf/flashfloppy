@@ -3,6 +3,16 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.8a - 8 February 2018
+ - Pipelined writes
+   - New writes are buffered while older ones are written to the USB drive
+   - More reliable write/format/disk-copy operation with slower USB drives
+ - FF.CFG: Allow OLED display to be rotated 180 degrees (upside down)
+   - display-type = oled-128x32-rotate
+ - FF.CFG: Support BBC Micro with 8271 controller
+   - Index pulses must continue during seek (index-during-seek = yes)
+   - Index pulses must not be delayed by seek (track-change = realtime)
+
 ** v0.9.7a - 29 January 2018
  - Performance & reliability improvements (eg. Github issues #35, #44):
    - Sync data read after writes, prevents host missing next sector
