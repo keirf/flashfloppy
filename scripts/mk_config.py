@@ -31,6 +31,8 @@ def main(argv):
                 val = "DISPLAY_" + val.replace("-","_")
             elif opt == "image-on-startup":
                 val = "IMGS_" + val
+            elif opt == "rotary":
+                val = "ROT_" + val
             elif opt == "twobutton-action":
                 val = "TWOBUTTON_" + val
             elif opt == "nav-mode":
