@@ -9,7 +9,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - IMG/IMA (IBM MFM Raw Sector)
   - ST (Atari ST)
 - Pre-configured track layouts for Raw Sector Images:
-  - Akai synths (eg. Akai S01)
+  - Akai synths (eg. S01, S20, S950)
   - IBM PC and many others
 - No configuration required! Just dump images into the root
   of an empty USB stick.
