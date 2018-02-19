@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.9a - 19 February 2018
+ - Fix write problems present in v0.9.8a (issue #53)
+ - Support rotary encoders with proper Gray code output
+   - FF.CFG: rotary = none | simple | gray
+
 ** v0.9.8a - 8 February 2018
  - Pipelined writes
    - New writes are buffered while older ones are written to the USB drive
