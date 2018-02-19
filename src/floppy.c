@@ -972,6 +972,9 @@ static void IRQ_wdata_dma(void)
             mfmbuf[((mfmprod-1) / 32) % mfmbuflen] = htobe32(mfm);
     }
 
+    if (mfmprod & 31)
+        mfmbuf[(mfmprod / 32) % mfmbuflen] = htobe32(mfm << (-mfmprod&31));
+
     /* Processing the tail end of a write? */
     if (write != NULL) {
         /* Remember where this write's MFM ends. */
@@ -983,8 +986,6 @@ static void IRQ_wdata_dma(void)
     }
 
     /* Save our progress for next time. */
-    if (mfmprod & 31)
-        mfmbuf[(mfmprod / 32) % mfmbuflen] = htobe32(mfm << (-mfmprod&31));
     image->write_mfm_window = mfm;
     image->bufs.write_mfm.prod = mfmprod;
     dma_wr->cons = cons;
