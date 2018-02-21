@@ -421,27 +421,28 @@ fail:
     return FALSE;
 }
 
-#ifdef font_7x16
+#ifdef font_extra
 
-extern const uint8_t oled_font_7x16[];
-static void oled_convert_text_row_7x16(char *pc)
+extern const uint8_t oled_font_6x13[];
+static void oled_convert_text_row_6x13(char *pc)
 {
     unsigned int i, c;
     const uint8_t *p;
     uint8_t *q = (uint8_t *)buffer;
+    const unsigned int w = 6;
 
     for (i = 0; i < 16; i++) {
         if ((c = *pc++ - 0x20) > 0x5e)
             c = '.' - 0x20;
-        p = &oled_font_7x16[c * 14];
-        memcpy(q, p, 7);
-        memcpy(q+128, p+7, 7);
-        q += 7;
+        p = &oled_font_6x13[c * w * 2];
+        memcpy(q, p, w);
+        memcpy(q+128, p+w, w);
+        q += w;
     }
 
     /* Fill remainder of buffer[] with zeroes. */
-    memset(q, 0, 16);
-    memset(q+128, 0, 16);
+    memset(q, 0, 128-16*w);
+    memset(q+128, 0, 128-16*w);
 }
 
 #endif
@@ -466,9 +467,9 @@ static void oled_convert_text_row_8x16(char *pc)
 
 static void oled_convert_text_row(char *pc)
 {
-#ifdef font_7x16
-    if (ff_cfg.oled_font == FONT_7x16)
-        oled_convert_text_row_7x16(pc);
+#ifdef font_extra
+    if (ff_cfg.oled_font == FONT_6x13)
+        oled_convert_text_row_6x13(pc);
     else
 #endif
         oled_convert_text_row_8x16(pc);

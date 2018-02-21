@@ -494,8 +494,9 @@ static void read_ff_cfg(void)
             break;
 
         case FFCFG_oled_font:
-            ff_cfg.oled_font = !strcmp(opts.arg, "7x16")
-                ? FONT_7x16 : FONT_8x16;
+            ff_cfg.oled_font =
+                !strcmp(opts.arg, "6x13") ? FONT_6x13
+                : FONT_8x16;
             break;
 
         case FFCFG_display_type:

@@ -41,7 +41,7 @@ struct __packed ff_cfg {
     uint8_t display_off_secs;
     bool_t display_on_activity; /* Display on when there is drive activity? */
     uint16_t display_scroll_rate;
-#define FONT_7x16 7
+#define FONT_6x13 7
 #define FONT_8x16 8
     uint8_t oled_font; /* FONT_* oled font specifier */
     uint8_t step_volume;
