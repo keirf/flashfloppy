@@ -3,6 +3,16 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.10a - 22 February 2018
+ - New default OLED font 6x13 displays more text per line
+   - 7x16 font removed
+   - 8x16 font MAY be removed, let me know if you use it!!
+ - Narrow OLED view (default Gotek display cutout) supported
+   - FF.CFG: display-type = oled-128x32-narrow
+ - All images can be write-protected by default
+   - FF.CFG: write-protect = yes
+ - Write-protect switchable by holding eject for 2 seconds
+
 ** v0.9.9a - 19 February 2018
  - Fix write problems present in v0.9.8a (issue #53)
  - Support rotary encoders with proper Gray code output
