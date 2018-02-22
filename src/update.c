@@ -319,7 +319,7 @@ int main(void)
     wait_buttons(HIGH);
 
     if (display_mode == DM_LCD_1602)
-        lcd_write(0, 1, 16, "     [   ]");
+        lcd_write(0, 1, -1, "     [   ]");
 
     /* Wait for a filesystem. */
     msg_display("USB");

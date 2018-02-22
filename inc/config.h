@@ -70,11 +70,13 @@ struct __packed ff_cfg {
 #define DISPLAY_lcd    (1<<0)
 #define DISPLAY_oled   (1<<1)
 #define DISPLAY_rotate (1<<2)
+#define DISPLAY_narrow (1<<3)
     /* User-configurable composite values. */
 #define DISPLAY_auto               0
 #define DISPLAY_lcd_16x02          DISPLAY_lcd
 #define DISPLAY_oled_128x32        DISPLAY_oled
 #define DISPLAY_oled_128x32_rotate (DISPLAY_oled | DISPLAY_rotate)
+#define DISPLAY_oled_128x32_narrow (DISPLAY_oled | DISPLAY_narrow)
     uint8_t display_type;
     bool_t index_during_seek;
 #define ROT_none   0

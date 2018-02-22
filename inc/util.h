@@ -155,6 +155,7 @@ void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
+extern uint8_t lcd_columns, lcd_rows;
 
 /* Gotek: USB stack processing */
 void usbh_msc_init(void);

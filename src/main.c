@@ -82,14 +82,14 @@ static bool_t slot_type(const char *str)
 /* Write slot info to display. */
 static void display_write_slot(void)
 {
-    char msg[17], *type;
+    char msg[25], *type;
     if (display_mode != DM_LCD_1602) {
         if (display_mode == DM_LED_7SEG)
             led_7seg_write_decimal(cfg.slot_nr);
         return;
     }
     snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
-    lcd_write(0, 0, 16, msg);
+    lcd_write(0, 0, -1, msg);
     type = (cfg.slot.attributes & AM_DIR) ? "DIR"
         : slot_type("adf") ? "ADF"
         : slot_type("dsk") ? "DSK"
@@ -107,7 +107,7 @@ static void display_write_slot(void)
         snprintf(msg, sizeof(msg), "%03u/%03u %s D:%u",
                  cfg.slot_nr, cfg.max_slot_nr, type, cfg.depth);
     }
-    lcd_write(0, 1, 16, msg);
+    lcd_write(0, 1, -1, msg);
     lcd_on();
 }
 
@@ -133,18 +133,18 @@ static void lcd_write_track_info(bool_t force)
     }
 }
 
-/* Scroll long filename within 16-character window. */
+/* Scroll long filename. */
 static uint8_t lcd_scroll_off, lcd_scroll_end;
 static int32_t lcd_scroll_ticks;
 static void lcd_scroll_name(void)
 {
-    char msg[17];
+    char msg[25];
     if (lcd_scroll_ticks > 0)
         return;
     if (++lcd_scroll_off > lcd_scroll_end)
         lcd_scroll_off = 0;
     snprintf(msg, sizeof(msg), "%s", cfg.slot.name + lcd_scroll_off);
-    lcd_write(0, 0, 16, msg);
+    lcd_write(0, 0, -1, msg);
     lcd_scroll_ticks =
         ((lcd_scroll_off == 0)
          || (lcd_scroll_off == lcd_scroll_end))
@@ -499,13 +499,28 @@ static void read_ff_cfg(void)
                 : FONT_8x16;
             break;
 
-        case FFCFG_display_type:
-            ff_cfg.display_type =
-                !strcmp(opts.arg, "lcd-16x02") ? DISPLAY_lcd_16x02
-                : !strcmp(opts.arg, "oled-128x32") ? DISPLAY_oled_128x32
-                : !strcmp(opts.arg, "oled-128x32-rotate") ? DISPLAY_oled_128x32_rotate
-                : DISPLAY_auto;
+        case FFCFG_display_type: {
+            char *p, *q;
+            ff_cfg.display_type = DISPLAY_auto;
+            for (p = opts.arg; *p != '\0'; p = q) {
+                for (q = p; *q != '-'; q++) {
+                    if (*q == '\0') {
+                        q++; /* double terminate */
+                        break;
+                    }
+                }
+                *q++ = '\0';
+                if (!strcmp(p, "lcd"))
+                    ff_cfg.display_type = DISPLAY_lcd;
+                if (!strcmp(p, "oled"))
+                    ff_cfg.display_type = DISPLAY_oled;
+                if (!strcmp(p, "rotate"))
+                    ff_cfg.display_type |= DISPLAY_rotate;
+                if (!strcmp(p, "narrow"))
+                    ff_cfg.display_type |= DISPLAY_narrow;
+            }
             break;
+        }
 
             /* MISCELLANEOUS */
 
@@ -534,19 +549,24 @@ static void read_ff_cfg(void)
     flash_ff_cfg_update();
 }
 
-static void process_ff_cfg_opts(void)
+static void process_ff_cfg_opts(const struct ff_cfg *old)
 {
     /* interface: Inform the floppy subsystem. */
-    if (ff_cfg.interface != FINTF_JC)
-        floppy_set_fintf_mode(ff_cfg.interface);
+    floppy_set_fintf_mode(ff_cfg.interface);
 
     /* ejected-on-startup: Set the ejected state appropriately. */
     if (ff_cfg.ejected_on_startup)
         cfg.ejected = TRUE;
+
+    /* oled-font, display-type: Reinitialise the display subsystem. */
+    if ((ff_cfg.oled_font != old->oled_font)
+        || (ff_cfg.display_type != old->display_type))
+        system_reset(); /* hit it with a hammer */
 }
 
 static void cfg_init(void)
 {
+    struct ff_cfg old_ff_cfg = ff_cfg;
     struct hxcsdfe_cfg hxc_cfg;
     unsigned int sofar;
     char *p;
@@ -562,7 +582,7 @@ static void cfg_init(void)
     cfg.cfg_cdir = fatfs.cdir;
 
     read_ff_cfg();
-    process_ff_cfg_opts();
+    process_ff_cfg_opts(&old_ff_cfg);
 
     switch (ff_cfg.nav_mode) {
     case NAVMODE_native:
@@ -1122,7 +1142,7 @@ static int run_floppy(void *_b)
     lcd_scroll_ticks = stk_ms(LCD_SCROLL_PAUSE_MSEC);
     lcd_scroll_off = 0;
     lcd_scroll_end = max_t(
-        int, strnlen(cfg.slot.name, sizeof(cfg.slot.name)) - 16, 0);
+        int, strnlen(cfg.slot.name, sizeof(cfg.slot.name)) - lcd_columns, 0);
     t_prev = stk_now();
     while (((*pb = buttons) == 0) && !floppy_handle()) {
         t_now = stk_now();
@@ -1242,7 +1262,7 @@ static int floppy_main(void *unused)
                 if (fres)
                     snprintf(msg, sizeof(msg), "*%s*%02u*",
                              (fres >= 30) ? "ERR" : "FAT", fres);
-                lcd_write(8, 1, 8, msg);
+                lcd_write(8, 1, -1, msg);
                 lcd_on();
                 break;
             }
@@ -1440,8 +1460,8 @@ static void handle_errors(FRESULT fres)
         led_7seg_write_string(msg);
         break;
     case DM_LCD_1602:
-        lcd_write(0, 0, 16, "***************");
-        lcd_write(0, 1, 16, msg);
+        lcd_write(0, 0, -1, "***************");
+        lcd_write(0, 1, -1, msg);
         lcd_on();
         break;
     }
@@ -1462,7 +1482,6 @@ static void handle_errors(FRESULT fres)
 int main(void)
 {
     FRESULT fres;
-    uint8_t fintf_mode;
 
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
@@ -1488,14 +1507,7 @@ int main(void)
 
     flash_ff_cfg_read();
 
-    fintf_mode = ff_cfg.interface;
-    if (fintf_mode == FINTF_JC) {
-        /* Jumper JC selects default floppy interface configuration:
-         *   - No Jumper: Shugart
-         *   - Jumpered:  IBM PC */
-        fintf_mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_IBMPC;
-    }
-    floppy_init(fintf_mode);
+    floppy_init(ff_cfg.interface);
 
     display_init();
 
