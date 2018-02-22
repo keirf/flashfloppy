@@ -253,13 +253,17 @@ void lcd_clear(void)
 
 void lcd_write(int col, int row, int min, const char *str)
 {
-    char c, *p = &text[row][col];
+    char c, *p;
     uint32_t oldpri;
 
+    if (row < 0)
+        row += lcd_rows;
     if (col < 0)
         col += lcd_columns;
     if (min < 0)
         min = lcd_columns;
+
+    p = &text[row][col];
 
     /* Prevent the text[] getting rendered while we're updating it. */
     oldpri = IRQ_save(I2C_IRQ_PRI);
