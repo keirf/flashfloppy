@@ -762,11 +762,13 @@ void floppy_set_cyl(uint8_t unit, uint8_t cyl)
     }
 }
 
-void floppy_get_track(uint8_t *p_cyl, uint8_t *p_side, uint8_t *p_sel)
+void floppy_get_track(uint8_t *p_cyl, uint8_t *p_side, uint8_t *p_sel,
+                      uint8_t *p_writing)
 {
     *p_cyl = drive.cyl;
     *p_side = drive.head & (drive.nr_sides - 1);
     *p_sel = drive.sel;
+    *p_writing = (dma_wr && dma_wr->state != DMA_inactive);
 }
 
 bool_t floppy_handle(void)

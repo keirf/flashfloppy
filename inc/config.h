@@ -83,6 +83,7 @@ struct __packed ff_cfg {
 #define ROT_simple 1
 #define ROT_gray   2
     uint8_t rotary;
+    bool_t write_protect;
 };
 
 extern struct ff_cfg ff_cfg;

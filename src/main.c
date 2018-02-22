@@ -79,6 +79,14 @@ static bool_t slot_type(const char *str)
     return !strcmp(cfg.slot.type, str);
 }
 
+#define wp_column ((lcd_columns > 16) ? 8 : 7)
+static void display_wp_status(void)
+{
+    if (display_mode != DM_LCD_1602)
+        return;
+    lcd_write(wp_column, 1, 1, (cfg.slot.attributes & AM_RDO) ? "*" : "");
+}
+
 /* Write slot info to display. */
 static void display_write_slot(void)
 {
@@ -100,36 +108,46 @@ static void display_write_slot(void)
         : slot_type("adl") ? "ADL"
         : slot_type("adm") ? "ADM"
         : "UNK";
+    snprintf(msg, sizeof(msg), "%03u/%03u%*s%s D:%u",
+             cfg.slot_nr, cfg.max_slot_nr,
+             (lcd_columns > 16) ? 3 : 1, "",
+             type, cfg.depth);
     if (cfg.hxc_mode) {
-        snprintf(msg, sizeof(msg), "%03u/%03u %s",
-                 cfg.slot_nr, cfg.max_slot_nr, type);
-    } else {
-        snprintf(msg, sizeof(msg), "%03u/%03u %s D:%u",
-                 cfg.slot_nr, cfg.max_slot_nr, type, cfg.depth);
+        /* HxC mode: Exclude depth from the info message. */
+        char *p = strrchr(msg, 'D');
+        if (p)
+            *p = '\0';
     }
     lcd_write(0, 1, -1, msg);
     lcd_on();
 }
 
 /* Write track number to LCD. */
-static uint8_t lcd_cyl, lcd_side;
 static int32_t lcd_update_ticks;
 static void lcd_write_track_info(bool_t force)
 {
-    uint8_t cyl, side, sel;
+    static uint8_t lcd_cyl, lcd_side, lcd_writing;
+    uint8_t cyl, side, sel, writing;
     char msg[17];
+
     if (display_mode != DM_LCD_1602)
         return;
-    floppy_get_track(&cyl, &side, &sel);
+
+    floppy_get_track(&cyl, &side, &sel, &writing);
     cyl = min_t(uint8_t, cyl, 99);
     side = min_t(uint8_t, side, 1);
-    if (force || (cyl != lcd_cyl) || ((side != lcd_side) && sel)) {
-        snprintf(msg, sizeof(msg), "T:%02u S:%u", cyl, side);
-        lcd_write(8, 1, 0, msg);
+
+    if (force || (cyl != lcd_cyl) || ((side != lcd_side) && sel)
+        || (writing != lcd_writing)) {
+        snprintf(msg, sizeof(msg), "%c T:%02u.%u",
+                 (cfg.slot.attributes & AM_RDO) ? '*' : writing ? 'W' : ' ',
+                 cyl, side);
+        lcd_write(wp_column, 1, -1, msg);
         if (ff_cfg.display_on_activity)
             lcd_on();
         lcd_cyl = cyl;
         lcd_side = side;
+        lcd_writing = writing;
     }
 }
 
@@ -410,6 +428,11 @@ static void read_ff_cfg(void)
                 : HOST_unspecified;
             break;
 
+
+        case FFCFG_write_protect:
+            ff_cfg.write_protect = !strcmp(opts.arg, "yes");
+            break;
+
         case FFCFG_side_select_glitch_filter:
             ff_cfg.side_select_glitch_filter = strtol(opts.arg, NULL, 10);
             break;
@@ -622,6 +645,7 @@ static void cfg_init(void)
     if (fr)
         goto native_mode;
     fatfs_to_short_slot(&cfg.autoboot, &fs->file, "AUTOBOOT.HFE");
+    cfg.autoboot.attributes |= AM_RDO; /* default read-only */
     F_close(&fs->file);
 
     cfg.hxc_mode = TRUE;
@@ -1043,6 +1067,8 @@ static void cfg_update(uint8_t slot_mode)
         hxc_cfg_update(slot_mode);
     else
         native_update(slot_mode);
+    if (!(cfg.slot.attributes & AM_DIR) && ff_cfg.write_protect)
+        cfg.slot.attributes |= AM_RDO;
 }
 
 /* Based on button presses, change which floppy image is selected. */
@@ -1246,7 +1272,7 @@ static int floppy_main(void *unused)
         /* When an image is loaded, select button means eject. */
         if (fres || (b & B_SELECT)) {
             /* ** EJECT STATE ** */
-            unsigned int wait = 0;
+            unsigned int wait;
             snprintf(msg, sizeof(msg), "EJECTED");
             switch (display_mode) {
             case DM_LED_7SEG:
@@ -1259,7 +1285,9 @@ static int floppy_main(void *unused)
                 if (fres)
                     snprintf(msg, sizeof(msg), "*%s*%02u*",
                              (fres >= 30) ? "ERR" : "FAT", fres);
-                lcd_write(8, 1, -1, msg);
+                display_wp_status();
+                lcd_write(wp_column+1, 1, -1, "");
+                lcd_write((lcd_columns > 16) ? 10 : 8, 1, 0, msg);
                 lcd_on();
                 break;
             }
@@ -1267,9 +1295,18 @@ static int floppy_main(void *unused)
                 ima_mark_ejected(TRUE);
             fres = FR_OK;
             /* Wait for buttons to be released. */
-            while (buttons != 0)
-                continue;
+            wait = 0;
+            while (buttons != 0) {
+                delay_ms(1);
+                if ((display_mode == DM_LCD_1602) && (wait++ >= 2000)) {
+                toggle_wp:
+                    wait = 0;
+                    cfg.slot.attributes ^= AM_RDO;
+                    display_wp_status();
+                }
+            }
             /* Wait for any button to be pressed. */
+            wait = 0;
             while ((b = buttons) == 0) {
                 /* Bail if USB disconnects. */
                 assert_usbh_msc_connected();
@@ -1311,12 +1348,16 @@ static int floppy_main(void *unused)
             /* Reload same image immediately if eject pressed again. */
             if (b & B_SELECT) {
                 /* Wait for eject button to be released. */
+                wait = 0;
                 while (b & B_SELECT) {
                     b = buttons;
                     if ((ff_cfg.twobutton_action == TWOBUTTON_eject) && b) {
                         /* Wait for 2-button release. */
                         b = B_SELECT;
                     }
+                    delay_ms(1);
+                    if ((display_mode == DM_LCD_1602) && (wait++ >= 2000))
+                        goto toggle_wp;
                 }
                 ima_mark_ejected(FALSE);
                 continue;
