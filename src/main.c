@@ -503,13 +503,10 @@ static void read_ff_cfg(void)
             char *p, *q;
             ff_cfg.display_type = DISPLAY_auto;
             for (p = opts.arg; *p != '\0'; p = q) {
-                for (q = p; *q != '-'; q++) {
-                    if (*q == '\0') {
-                        q++; /* double terminate */
-                        break;
-                    }
-                }
-                *q++ = '\0';
+                for (q = p; *q && *q != '-'; q++)
+                    continue;
+                if (*q == '-')
+                    *q++ = '\0';
                 if (!strcmp(p, "lcd"))
                     ff_cfg.display_type = DISPLAY_lcd;
                 if (!strcmp(p, "oled"))
