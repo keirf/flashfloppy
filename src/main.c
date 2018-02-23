@@ -39,8 +39,6 @@ static struct {
 
 uint8_t board_id;
 
-#define LCD_SCROLL_PAUSE_MSEC  2000
-
 static uint32_t backlight_ticks;
 static uint8_t backlight_state;
 #define BACKLIGHT_OFF          0
@@ -87,8 +85,57 @@ static void display_wp_status(void)
     lcd_write(wp_column, 1, 1, (cfg.slot.attributes & AM_RDO) ? "*" : "");
 }
 
+/* Scroll long filename. */
+static struct {
+    uint16_t off, end, pause, rate;
+    int32_t ticks;
+} lcd_scroll;
+static void lcd_scroll_init(uint16_t pause, uint16_t rate)
+{
+    int diff = lcd_scroll.off - lcd_scroll.end;
+    lcd_scroll.pause = pause;
+    lcd_scroll.rate = rate;
+    lcd_scroll.end = max_t(
+        int, strnlen(cfg.slot.name, sizeof(cfg.slot.name)) - lcd_columns, 0);
+    if (lcd_scroll.end && !lcd_scroll.pause)
+        lcd_scroll.end += lcd_columns;
+    if (lcd_scroll.off > lcd_scroll.end)
+        lcd_scroll.off = lcd_scroll.pause || !lcd_scroll.end
+            ? 0 : lcd_scroll.end + diff;
+}
+static void lcd_scroll_name(void)
+{
+    char msg[25];
+    if ((lcd_scroll.ticks > 0) || (lcd_scroll.end == 0))
+        return;
+    lcd_scroll.ticks = stk_ms(lcd_scroll.rate);
+    if (lcd_scroll.pause != 0) {
+        if (++lcd_scroll.off > lcd_scroll.end)
+            lcd_scroll.off = 0;
+        snprintf(msg, sizeof(msg), "%s", cfg.slot.name + lcd_scroll.off);
+        if ((lcd_scroll.off == 0)
+            || (lcd_scroll.off == lcd_scroll.end))
+            lcd_scroll.ticks = stk_ms(lcd_scroll.pause);
+    } else {
+        const unsigned int scroll_gap = 4;
+        lcd_scroll.off++;
+        if (lcd_scroll.off <= lcd_scroll.end) {
+            snprintf(msg, sizeof(msg), "%s%*s%s",
+                     cfg.slot.name + lcd_scroll.off,
+                     scroll_gap, "", cfg.slot.name);
+        } else {
+            snprintf(msg, sizeof(msg), "%*s%s",
+                     scroll_gap - (lcd_scroll.off - lcd_scroll.end), "",
+                     cfg.slot.name);
+            if ((lcd_scroll.off - lcd_scroll.end) == scroll_gap)
+                lcd_scroll.off = 0;
+        }
+    }
+    lcd_write(0, 0, -1, msg);
+}
+
 /* Write slot info to display. */
-static void display_write_slot(void)
+static void display_write_slot(bool_t nav_mode)
 {
     char msg[25], *type;
     if (display_mode != DM_LCD_1602) {
@@ -96,8 +143,20 @@ static void display_write_slot(void)
             led_7seg_write_decimal(cfg.slot_nr);
         return;
     }
-    snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
-    lcd_write(0, 0, -1, msg);
+    if (nav_mode) {
+        lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
+        if (lcd_scroll.end == 0) {
+            snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
+            lcd_write(0, 0, -1, msg);
+        } else {
+            lcd_scroll.off--;
+            lcd_scroll.ticks = 0;
+            lcd_scroll_name();
+        }
+    } else {
+        snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
+        lcd_write(0, 0, -1, msg);
+    }
     type = (cfg.slot.attributes & AM_DIR) ? "DIR"
         : slot_type("adf") ? "ADF"
         : slot_type("dsk") ? "DSK"
@@ -123,7 +182,6 @@ static void display_write_slot(void)
 }
 
 /* Write track number to LCD. */
-static int32_t lcd_update_ticks;
 static void lcd_write_track_info(bool_t force)
 {
     static uint8_t lcd_cyl, lcd_side, lcd_writing;
@@ -149,24 +207,6 @@ static void lcd_write_track_info(bool_t force)
         lcd_side = side;
         lcd_writing = writing;
     }
-}
-
-/* Scroll long filename. */
-static uint8_t lcd_scroll_off, lcd_scroll_end;
-static int32_t lcd_scroll_ticks;
-static void lcd_scroll_name(void)
-{
-    char msg[25];
-    if (lcd_scroll_ticks > 0)
-        return;
-    if (++lcd_scroll_off > lcd_scroll_end)
-        lcd_scroll_off = 0;
-    snprintf(msg, sizeof(msg), "%s", cfg.slot.name + lcd_scroll_off);
-    lcd_write(0, 0, -1, msg);
-    lcd_scroll_ticks =
-        ((lcd_scroll_off == 0)
-         || (lcd_scroll_off == lcd_scroll_end))
-        ? stk_ms(LCD_SCROLL_PAUSE_MSEC) : stk_ms(ff_cfg.display_scroll_rate);
 }
 
 /* Handle switching the LCD backlight. */
@@ -514,6 +554,18 @@ static void read_ff_cfg(void)
             if (ff_cfg.display_scroll_rate < 100)
                 ff_cfg.display_scroll_rate = 100;
             cfg.ffcfg_has_display_scroll_rate = TRUE;
+            break;
+
+        case FFCFG_display_scroll_pause:
+            ff_cfg.display_scroll_pause = strtol(opts.arg, NULL, 10);
+            break;
+
+        case FFCFG_nav_scroll_rate:
+            ff_cfg.nav_scroll_rate = strtol(opts.arg, NULL, 10);
+            break;
+
+        case FFCFG_nav_scroll_pause:
+            ff_cfg.nav_scroll_pause = strtol(opts.arg, NULL, 10);
             break;
 
         case FFCFG_oled_font:
@@ -1112,10 +1164,10 @@ static bool_t choose_new_image(uint8_t init_b)
                  * immediately enter parent-dir (if we're in a subfolder). */
                 while (buttons)
                     continue;
-                display_write_slot();
+                display_write_slot(TRUE);
                 return (cfg.depth != 0);
             }
-            display_write_slot();
+            display_write_slot(TRUE);
             /* Ignore changes while user is releasing the buttons. */
             while ((stk_diff(last_change, stk_now()) < stk_ms(1000))
                    && buttons)
@@ -1142,7 +1194,7 @@ static bool_t choose_new_image(uint8_t init_b)
 
         cfg.slot_nr = i;
         cfg_update(CFG_KEEP_SLOT_NR);
-        display_write_slot();
+        display_write_slot(TRUE);
     }
 
     return FALSE;
@@ -1158,14 +1210,11 @@ static int run_floppy(void *_b)
 {
     volatile uint8_t *pb = _b;
     stk_time_t t_now, t_prev, t_diff;
+    int32_t lcd_update_ticks;
 
     floppy_insert(0, &cfg.slot);
 
     lcd_update_ticks = stk_ms(20);
-    lcd_scroll_ticks = stk_ms(LCD_SCROLL_PAUSE_MSEC);
-    lcd_scroll_off = 0;
-    lcd_scroll_end = max_t(
-        int, strnlen(cfg.slot.name, sizeof(cfg.slot.name)) - lcd_columns, 0);
     t_prev = stk_now();
     while (((*pb = buttons) == 0) && !floppy_handle()) {
         t_now = stk_now();
@@ -1176,7 +1225,7 @@ static int run_floppy(void *_b)
                 lcd_write_track_info(FALSE);
                 lcd_update_ticks = stk_ms(20);
             }
-            lcd_scroll_ticks -= t_diff;
+            lcd_scroll.ticks -= t_diff;
             lcd_scroll_name();
         }
         canary_check();
@@ -1207,12 +1256,18 @@ static int floppy_main(void *unused)
 
     /* If we start on a folder, go directly into the image selector. */
     if (cfg.slot.attributes & AM_DIR) {
-        display_write_slot();
+        display_write_slot(FALSE);
         b = buttons;
         goto select;
     }
 
     for (;;) {
+
+        lcd_scroll.ticks = stk_ms(ff_cfg.display_scroll_pause)
+            ?: stk_ms(ff_cfg.display_scroll_rate);
+        lcd_scroll.off = lcd_scroll.end = 0;
+        lcd_scroll_init(ff_cfg.display_scroll_pause,
+                        ff_cfg.display_scroll_rate);
 
         /* Make sure slot index is on a valid slot. Find next valid slot if 
          * not (and update config). */
@@ -1241,14 +1296,14 @@ static int floppy_main(void *unused)
                 cfg.slot_nr = 1;
             }
             cfg_update(CFG_READ_SLOT_NR);
-            display_write_slot();
+            display_write_slot(FALSE);
             b = buttons;
             goto select;
         }
 
         fs = NULL;
 
-        display_write_slot();
+        display_write_slot(FALSE);
         if (display_mode == DM_LCD_1602)
             lcd_write_track_info(TRUE);
 
@@ -1329,7 +1384,7 @@ static int floppy_main(void *unused)
                     break;
                 case DM_LCD_1602:
                     /* Continue to scroll long filename. */
-                    lcd_scroll_ticks -= stk_ms(1);
+                    lcd_scroll.ticks -= stk_ms(1);
                     lcd_scroll_name();
                     break;
                 }
@@ -1371,8 +1426,9 @@ static int floppy_main(void *unused)
         }
 
     select:
+        lcd_scroll.off = lcd_scroll.end = 0;
         do {
-            unsigned int wait_secs;
+            unsigned int wait_ms;
 
             /* While buttons are pressed we poll them and update current image
              * accordingly. */
@@ -1382,14 +1438,25 @@ static int floppy_main(void *unused)
 
             /* Wait a few seconds for further button presses before acting on 
              * the new image selection. */
-            wait_secs = (cfg.slot.attributes & AM_DIR) ?
+            lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
+            lcd_scroll.ticks = stk_ms(ff_cfg.nav_scroll_pause);
+            wait_ms = (cfg.slot.attributes & AM_DIR) ?
                 ff_cfg.autoselect_folder_secs : ff_cfg.autoselect_file_secs;
-            for (i = 0; (wait_secs == 0) || (i < wait_secs*1000); i++) {
+            wait_ms *= 1000;
+            if (wait_ms && (display_mode == DM_LCD_1602)) {
+                /* Allow time for full name to scroll through. */
+                unsigned int scroll_ms = ff_cfg.nav_scroll_pause;
+                scroll_ms += lcd_scroll.end * ff_cfg.nav_scroll_rate;
+                wait_ms = max(wait_ms, scroll_ms);
+            }
+            for (i = 0; (wait_ms == 0) || (i < wait_ms); i++) {
                 b = buttons;
                 if (b != 0)
                     break;
                 assert_usbh_msc_connected();
                 delay_ms(1);
+                lcd_scroll.ticks -= stk_ms(1);
+                lcd_scroll_name();
             }
 
             /* Flash the LED display to indicate loading the new image. */

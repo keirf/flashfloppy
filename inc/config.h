@@ -84,6 +84,9 @@ struct __packed ff_cfg {
 #define ROT_gray   2
     uint8_t rotary;
     bool_t write_protect;
+    uint16_t nav_scroll_rate;
+    uint16_t nav_scroll_pause;
+    uint16_t display_scroll_pause;
 };
 
 extern struct ff_cfg ff_cfg;
