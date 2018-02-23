@@ -651,6 +651,10 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Seek to the new track. */
         track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
+        if ((track >= 510) && (drv->outp & m(outp_wrprot))) {
+            /* Remove write-protect when driven into D-A mode. */
+            drive_change_output(drv, outp_wrprot, FALSE);
+        }
         if (image_seek_track(drv->image, track, &read_start_pos))
             return TRUE;
         read_start_pos /= SYSCLK_MHZ/STK_MHZ;
