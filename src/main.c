@@ -25,7 +25,7 @@ static struct {
     struct short_slot autoboot, hxcsdfe;
     struct slot slot;
     uint32_t cfg_cdir, cur_cdir;
-    uint16_t cdir_stack[20];
+    struct { uint16_t cdir, slot; } stack[20];
     uint8_t depth;
     bool_t usb_power_fault;
     uint8_t hxc_mode:1;
@@ -720,6 +720,8 @@ native_mode:
     sofar = 0; /* bytes consumed so far */
     fatfs.cdir = cfg.cur_cdir;
     for (;;) {
+        unsigned int nr = cfg.depth ? 1 : 0;
+        bool_t ok;
         /* Read next pathname section, search for its terminating slash. */
         F_read(&fs->file, fs->buf, sizeof(fs->buf), NULL);
         fs->buf[sizeof(fs->buf)-1] = '\0';
@@ -731,9 +733,17 @@ native_mode:
         /* Terminate the name section, push curdir onto stack, then chdir. */
         *p++ = '\0';
         printk("%u:D: '%s'\n", cfg.depth, fs->buf);
-        if (cfg.depth == ARRAY_SIZE(cfg.cdir_stack))
+        if (cfg.depth == ARRAY_SIZE(cfg.stack))
             F_die(FR_PATH_TOO_DEEP);
-        cfg.cdir_stack[cfg.depth++] = fatfs.cdir;
+        /* Find slot nr, and stack it */
+        F_opendir(&fs->dp, "");
+        while ((ok = native_dir_next()) && strcmp(fs->fp.fname, fs->buf))
+            nr++;
+        F_closedir(&fs->dp);
+        if (!ok)
+            goto clear_image_a;
+        cfg.stack[cfg.depth].slot = nr;
+        cfg.stack[cfg.depth++].cdir = fatfs.cdir;
         fr = f_chdir(fs->buf);
         if (fr)
             goto clear_image_a;
@@ -1285,12 +1295,13 @@ static int floppy_main(void *unused)
             if (!strcmp(fs->fp.fname, "..")) {
                 if (cfg.depth == 0)
                     F_die(FR_BAD_IMAGECFG);
-                fatfs.cdir = cfg.cur_cdir = cfg.cdir_stack[--cfg.depth];
-                cfg.slot_nr = 0;
+                fatfs.cdir = cfg.cur_cdir = cfg.stack[--cfg.depth].cdir;
+                cfg.slot_nr = cfg.stack[cfg.depth].slot;
             } else {
-                if (cfg.depth == ARRAY_SIZE(cfg.cdir_stack))
+                if (cfg.depth == ARRAY_SIZE(cfg.stack))
                     F_die(FR_PATH_TOO_DEEP);
-                cfg.cdir_stack[cfg.depth++] = cfg.cur_cdir;
+                cfg.stack[cfg.depth].slot = cfg.slot_nr;
+                cfg.stack[cfg.depth++].cdir = cfg.cur_cdir;
                 F_chdir(fs->fp.fname);
                 cfg.cur_cdir = fatfs.cdir;
                 cfg.slot_nr = 1;
