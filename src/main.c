@@ -540,6 +540,32 @@ static void read_ff_cfg(void)
 
             /* DISPLAY */
 
+        case FFCFG_display_type: {
+            char *p, *q;
+            ff_cfg.display_type = DISPLAY_auto;
+            for (p = opts.arg; *p != '\0'; p = q) {
+                for (q = p; *q && *q != '-'; q++)
+                    continue;
+                if (*q == '-')
+                    *q++ = '\0';
+                if (!strcmp(p, "lcd"))
+                    ff_cfg.display_type = DISPLAY_lcd;
+                if (!strcmp(p, "oled"))
+                    ff_cfg.display_type = DISPLAY_oled;
+                if (!strcmp(p, "rotate"))
+                    ff_cfg.display_type |= DISPLAY_rotate;
+                if (!strcmp(p, "narrow"))
+                    ff_cfg.display_type |= DISPLAY_narrow;
+            }
+            break;
+        }
+
+        case FFCFG_oled_font:
+            ff_cfg.oled_font =
+                !strcmp(opts.arg, "6x13") ? FONT_6x13
+                : FONT_8x16;
+            break;
+
         case FFCFG_display_off_secs:
             ff_cfg.display_off_secs = strtol(opts.arg, NULL, 10);
             cfg.ffcfg_has_display_off_secs = TRUE;
@@ -567,32 +593,6 @@ static void read_ff_cfg(void)
         case FFCFG_nav_scroll_pause:
             ff_cfg.nav_scroll_pause = strtol(opts.arg, NULL, 10);
             break;
-
-        case FFCFG_oled_font:
-            ff_cfg.oled_font =
-                !strcmp(opts.arg, "6x13") ? FONT_6x13
-                : FONT_8x16;
-            break;
-
-        case FFCFG_display_type: {
-            char *p, *q;
-            ff_cfg.display_type = DISPLAY_auto;
-            for (p = opts.arg; *p != '\0'; p = q) {
-                for (q = p; *q && *q != '-'; q++)
-                    continue;
-                if (*q == '-')
-                    *q++ = '\0';
-                if (!strcmp(p, "lcd"))
-                    ff_cfg.display_type = DISPLAY_lcd;
-                if (!strcmp(p, "oled"))
-                    ff_cfg.display_type = DISPLAY_oled;
-                if (!strcmp(p, "rotate"))
-                    ff_cfg.display_type |= DISPLAY_rotate;
-                if (!strcmp(p, "narrow"))
-                    ff_cfg.display_type |= DISPLAY_narrow;
-            }
-            break;
-        }
 
             /* MISCELLANEOUS */
 
