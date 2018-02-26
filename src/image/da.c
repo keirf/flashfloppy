@@ -23,7 +23,7 @@ static struct da_status_sector dass = {
 #define CMD_SELECT_IMAGE 4 /* p[0-1] = slot # (little endian) */
 
 #define TRACKLEN_BC 100160 /* multiple of 32 */
-#define TICKS_PER_CELL ((sysclk_ms(DRIVE_MS_PER_REV) * 16u) / TRACKLEN_BC)
+#define TICKS_PER_CELL ((sysclk_stk(im->stk_per_rev) * 16u) / TRACKLEN_BC)
 
 static void da_seek_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)

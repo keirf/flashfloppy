@@ -77,6 +77,7 @@ void image_open(struct image *im, const struct slot *slot)
     memset(im, 0, sizeof(*im));
     im->bufs = bufs;
     im->write_bc_ticks = sysclk_us(2);
+    im->stk_per_rev = stk_ms(200);
 
     /* Extract filename extension (if available). */
     memcpy(ext, slot->type, sizeof(slot->type));

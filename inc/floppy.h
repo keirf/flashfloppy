@@ -9,8 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define DRIVE_RPM 300u
-#define DRIVE_MS_PER_REV (60000u/DRIVE_RPM)
 #define DRIVE_SETTLE_MS 12
 
 #define FINTF_SHUGART 0
@@ -100,12 +98,13 @@ struct image {
 
     /* Info about current track. */
     uint16_t cur_track;
-    uint16_t write_bc_ticks; /* Nr systicks per bitcell in write stream */
+    uint16_t write_bc_ticks; /* Nr SYSCLK ticks per bitcell in write stream */
     uint32_t tracklen_bc, cur_bc; /* Track length and cursor, in bitcells */
     uint32_t tracklen_ticks; /* Timing of previous revolution, in 'ticks' */
     uint32_t cur_ticks; /* Offset from index, in 'ticks' */
     uint32_t ticks_since_flux; /* Ticks since last flux sample/reversal */
     uint32_t write_mfm_window; /* Sliding window at head of MFM write stream */
+    uint32_t stk_per_rev; /* Nr STK ticks per revolution. */
 
     struct directaccess da;
 

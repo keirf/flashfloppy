@@ -104,7 +104,7 @@ static void dsk_seek_track(
         printk("T%u.%u: Unformatted\n", cyl, side);
         memset(tib, 0, sizeof(*tib));
         im->tracklen_bc = 100160;
-        im->dsk.ticks_per_cell = ((sysclk_ms(DRIVE_MS_PER_REV) * 16u)
+        im->dsk.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
                                   / im->tracklen_bc);
         im->ticks_since_flux = 0;
         im->cur_track = track;
@@ -172,7 +172,7 @@ static void dsk_seek_track(
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
 
     /* Calculate output data rate (bitcell size). */
-    im->dsk.ticks_per_cell = ((sysclk_ms(DRIVE_MS_PER_REV) * 16u)
+    im->dsk.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
                               / im->tracklen_bc);
 
     /* Now calculate the pre-index track gap. */

@@ -57,7 +57,6 @@ static struct dma_ring *dma_wr; /* WDATA DMA buffer */
 /* Statically-allocated floppy drive state. Tracks head movements and 
  * side changes at all times, even when the drive is empty. */
 static struct drive {
-    const struct slot *slot;
     uint8_t cyl, head, nr_sides;
     bool_t writing;
     bool_t sel;
@@ -171,7 +170,6 @@ void floppy_cancel(void)
     /* Clear soft state. */
     drive.index_suppressed = FALSE;
     drive.image = NULL;
-    drive.slot = NULL;
     max_read_us = 0;
     image = NULL;
     dma_rd = dma_wr = NULL;
@@ -326,12 +324,12 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
      * Change of use of this memory space is fully serialised. */
     image->bufs.read_data = image->bufs.write_data;
 
-    drv->slot = slot;
+    image_open(image, slot);
+    drv->image = image;
+    dma_rd->state = DMA_stopping;
 
     drv->index_suppressed = FALSE;
     index.prev_time = stk_now();
-    timer_set(&index.timer, stk_add(index.prev_time,
-                                    stk_ms(DRIVE_MS_PER_REV)));
 
     /* Enable DMA interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch) | DMA_IFCR_CGIF(dma_wdata_ch);
@@ -396,8 +394,25 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
                      DMA_CCR_TCIE |
                      DMA_CCR_EN);
 
-    /* Drive is 'ready'. */
+    /* Drive is ready. Set output signals appropriately. */
     drive_change_output(drv, outp_rdy, TRUE);
+    if ((slot->attributes & AM_RDO)
+        || !image->handler->write_track) {
+        printk("Image is R/O %s%s\n",
+               (slot->attributes & AM_RDO) ? "[fat-attr]" : "",
+               !image->handler->write_track ? "[no-handler]" : "");
+    } else {
+        drive_change_output(drv, outp_wrprot, FALSE);
+    }
+}
+
+/* Find current rotational position for read-stream restart. */
+static void drive_set_restart_pos(struct drive *drv)
+{
+    uint32_t pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
+    pos %= drv->image->stk_per_rev;
+    drv->restart_pos = pos;
+    drv->index_suppressed = TRUE;
 }
 
 /* Called from IRQ context to stop the write stream. */
@@ -405,7 +420,6 @@ static void wdata_stop(void)
 {
     struct write *write;
     uint8_t prev_state = dma_wr->state;
-    uint32_t pos;
 
     /* Already inactive? Nothing to do. */
     if ((prev_state == DMA_inactive) || (prev_state == DMA_stopping))
@@ -421,14 +435,9 @@ static void wdata_stop(void)
     /* Drain out the DMA buffer. */
     IRQx_set_pending(dma_wdata_irq);
 
-    /* No more IDX pulses until write-out is complete. */
-    drive.index_suppressed = TRUE;
-
-    /* Find rotational end position of the write. We will restart the read 
-     * stream at exactly this point. */
-    pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
-    pos %= stk_ms(DRIVE_MS_PER_REV);
-    drive.restart_pos = pos;
+    /* Restart read exactly where write ended. 
+     * No more IDX pulses until write-out is complete. */
+    drive_set_restart_pos(&drive);
 
     /* Remember where this write's DMA stream ended. */
     write = get_write(image, image->wr_prod);
@@ -467,9 +476,9 @@ static void wdata_start(void)
     tim_wdata->sr = 0; /* dummy write, gives h/w time to process EGR.UG=1 */
     tim_wdata->cr1 = TIM_CR1_CEN;
 
-    /* Find rotational start position of the write, in systicks since index. */
+    /* Find rotational start position of the write, in SYSCLK ticks. */
     start_pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
-    start_pos %= stk_ms(DRIVE_MS_PER_REV);
+    start_pos %= drive.image->stk_per_rev;
     start_pos *= SYSCLK_MHZ / STK_MHZ;
     write = get_write(image, image->wr_prod);
     write->start = start_pos;
@@ -485,7 +494,6 @@ static void wdata_start(void)
 static void rdata_stop(void)
 {
     uint8_t prev_state = dma_rd->state;
-    uint32_t pos;
 
     /* Already inactive? Nothing to do. */
     if (prev_state == DMA_inactive)
@@ -504,14 +512,9 @@ static void rdata_stop(void)
     /* Turn off timer. */
     tim_rdata->cr1 = 0;
 
-    if ((ff_cfg.track_change == TRKCHG_instant) && !drive.index_suppressed) {
-        /* Find rotational end position of the read. We will restart the read
-         * stream at exactly this point. */
-        pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
-        pos %= stk_ms(DRIVE_MS_PER_REV);
-        drive.restart_pos = pos;
-        drive.index_suppressed = TRUE;
-    }
+    /* track-change = instant: Restart read stream where we left off. */
+    if ((ff_cfg.track_change == TRKCHG_instant) && !drive.index_suppressed)
+        drive_set_restart_pos(&drive);
 }
 
 /* Called from user context to start the read stream. */
@@ -647,7 +650,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         read_start_pos = drv->index_suppressed
             ? drive.restart_pos /* start read exactly where write ended */
             : stk_timesince(index_time) + delay;
-        read_start_pos %= stk_ms(DRIVE_MS_PER_REV);
+        read_start_pos %= drv->image->stk_per_rev;
         /* Seek to the new track. */
         track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
@@ -663,7 +666,7 @@ static bool_t dma_rd_handle(struct drive *drv)
             /* Set the deadline to match existing index timing. */
             sync_time = stk_add(index_time, read_start_pos);
             if (stk_delta(stk_now(), sync_time) < 0)
-                sync_time = stk_add(sync_time, stk_ms(DRIVE_MS_PER_REV));
+                sync_time = stk_add(sync_time, drv->image->stk_per_rev);
         }
         /* Change state /then/ check for race against step or side change. */
         dma_rd->state = DMA_starting;
@@ -691,7 +694,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Free-running index timer. */
         timer_cancel(&index.timer);
         timer_set(&index.timer, stk_add(index.prev_time,
-                                        stk_ms(DRIVE_MS_PER_REV)));
+                                        drv->image->stk_per_rev));
         break;
     }
 
@@ -779,20 +782,6 @@ bool_t floppy_handle(void)
 {
     struct drive *drv = &drive;
 
-    if (!drv->image) {
-        image_open(image, drv->slot);
-        drv->image = image;
-        dma_rd->state = DMA_stopping;
-        if ((drv->slot->attributes & AM_RDO)
-            || !image->handler->write_track) {
-            printk("Image is R/O %s%s\n",
-                   (drv->slot->attributes & AM_RDO) ? "[fat-attr]" : "",
-                   !image->handler->write_track ? "[no-handler]" : "");
-        } else {
-            drive_change_output(drv, outp_wrprot, FALSE);
-        }
-    }
-
     return ((dma_wr->state == DMA_inactive)
             ? dma_rd_handle : dma_wr_handle)(drv);
 }
@@ -808,7 +797,7 @@ static void index_assert(void *dat)
     }
     if (dma_rd->state != DMA_active) /* timer set from input flux stream */
         timer_set(&index.timer, stk_add(index.prev_time,
-                                        stk_ms(DRIVE_MS_PER_REV)));
+                                        drv->image->stk_per_rev));
 }
 
 static void index_deassert(void *dat)

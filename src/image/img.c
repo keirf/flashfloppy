@@ -111,7 +111,7 @@ found:
     /* Round the track length up to a multiple of 32 bitcells. */
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
 
-    im->img.ticks_per_cell = ((sysclk_ms(DRIVE_MS_PER_REV) * 16u)
+    im->img.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
                               / im->tracklen_bc);
     im->img.gap4 = (im->tracklen_bc - tracklen) / 16;
 

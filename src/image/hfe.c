@@ -110,7 +110,7 @@ static void hfe_seek_track(
     im->hfe.trk_off = le16toh(thdr.offset);
     im->hfe.trk_len = le16toh(thdr.len) / 2;
     im->tracklen_bc = im->hfe.trk_len * 8;
-    im->hfe.ticks_per_cell = ((sysclk_ms(DRIVE_MS_PER_REV) * 16u)
+    im->hfe.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
                               / im->tracklen_bc);
     im->ticks_since_flux = 0;
     im->cur_track = track;
