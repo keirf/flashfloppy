@@ -12,7 +12,9 @@
 #define TRACKS_PER_DISK 160
 #define NR_SECS 11
 #define BYTES_PER_TRACK (NR_SECS*512)
-#define TRACKLEN_BC 100160 /* multiple of 32 */
+/* Amiga writes short bitcells (PAL: 14/7093790 us) hence long tracks. 
+ * For better loader compatibility it is sensible to emulate this. */
+#define TRACKLEN_BC 101376 /* multiple of 32 */
 #define TICKS_PER_CELL ((sysclk_stk(im->stk_per_rev) * 16u) / TRACKLEN_BC)
 #define POST_IDX_GAP_BC 1024
 #define PRE_IDX_GAP_BC (TRACKLEN_BC - NR_SECS*544*16 - POST_IDX_GAP_BC)
