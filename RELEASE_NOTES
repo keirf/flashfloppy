@@ -3,6 +3,14 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.12a - 27 February 2018
+ - LCD/OLED: Long filenames scroll during navigation
+ - LCD/OLED: Make filename scrolling more configurable
+   - FF.CFG: {nav,display}-scroll-{rate,pause}
+ - Direct navigation: ".." returns to subfolder position within parent
+ - Fix head-seek settle time emulation
+ - ADF: Generate longer tracks, like a real Amiga would
+
 ** v0.9.11a - 23 February 2018
  - Fix Direct-Acesss mode (as used by HxC Autoboot, broken in v0.9.10a)
 
