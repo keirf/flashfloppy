@@ -95,6 +95,7 @@ int32_t stk_delta(stk_time_t a, stk_time_t b);
 
 #define stk_us(x) ((x) * STK_MHZ)
 #define stk_ms(x) stk_us((x) * 1000)
+#define stk_sysclk(x) ((x) / (SYSCLK_MHZ / STK_MHZ))
 
 /* NVIC */
 #define IRQx_enable(x) do {                     \

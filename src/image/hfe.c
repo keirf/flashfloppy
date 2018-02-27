@@ -71,6 +71,7 @@ enum {
 static bool_t hfe_open(struct image *im)
 {
     struct disk_header dhdr;
+    struct track_header thdr;
 
     F_read(&im->fp, &dhdr, sizeof(dhdr), NULL);
     if (dhdr.formatrevision != 0)
@@ -87,6 +88,14 @@ static bool_t hfe_open(struct image *im)
     im->nr_cyls = dhdr.nr_tracks;
     im->nr_sides = dhdr.nr_sides;
     im->write_bc_ticks = sysclk_us(500) / le16toh(dhdr.bitrate);
+    im->hfe.ticks_per_cell = im->write_bc_ticks * 16;
+
+    /* Get an initial value for ticks per revolution. */
+    F_lseek(&im->fp, im->hfe.tlut_base*512);
+    F_read(&im->fp, &thdr, sizeof(thdr), NULL);
+    im->hfe.trk_len = le16toh(thdr.len) / 2;
+    im->tracklen_bc = im->hfe.trk_len * 8;
+    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
 
     return TRUE;
 }
@@ -110,17 +119,9 @@ static void hfe_seek_track(
     im->hfe.trk_off = le16toh(thdr.offset);
     im->hfe.trk_len = le16toh(thdr.len) / 2;
     im->tracklen_bc = im->hfe.trk_len * 8;
-    im->hfe.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
-                              / im->tracklen_bc);
+    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
     im->ticks_since_flux = 0;
     im->cur_track = track;
-
-    /* HFEv3: the track data length is not the same as track bit length as 
-     * it contains opcode metadata in the stream. Instead use a sensible 
-     * default (based on the kB/s bitrate in the image header) and expect this 
-     * to be updated via the opcode stream as necessary. */
-    if (im->hfe.is_v3)
-        im->hfe.ticks_per_cell = im->write_bc_ticks * 16;
 
     im->cur_bc = (sys_ticks * 16) / im->hfe.ticks_per_cell;
     if (im->cur_bc >= im->tracklen_bc)
@@ -134,7 +135,7 @@ static void hfe_seek_track(
 
     /* Aggressively batch our reads at HD data rate, as that can be faster 
      * than some USB drives will serve up a single block.*/
-    im->hfe.batch_secs = (im->hfe.ticks_per_cell > 1700) ? 2 : 8;
+    im->hfe.batch_secs = (im->write_bc_ticks > sysclk_ns(1500)) ? 2 : 8;
 
     if (start_pos) {
         image_read_track(im);
