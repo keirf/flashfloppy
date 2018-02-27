@@ -585,6 +585,17 @@ static void floppy_sync_flux(void)
                        drv->image->cur_track, -ticks/stk_us(1));
             }
         }
+    } else if (drv->step.state) {
+        /* IDX is suppressed: Wait for heads to settle.
+         * When IDX is not suppressed, settle time is already accounted for in
+         * dma_rd_handle()'s call to image_seek_track(). */
+        stk_time_t step_settle = stk_add(drv->step.start,
+                                         stk_ms(DRIVE_SETTLE_MS));
+        int32_t delta = stk_delta(stk_now(), step_settle) - stk_us(1);
+        if (delta > stk_ms(5))
+            return; /* go do other work for a while */
+        if (delta > 0)
+            delay_ticks(delta);
     }
 
     if (drv->index_suppressed) {
@@ -819,7 +830,8 @@ static void drive_step_timer(void *_drv)
         if ((drv->cyl >= 84) && !drv->step.inward)
             drv->cyl = 84; /* Fast step back from D-A cyl 255 */
         drv->cyl += drv->step.inward ? 1 : -1;
-        timer_set(&drv->step.timer, stk_add(drv->step.start, DRIVE_SETTLE_MS));
+        timer_set(&drv->step.timer,
+                  stk_add(drv->step.start, stk_ms(DRIVE_SETTLE_MS)));
         if (drv->cyl == 0)
             drive_change_output(drv, outp_trk0, TRUE);
         /* New state last, as that lets hi-pri IRQ start another step. */
