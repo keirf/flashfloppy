@@ -30,7 +30,6 @@ static void da_seek_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *mfm = &im->bufs.read_mfm;
-    struct da_status_sector *da = rd->p;
 
     im->tracklen_bc = TRACKLEN_BC;
     im->ticks_since_flux = 0;
@@ -39,18 +38,11 @@ static void da_seek_track(
     im->cur_bc = 0;
     im->cur_ticks = 0;
 
-    rd->prod = rd->cons = 0;
+    rd->prod = 8; /* nr sectors */
+    rd->cons = 0;
     mfm->prod = mfm->cons = 0;
 
     if (start_pos) {
-        memset(da, 0, 512);
-        memcpy(da, &dass, sizeof(dass));
-        if (ff_cfg.da_report_version[0] != '\0') {
-            /* Report the user-configured version string. */
-            memset(da->fw_ver, 0, sizeof(da->fw_ver));
-            snprintf(da->fw_ver, sizeof(da->fw_ver),
-                     "%s", ff_cfg.da_report_version);
-        }
         image_read_track(im);
         *start_pos = 0;
     }
@@ -66,15 +58,7 @@ static bool_t da_read_track(struct image *im)
     uint16_t pr = 0, crc;
 
     const unsigned int gap3 = 84;
-    const unsigned int nr_sec = 9;
     const unsigned int sec_sz = 512;
-
-    /* Read some sectors. */
-    if (!rd->prod) {
-        if (disk_read(0, buf + sec_sz, dass.lba_base, nr_sec-1) != RES_OK)
-            F_die(FR_DISK_ERR);
-        rd->prod = nr_sec * sec_sz;
-    }
 
     /* Generate some MFM if there is space in the MFM ring buffer. */
     mfmp = mfm->prod / 16; /* MFM words */
@@ -99,7 +83,7 @@ static bool_t da_read_track(struct image *im)
         emit_byte(0xfc);
         for (i = 0; i < 50; i++) /* Gap 1 */
             emit_byte(0x4e);
-    } else if (rd->cons == 19) {
+    } else if (rd->cons == (1 + (rd->prod + 1) * 2)) {
         /* Track gap. TODO: Make this dynamically sized. */
         for (i = 0; i < 192; i++) /* Gap 4 */
             emit_byte(0x4e);
@@ -128,10 +112,24 @@ static bool_t da_read_track(struct image *im)
         for (i = 0; i < 3; i++)
             emit_raw(0x4489);
         emit_byte(dam[3]);
+        if (sec == 0) {
+            struct da_status_sector *da = (struct da_status_sector *)buf;
+            memset(da, 0, 512);
+            memcpy(da, &dass, sizeof(dass));
+            if (ff_cfg.da_report_version[0] != '\0') {
+                /* Report the user-configured version string. */
+                memset(da->fw_ver, 0, sizeof(da->fw_ver));
+                snprintf(da->fw_ver, sizeof(da->fw_ver),
+                         "%s", ff_cfg.da_report_version);
+            }
+        } else {
+            if (disk_read(0, buf, dass.lba_base+sec-1, 1) != RES_OK)
+                F_die(FR_DISK_ERR);
+        }
         for (i = 0; i < sec_sz; i++) /* Data */
-            emit_byte(buf[sec*sec_sz+i]);
+            emit_byte(buf[i]);
         crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
-        crc = crc16_ccitt(&buf[sec*sec_sz], sec_sz, crc);
+        crc = crc16_ccitt(buf, sec_sz, crc);
         emit_byte(crc >> 8);
         emit_byte(crc);
         for (i = 0; i < gap3; i++) /* Gap 3 */
@@ -156,6 +154,7 @@ static bool_t da_write_track(struct image *im)
 
     bool_t flush;
     struct write *write = get_write(im, im->wr_cons);
+    struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *wr = &im->bufs.write_mfm;
     uint16_t *buf = wr->p;
     unsigned int buflen = wr->len / 2;
@@ -212,7 +211,8 @@ static bool_t da_write_track(struct image *im)
                     dass.lba_base <<= 8;
                     dass.lba_base |= dac->param[3-i];
                 }
-                printk("D-A LBA %08x\n", dass.lba_base);
+                rd->prod = (dac->param[5] <= 8) ? 8 : dac->param[5];
+                printk("D-A LBA %08x, nr=%u\n", dass.lba_base, rd->prod);
                 break;
             case CMD_SET_CYL:
                 printk("D-A Cyl A=%u B=%u\n", dac->param[0], dac->param[1]);
