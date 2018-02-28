@@ -54,28 +54,34 @@ const static struct img_type {
 static bool_t _img_open(struct image *im, bool_t has_iam,
                         const struct img_type *type)
 {
-    unsigned int nr_cyls, cyl_sz;
     uint32_t tracklen;
 
-    /* Walk the layout/type hints looking for a match on file size. */
-    for (; type->nr_secs != 0; type++) {
-        cyl_sz = type->nr_secs * (128 << type->no) * type->nr_sides;
-        for (nr_cyls = 77; nr_cyls <= 85; nr_cyls++)
-            if ((nr_cyls * cyl_sz) == f_size(&im->fp))
-                goto found;
+    if (type != NULL) {
+
+        unsigned int nr_cyls, cyl_sz;
+
+        /* Walk the layout/type hints looking for a match on file size. */
+        for (; type->nr_secs != 0; type++) {
+            cyl_sz = type->nr_secs * (128 << type->no) * type->nr_sides;
+            for (nr_cyls = 77; nr_cyls <= 85; nr_cyls++)
+                if ((nr_cyls * cyl_sz) == f_size(&im->fp))
+                    goto found;
+        }
+
+        return FALSE;
+
+    found:
+        im->nr_cyls = nr_cyls;
+        im->nr_sides = type->nr_sides;
+        im->img.sec_no = type->no;
+        im->img.interleave = type->interleave;
+        im->img.skew = type->skew;
+        im->img.sec_base = type->base;
+        im->img.nr_sectors = type->nr_secs;
+        im->img.gap3 = type->gap3;
+
     }
 
-    return FALSE;
-
-found:
-    im->nr_cyls = nr_cyls;
-    im->nr_sides = type->nr_sides;
-    im->img.sec_no = type->no;
-    im->img.interleave = type->interleave;
-    im->img.skew = type->skew;
-    im->img.sec_base = type->base;
-    im->img.nr_sectors = type->nr_secs;
-    im->img.gap3 = type->gap3;
     im->img.has_iam = has_iam;
     im->img.idx_sz = im->img.gap_4a = GAP_4A;
     if (im->img.has_iam)
@@ -142,6 +148,54 @@ static bool_t st_open(struct image *im)
 static bool_t adl_open(struct image *im)
 {
     return _img_open(im, TRUE, adfs_type);
+}
+
+static bool_t trd_open(struct image *im)
+{
+    uint8_t geometry;
+
+    /* Interrogate TR-DOS geometry identifier. */
+    F_lseek(&im->fp, 0x8e3);
+    F_read(&im->fp, &geometry, 1, NULL);
+    switch (geometry) {
+    case 0x16:
+        im->nr_cyls = 80;
+        im->nr_sides = 2;
+        break;
+    case 0x17:
+        im->nr_cyls = 40;
+        im->nr_sides = 2;
+        break;
+    case 0x18:
+        im->nr_cyls = 80;
+        im->nr_sides = 1;
+        break;
+    case 0x19:
+        im->nr_cyls = 40;
+        im->nr_sides = 1;
+        break;
+    default:
+        /* Guess geometry */
+        if (f_size(&im->fp) <= 40*16*256) {
+            im->nr_cyls = 40;
+            im->nr_sides = 1;
+        } else if (f_size(&im->fp) < 40*2*16*256) {
+            im->nr_cyls = 40;
+            im->nr_sides = 1;
+        } else {
+            im->nr_cyls = 80;
+            im->nr_sides = 2;
+        }
+    }
+
+    im->img.sec_no = 1; /* 256-byte */
+    im->img.interleave = 1;
+    im->img.skew = 0;
+    im->img.sec_base = 1;
+    im->img.nr_sectors = 16;
+    im->img.gap3 = 57;
+
+    return _img_open(im, TRUE, NULL);
 }
 
 static void img_seek_track(
@@ -446,6 +500,15 @@ const struct image_handler st_image_handler = {
 
 const struct image_handler adl_image_handler = {
     .open = adl_open,
+    .seek_track = img_seek_track,
+    .read_track = img_read_track,
+    .rdata_flux = img_rdata_flux,
+    .write_track = img_write_track,
+    .syncword = 0x44894489
+};
+
+const struct image_handler trd_image_handler = {
+    .open = trd_open,
     .seek_track = img_seek_track,
     .read_track = img_read_track,
     .rdata_flux = img_rdata_flux,
