@@ -80,6 +80,7 @@ void image_open(struct image *im, const struct slot *slot)
     im->bufs = bufs;
     im->write_bc_ticks = sysclk_us(2);
     im->stk_per_rev = stk_ms(200);
+    im->cur_track = ~0;
 
     /* Extract filename extension (if available). */
     memcpy(ext, slot->type, sizeof(slot->type));
@@ -122,12 +123,6 @@ bool_t image_seek_track(
     /* If we are exiting D-A mode then we need to re-read the config file. */
     if ((im->handler == &da_image_handler) && (track < 510))
         return TRUE;
-
-    /* If we are already seeked to this track and we are not interested in 
-     * a particular rotational position (ie. we are writing) then we have 
-     * nothing to do. */
-    if ((start_pos == NULL) && (track == im->cur_track))
-        return FALSE;
 
     /* Are we in special direct-access mode, or not? */
     im->handler = (track >= 510)

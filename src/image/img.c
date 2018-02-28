@@ -203,37 +203,45 @@ static void img_seek_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *mfm = &im->bufs.read_mfm;
-    uint32_t trk_len, decode_off, sys_ticks = start_pos ? *start_pos : 0;
+    uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
     uint8_t cyl = track/2, side = track&1;
-    unsigned int i, pos;
 
     /* TODO: Fake out unformatted tracks. */
     cyl = min_t(uint8_t, cyl, im->nr_cyls-1);
     side = min_t(uint8_t, side, im->nr_sides-1);
     track = cyl*2 + side;
 
-    /* Create logical sector map in rotational order. */
-    memset(im->img.sec_map, 0xff, im->img.nr_sectors);
-    pos = track * (unsigned int)im->img.skew;
-    for (i = 0; i < im->img.nr_sectors; i++) {
-        while (im->img.sec_map[pos] != 0xff)
-            pos = (pos + 1) % im->img.nr_sectors;
-        im->img.sec_map[pos] = i + im->img.sec_base;
-        pos = (pos + im->img.interleave) % im->img.nr_sectors;
+    if (track != im->cur_track) {
+
+        uint32_t trk_len;
+        unsigned int i, pos;
+
+        /* Create logical sector map in rotational order. */
+        memset(im->img.sec_map, 0xff, im->img.nr_sectors);
+        pos = track * (unsigned int)im->img.skew;
+        for (i = 0; i < im->img.nr_sectors; i++) {
+            while (im->img.sec_map[pos] != 0xff)
+                pos = (pos + 1) % im->img.nr_sectors;
+            im->img.sec_map[pos] = i + im->img.sec_base;
+            pos = (pos + im->img.interleave) % im->img.nr_sectors;
+        }
+
+        trk_len = im->img.nr_sectors * sec_sz(im);
+        im->img.trk_off = ((uint32_t)cyl * im->nr_sides + side) * trk_len;
+        im->img.trk_sec = 0;
+
+        im->cur_track = track;
+
     }
 
     im->img.write_sector = -1;
-    trk_len = im->img.nr_sectors * sec_sz(im);
-    im->img.trk_off = ((uint32_t)cyl * im->nr_sides + side) * trk_len;
-    im->img.trk_sec = 0;
-    im->ticks_since_flux = 0;
-    im->cur_track = track;
 
     im->cur_bc = (sys_ticks * 16) / im->img.ticks_per_cell;
     im->cur_bc &= ~15;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
     im->cur_ticks = im->cur_bc * im->img.ticks_per_cell;
+    im->ticks_since_flux = 0;
 
     decode_off = im->cur_bc / 16;
     if (decode_off < im->img.idx_sz) {

@@ -105,7 +105,6 @@ static void hfe_seek_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     uint32_t sys_ticks;
-    struct track_header thdr;
     uint8_t cyl = track/2, side = track&1;
 
     /* TODO: Fake out unformatted tracks. */
@@ -113,21 +112,28 @@ static void hfe_seek_track(
     side = min_t(uint8_t, side, im->nr_sides-1);
     track = cyl*2 + side;
 
-    F_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
-    F_read(&im->fp, &thdr, sizeof(thdr), NULL);
+    if (track != im->cur_track) {
 
-    im->hfe.trk_off = le16toh(thdr.offset);
-    im->hfe.trk_len = le16toh(thdr.len) / 2;
-    im->tracklen_bc = im->hfe.trk_len * 8;
-    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
-    im->ticks_since_flux = 0;
-    im->cur_track = track;
+        struct track_header thdr;
+
+        F_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
+        F_read(&im->fp, &thdr, sizeof(thdr), NULL);
+
+        im->hfe.trk_off = le16toh(thdr.offset);
+        im->hfe.trk_len = le16toh(thdr.len) / 2;
+        im->tracklen_bc = im->hfe.trk_len * 8;
+        im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
+
+        im->cur_track = track;
+
+    }
 
     sys_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
     im->cur_bc = (sys_ticks * 16) / im->hfe.ticks_per_cell;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
     im->cur_ticks = im->cur_bc * im->hfe.ticks_per_cell;
+    im->ticks_since_flux = 0;
 
     sys_ticks = im->cur_ticks / 16;
 
