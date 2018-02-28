@@ -104,7 +104,7 @@ static void hfe_seek_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    uint32_t sys_ticks = start_pos ? *start_pos : 0;
+    uint32_t sys_ticks;
     struct track_header thdr;
     uint8_t cyl = track/2, side = track&1;
 
@@ -123,6 +123,7 @@ static void hfe_seek_track(
     im->ticks_since_flux = 0;
     im->cur_track = track;
 
+    sys_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
     im->cur_bc = (sys_ticks * 16) / im->hfe.ticks_per_cell;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
@@ -130,7 +131,6 @@ static void hfe_seek_track(
 
     sys_ticks = im->cur_ticks / 16;
 
-    im->hfe.trk_pos = (im->cur_bc/8) & ~255;
     rd->prod = rd->cons = 0;
 
     /* Aggressively batch our reads at HD data rate, as that can be faster 
@@ -138,9 +138,14 @@ static void hfe_seek_track(
     im->hfe.batch_secs = (im->write_bc_ticks > sysclk_ns(1500)) ? 2 : 8;
 
     if (start_pos) {
+        /* Read mode. */
+        im->hfe.trk_pos = (im->cur_bc/8) & ~255;
         image_read_track(im);
         rd->cons = im->cur_bc & 2047;
         *start_pos = sys_ticks;
+    } else {
+        /* Write mode. */
+        im->hfe.trk_pos = im->cur_bc / 8;
     }
 }
 
@@ -257,7 +262,6 @@ static bool_t hfe_write_track(struct image *im)
     uint8_t *buf = wr->p;
     unsigned int buflen = wr->len;
     uint8_t *w, *wrbuf = im->bufs.write_data.p;
-    uint32_t base = (write->start*(16/8)) / im->hfe.ticks_per_cell;
     uint32_t i, c = wr->cons / 8, p = wr->prod / 8;
     stk_time_t t;
 
@@ -292,7 +296,7 @@ static bool_t hfe_write_track(struct image *im)
 
     for (;;) {
 
-        uint32_t off = (c + base) % im->hfe.trk_len;
+        uint32_t off = im->hfe.trk_pos;
         UINT nr;
 
         /* All bytes remaining in the MFM buffer. */
@@ -341,6 +345,9 @@ static bool_t hfe_write_track(struct image *im)
                 printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
             }
         }
+
+        im->hfe.trk_pos += nr;
+        im->hfe.trk_pos %= im->hfe.trk_len;
     }
 
     wr->cons = c * 8;
