@@ -24,7 +24,7 @@ struct __packed da_status_sector {
     uint8_t sd_status;
     uint8_t SD_WP;
     uint8_t SD_CD;
-    uint8_t number_of_sector;
+    uint8_t nr_sec;
     uint16_t current_index;
 };
 

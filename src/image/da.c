@@ -11,10 +11,8 @@
 
 #include "../fatfs/diskio.h"
 
-static struct da_status_sector dass = {
-    .sig = "HxCFEDA",
-    .fw_ver = "FF-v"FW_VER,
-};
+#define DA_SIG    "HxCFEDA"
+#define DA_FW_VER "FF-v"FW_VER
 
 #define CMD_NOP          0
 #define CMD_SET_LBA      1 /* p[0-3] = LBA (little endian) */
@@ -22,24 +20,50 @@ static struct da_status_sector dass = {
 #define CMD_SET_RPM      3 /* p[0] = 0x00 -> default, 0xFF -> 300 RPM */
 #define CMD_SELECT_IMAGE 4 /* p[0-1] = slot # (little endian) */
 
+#define GAP3 84
+#define SECSZ 512
+#define IAM (80+12+4+50)
+#define IDAM (12+8+2+22)
+#define DAM (12+4+SECSZ+2+GAP3)
+#define GAP4 192
 #define TRACKLEN_BC 100160 /* multiple of 32 */
-#define TICKS_PER_CELL ((sysclk_stk(im->stk_per_rev) * 16u) / TRACKLEN_BC)
+
+static void da_seek_track(struct image *im)
+{
+    struct da_status_sector *dass = &im->da.dass;
+
+    im->cur_track = 255*2;
+
+    memset(&im->da, 0, sizeof(im->da));
+
+    snprintf(dass->sig, sizeof(dass->sig), "%s", DA_SIG);
+    snprintf(dass->fw_ver, sizeof(dass->fw_ver), "%s",
+             (ff_cfg.da_report_version[0] != '\0')
+             ? ff_cfg.da_report_version : DA_FW_VER);
+    dass->nr_sec = 8;
+
+    im->write_bc_ticks = sysclk_us(2);
+    im->ticks_per_cell = im->write_bc_ticks * 16;
+}
 
 static void da_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
-    struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
+    unsigned int nsec;
 
-    im->tracklen_bc = TRACKLEN_BC;
+    if (im->cur_track != 255*2)
+        da_seek_track(im);
+
+    nsec = im->da.dass.nr_sec + 1;
+    im->tracklen_bc = 16 * (IAM + GAP4 + (IDAM + DAM) * nsec);
+    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
+
     im->ticks_since_flux = 0;
-    im->cur_track = 255*2;
-
     im->cur_bc = 0;
     im->cur_ticks = 0;
 
-    rd->prod = 8; /* nr sectors */
-    rd->cons = 0;
+    im->da.decode_pos = 0;
     bc->prod = bc->cons = 0;
 
     if (start_pos) {
@@ -50,6 +74,7 @@ static void da_setup_track(
 
 static bool_t da_read_track(struct image *im)
 {
+    struct da_status_sector *dass = &im->da.dass;
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
@@ -72,7 +97,7 @@ static bool_t da_read_track(struct image *im)
     bc_b[bc_p++ % bc_len] = htobe16(_r & ~(pr << 15));  \
     pr = _r; })
 #define emit_byte(b) emit_raw(bintomfm(b))
-    if (rd->cons == 0) {
+    if (im->da.decode_pos == 0) {
         /* IAM */
         for (i = 0; i < 80; i++) /* Gap 4A */
             emit_byte(0x4e);
@@ -83,14 +108,14 @@ static bool_t da_read_track(struct image *im)
         emit_byte(0xfc);
         for (i = 0; i < 50; i++) /* Gap 1 */
             emit_byte(0x4e);
-    } else if (rd->cons == (1 + (rd->prod + 1) * 2)) {
+    } else if (im->da.decode_pos == (1 + (dass->nr_sec + 1) * 2)) {
         /* Track gap. TODO: Make this dynamically sized. */
         for (i = 0; i < 192; i++) /* Gap 4 */
             emit_byte(0x4e);
-        rd->cons = -1;
-    } else if (rd->cons & 1) {
+        im->da.decode_pos = -1;
+    } else if (im->da.decode_pos & 1) {
         /* IDAM */
-        uint8_t cyl = 255, hd = 0, sec = (rd->cons-1) >> 1, no = 2;
+        uint8_t cyl = 255, hd = 0, sec = (im->da.decode_pos-1) >> 1, no = 2;
         uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe, cyl, hd, sec, no };
         for (i = 0; i < 12; i++) /* Pre-sync */
             emit_byte(0x00);
@@ -106,7 +131,7 @@ static bool_t da_read_track(struct image *im)
     } else {
         /* DAM */
         uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
-        unsigned int sec = (rd->cons-1) >> 1;
+        unsigned int sec = (im->da.decode_pos-1) >> 1;
         for (i = 0; i < 12; i++) /* Pre-sync */
             emit_byte(0x00);
         for (i = 0; i < 3; i++)
@@ -115,15 +140,9 @@ static bool_t da_read_track(struct image *im)
         if (sec == 0) {
             struct da_status_sector *da = (struct da_status_sector *)buf;
             memset(da, 0, 512);
-            memcpy(da, &dass, sizeof(dass));
-            if (ff_cfg.da_report_version[0] != '\0') {
-                /* Report the user-configured version string. */
-                memset(da->fw_ver, 0, sizeof(da->fw_ver));
-                snprintf(da->fw_ver, sizeof(da->fw_ver),
-                         "%s", ff_cfg.da_report_version);
-            }
+            memcpy(da, dass, sizeof(*dass));
         } else {
-            if (disk_read(0, buf, dass.lba_base+sec-1, 1) != RES_OK)
+            if (disk_read(0, buf, dass->lba_base+sec-1, 1) != RES_OK)
                 F_die(FR_DISK_ERR);
         }
         for (i = 0; i < sec_sz; i++) /* Data */
@@ -136,15 +155,10 @@ static bool_t da_read_track(struct image *im)
             emit_byte(0x4e);
     }
 
-    rd->cons++;
+    im->da.decode_pos++;
     bc->prod = bc_p * 16;
 
     return TRUE;
-}
-
-static uint16_t da_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
-{
-    return bc_rdata_flux(im, tbuf, nr, TICKS_PER_CELL);
 }
 
 static bool_t da_write_track(struct image *im)
@@ -153,14 +167,14 @@ static bool_t da_write_track(struct image *im)
     const unsigned int sec_sz = 512;
 
     bool_t flush;
+    struct da_status_sector *dass = &im->da.dass;
     struct write *write = get_write(im, im->wr_cons);
-    struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *wr = &im->bufs.write_bc;
     uint16_t *buf = wr->p;
     unsigned int buflen = wr->len / 2;
     uint8_t *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    uint32_t base = write->start / (sysclk_us(2) * 16);
+    uint32_t base = write->start / (im->write_bc_ticks * 16);
     unsigned int sect, i;
     stk_time_t t;
     uint16_t crc;
@@ -185,7 +199,7 @@ static bool_t da_write_track(struct image *im)
             continue;
 
         sect = base / 658;
-        if (sect > 8) {
+        if (sect > dass->nr_sec) {
             printk("D-A Bad Sector %u\n", sect);
             continue;
         }
@@ -201,18 +215,18 @@ static bool_t da_write_track(struct image *im)
 
         if (sect == 0) {
             struct da_cmd_sector *dac = (struct da_cmd_sector *)wrbuf;
-            if (strcmp(dass.sig, dac->sig))
+            if (strcmp(dass->sig, dac->sig))
                 continue;
             switch (dac->cmd) {
             case CMD_NOP:
                 break;
             case CMD_SET_LBA:
                 for (i = 0; i < 4; i++) {
-                    dass.lba_base <<= 8;
-                    dass.lba_base |= dac->param[3-i];
+                    dass->lba_base <<= 8;
+                    dass->lba_base |= dac->param[3-i];
                 }
-                rd->prod = (dac->param[5] <= 8) ? 8 : dac->param[5];
-                printk("D-A LBA %08x, nr=%u\n", dass.lba_base, rd->prod);
+                dass->nr_sec = (dac->param[5] <= 8) ? 8 : dac->param[5];
+                printk("D-A LBA %08x, nr=%u\n", dass->lba_base, dass->nr_sec);
                 break;
             case CMD_SET_CYL:
                 printk("D-A Cyl A=%u B=%u\n", dac->param[0], dac->param[1]);
@@ -225,9 +239,9 @@ static bool_t da_write_track(struct image *im)
             }
         } else {
             /* All good: write out to mass storage. */
-            printk("Write %08x+%u... ", dass.lba_base, sect-1);
+            printk("Write %08x+%u... ", dass->lba_base, sect-1);
             t = stk_now();
-            if (disk_write(0, wrbuf, dass.lba_base+sect-1, 1) != RES_OK)
+            if (disk_write(0, wrbuf, dass->lba_base+sect-1, 1) != RES_OK)
                 F_die(FR_DISK_ERR);
             printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
         }
@@ -241,7 +255,7 @@ static bool_t da_write_track(struct image *im)
 const struct image_handler da_image_handler = {
     .setup_track = da_setup_track,
     .read_track = da_read_track,
-    .rdata_flux = da_rdata_flux,
+    .rdata_flux = bc_rdata_flux,
     .write_track = da_write_track,
     .syncword = 0x44894489
 };

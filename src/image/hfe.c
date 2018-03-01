@@ -88,7 +88,7 @@ static bool_t hfe_open(struct image *im)
     im->nr_cyls = dhdr.nr_tracks;
     im->nr_sides = dhdr.nr_sides;
     im->write_bc_ticks = sysclk_us(500) / le16toh(dhdr.bitrate);
-    im->hfe.ticks_per_cell = im->write_bc_ticks * 16;
+    im->ticks_per_cell = im->write_bc_ticks * 16;
 
     /* Get an initial value for ticks per revolution. */
     F_lseek(&im->fp, im->hfe.tlut_base*512);
@@ -131,10 +131,10 @@ static void hfe_setup_track(
         hfe_seek_track(im, track);
 
     sys_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
-    im->cur_bc = (sys_ticks * 16) / im->hfe.ticks_per_cell;
+    im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
-    im->cur_ticks = im->cur_bc * im->hfe.ticks_per_cell;
+    im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
 
     sys_ticks = im->cur_ticks / 16;
@@ -191,7 +191,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
     struct image_buf *rd = &im->bufs.read_data;
     uint32_t ticks = im->ticks_since_flux;
-    uint32_t ticks_per_cell = im->hfe.ticks_per_cell;
+    uint32_t ticks_per_cell = im->ticks_per_cell;
     uint32_t y = 8, todo = nr;
     uint8_t x, *buf = rd->p;
     unsigned int buflen = (rd->len & ~255) - im->hfe.batch_secs*512;
@@ -220,7 +220,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
                 continue;
             case OP_bitrate:
                 x = _rbit32(buf[(rd->cons/8+1) % buflen]) >> 24;
-                im->hfe.ticks_per_cell = ticks_per_cell = 
+                im->ticks_per_cell = ticks_per_cell = 
                     (sysclk_us(2) * 16 * x) / 72;
                 rd->cons += 2*8;
                 im->cur_bc += 2*8;

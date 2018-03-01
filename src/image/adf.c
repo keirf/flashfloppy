@@ -15,7 +15,6 @@
 /* Amiga writes short bitcells (PAL: 14/7093790 us) hence long tracks. 
  * For better loader compatibility it is sensible to emulate this. */
 #define TRACKLEN_BC 101376 /* multiple of 32 */
-#define TICKS_PER_CELL ((sysclk_stk(im->stk_per_rev) * 16u) / TRACKLEN_BC)
 #define POST_IDX_GAP_BC 1024
 #define PRE_IDX_GAP_BC (TRACKLEN_BC - NR_SECS*544*16 - POST_IDX_GAP_BC)
 
@@ -41,6 +40,7 @@ static bool_t adf_open(struct image *im)
 
     im->nr_cyls = f_size(&im->fp) / (2 * BYTES_PER_TRACK);
     im->nr_sides = 2;
+    im->ticks_per_cell = (sysclk_stk(im->stk_per_rev) * 16u) / TRACKLEN_BC;
 
     return TRUE;
 }
@@ -64,10 +64,10 @@ static void adf_setup_track(
     im->ticks_since_flux = 0;
     im->cur_track = track;
 
-    im->cur_bc = (sys_ticks * 16) / TICKS_PER_CELL;
+    im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
-    im->cur_ticks = im->cur_bc * TICKS_PER_CELL;
+    im->cur_ticks = im->cur_bc * im->ticks_per_cell;
 
     decode_off = im->cur_bc;
     if (decode_off < POST_IDX_GAP_BC) {
@@ -193,11 +193,6 @@ static bool_t adf_read_track(struct image *im)
     return TRUE;
 }
 
-static uint16_t adf_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
-{
-    return bc_rdata_flux(im, tbuf, nr, TICKS_PER_CELL);
-}
-
 static bool_t adf_write_track(struct image *im)
 {
     bool_t flush;
@@ -286,7 +281,7 @@ const struct image_handler adf_image_handler = {
     .open = adf_open,
     .setup_track = adf_setup_track,
     .read_track = adf_read_track,
-    .rdata_flux = adf_rdata_flux,
+    .rdata_flux = bc_rdata_flux,
     .write_track = adf_write_track,
     .syncword = 0x44894489
 };

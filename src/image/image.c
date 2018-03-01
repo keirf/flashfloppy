@@ -49,7 +49,7 @@ static bool_t try_handler(struct image *im, const struct slot *slot,
 {
     BYTE mode;
 
-    im->handler = im->_handler = handler;
+    im->handler = handler;
 
     mode = FA_READ | FA_OPEN_EXISTING;
     if (handler->write_track != NULL)
@@ -120,14 +120,13 @@ void image_open(struct image *im, const struct slot *slot)
 bool_t image_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
-    /* If we are exiting D-A mode then we need to re-read the config file. */
-    if ((im->handler == &da_image_handler) && (track < 510))
-        return TRUE;
-
-    /* Are we in special direct-access mode, or not? */
-    im->handler = (track >= 510)
-        ? &da_image_handler
-        : im->_handler;
+    if (track < 510) {
+        /* If we are exiting D-A mode then need to re-read the config file. */
+        if (im->handler == &da_image_handler)
+            return TRUE;
+    } else {
+        im->handler = &da_image_handler;
+    }
 
     im->handler->setup_track(im, track, start_pos);
 
@@ -139,9 +138,9 @@ bool_t image_read_track(struct image *im)
     return im->handler->read_track(im);
 }
 
-uint16_t bc_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr,
-                        uint32_t ticks_per_cell)
+uint16_t bc_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
+    uint32_t ticks_per_cell = im->ticks_per_cell;
     uint32_t ticks = im->ticks_since_flux;
     uint32_t x, y = 32, todo = nr;
     struct image_buf *bc = &im->bufs.read_bc;

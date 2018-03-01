@@ -117,8 +117,8 @@ static bool_t _img_open(struct image *im, bool_t has_iam,
     /* Round the track length up to a multiple of 32 bitcells. */
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
 
-    im->img.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
-                              / im->tracklen_bc);
+    im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
+                          / im->tracklen_bc);
     im->img.gap4 = (im->tracklen_bc - tracklen) / 16;
 
     im->write_bc_ticks = sysclk_ms(1) / im->img.data_rate;
@@ -239,11 +239,11 @@ static void img_setup_track(
     im->img.trk_sec = 0;
     im->img.write_sector = -1;
 
-    im->cur_bc = (sys_ticks * 16) / im->img.ticks_per_cell;
+    im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
     im->cur_bc &= ~15;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
-    im->cur_ticks = im->cur_bc * im->img.ticks_per_cell;
+    im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
 
     decode_off = im->cur_bc / 16;
@@ -377,11 +377,6 @@ static bool_t img_read_track(struct image *im)
     return TRUE;
 }
 
-static uint16_t img_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
-{
-    return bc_rdata_flux(im, tbuf, nr, im->img.ticks_per_cell);
-}
-
 static bool_t img_write_track(struct image *im)
 {
     const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
@@ -493,7 +488,7 @@ const struct image_handler img_image_handler = {
     .open = img_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
-    .rdata_flux = img_rdata_flux,
+    .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
     .syncword = 0x44894489
 };
@@ -502,7 +497,7 @@ const struct image_handler st_image_handler = {
     .open = st_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
-    .rdata_flux = img_rdata_flux,
+    .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
     .syncword = 0x44894489
 };
@@ -511,7 +506,7 @@ const struct image_handler adl_image_handler = {
     .open = adl_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
-    .rdata_flux = img_rdata_flux,
+    .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
     .syncword = 0x44894489
 };
@@ -520,7 +515,7 @@ const struct image_handler trd_image_handler = {
     .open = trd_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
-    .rdata_flux = img_rdata_flux,
+    .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
     .syncword = 0x44894489
 };

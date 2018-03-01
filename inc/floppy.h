@@ -24,7 +24,6 @@ struct hfe_image {
     uint16_t tlut_base;
     uint16_t trk_off;
     uint16_t trk_pos, trk_len;
-    uint32_t ticks_per_cell;
     bool_t is_v3;
     uint8_t batch_secs;
 };
@@ -40,7 +39,6 @@ struct img_image {
     uint8_t nr_sectors, sec_no;
     uint8_t interleave:4, skew:4;
     uint16_t data_rate, gap4;
-    uint32_t ticks_per_cell;
     uint32_t idx_sz, idam_sz, dam_sz;
 };
 
@@ -51,12 +49,12 @@ struct dsk_image {
     bool_t extended;
     int8_t write_sector;
     uint16_t gap4;
-    uint32_t ticks_per_cell;
     uint32_t idx_sz, idam_sz, dam_sz;
 };
 
 struct directaccess {
-    uint32_t lba;
+    struct da_status_sector dass;
+    int32_t decode_pos;
 };
 
 struct image_buf {
@@ -99,6 +97,7 @@ struct image {
     /* Info about current track. */
     uint16_t cur_track;
     uint16_t write_bc_ticks; /* Nr SYSCLK ticks per bitcell in write stream */
+    uint32_t ticks_per_cell; /* Nr 'ticks' per bitcell in read stream. */
     uint32_t tracklen_bc, cur_bc; /* Track length and cursor, in bitcells */
     uint32_t tracklen_ticks; /* Timing of previous revolution, in 'ticks' */
     uint32_t cur_ticks; /* Offset from index, in 'ticks' */
@@ -106,13 +105,12 @@ struct image {
     uint32_t write_bc_window; /* Sliding window at head of bitcell stream */
     uint32_t stk_per_rev; /* Nr STK ticks per revolution. */
 
-    struct directaccess da;
-
     union {
         struct adf_image adf;
         struct hfe_image hfe;
         struct img_image img;
         struct dsk_image dsk;
+        struct directaccess da;
     };
 };
 
@@ -152,8 +150,7 @@ bool_t image_read_track(struct image *im);
 
 /* Generate flux timings for the RDATA timer and output pin. */
 uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
-uint16_t bc_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr,
-                       uint32_t ticks_per_cell);
+uint16_t bc_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
 
 /* Write track data from memory to mass storage. Returns TRUE if processing
  * was completed for the write at the tail of the pipeline. */

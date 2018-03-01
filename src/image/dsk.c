@@ -99,8 +99,8 @@ static void dsk_seek_track(
         printk("T%u.%u: Unformatted\n", cyl, side);
         memset(tib, 0, sizeof(*tib));
         im->tracklen_bc = 100160;
-        im->dsk.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
-                                  / im->tracklen_bc);
+        im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
+                              / im->tracklen_bc);
         return;
     }
 
@@ -160,8 +160,8 @@ static void dsk_seek_track(
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
 
     /* Calculate output data rate (bitcell size). */
-    im->dsk.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
-                              / im->tracklen_bc);
+    im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
+                          / im->tracklen_bc);
 
     /* Now calculate the pre-index track gap. */
     im->dsk.gap4 = (im->tracklen_bc - tracklen) / 16;
@@ -185,11 +185,11 @@ static void dsk_setup_track(
 
     im->dsk.write_sector = -1;
 
-    im->cur_bc = (sys_ticks * 16) / im->dsk.ticks_per_cell;
+    im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
     im->cur_bc &= ~15;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
-    im->cur_ticks = im->cur_bc * im->dsk.ticks_per_cell;
+    im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
 
     if (tib->nr_secs != 0) {
@@ -353,11 +353,6 @@ static bool_t dsk_read_track(struct image *im)
     return TRUE;
 }
 
-static uint16_t dsk_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
-{
-    return bc_rdata_flux(im, tbuf, nr, im->dsk.ticks_per_cell);
-}
-
 static bool_t dsk_write_track(struct image *im)
 {
     const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
@@ -489,7 +484,7 @@ const struct image_handler dsk_image_handler = {
     .open = dsk_open,
     .setup_track = dsk_setup_track,
     .read_track = dsk_read_track,
-    .rdata_flux = dsk_rdata_flux,
+    .rdata_flux = bc_rdata_flux,
     .write_track = dsk_write_track,
     .syncword = 0x44894489
 };
