@@ -8,6 +8,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - DSK (Amstrad CPC, Spectrum +3)
   - IMG/IMA (IBM MFM Raw Sector)
   - ST (Atari ST)
+  - TRD (Spectrum TR-DOS)
 - Pre-configured track layouts for Raw Sector Images:
   - Akai synths (eg. S01, S20, S950)
   - IBM PC and many others
