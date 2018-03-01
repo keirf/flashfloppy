@@ -264,7 +264,7 @@ static bool_t hfe_write_track(struct image *im)
 {
     bool_t flush;
     struct write *write = get_write(im, im->wr_cons);
-    struct image_buf *wr = &im->bufs.write_mfm;
+    struct image_buf *wr = &im->bufs.write_bc;
     uint8_t *buf = wr->p;
     unsigned int buflen = wr->len;
     uint8_t *w, *wrbuf = im->bufs.write_data.p;
@@ -279,9 +279,9 @@ static bool_t hfe_write_track(struct image *im)
     /* If we are processing final data then use the end index, rounded to
      * nearest. */
     barrier();
-    flush = (im->wr_cons != im->wr_mfm);
+    flush = (im->wr_cons != im->wr_bc);
     if (flush)
-        p = (write->mfm_end + 4) / 8;
+        p = (write->bc_end + 4) / 8;
 
     if (!im->bufs.write_data.prod) {
         /* How many bytes is the full track data? */

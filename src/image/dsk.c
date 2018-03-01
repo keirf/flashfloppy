@@ -90,7 +90,7 @@ static void dsk_setup_track(
     struct dib *dib = dib_p(im);
     struct tib *tib = tib_p(im);
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_mfm;
+    struct image_buf *mfm = &im->bufs.read_bc;
     unsigned int i;
     uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
     uint8_t cyl = track/2, side = track&1;
@@ -237,7 +237,7 @@ static bool_t dsk_read_track(struct image *im)
 {
     struct tib *tib = tib_p(im);
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_mfm;
+    struct image_buf *mfm = &im->bufs.read_bc;
     uint8_t *buf = (uint8_t *)rd->p + 512; /* skip DIB/TIB */
     uint16_t *mfmb = mfm->p;
     unsigned int i, mfmlen, mfmp, mfmc;
@@ -355,7 +355,7 @@ static bool_t dsk_read_track(struct image *im)
 
 static uint16_t dsk_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
-    return mfm_rdata_flux(im, tbuf, nr, im->dsk.ticks_per_cell);
+    return bc_rdata_flux(im, tbuf, nr, im->dsk.ticks_per_cell);
 }
 
 static bool_t dsk_write_track(struct image *im)
@@ -365,7 +365,7 @@ static bool_t dsk_write_track(struct image *im)
     bool_t flush;
     struct write *write = get_write(im, im->wr_cons);
     struct tib *tib = tib_p(im);
-    struct image_buf *wr = &im->bufs.write_mfm;
+    struct image_buf *wr = &im->bufs.write_bc;
     uint16_t *buf = wr->p;
     unsigned int buflen = wr->len / 2;
     uint8_t *wrbuf = (uint8_t *)im->bufs.write_data.p + 512; /* skip DIB/TIB */
@@ -378,9 +378,9 @@ static bool_t dsk_write_track(struct image *im)
 
     /* If we are processing final data then use the end index, rounded up. */
     barrier();
-    flush = (im->wr_cons != im->wr_mfm);
+    flush = (im->wr_cons != im->wr_bc);
     if (flush)
-        p = (write->mfm_end + 15) / 16;
+        p = (write->bc_end + 15) / 16;
 
     if (tib->nr_secs == 0) {
         /* Unformatted. */

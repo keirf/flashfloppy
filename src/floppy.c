@@ -28,10 +28,10 @@ struct dma_ring {
      *  DMA_active: DMA is active, timer is operational. 
      *  DMA_stopping: DMA+timer halted, buffer waiting to be cleared. 
      * Current state of DMA (WDATA): 
-     *  DMA_inactive: No activity, flux ring and MFM buffer are empty. 
-     *  DMA_starting: Flux ring and MFM buffer are filling, DMA+timer active.
+     *  DMA_inactive: No activity, flux ring and bitcell buffer are empty. 
+     *  DMA_starting: Flux ring and bitcell buffer are filling.
      *  DMA_active: Writeback processing is active (to mass storage).
-     *  DMA_stopping: DMA+timer halted, buffers waiting to be cleared. */
+     *  DMA_stopping: Timer halted, buffers waiting to be cleared. */
 #define DMA_inactive 0 /* -> {starting, active} */
 #define DMA_starting 1 /* -> {active, stopping} */
 #define DMA_active   2 /* -> {stopping} */
@@ -296,18 +296,18 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
     memset(image, 0, sizeof(*image));
 
     /* Large buffer to absorb long write latencies at mass-storage layer. */
-    image->bufs.write_mfm.len = 20*1024;
-    image->bufs.write_mfm.p = arena_alloc(image->bufs.write_mfm.len);
+    image->bufs.write_bc.len = 20*1024;
+    image->bufs.write_bc.p = arena_alloc(image->bufs.write_bc.len);
 
     /* Any remaining space is used for staging writes to mass storage, for 
      * example when format conversion is required and it is not possible to 
-     * do this in place within the write_mfm buffer. */
+     * do this in place within the write_bc buffer. */
     image->bufs.write_data.len = arena_avail();
     image->bufs.write_data.p = arena_alloc(image->bufs.write_data.len);
 
-    /* Read MFM buffer overlaps the second half of the write MFM buffer.
+    /* Read BC buffer overlaps the second half of the write BC buffer.
      * This is because:
-     *  (a) The read MFM buffer does not need to absorb such large latencies
+     *  (a) The read BC buffer does not need to absorb such large latencies
      *      (reads are much more predictable than writes to mass storage).
      *  (b) By dedicating the first half of the write buffer to writes, we
      *      can safely start processing write flux while read-data is still
@@ -316,9 +316,9 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
      *      with read buffers, even at HD data rate (1us/bitcell).
      *      This is more than enough time for read
      *      processing to complete. */
-    image->bufs.read_mfm.len = image->bufs.write_mfm.len / 2;
-    image->bufs.read_mfm.p = (char *)image->bufs.write_mfm.p
-        + image->bufs.read_mfm.len;
+    image->bufs.read_bc.len = image->bufs.write_bc.len / 2;
+    image->bufs.read_bc.p = (char *)image->bufs.write_bc.p
+        + image->bufs.read_bc.len;
 
     /* Read-data buffer can entirely share the space of the write-data buffer. 
      * Change of use of this memory space is fully serialised. */
@@ -749,9 +749,9 @@ static bool_t dma_wr_handle(struct drive *drv)
         im->bufs.write_data.cons = 0;
         im->bufs.write_data.prod = 0;
 
-        /* Align the MFM consumer index for start of next write. */
+        /* Align the bitcell consumer index for start of next write. */
         write = get_write(im, im->wr_cons);
-        im->bufs.write_mfm.cons = (write->mfm_end + 31) & ~31;
+        im->bufs.write_bc.cons = (write->bc_end + 31) & ~31;
 
         /* Sync back to mass storage. */
         F_sync(&im->fp);
@@ -939,9 +939,9 @@ static void IRQ_wdata_dma(void)
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
     uint16_t cons, prod, prev, curr, next;
     uint16_t cell = image->write_bc_ticks, window;
-    uint32_t mfm = 0, mfmprod, syncword = image->handler->syncword;
-    uint32_t *mfmbuf = image->bufs.write_mfm.p;
-    unsigned int mfmbuflen = image->bufs.write_mfm.len / 4;
+    uint32_t bc_dat = 0, bc_prod, syncword = image->handler->syncword;
+    uint32_t *bc_buf = image->bufs.write_bc.p;
+    unsigned int bc_buflen = image->bufs.write_bc.len / 4;
     struct write *write = NULL;
 
     window = cell + (cell >> 1);
@@ -958,50 +958,50 @@ static void IRQ_wdata_dma(void)
 
     /* Check if we are processing the tail end of a write. */
     barrier(); /* interrogate peripheral /then/ check for write-end. */
-    if (image->wr_mfm != image->wr_prod) {
-        write = get_write(image, image->wr_mfm);
+    if (image->wr_bc != image->wr_prod) {
+        write = get_write(image, image->wr_bc);
         prod = write->dma_end;
     }
 
-    /* Process the flux timings into the MFM raw buffer. */
+    /* Process the flux timings into the raw bitcell buffer. */
     prev = dma_wr->prev_sample;
-    mfmprod = image->bufs.write_mfm.prod;
-    mfm = image->write_mfm_window;
+    bc_prod = image->bufs.write_bc.prod;
+    bc_dat = image->write_bc_window;
     for (cons = dma_wr->cons; cons != prod; cons = (cons+1) & buf_mask) {
         next = dma_wr->buf[cons];
         curr = next - prev;
         prev = next;
         while (curr > window) {
             curr -= cell;
-            mfm <<= 1;
-            mfmprod++;
-            if (!(mfmprod&31))
-                mfmbuf[((mfmprod-1) / 32) % mfmbuflen] = htobe32(mfm);
+            bc_dat <<= 1;
+            bc_prod++;
+            if (!(bc_prod&31))
+                bc_buf[((bc_prod-1) / 32) % bc_buflen] = htobe32(bc_dat);
         }
-        mfm = (mfm << 1) | 1;
-        mfmprod++;
-        if (mfm == syncword)
-            mfmprod &= ~31;
-        if (!(mfmprod&31))
-            mfmbuf[((mfmprod-1) / 32) % mfmbuflen] = htobe32(mfm);
+        bc_dat = (bc_dat << 1) | 1;
+        bc_prod++;
+        if (bc_dat == syncword)
+            bc_prod &= ~31;
+        if (!(bc_prod&31))
+            bc_buf[((bc_prod-1) / 32) % bc_buflen] = htobe32(bc_dat);
     }
 
-    if (mfmprod & 31)
-        mfmbuf[(mfmprod / 32) % mfmbuflen] = htobe32(mfm << (-mfmprod&31));
+    if (bc_prod & 31)
+        bc_buf[(bc_prod / 32) % bc_buflen] = htobe32(bc_dat << (-bc_prod&31));
 
     /* Processing the tail end of a write? */
     if (write != NULL) {
-        /* Remember where this write's MFM ends. */
-        write->mfm_end = mfmprod;
-        image->wr_mfm++;
+        /* Remember where this write's bitcell data ends. */
+        write->bc_end = bc_prod;
+        image->wr_bc++;
         /* Initialise decoder state for the start of the next write. */
-        mfmprod = (mfmprod + 31) & ~31;
-        mfm = prev = 0;
+        bc_prod = (bc_prod + 31) & ~31;
+        bc_dat = prev = 0;
     }
 
     /* Save our progress for next time. */
-    image->write_mfm_window = mfm;
-    image->bufs.write_mfm.prod = mfmprod;
+    image->write_bc_window = bc_dat;
+    image->bufs.write_bc.prod = bc_prod;
     dma_wr->cons = cons;
     dma_wr->prev_sample = prev;
 }

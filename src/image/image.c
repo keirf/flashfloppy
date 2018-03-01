@@ -139,12 +139,12 @@ bool_t image_read_track(struct image *im)
     return im->handler->read_track(im);
 }
 
-uint16_t mfm_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr,
+uint16_t bc_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr,
                         uint32_t ticks_per_cell)
 {
     uint32_t ticks = im->ticks_since_flux;
     uint32_t x, y = 32, todo = nr;
-    struct image_buf *mfm = &im->bufs.read_mfm;
+    struct image_buf *mfm = &im->bufs.read_bc;
     uint32_t *mfmb = mfm->p, mfmc = mfm->cons, mfmp = mfm->prod & ~31;
 
     /* Convert pre-generated MFM into flux timings. */

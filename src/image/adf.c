@@ -49,7 +49,7 @@ static void adf_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_mfm;
+    struct image_buf *mfm = &im->bufs.read_bc;
     uint32_t decode_off, sector, sys_ticks = start_pos ? *start_pos : 0;
     uint8_t cyl = track/2, side = track&1;
 
@@ -96,7 +96,7 @@ static bool_t adf_read_track(struct image *im)
 {
     const UINT sec_sz = 512;
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_mfm;
+    struct image_buf *mfm = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
     uint32_t pr, *mfmb = mfm->p;
     unsigned int i, mfmlen, mfmp, mfmc;
@@ -195,14 +195,14 @@ static bool_t adf_read_track(struct image *im)
 
 static uint16_t adf_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
-    return mfm_rdata_flux(im, tbuf, nr, TICKS_PER_CELL);
+    return bc_rdata_flux(im, tbuf, nr, TICKS_PER_CELL);
 }
 
 static bool_t adf_write_track(struct image *im)
 {
     bool_t flush;
     struct write *write = get_write(im, im->wr_cons);
-    struct image_buf *wr = &im->bufs.write_mfm;
+    struct image_buf *wr = &im->bufs.write_bc;
     uint32_t *buf = wr->p;
     unsigned int buflen = wr->len / 4;
     uint32_t *w, *wrbuf = im->bufs.write_data.p;
@@ -213,9 +213,9 @@ static bool_t adf_write_track(struct image *im)
 
     /* If we are processing final data then use the end index, rounded up. */
     barrier();
-    flush = (im->wr_cons != im->wr_mfm);
+    flush = (im->wr_cons != im->wr_bc);
     if (flush)
-        p = (write->mfm_end + 31) / 32;
+        p = (write->bc_end + 31) / 32;
 
     while ((p - c) >= (542/2)) {
 

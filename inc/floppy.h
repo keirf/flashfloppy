@@ -66,10 +66,10 @@ struct image_buf {
 };
 
 struct image_bufs {
-    /* Buffering for MFM being written to disk. */
-    struct image_buf write_mfm;
-    /* Buffering for MFM we generate from read_data. */
-    struct image_buf read_mfm;
+    /* Buffering for bitcells being written to disk. */
+    struct image_buf write_bc;
+    /* Buffering for bitcells we generate from read_data. */
+    struct image_buf read_bc;
     /* Staging area for writeout to mass storage. */
     struct image_buf write_data;
     /* Read buffer for track data to be used for generating flux pattern. */
@@ -91,10 +91,10 @@ struct image {
 
     struct write {
         uint32_t start; /* Ticks past index when current write started */
-        uint32_t mfm_end; /* Final MFM buffer index */
+        uint32_t bc_end; /* Final bitcell buffer index */
         uint16_t dma_end; /* Final DMA buffer index */
     } write[8];
-    uint16_t wr_cons, wr_mfm, wr_prod;
+    uint16_t wr_cons, wr_bc, wr_prod;
 
     /* Info about current track. */
     uint16_t cur_track;
@@ -103,7 +103,7 @@ struct image {
     uint32_t tracklen_ticks; /* Timing of previous revolution, in 'ticks' */
     uint32_t cur_ticks; /* Offset from index, in 'ticks' */
     uint32_t ticks_since_flux; /* Ticks since last flux sample/reversal */
-    uint32_t write_mfm_window; /* Sliding window at head of MFM write stream */
+    uint32_t write_bc_window; /* Sliding window at head of bitcell stream */
     uint32_t stk_per_rev; /* Nr STK ticks per revolution. */
 
     struct directaccess da;
@@ -152,8 +152,8 @@ bool_t image_read_track(struct image *im);
 
 /* Generate flux timings for the RDATA timer and output pin. */
 uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
-uint16_t mfm_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr,
-                        uint32_t ticks_per_cell);
+uint16_t bc_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr,
+                       uint32_t ticks_per_cell);
 
 /* Write track data from memory to mass storage. Returns TRUE if processing
  * was completed for the write at the tail of the pipeline. */

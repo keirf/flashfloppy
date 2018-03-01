@@ -29,7 +29,7 @@ static void da_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_mfm;
+    struct image_buf *mfm = &im->bufs.read_bc;
 
     im->tracklen_bc = TRACKLEN_BC;
     im->ticks_since_flux = 0;
@@ -51,7 +51,7 @@ static void da_setup_track(
 static bool_t da_read_track(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_mfm;
+    struct image_buf *mfm = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
     uint16_t *mfmb = mfm->p;
     unsigned int i, mfmlen, mfmp, mfmc;
@@ -144,7 +144,7 @@ static bool_t da_read_track(struct image *im)
 
 static uint16_t da_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
-    return mfm_rdata_flux(im, tbuf, nr, TICKS_PER_CELL);
+    return bc_rdata_flux(im, tbuf, nr, TICKS_PER_CELL);
 }
 
 static bool_t da_write_track(struct image *im)
@@ -155,7 +155,7 @@ static bool_t da_write_track(struct image *im)
     bool_t flush;
     struct write *write = get_write(im, im->wr_cons);
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *wr = &im->bufs.write_mfm;
+    struct image_buf *wr = &im->bufs.write_bc;
     uint16_t *buf = wr->p;
     unsigned int buflen = wr->len / 2;
     uint8_t *wrbuf = im->bufs.write_data.p;
@@ -168,9 +168,9 @@ static bool_t da_write_track(struct image *im)
 
     /* If we are processing final data then use the end index, rounded up. */
     barrier();
-    flush = (im->wr_cons != im->wr_mfm);
+    flush = (im->wr_cons != im->wr_bc);
     if (flush)
-        p = (write->mfm_end + 15) / 16;
+        p = (write->bc_end + 15) / 16;
 
     while ((p - c) >= (3 + sec_sz + 2)) {
 
