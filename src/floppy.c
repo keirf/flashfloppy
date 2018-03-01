@@ -588,7 +588,7 @@ static void floppy_sync_flux(void)
     } else if (drv->step.state) {
         /* IDX is suppressed: Wait for heads to settle.
          * When IDX is not suppressed, settle time is already accounted for in
-         * dma_rd_handle()'s call to image_seek_track(). */
+         * dma_rd_handle()'s call to image_setup_track(). */
         stk_time_t step_settle = stk_add(drv->step.start,
                                          stk_ms(DRIVE_SETTLE_MS));
         int32_t delta = stk_delta(stk_now(), step_settle) - stk_us(1);
@@ -669,7 +669,7 @@ static bool_t dma_rd_handle(struct drive *drv)
             /* Remove write-protect when driven into D-A mode. */
             drive_change_output(drv, outp_wrprot, FALSE);
         }
-        if (image_seek_track(drv->image, track, &read_start_pos))
+        if (image_setup_track(drv->image, track, &read_start_pos))
             return TRUE;
         read_start_pos /= SYSCLK_MHZ/STK_MHZ;
         sync_pos = read_start_pos;
@@ -731,8 +731,8 @@ static bool_t dma_wr_handle(struct drive *drv)
             ASSERT(dma_rd->state == DMA_inactive);
         }
     
-        /* Make sure we're on the correct track. */
-        if (image_seek_track(im, drive_calc_track(drv), NULL))
+        /* Set up the track for writing. */
+        if (image_setup_track(im, drive_calc_track(drv), NULL))
             return TRUE;
 
         drv->writing = TRUE;

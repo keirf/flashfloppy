@@ -84,7 +84,7 @@ static bool_t dsk_open(struct image *im)
     return TRUE;
 }
 
-static void dsk_seek_track(
+static void dsk_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct dib *dib = dib_p(im);
@@ -489,7 +489,7 @@ out:
 
 const struct image_handler dsk_image_handler = {
     .open = dsk_open,
-    .seek_track = dsk_seek_track,
+    .setup_track = dsk_setup_track,
     .read_track = dsk_read_track,
     .rdata_flux = dsk_rdata_flux,
     .write_track = dsk_write_track,

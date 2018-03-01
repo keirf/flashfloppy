@@ -45,7 +45,7 @@ static bool_t adf_open(struct image *im)
     return TRUE;
 }
 
-static void adf_seek_track(
+static void adf_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
@@ -284,7 +284,7 @@ static bool_t adf_write_track(struct image *im)
 
 const struct image_handler adf_image_handler = {
     .open = adf_open,
-    .seek_track = adf_seek_track,
+    .setup_track = adf_setup_track,
     .read_track = adf_read_track,
     .rdata_flux = adf_rdata_flux,
     .write_track = adf_write_track,

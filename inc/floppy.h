@@ -123,7 +123,7 @@ static inline struct write *get_write(struct image *im, uint16_t idx)
 
 struct image_handler {
     bool_t (*open)(struct image *im);
-    void (*seek_track)(
+    void (*setup_track)(
         struct image *im, uint16_t track, stk_time_t *start_pos);
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
@@ -144,7 +144,7 @@ void image_open(struct image *im, const struct slot *slot);
  * interested in fetching data from a particular rotational position.
  * 
  * Returns TRUE if the config file needs to be re-read (exiting D-A mode). */
-bool_t image_seek_track(
+bool_t image_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos);
 
 /* Read track data into memory. Returns TRUE if any new data was read. */

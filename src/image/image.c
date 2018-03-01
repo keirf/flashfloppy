@@ -117,7 +117,7 @@ void image_open(struct image *im, const struct slot *slot)
     F_die(FR_BAD_IMAGE);
 }
 
-bool_t image_seek_track(
+bool_t image_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     /* If we are exiting D-A mode then we need to re-read the config file. */
@@ -129,7 +129,7 @@ bool_t image_seek_track(
         ? &da_image_handler
         : im->_handler;
 
-    im->handler->seek_track(im, track, start_pos);
+    im->handler->setup_track(im, track, start_pos);
 
     return FALSE;
 }

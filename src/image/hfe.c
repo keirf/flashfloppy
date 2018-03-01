@@ -100,7 +100,7 @@ static bool_t hfe_open(struct image *im)
     return TRUE;
 }
 
-static void hfe_seek_track(
+static void hfe_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
@@ -371,7 +371,7 @@ static bool_t hfe_write_track(struct image *im)
 
 const struct image_handler hfe_image_handler = {
     .open = hfe_open,
-    .seek_track = hfe_seek_track,
+    .setup_track = hfe_setup_track,
     .read_track = hfe_read_track,
     .rdata_flux = hfe_rdata_flux,
     .write_track = hfe_write_track,

@@ -198,7 +198,7 @@ static bool_t trd_open(struct image *im)
     return _img_open(im, TRUE, NULL);
 }
 
-static void img_seek_track(
+static void img_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
@@ -490,7 +490,7 @@ static bool_t img_write_track(struct image *im)
 
 const struct image_handler img_image_handler = {
     .open = img_open,
-    .seek_track = img_seek_track,
+    .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = img_rdata_flux,
     .write_track = img_write_track,
@@ -499,7 +499,7 @@ const struct image_handler img_image_handler = {
 
 const struct image_handler st_image_handler = {
     .open = st_open,
-    .seek_track = img_seek_track,
+    .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = img_rdata_flux,
     .write_track = img_write_track,
@@ -508,7 +508,7 @@ const struct image_handler st_image_handler = {
 
 const struct image_handler adl_image_handler = {
     .open = adl_open,
-    .seek_track = img_seek_track,
+    .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = img_rdata_flux,
     .write_track = img_write_track,
@@ -517,7 +517,7 @@ const struct image_handler adl_image_handler = {
 
 const struct image_handler trd_image_handler = {
     .open = trd_open,
-    .seek_track = img_seek_track,
+    .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = img_rdata_flux,
     .write_track = img_write_track,

@@ -25,7 +25,7 @@ static struct da_status_sector dass = {
 #define TRACKLEN_BC 100160 /* multiple of 32 */
 #define TICKS_PER_CELL ((sysclk_stk(im->stk_per_rev) * 16u) / TRACKLEN_BC)
 
-static void da_seek_track(
+static void da_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
@@ -239,7 +239,7 @@ static bool_t da_write_track(struct image *im)
 }
 
 const struct image_handler da_image_handler = {
-    .seek_track = da_seek_track,
+    .setup_track = da_setup_track,
     .read_track = da_read_track,
     .rdata_flux = da_rdata_flux,
     .write_track = da_write_track,
