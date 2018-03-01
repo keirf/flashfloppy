@@ -68,10 +68,11 @@ enum {
     OP_skip = 12    /* +1byte: skip 0-8 bits in next byte */
 };
 
+static void hfe_seek_track(struct image *im, uint16_t track);
+
 static bool_t hfe_open(struct image *im)
 {
     struct disk_header dhdr;
-    struct track_header thdr;
 
     F_read(&im->fp, &dhdr, sizeof(dhdr), NULL);
     if (dhdr.formatrevision != 0)
@@ -91,11 +92,7 @@ static bool_t hfe_open(struct image *im)
     im->ticks_per_cell = im->write_bc_ticks * 16;
 
     /* Get an initial value for ticks per revolution. */
-    F_lseek(&im->fp, im->hfe.tlut_base*512);
-    F_read(&im->fp, &thdr, sizeof(thdr), NULL);
-    im->hfe.trk_len = le16toh(thdr.len) / 2;
-    im->tracklen_bc = im->hfe.trk_len * 8;
-    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
+    hfe_seek_track(im, 0);
 
     return TRUE;
 }

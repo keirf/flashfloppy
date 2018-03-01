@@ -388,7 +388,7 @@ static bool_t img_write_track(struct image *im)
     unsigned int buflen = wr->len / 2;
     uint8_t *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    uint32_t base = write->start / (im->write_bc_ticks * 16);
+    uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
     unsigned int i;
     stk_time_t t;
     uint16_t crc;

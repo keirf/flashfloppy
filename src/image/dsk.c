@@ -365,7 +365,7 @@ static bool_t dsk_write_track(struct image *im)
     unsigned int buflen = wr->len / 2;
     uint8_t *wrbuf = (uint8_t *)im->bufs.write_data.p + 512; /* skip DIB/TIB */
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    int32_t base = write->start / (im->write_bc_ticks * 16);
+    int32_t base = write->start / im->ticks_per_cell; /* in data bytes */
     unsigned int i;
     stk_time_t t;
     uint16_t crc, sec_sz, off;
