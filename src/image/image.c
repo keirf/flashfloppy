@@ -144,14 +144,14 @@ uint16_t bc_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr,
 {
     uint32_t ticks = im->ticks_since_flux;
     uint32_t x, y = 32, todo = nr;
-    struct image_buf *mfm = &im->bufs.read_bc;
-    uint32_t *mfmb = mfm->p, mfmc = mfm->cons, mfmp = mfm->prod & ~31;
+    struct image_buf *bc = &im->bufs.read_bc;
+    uint32_t *bc_b = bc->p, bc_c = bc->cons, bc_p = bc->prod & ~31;
 
-    /* Convert pre-generated MFM into flux timings. */
-    while (mfmc != mfmp) {
-        y = mfmc % 32;
-        x = be32toh(mfmb[(mfmc/32)%(mfm->len/4)]) << y;
-        mfmc += 32 - y;
+    /* Convert pre-generated bitcells into flux timings. */
+    while (bc_c != bc_p) {
+        y = bc_c % 32;
+        x = be32toh(bc_b[(bc_c/32)%(bc->len/4)]) << y;
+        bc_c += 32 - y;
         im->cur_bc += 32 - y;
         im->cur_ticks += (32 - y) * ticks_per_cell;
         while (y < 32) {
@@ -170,7 +170,7 @@ uint16_t bc_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr,
     ASSERT(y == 32);
 
 out:
-    mfm->cons = mfmc - (32 - y);
+    bc->cons = bc_c - (32 - y);
     im->cur_bc -= 32 - y;
     im->cur_ticks -= (32 - y) * ticks_per_cell;
     im->ticks_since_flux = ticks;

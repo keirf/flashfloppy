@@ -305,7 +305,7 @@ static bool_t hfe_write_track(struct image *im)
         uint32_t off = im->hfe.trk_pos;
         UINT nr;
 
-        /* All bytes remaining in the MFM buffer. */
+        /* All bytes remaining in the raw-bitcell buffer. */
         nr = p - c;
         /* Limit to end of current 256-byte HFE block. */
         nr = min_t(UINT, nr, 256 - (off & 255));

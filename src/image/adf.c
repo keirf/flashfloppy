@@ -49,7 +49,7 @@ static void adf_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_bc;
+    struct image_buf *bc = &im->bufs.read_bc;
     uint32_t decode_off, sector, sys_ticks = start_pos ? *start_pos : 0;
     uint8_t cyl = track/2, side = track&1;
 
@@ -84,11 +84,11 @@ static void adf_setup_track(
     }
 
     rd->prod = rd->cons = 0;
-    mfm->prod = mfm->cons = 0;
+    bc->prod = bc->cons = 0;
 
     if (start_pos) {
         image_read_track(im);
-        mfm->cons = decode_off;
+        bc->cons = decode_off;
     }
 }
 
@@ -96,10 +96,10 @@ static bool_t adf_read_track(struct image *im)
 {
     const UINT sec_sz = 512;
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_bc;
+    struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
-    uint32_t pr, *mfmb = mfm->p;
-    unsigned int i, mfmlen, mfmp, mfmc;
+    uint32_t pr, *bc_b = bc->p;
+    unsigned int i, bc_len, bc_p, bc_c;
     unsigned int buflen = rd->len & ~511;
 
     if (rd->prod == rd->cons) {
@@ -111,15 +111,15 @@ static bool_t adf_read_track(struct image *im)
             im->adf.trk_pos = 0;
     }
 
-    /* Generate some MFM if there is space in the MFM ring buffer. */
-    mfmp = mfm->prod / 32; /* MFM longs */
-    mfmc = mfm->cons / 32; /* MFM longs */
-    mfmlen = mfm->len / 4; /* MFM longs */
+    /* Generate some MFM if there is space in the raw-bitcell ring buffer. */
+    bc_p = bc->prod / 32; /* MFM longs */
+    bc_c = bc->cons / 32; /* MFM longs */
+    bc_len = bc->len / 4; /* MFM longs */
 
-    pr = be32toh(mfmb[(mfmp-1) % mfmlen]);
+    pr = be32toh(bc_b[(bc_p-1) % bc_len]);
 #define emit_raw(r) ({                                  \
     uint32_t _r = (r);                                  \
-    mfmb[mfmp++ % mfmlen] = htobe32(_r & ~(pr << 31));  \
+    bc_b[bc_p++ % bc_len] = htobe32(_r & ~(pr << 31));  \
     pr = _r; })
 #define emit_long(l) ({                                         \
     uint32_t _l = (l);                                          \
@@ -130,7 +130,7 @@ static bool_t adf_read_track(struct image *im)
     if (im->adf.decode_pos == 0) {
 
         /* Post-index track gap */
-        if ((mfmlen - (mfmp - mfmc)) < POST_IDX_GAP_BC/32)
+        if ((bc_len - (bc_p - bc_c)) < POST_IDX_GAP_BC/32)
             return FALSE;
         for (i = 0; i < POST_IDX_GAP_BC/32; i++)
             emit_long(0);
@@ -138,7 +138,7 @@ static bool_t adf_read_track(struct image *im)
     } else if (im->adf.decode_pos == NR_SECS+1) {
 
         /* Pre-index track gap */
-        if ((mfmlen - (mfmp - mfmc)) < PRE_IDX_GAP_BC/32)
+        if ((bc_len - (bc_p - bc_c)) < PRE_IDX_GAP_BC/32)
             return FALSE;
         for (i = 0; i < PRE_IDX_GAP_BC/32-1; i++)
             emit_long(0);
@@ -149,7 +149,7 @@ static bool_t adf_read_track(struct image *im)
 
         uint32_t sector = im->adf.decode_pos - 1;
         uint32_t info, csum, *dat = (uint32_t *)&buf[(rd->cons/8)%buflen];
-        if ((mfmlen - (mfmp - mfmc)) < (544*16)/32)
+        if ((bc_len - (bc_p - bc_c)) < (544*16)/32)
             return FALSE;
 
         /* Sector header */
@@ -188,7 +188,7 @@ static bool_t adf_read_track(struct image *im)
     }
 
     im->adf.decode_pos++;
-    mfm->prod = mfmp * 32;
+    bc->prod = bc_p * 32;
 
     return TRUE;
 }

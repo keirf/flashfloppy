@@ -90,7 +90,7 @@ static void dsk_setup_track(
     struct dib *dib = dib_p(im);
     struct tib *tib = tib_p(im);
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_bc;
+    struct image_buf *bc = &im->bufs.read_bc;
     unsigned int i;
     uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
     uint8_t cyl = track/2, side = track&1;
@@ -224,11 +224,11 @@ static void dsk_setup_track(
 
 out:
     rd->prod = rd->cons = 0;
-    mfm->prod = mfm->cons = 0;
+    bc->prod = bc->cons = 0;
 
     if (start_pos) {
         image_read_track(im);
-        mfm->cons = decode_off * 16;
+        bc->cons = decode_off * 16;
         *start_pos = sys_ticks;
     }
 }
@@ -237,16 +237,16 @@ static bool_t dsk_read_track(struct image *im)
 {
     struct tib *tib = tib_p(im);
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_bc;
+    struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = (uint8_t *)rd->p + 512; /* skip DIB/TIB */
-    uint16_t *mfmb = mfm->p;
-    unsigned int i, mfmlen, mfmp, mfmc;
+    uint16_t *bc_b = bc->p;
+    unsigned int i, bc_len, bc_p, bc_c;
     uint16_t pr = 0, crc;
     unsigned int buflen = rd->len & ~511;
 
     if (tib->nr_secs == 0) {
         /* Unformatted. */
-        mfm->prod = mfm->cons + mfm->len*8;
+        bc->prod = bc->cons + bc->len*8;
         return TRUE;
     }
 
@@ -262,20 +262,20 @@ static bool_t dsk_read_track(struct image *im)
             im->dsk.trk_pos = 0;
     }
 
-    /* Generate some MFM if there is space in the MFM ring buffer. */
-    mfmp = mfm->prod / 16; /* MFM words */
-    mfmc = mfm->cons / 16; /* MFM words */
-    mfmlen = mfm->len / 2; /* MFM words */
+    /* Generate some MFM if there is space in the raw-bitcell ring buffer. */
+    bc_p = bc->prod / 16; /* MFM words */
+    bc_c = bc->cons / 16; /* MFM words */
+    bc_len = bc->len / 2; /* MFM words */
 
 #define emit_raw(r) ({                                  \
     uint16_t _r = (r);                                  \
-    mfmb[mfmp++ % mfmlen] = htobe16(_r & ~(pr << 15));  \
+    bc_b[bc_p++ % bc_len] = htobe16(_r & ~(pr << 15));  \
     pr = _r; })
 #define emit_byte(b) emit_raw(mfmtab[(uint8_t)(b)])
 
     if (im->dsk.decode_pos == 0) {
         /* Post-index track gap */
-        if ((mfmlen - (mfmp - mfmc)) < (GAP_4A + GAP_SYNC + 4 + GAP_1))
+        if ((bc_len - (bc_p - bc_c)) < (GAP_4A + GAP_SYNC + 4 + GAP_1))
             return FALSE;
         for (i = 0; i < GAP_4A; i++)
             emit_byte(0x4e);
@@ -289,7 +289,7 @@ static bool_t dsk_read_track(struct image *im)
             emit_byte(0x4e);
     } else if (im->dsk.decode_pos == (tib->nr_secs * 2 + 1)) {
         /* Pre-index track gap */
-        if ((mfmlen - (mfmp - mfmc)) < im->dsk.gap4)
+        if ((bc_len - (bc_p - bc_c)) < im->dsk.gap4)
             return FALSE;
         for (i = 0; i < im->dsk.gap4; i++)
             emit_byte(0x4e);
@@ -298,7 +298,7 @@ static bool_t dsk_read_track(struct image *im)
         /* IDAM */
         uint8_t sec = (im->dsk.decode_pos-1) >> 1;
         uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe };
-        if ((mfmlen - (mfmp - mfmc)) < (GAP_SYNC + 8 + 2 + GAP_2))
+        if ((bc_len - (bc_p - bc_c)) < (GAP_SYNC + 8 + 2 + GAP_2))
             return FALSE;
         if ((tib->sib[sec].stat1 & 0x01) && !(tib->sib[sec].stat2 & 0x01))
             idam[3] = 0x00; /* Missing Address Mark (ID) */
@@ -322,7 +322,7 @@ static bool_t dsk_read_track(struct image *im)
         uint16_t sec_sz = tib->sib[sec].actual_length;
         uint8_t *dat = &buf[(rd->cons/8)%buflen];
         uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
-        if ((mfmlen - (mfmp - mfmc)) < (GAP_SYNC + 4 + sec_sz + 2
+        if ((bc_len - (bc_p - bc_c)) < (GAP_SYNC + 4 + sec_sz + 2
                                         + tib->gap3))
             return FALSE;
         if ((tib->sib[sec].stat1 & 0x01) && (tib->sib[sec].stat2 & 0x01))
@@ -348,7 +348,7 @@ static bool_t dsk_read_track(struct image *im)
     }
 
     im->dsk.decode_pos++;
-    mfm->prod = mfmp * 16;
+    bc->prod = bc_p * 16;
 
     return TRUE;
 }

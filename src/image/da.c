@@ -29,7 +29,7 @@ static void da_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_bc;
+    struct image_buf *bc = &im->bufs.read_bc;
 
     im->tracklen_bc = TRACKLEN_BC;
     im->ticks_since_flux = 0;
@@ -40,7 +40,7 @@ static void da_setup_track(
 
     rd->prod = 8; /* nr sectors */
     rd->cons = 0;
-    mfm->prod = mfm->cons = 0;
+    bc->prod = bc->cons = 0;
 
     if (start_pos) {
         image_read_track(im);
@@ -51,25 +51,25 @@ static void da_setup_track(
 static bool_t da_read_track(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *mfm = &im->bufs.read_bc;
+    struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
-    uint16_t *mfmb = mfm->p;
-    unsigned int i, mfmlen, mfmp, mfmc;
+    uint16_t *bc_b = bc->p;
+    unsigned int i, bc_len, bc_p, bc_c;
     uint16_t pr = 0, crc;
 
     const unsigned int gap3 = 84;
     const unsigned int sec_sz = 512;
 
-    /* Generate some MFM if there is space in the MFM ring buffer. */
-    mfmp = mfm->prod / 16; /* MFM words */
-    mfmc = mfm->cons / 16; /* MFM words */
-    mfmlen = mfm->len / 2; /* MFM words */
-    if ((mfmlen - (mfmp - mfmc)) < (16 + sec_sz + 2 + gap3))
+    /* Generate some MFM if there is space in the raw-bitcell ring buffer. */
+    bc_p = bc->prod / 16; /* MFM words */
+    bc_c = bc->cons / 16; /* MFM words */
+    bc_len = bc->len / 2; /* MFM words */
+    if ((bc_len - (bc_p - bc_c)) < (16 + sec_sz + 2 + gap3))
         return FALSE;
 
 #define emit_raw(r) ({                                  \
     uint16_t _r = (r);                                  \
-    mfmb[mfmp++ % mfmlen] = htobe16(_r & ~(pr << 15));  \
+    bc_b[bc_p++ % bc_len] = htobe16(_r & ~(pr << 15));  \
     pr = _r; })
 #define emit_byte(b) emit_raw(bintomfm(b))
     if (rd->cons == 0) {
@@ -137,7 +137,7 @@ static bool_t da_read_track(struct image *im)
     }
 
     rd->cons++;
-    mfm->prod = mfmp * 16;
+    bc->prod = bc_p * 16;
 
     return TRUE;
 }
