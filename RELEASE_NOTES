@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.13a - 1 March 2018
+ - HFE: Emulate non-standard drive speeds (eg. Sony 600 RPM drive)
+ - HFE: Fix single-sector writes (broken since v0.9.8a)
+ - Direct Access: Support up to 64-sector track (Atari ST HxC Mount)
+ - Direct support for Spectrum TR-DOS (TRD) image files
+
 ** v0.9.12a - 27 February 2018
  - LCD/OLED: Long filenames scroll during navigation
  - LCD/OLED: Make filename scrolling more configurable
