@@ -198,6 +198,28 @@ static bool_t trd_open(struct image *im)
     return _img_open(im, TRUE, NULL);
 }
 
+static void img_seek_track(
+    struct image *im, uint16_t track, unsigned int cyl, unsigned int side)
+{
+    uint32_t trk_len;
+    unsigned int i, pos;
+
+    /* Create logical sector map in rotational order. */
+    memset(im->img.sec_map, 0xff, im->img.nr_sectors);
+    pos = track * (unsigned int)im->img.skew;
+    for (i = 0; i < im->img.nr_sectors; i++) {
+        while (im->img.sec_map[pos] != 0xff)
+            pos = (pos + 1) % im->img.nr_sectors;
+        im->img.sec_map[pos] = i + im->img.sec_base;
+        pos = (pos + im->img.interleave) % im->img.nr_sectors;
+    }
+
+    trk_len = im->img.nr_sectors * sec_sz(im);
+    im->img.trk_off = (cyl * im->nr_sides + side) * trk_len;
+
+    im->cur_track = track;
+}
+
 static void img_setup_track(
     struct image *im, uint16_t track, stk_time_t *start_pos)
 {
@@ -211,29 +233,10 @@ static void img_setup_track(
     side = min_t(uint8_t, side, im->nr_sides-1);
     track = cyl*2 + side;
 
-    if (track != im->cur_track) {
+    if (track != im->cur_track)
+        img_seek_track(im, track, cyl, side);
 
-        uint32_t trk_len;
-        unsigned int i, pos;
-
-        /* Create logical sector map in rotational order. */
-        memset(im->img.sec_map, 0xff, im->img.nr_sectors);
-        pos = track * (unsigned int)im->img.skew;
-        for (i = 0; i < im->img.nr_sectors; i++) {
-            while (im->img.sec_map[pos] != 0xff)
-                pos = (pos + 1) % im->img.nr_sectors;
-            im->img.sec_map[pos] = i + im->img.sec_base;
-            pos = (pos + im->img.interleave) % im->img.nr_sectors;
-        }
-
-        trk_len = im->img.nr_sectors * sec_sz(im);
-        im->img.trk_off = ((uint32_t)cyl * im->nr_sides + side) * trk_len;
-        im->img.trk_sec = 0;
-
-        im->cur_track = track;
-
-    }
-
+    im->img.trk_sec = 0;
     im->img.write_sector = -1;
 
     im->cur_bc = (sys_ticks * 16) / im->img.ticks_per_cell;
@@ -483,8 +486,6 @@ static bool_t img_write_track(struct image *im)
 
     wr->cons = c * 16;
 
-    if (flush)
-        im->img.write_sector = -1;
     return flush;
 }
 

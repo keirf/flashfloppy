@@ -84,19 +84,15 @@ static bool_t dsk_open(struct image *im)
     return TRUE;
 }
 
-static void dsk_setup_track(
-    struct image *im, uint16_t track, stk_time_t *start_pos)
+static void dsk_seek_track(
+    struct image *im, uint16_t track, unsigned int cyl, unsigned int side)
 {
     struct dib *dib = dib_p(im);
     struct tib *tib = tib_p(im);
-    struct image_buf *rd = &im->bufs.read_data;
-    struct image_buf *bc = &im->bufs.read_bc;
-    unsigned int i;
-    uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
-    uint8_t cyl = track/2, side = track&1;
+    unsigned int i, nr;
+    uint32_t tracklen;
 
-    side = min_t(uint8_t, side, im->nr_sides-1);
-    track = cyl*2 + side;
+    im->cur_track = track;
 
     if (cyl >= im->nr_cyls) {
     unformatted:
@@ -105,87 +101,87 @@ static void dsk_setup_track(
         im->tracklen_bc = 100160;
         im->dsk.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
                                   / im->tracklen_bc);
-        im->ticks_since_flux = 0;
-        im->cur_track = track;
-        im->cur_bc = (sys_ticks * 16) / im->dsk.ticks_per_cell;
-        im->cur_bc &= ~15;
-        if (im->cur_bc >= im->tracklen_bc)
-            im->cur_bc = 0;
-        im->cur_ticks = im->cur_bc * im->dsk.ticks_per_cell;
-        decode_off = 0;
-        goto out;
+        return;
     }
 
-    if (track != im->cur_track) {
-
-        unsigned int nr;
-        uint32_t tracklen;
-
-        im->dsk.trk_off = 0x100;
-        nr = (unsigned int)cyl * im->nr_sides + side;
-        if (im->dsk.extended) {
-            if (dib->track_szs[nr] == 0)
-                goto unformatted;
-            for (i = 0; i < nr; i++)
-                im->dsk.trk_off += dib->track_szs[i] * 256;
-        } else {
-            im->dsk.trk_off += nr * le16toh(dib->track_sz);
-        }
-
-        /* Read the Track Info Block and Sector Info Blocks. */
-        F_lseek(&im->fp, im->dsk.trk_off);
-        F_read(&im->fp, tib, 256, NULL);
-        im->dsk.trk_off += 256;
-        if (strncmp(tib->sig, "Track-Info", 10) || !tib->nr_secs)
+    im->dsk.trk_off = 0x100;
+    nr = (unsigned int)cyl * im->nr_sides + side;
+    if (im->dsk.extended) {
+        if (dib->track_szs[nr] == 0)
             goto unformatted;
-
-        printk("T%u.%u -> %u.%u: %u sectors\n", cyl, side, tib->track,
-               tib->side, tib->nr_secs);
-
-        /* Clamp number of sectors. */
-        if (tib->nr_secs > 29)
-            tib->nr_secs = 29;
-
-        /* Compute per-sector actual length. */
-        for (i = 0; i < tib->nr_secs; i++) {
-            tib->sib[i].actual_length = im->dsk.extended
-                ? le16toh(tib->sib[i].actual_length) : 128 << tib->sec_sz;
-            /* Clamp sector size */
-            if (tib->sib[i].actual_length > 16384) {
-                printk("Warn: clamp sector size %u\n",
-                       tib->sib[i].actual_length);
-                tib->sib[i].actual_length = 16384;
-            }
-        }
-
-        im->dsk.idx_sz = GAP_4A;
-        im->dsk.idx_sz += GAP_SYNC + 4 + GAP_1;
-        im->dsk.idam_sz = GAP_SYNC + 8 + 2 + GAP_2;
-        im->dsk.dam_sz = GAP_SYNC + 4 + /*sec_sz +*/ 2 + tib->gap3;
-
-        /* Work out minimum track length (with no pre-index track gap). */
-        tracklen = (im->dsk.idam_sz + im->dsk.dam_sz) * tib->nr_secs;
-        tracklen += im->dsk.idx_sz;
-        for (i = 0; i < tib->nr_secs; i++)
-            tracklen += tib->sib[i].actual_length;
-        tracklen *= 16;
-
-        /* Calculate and round the track length. */
-        im->tracklen_bc = 100000;
-        if (im->tracklen_bc < tracklen)
-            im->tracklen_bc = tracklen + 1000;
-        im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
-
-        /* Calculate output data rate (bitcell size). */
-        im->dsk.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
-                                  / im->tracklen_bc);
-
-        /* Now calculate the pre-index track gap. */
-        im->dsk.gap4 = (im->tracklen_bc - tracklen) / 16;
-
-        im->cur_track = track;
-
+        for (i = 0; i < nr; i++)
+            im->dsk.trk_off += dib->track_szs[i] * 256;
+    } else {
+        im->dsk.trk_off += nr * le16toh(dib->track_sz);
     }
+
+    /* Read the Track Info Block and Sector Info Blocks. */
+    F_lseek(&im->fp, im->dsk.trk_off);
+    F_read(&im->fp, tib, 256, NULL);
+    im->dsk.trk_off += 256;
+    if (strncmp(tib->sig, "Track-Info", 10) || !tib->nr_secs)
+        goto unformatted;
+
+    printk("T%u.%u -> %u.%u: %u sectors\n", cyl, side, tib->track,
+           tib->side, tib->nr_secs);
+
+    /* Clamp number of sectors. */
+    if (tib->nr_secs > 29)
+        tib->nr_secs = 29;
+
+    /* Compute per-sector actual length. */
+    for (i = 0; i < tib->nr_secs; i++) {
+        tib->sib[i].actual_length = im->dsk.extended
+            ? le16toh(tib->sib[i].actual_length) : 128 << tib->sec_sz;
+        /* Clamp sector size */
+        if (tib->sib[i].actual_length > 16384) {
+            printk("Warn: clamp sector size %u\n",
+                   tib->sib[i].actual_length);
+            tib->sib[i].actual_length = 16384;
+        }
+    }
+
+    im->dsk.idx_sz = GAP_4A;
+    im->dsk.idx_sz += GAP_SYNC + 4 + GAP_1;
+    im->dsk.idam_sz = GAP_SYNC + 8 + 2 + GAP_2;
+    im->dsk.dam_sz = GAP_SYNC + 4 + /*sec_sz +*/ 2 + tib->gap3;
+
+    /* Work out minimum track length (with no pre-index track gap). */
+    tracklen = (im->dsk.idam_sz + im->dsk.dam_sz) * tib->nr_secs;
+    tracklen += im->dsk.idx_sz;
+    for (i = 0; i < tib->nr_secs; i++)
+        tracklen += tib->sib[i].actual_length;
+    tracklen *= 16;
+
+    /* Calculate and round the track length. */
+    im->tracklen_bc = 100000;
+    if (im->tracklen_bc < tracklen)
+        im->tracklen_bc = tracklen + 1000;
+    im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
+
+    /* Calculate output data rate (bitcell size). */
+    im->dsk.ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
+                              / im->tracklen_bc);
+
+    /* Now calculate the pre-index track gap. */
+    im->dsk.gap4 = (im->tracklen_bc - tracklen) / 16;
+}
+
+static void dsk_setup_track(
+    struct image *im, uint16_t track, stk_time_t *start_pos)
+{
+    struct tib *tib = tib_p(im);
+    struct image_buf *rd = &im->bufs.read_data;
+    struct image_buf *bc = &im->bufs.read_bc;
+    unsigned int i;
+    uint32_t decode_off = 0, sys_ticks = start_pos ? *start_pos : 0;
+    uint8_t cyl = track/2, side = track&1;
+
+    side = min_t(uint8_t, side, im->nr_sides-1);
+    track = cyl*2 + side;
+
+    if (track != im->cur_track)
+        dsk_seek_track(im, track, cyl, side);
 
     im->dsk.write_sector = -1;
 
@@ -196,33 +192,37 @@ static void dsk_setup_track(
     im->cur_ticks = im->cur_bc * im->dsk.ticks_per_cell;
     im->ticks_since_flux = 0;
 
-    im->dsk.trk_pos = 0;
-    decode_off = im->cur_bc / 16;
-    if (decode_off < im->dsk.idx_sz) {
-        im->dsk.decode_pos = 0;
-    } else {
-        decode_off -= im->dsk.idx_sz;
-        for (i = 0; i < tib->nr_secs; i++) {
-            uint16_t sec_sz = im->dsk.idam_sz + im->dsk.dam_sz
-                + tib->sib[i].actual_length;
-            if (decode_off < sec_sz)
-                break;
-            decode_off -= sec_sz;
-        }
-        if (i < tib->nr_secs) {
-            im->dsk.trk_pos = i;
-            im->dsk.decode_pos = i * 2 + 1;
-            if (decode_off >= im->dsk.idam_sz) {
-                decode_off -= im->dsk.idam_sz;
-                im->dsk.decode_pos++;
-            }
+    if (tib->nr_secs != 0) {
+
+        /* Calculate start position within the track. */
+        im->dsk.trk_pos = 0;
+        decode_off = im->cur_bc / 16;
+        if (decode_off < im->dsk.idx_sz) {
+            im->dsk.decode_pos = 0;
         } else {
-            im->dsk.trk_pos = 0;
-            im->dsk.decode_pos = tib->nr_secs * 2 + 1;
+            decode_off -= im->dsk.idx_sz;
+            for (i = 0; i < tib->nr_secs; i++) {
+                uint16_t sec_sz = im->dsk.idam_sz + im->dsk.dam_sz
+                    + tib->sib[i].actual_length;
+                if (decode_off < sec_sz)
+                    break;
+                decode_off -= sec_sz;
+            }
+            if (i < tib->nr_secs) {
+                im->dsk.trk_pos = i;
+                im->dsk.decode_pos = i * 2 + 1;
+                if (decode_off >= im->dsk.idam_sz) {
+                    decode_off -= im->dsk.idam_sz;
+                    im->dsk.decode_pos++;
+                }
+            } else {
+                im->dsk.trk_pos = 0;
+                im->dsk.decode_pos = tib->nr_secs * 2 + 1;
+            }
         }
+
     }
 
-out:
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
 
@@ -482,8 +482,6 @@ static bool_t dsk_write_track(struct image *im)
     wr->cons = c * 16;
 
 out:
-    if (flush)
-        im->dsk.write_sector = -1;
     return flush;
 }
 
