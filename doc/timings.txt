@@ -74,6 +74,16 @@ USB Reads:
 16 sector: 11.4 - 12.6ms (+5.4ms)
 > Read time ~= 0.4-1.7ms + 0.8ms*nr_secs
 
+USB Writes:
+-----------
+(Per-sector write latencies)
+ 1 sector:  771 - 4227us (av approx 2.4ms)
+ 2 sector:  722 - 1887us (" 1.1ms)
+ 4 sector:  733 - 1206us (" 900us)
+ 8 sector:  676 -  904us (" 800us)
+16 sector:  643 -  743us (" 700us)
+Alignment seems to make little or no difference.
+
 BEST USB STICKS:
 ----------------
 Lexar 32GB USB3.0 Jump Drive S75 (05DC:A205 "Lexar JumpDrive"):
