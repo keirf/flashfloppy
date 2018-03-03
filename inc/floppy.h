@@ -55,6 +55,7 @@ struct dsk_image {
 struct directaccess {
     struct da_status_sector dass;
     int32_t decode_pos;
+    uint16_t trk_sec;
 };
 
 struct image_buf {
