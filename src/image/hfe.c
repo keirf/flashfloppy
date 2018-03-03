@@ -268,12 +268,8 @@ static bool_t hfe_write_track(struct image *im)
     unsigned int buflen = wr->len;
     uint8_t *w, *wrbuf = im->bufs.write_data.p;
     uint32_t i, c = wr->cons / 8, p = wr->prod / 8;
+    uint32_t batch = 0, batch_off = (im->hfe.trk_pos & ~255) << 1;
     stk_time_t t;
-
-    /* Even when we can buffer the whole track in memory, it still performs
-     * better to then write out sectors as they're dirtied. Otherwise we
-     * suffer 30ms+ of latency as the track buffer is written out. */
-    const bool_t write_whole_track = 0;
 
     /* If we are processing final data then use the end index, rounded to
      * nearest. */
@@ -340,30 +336,34 @@ static bool_t hfe_write_track(struct image *im)
                 + ((off & ~255) << 1) + (off & 255);
             for (i = 0; i < nr; i++)
                 *w++ = _rbit32(buf[c++ % buflen]) >> 24;
+            batch++;
 
-            if (!write_whole_track) {
-                w = wrbuf + ((off & ~255) << 1);
-                t = stk_now();
-                printk("Write %u-%u (%u)... ", off, off+nr-1, nr);
-                F_lseek(&im->fp, im->hfe.trk_off * 512 + ((off & ~255) << 1));
-                F_write(&im->fp, w, 512, NULL);
-                printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
-            }
         }
 
         im->hfe.trk_pos += nr;
-        im->hfe.trk_pos %= im->hfe.trk_len;
+        if (im->hfe.trk_pos >= im->hfe.trk_len) {
+            ASSERT(im->hfe.trk_pos == im->hfe.trk_len);
+            im->hfe.trk_pos = 0;
+            if (batch) {
+                /* Process contiguous batch and ask to be called again for data
+                 * at start of track. */
+                flush = FALSE;
+                break;
+            }
+        }
+    }
+
+    if (batch) { 
+        unsigned int nr = batch * 512;
+        t = stk_now();
+        printk("Write %u-%u (%u)... ", batch_off, batch_off+nr-1, nr);
+        w = wrbuf + batch_off;
+        F_lseek(&im->fp, im->hfe.trk_off * 512 + batch_off);
+        F_write(&im->fp, w, nr, NULL);
+        printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
     }
 
     wr->cons = c * 8;
-
-    if (flush && write_whole_track) {
-        /* Whole track mode: flush dirty buffer in one go. */
-        t = stk_now();
-        printk("Write whole track %u... ", im->cur_track);
-        F_write(&im->fp, wrbuf, im->bufs.write_data.prod, NULL);
-        printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
-    }
 
     return flush;
 }
