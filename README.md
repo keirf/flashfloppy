@@ -7,6 +7,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - ADM, ADL (Acorn ADFS)
   - DSK (Amstrad CPC, Spectrum +3)
   - IMG/IMA (IBM MFM Raw Sector)
+  - OPD (Spectrum Opus Discovery)
   - ST (Atari ST)
   - TRD (Spectrum TR-DOS)
 - Pre-configured track layouts for Raw Sector Images:

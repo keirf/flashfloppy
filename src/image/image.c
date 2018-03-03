@@ -17,6 +17,7 @@ extern const struct image_handler dsk_image_handler;
 extern const struct image_handler da_image_handler;
 extern const struct image_handler adl_image_handler;
 extern const struct image_handler trd_image_handler;
+extern const struct image_handler opd_image_handler;
 
 bool_t image_valid(FILINFO *fp)
 {
@@ -37,7 +38,8 @@ bool_t image_valid(FILINFO *fp)
                || !strcmp(ext, "st")
                || !strcmp(ext, "adl")
                || !strcmp(ext, "adm")
-               || !strcmp(ext, "trd")) {
+               || !strcmp(ext, "trd")
+               || !strcmp(ext, "opd")) {
         return TRUE;
     }
 
@@ -97,6 +99,7 @@ void image_open(struct image *im, const struct slot *slot)
             : !strcmp(ext, "adl") ? &adl_image_handler
             : !strcmp(ext, "adm") ? &adl_image_handler
             : !strcmp(ext, "trd") ? &trd_image_handler
+            : !strcmp(ext, "opd") ? &opd_image_handler
             : NULL);
     if (hint) {
         if (try_handler(im, slot, hint))

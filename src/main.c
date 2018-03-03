@@ -167,6 +167,7 @@ static void display_write_slot(bool_t nav_mode)
         : slot_type("adl") ? "ADL"
         : slot_type("adm") ? "ADM"
         : slot_type("trd") ? "TRD"
+        : slot_type("opd") ? "OPD"
         : "UNK";
     snprintf(msg, sizeof(msg), "%03u/%03u%*s%s D:%u",
              cfg.slot_nr, cfg.max_slot_nr,

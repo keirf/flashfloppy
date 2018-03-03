@@ -198,6 +198,31 @@ static bool_t trd_open(struct image *im)
     return _img_open(im, TRUE, NULL);
 }
 
+static bool_t opd_open(struct image *im)
+{
+    switch (f_size(&im->fp)) {
+    case 184320:
+        im->nr_cyls = 40;
+        im->nr_sides = 1;
+        break;
+    case 737280:
+        im->nr_cyls = 80;
+        im->nr_sides = 2;
+        break;
+    default:
+        return FALSE;
+    }
+
+    im->img.sec_no = 1; /* 256-byte */
+    im->img.interleave = 13;
+    im->img.skew = 13;
+    im->img.sec_base = 0;
+    im->img.nr_sectors = 18;
+    im->img.gap3 = 12;
+
+    return _img_open(im, TRUE, NULL);
+}
+
 static void img_seek_track(
     struct image *im, uint16_t track, unsigned int cyl, unsigned int side)
 {
@@ -206,7 +231,7 @@ static void img_seek_track(
 
     /* Create logical sector map in rotational order. */
     memset(im->img.sec_map, 0xff, im->img.nr_sectors);
-    pos = track * (unsigned int)im->img.skew;
+    pos = (cyl * (unsigned int)im->img.skew) % im->img.nr_sectors;
     for (i = 0; i < im->img.nr_sectors; i++) {
         while (im->img.sec_map[pos] != 0xff)
             pos = (pos + 1) % im->img.nr_sectors;
@@ -513,6 +538,15 @@ const struct image_handler adl_image_handler = {
 
 const struct image_handler trd_image_handler = {
     .open = trd_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+    .syncword = 0x44894489
+};
+
+const struct image_handler opd_image_handler = {
+    .open = opd_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
