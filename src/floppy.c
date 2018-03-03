@@ -418,7 +418,8 @@ static void drive_set_restart_pos(struct drive *drv)
     uint32_t pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
     pos %= drv->image->stk_per_rev;
     drv->restart_pos = pos;
-    drv->index_suppressed = TRUE;
+    if (ff_cfg.index_suppression)
+        drv->index_suppressed = TRUE;
 }
 
 /* Called from IRQ context to stop the write stream. */
@@ -802,7 +803,7 @@ static void index_assert(void *dat)
     struct drive *drv = &drive;
     index.prev_time = index.timer.deadline;
     if (!drv->index_suppressed
-        && !(drv->step.state && !ff_cfg.index_during_seek)) {
+        && !(drv->step.state && ff_cfg.index_suppression)) {
         drive_change_output(drv, outp_index, TRUE);
         timer_set(&index.timer_deassert, stk_add(index.prev_time, stk_ms(2)));
     }

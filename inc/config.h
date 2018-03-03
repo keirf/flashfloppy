@@ -78,7 +78,7 @@ struct __packed ff_cfg {
 #define DISPLAY_oled_128x32_rotate (DISPLAY_oled | DISPLAY_rotate)
 #define DISPLAY_oled_128x32_narrow (DISPLAY_oled | DISPLAY_narrow)
     uint8_t display_type;
-    bool_t index_during_seek;
+    bool_t _unused0;
 #define ROT_none   0
 #define ROT_simple 1
 #define ROT_gray   2
@@ -87,6 +87,7 @@ struct __packed ff_cfg {
     uint16_t nav_scroll_rate;
     uint16_t nav_scroll_pause;
     uint16_t display_scroll_pause;
+    bool_t index_suppression;
 };
 
 extern struct ff_cfg ff_cfg;
