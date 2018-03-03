@@ -91,6 +91,7 @@ struct image {
         uint32_t start; /* Ticks past index when current write started */
         uint32_t bc_end; /* Final bitcell buffer index */
         uint16_t dma_end; /* Final DMA buffer index */
+        uint16_t track; /* Track written to */
     } write[8];
     uint16_t wr_cons, wr_bc, wr_prod;
 

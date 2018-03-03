@@ -406,6 +406,12 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
     }
 }
 
+static unsigned int drive_calc_track(struct drive *drv)
+{
+    drv->nr_sides = (drv->cyl == 255) ? 1 : drv->image->nr_sides;
+    return drv->cyl*2 + (drv->head & (drv->nr_sides - 1));
+}
+
 /* Find current rotational position for read-stream restart. */
 static void drive_set_restart_pos(struct drive *drv)
 {
@@ -482,6 +488,7 @@ static void wdata_start(void)
     start_pos *= SYSCLK_MHZ / STK_MHZ;
     write = get_write(image, image->wr_prod);
     write->start = start_pos;
+    write->track = drive_calc_track(&drive);
 
     /* Allow IDX pulses while handling a write. */
     drive.index_suppressed = FALSE;
@@ -630,12 +637,6 @@ static void floppy_read_data(struct drive *drv)
     }
 }
 
-static unsigned int drive_calc_track(struct drive *drv)
-{
-    drv->nr_sides = (drv->cyl == 255) ? 1 : drv->image->nr_sides;
-    return drv->cyl*2 + (drv->head & (drv->nr_sides - 1));
-}
-
 static bool_t dma_rd_handle(struct drive *drv)
 {
     switch (dma_rd->state) {
@@ -715,7 +716,7 @@ static bool_t dma_rd_handle(struct drive *drv)
 static bool_t dma_wr_handle(struct drive *drv)
 {
     struct image *im = drv->image;
-    struct write *write;
+    struct write *write = get_write(im, im->wr_cons);
     bool_t completed;
 
     ASSERT((dma_wr->state == DMA_starting) || (dma_wr->state == DMA_stopping));
@@ -732,7 +733,7 @@ static bool_t dma_wr_handle(struct drive *drv)
         }
     
         /* Set up the track for writing. */
-        if (image_setup_track(im, drive_calc_track(drv), NULL))
+        if (image_setup_track(im, write->track, NULL))
             return TRUE;
 
         drv->writing = TRUE;
@@ -750,7 +751,6 @@ static bool_t dma_wr_handle(struct drive *drv)
         im->bufs.write_data.prod = 0;
 
         /* Align the bitcell consumer index for start of next write. */
-        write = get_write(im, im->wr_cons);
         im->bufs.write_bc.cons = (write->bc_end + 31) & ~31;
 
         /* Sync back to mass storage. */
