@@ -18,6 +18,7 @@
 #include "stm32f10x.h"
 #include "intrinsics.h"
 
+#include "time.h"
 #include "../src/fatfs/ff.h"
 #include "hxc.h"
 #include "util.h"

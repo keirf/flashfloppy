@@ -75,7 +75,7 @@ static struct drive {
 #define STEP_settling 4 /* handled by step.timer */
         uint8_t state;
         bool_t inward;
-        stk_time_t start;
+        time_t start;
         struct timer timer;
     } step;
     uint32_t restart_pos;
@@ -83,11 +83,11 @@ static struct drive {
 } drive;
 
 static struct image *image;
-static stk_time_t sync_time, sync_pos;
+static time_t sync_time, sync_pos;
 
 static struct {
     struct timer timer, timer_deassert;
-    stk_time_t prev_time;
+    time_t prev_time;
 } index;
 static void index_assert(void *);   /* index.timer */
 static void index_deassert(void *); /* index.timer_deassert */
@@ -329,7 +329,7 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
     dma_rd->state = DMA_stopping;
 
     drv->index_suppressed = FALSE;
-    index.prev_time = stk_now();
+    index.prev_time = time_now();
 
     /* Enable DMA interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch) | DMA_IFCR_CGIF(dma_wdata_ch);
@@ -415,7 +415,7 @@ static unsigned int drive_calc_track(struct drive *drv)
 /* Find current rotational position for read-stream restart. */
 static void drive_set_restart_pos(struct drive *drv)
 {
-    uint32_t pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
+    uint32_t pos = max_t(int32_t, 0, time_diff(index.prev_time, time_now()));
     pos %= drv->image->stk_per_rev;
     drv->restart_pos = pos;
     if (ff_cfg.index_suppression)
@@ -484,7 +484,7 @@ static void wdata_start(void)
     tim_wdata->cr1 = TIM_CR1_CEN;
 
     /* Find rotational start position of the write, in SYSCLK ticks. */
-    start_pos = max_t(int32_t, 0, stk_delta(index.prev_time, stk_now()));
+    start_pos = max_t(int32_t, 0, time_diff(index.prev_time, time_now()));
     start_pos %= drive.image->stk_per_rev;
     start_pos *= SYSCLK_MHZ / STK_MHZ;
     write = get_write(image, image->wr_prod);
@@ -573,34 +573,34 @@ static void floppy_sync_flux(void)
         return;
 
     if (!drv->index_suppressed) {
-        ticks = stk_delta(stk_now(), sync_time) - stk_us(1);
-        if (ticks > stk_ms(15)) {
+        ticks = time_diff(time_now(), sync_time) - time_us(1);
+        if (ticks > time_ms(15)) {
             /* Too long to wait. Immediately re-sync index timing. */
             drv->index_suppressed = TRUE;
             printk("Trk %u: skip %ums\n",
-                   drv->image->cur_track, (ticks+stk_us(500))/stk_ms(1));
-        } else if (ticks > stk_ms(5)) {
+                   drv->image->cur_track, (ticks+time_us(500))/time_ms(1));
+        } else if (ticks > time_ms(5)) {
             /* A while to wait. Go do other work. */
             return;
         } else {
             if (ticks > 0)
                 delay_ticks(ticks);
             /* If we're out of sync then forcibly re-sync index timing. */
-            ticks = stk_delta(stk_now(), sync_time);
+            ticks = time_diff(time_now(), sync_time);
             if (ticks < -100) {
                 drv->index_suppressed = TRUE;
                 printk("Trk %u: late %uus\n",
-                       drv->image->cur_track, -ticks/stk_us(1));
+                       drv->image->cur_track, -ticks/time_us(1));
             }
         }
     } else if (drv->step.state) {
         /* IDX is suppressed: Wait for heads to settle.
          * When IDX is not suppressed, settle time is already accounted for in
          * dma_rd_handle()'s call to image_setup_track(). */
-        stk_time_t step_settle = stk_add(drv->step.start,
-                                         stk_ms(DRIVE_SETTLE_MS));
-        int32_t delta = stk_delta(stk_now(), step_settle) - stk_us(1);
-        if (delta > stk_ms(5))
+        time_t step_settle = time_add(drv->step.start,
+                                     time_ms(DRIVE_SETTLE_MS));
+        int32_t delta = time_diff(time_now(), step_settle) - time_us(1);
+        if (delta > time_ms(5))
             return; /* go do other work for a while */
         if (delta > 0)
             delay_ticks(delta);
@@ -610,7 +610,7 @@ static void floppy_sync_flux(void)
         /* Re-enable index timing, snapped to the new read stream. */
         timer_cancel(&index.timer);
         IRQ_global_disable();
-        index.prev_time = stk_sub(stk_now(), sync_pos);
+        index.prev_time = time_sub(time_now(), sync_pos);
         drv->index_suppressed = FALSE;
     }
 
@@ -620,10 +620,10 @@ static void floppy_sync_flux(void)
 static void floppy_read_data(struct drive *drv)
 {
     uint32_t read_us;
-    stk_time_t timestamp;
+    time_t timestamp;
 
     /* Read some track data if there is buffer space. */
-    timestamp = stk_now();
+    timestamp = time_now();
     if (image_read_track(drv->image) && dma_rd->kick_dma_irq) {
         /* We buffered some more data and the DMA handler requested a kick. */
         dma_rd->kick_dma_irq = FALSE;
@@ -631,7 +631,7 @@ static void floppy_read_data(struct drive *drv)
     }
 
     /* Log maximum time taken to read track data, in microseconds. */
-    read_us = stk_diff(timestamp, stk_now()) / STK_MHZ;
+    read_us = time_diff(timestamp, time_now()) / TIME_MHZ;
     if (read_us > max_read_us) {
         max_read_us = max_t(uint32_t, max_read_us, read_us);
         printk("New max: read_us=%u\n", max_read_us);
@@ -643,15 +643,15 @@ static bool_t dma_rd_handle(struct drive *drv)
     switch (dma_rd->state) {
 
     case DMA_inactive: {
-        stk_time_t index_time, read_start_pos;
+        time_t index_time, read_start_pos;
         unsigned int track;
         /* Allow 10ms from current rotational position to load new track */
-        int32_t delay = stk_ms(10);
+        int32_t delay = time_ms(10);
         /* Allow extra time if heads are settling. */
         if (drv->step.state & STEP_settling) {
-            stk_time_t step_settle = stk_add(drv->step.start,
-                                             stk_ms(DRIVE_SETTLE_MS));
-            int32_t delta = stk_delta(stk_now(), step_settle);
+            time_t step_settle = time_add(drv->step.start,
+                                             time_ms(DRIVE_SETTLE_MS));
+            int32_t delta = time_diff(time_now(), step_settle);
             delay = max_t(int32_t, delta, delay);
         }
         /* No data fetch while stepping. */
@@ -662,7 +662,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         index_time = index.prev_time;
         read_start_pos = drv->index_suppressed
             ? drive.restart_pos /* start read exactly where write ended */
-            : stk_timesince(index_time) + delay;
+            : time_since(index_time) + delay;
         read_start_pos %= drv->image->stk_per_rev;
         /* Seek to the new track. */
         track = drive_calc_track(drv);
@@ -677,9 +677,9 @@ static bool_t dma_rd_handle(struct drive *drv)
         sync_pos = read_start_pos;
         if (!drv->index_suppressed) {
             /* Set the deadline to match existing index timing. */
-            sync_time = stk_add(index_time, read_start_pos);
-            if (stk_delta(stk_now(), sync_time) < 0)
-                sync_time = stk_add(sync_time, drv->image->stk_per_rev);
+            sync_time = time_add(index_time, read_start_pos);
+            if (time_diff(time_now(), sync_time) < 0)
+                sync_time = time_add(sync_time, drv->image->stk_per_rev);
         }
         /* Change state /then/ check for race against step or side change. */
         dma_rd->state = DMA_starting;
@@ -706,7 +706,7 @@ static bool_t dma_rd_handle(struct drive *drv)
             ARRAY_SIZE(dma_rd->buf) - dma_rdata.cndtr;
         /* Free-running index timer. */
         timer_cancel(&index.timer);
-        timer_set(&index.timer, stk_add(index.prev_time,
+        timer_set(&index.timer, time_add(index.prev_time,
                                         drv->image->stk_per_rev));
         break;
     }
@@ -805,10 +805,10 @@ static void index_assert(void *dat)
     if (!drv->index_suppressed
         && !(drv->step.state && ff_cfg.index_suppression)) {
         drive_change_output(drv, outp_index, TRUE);
-        timer_set(&index.timer_deassert, stk_add(index.prev_time, stk_ms(2)));
+        timer_set(&index.timer_deassert, time_add(index.prev_time, time_ms(2)));
     }
     if (dma_rd->state != DMA_active) /* timer set from input flux stream */
-        timer_set(&index.timer, stk_add(index.prev_time,
+        timer_set(&index.timer, time_add(index.prev_time,
                                         drv->image->stk_per_rev));
 }
 
@@ -832,7 +832,7 @@ static void drive_step_timer(void *_drv)
             drv->cyl = 84; /* Fast step back from D-A cyl 255 */
         drv->cyl += drv->step.inward ? 1 : -1;
         timer_set(&drv->step.timer,
-                  stk_add(drv->step.start, stk_ms(DRIVE_SETTLE_MS)));
+                  time_add(drv->step.start, time_ms(DRIVE_SETTLE_MS)));
         if (drv->cyl == 0)
             drive_change_output(drv, outp_trk0, TRUE);
         /* New state last, as that lets hi-pri IRQ start another step. */
@@ -853,7 +853,7 @@ static void IRQ_step(void)
     if (drv->step.state == STEP_started) {
         timer_cancel(&drv->step.timer);
         drv->step.state = STEP_latched;
-        timer_set(&drv->step.timer, stk_add(drv->step.start, stk_ms(1)));
+        timer_set(&drv->step.timer, time_add(drv->step.start, time_ms(1)));
     }
 }
 
@@ -862,7 +862,7 @@ static void IRQ_rdata_dma(void)
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
     uint32_t prev_ticks_since_index, ticks, i;
     uint16_t nr_to_wrap, nr_to_cons, nr, dmacons, done;
-    stk_time_t now;
+    time_t now;
     struct drive *drv = &drive;
 
     /* Clear DMA peripheral interrupts. */
@@ -914,7 +914,7 @@ static void IRQ_rdata_dma(void)
     for (;;) {
         /* Snapshot current position in flux stream, including progress through
          * current timer sample. */
-        now = stk_now();
+        now = time_now();
         /* Ticks left in current sample. */
         ticks = tim_rdata->arr - tim_rdata->cnt;
         /* Index of next sample. */
@@ -931,8 +931,8 @@ static void IRQ_rdata_dma(void)
     /* Subtract current flux offset beyond the index. */
     ticks -= image_ticks_since_index(drv->image);
     /* Calculate deadline for index timer. */
-    ticks /= SYSCLK_MHZ/STK_MHZ;
-    timer_set(&index.timer, stk_add(now, ticks));
+    ticks /= SYSCLK_MHZ/TIME_MHZ;
+    timer_set(&index.timer, time_add(now, ticks));
 }
 
 static void IRQ_wdata_dma(void)

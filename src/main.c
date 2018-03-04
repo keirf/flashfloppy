@@ -108,14 +108,14 @@ static void lcd_scroll_name(void)
     char msg[25];
     if ((lcd_scroll.ticks > 0) || (lcd_scroll.end == 0))
         return;
-    lcd_scroll.ticks = stk_ms(lcd_scroll.rate);
+    lcd_scroll.ticks = time_ms(lcd_scroll.rate);
     if (lcd_scroll.pause != 0) {
         if (++lcd_scroll.off > lcd_scroll.end)
             lcd_scroll.off = 0;
         snprintf(msg, sizeof(msg), "%s", cfg.slot.name + lcd_scroll.off);
         if ((lcd_scroll.off == 0)
             || (lcd_scroll.off == lcd_scroll.end))
-            lcd_scroll.ticks = stk_ms(lcd_scroll.pause);
+            lcd_scroll.ticks = time_ms(lcd_scroll.pause);
     } else {
         const unsigned int scroll_gap = 4;
         lcd_scroll.off++;
@@ -311,7 +311,7 @@ static void button_timer_fn(void *unused)
 
     /* Latch final button state and reset the timer. */
     buttons = b;
-    timer_set(&button_timer, stk_add(button_timer.deadline, stk_ms(5)));
+    timer_set(&button_timer, time_add(button_timer.deadline, time_ms(5)));
 }
 
 static void canary_init(void)
@@ -1140,7 +1140,7 @@ static void cfg_update(uint8_t slot_mode)
 static bool_t choose_new_image(uint8_t init_b)
 {
     uint8_t b, prev_b;
-    stk_time_t last_change = 0;
+    time_t last_change = 0;
     int old_slot = cfg.slot_nr, i, changes = 0;
 
     for (prev_b = 0, b = init_b;
@@ -1149,10 +1149,10 @@ static bool_t choose_new_image(uint8_t init_b)
 
         if (prev_b == b) {
             /* Decaying delay between image steps while button pressed. */
-            stk_time_t delay = stk_ms(1000) / (changes + 1);
-            if (delay < stk_ms(50))
-                delay = stk_ms(50);
-            if (stk_diff(last_change, stk_now()) < delay)
+            time_t delay = time_ms(1000) / (changes + 1);
+            if (delay < time_ms(50))
+                delay = time_ms(50);
+            if (time_diff(last_change, time_now()) < delay)
                 continue;
             changes++;
         } else {
@@ -1160,7 +1160,7 @@ static bool_t choose_new_image(uint8_t init_b)
              * the continuous-press decaying delay. */
             changes = 0;
         }
-        last_change = stk_now();
+        last_change = time_now();
 
         i = cfg.slot_nr;
         if (!(b ^ (B_LEFT|B_RIGHT))) {
@@ -1182,7 +1182,7 @@ static bool_t choose_new_image(uint8_t init_b)
             }
             display_write_slot(TRUE);
             /* Ignore changes while user is releasing the buttons. */
-            while ((stk_diff(last_change, stk_now()) < stk_ms(1000))
+            while ((time_diff(last_change, time_now()) < time_ms(1000))
                    && buttons)
                 continue;
         } else if (b & B_LEFT) {
@@ -1222,21 +1222,21 @@ static void assert_usbh_msc_connected(void)
 static int run_floppy(void *_b)
 {
     volatile uint8_t *pb = _b;
-    stk_time_t t_now, t_prev, t_diff;
+    time_t t_now, t_prev, t_diff;
     int32_t lcd_update_ticks;
 
     floppy_insert(0, &cfg.slot);
 
-    lcd_update_ticks = stk_ms(20);
-    t_prev = stk_now();
+    lcd_update_ticks = time_ms(20);
+    t_prev = time_now();
     while (((*pb = buttons) == 0) && !floppy_handle()) {
-        t_now = stk_now();
-        t_diff = stk_diff(t_prev, t_now);
+        t_now = time_now();
+        t_diff = time_diff(t_prev, t_now);
         if (display_mode == DM_LCD_1602) {
             lcd_update_ticks -= t_diff;
             if (lcd_update_ticks <= 0) {
                 lcd_write_track_info(FALSE);
-                lcd_update_ticks = stk_ms(20);
+                lcd_update_ticks = time_ms(20);
             }
             lcd_scroll.ticks -= t_diff;
             lcd_scroll_name();
@@ -1276,8 +1276,8 @@ static int floppy_main(void *unused)
 
     for (;;) {
 
-        lcd_scroll.ticks = stk_ms(ff_cfg.display_scroll_pause)
-            ?: stk_ms(ff_cfg.display_scroll_rate);
+        lcd_scroll.ticks = time_ms(ff_cfg.display_scroll_pause)
+            ?: time_ms(ff_cfg.display_scroll_rate);
         lcd_scroll.off = lcd_scroll.end = 0;
         lcd_scroll_init(ff_cfg.display_scroll_pause,
                         ff_cfg.display_scroll_rate);
@@ -1398,7 +1398,7 @@ static int floppy_main(void *unused)
                     break;
                 case DM_LCD_1602:
                     /* Continue to scroll long filename. */
-                    lcd_scroll.ticks -= stk_ms(1);
+                    lcd_scroll.ticks -= time_ms(1);
                     lcd_scroll_name();
                     break;
                 }
@@ -1453,7 +1453,7 @@ static int floppy_main(void *unused)
             /* Wait a few seconds for further button presses before acting on 
              * the new image selection. */
             lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
-            lcd_scroll.ticks = stk_ms(ff_cfg.nav_scroll_pause);
+            lcd_scroll.ticks = time_ms(ff_cfg.nav_scroll_pause);
             wait_ms = (cfg.slot.attributes & AM_DIR) ?
                 ff_cfg.autoselect_folder_secs : ff_cfg.autoselect_file_secs;
             wait_ms *= 1000;
@@ -1469,7 +1469,7 @@ static int floppy_main(void *unused)
                     break;
                 assert_usbh_msc_connected();
                 delay_ms(1);
-                lcd_scroll.ticks -= stk_ms(1);
+                lcd_scroll.ticks -= time_ms(1);
                 lcd_scroll_name();
             }
 
@@ -1609,7 +1609,7 @@ int main(void)
 
     canary_init();
     stm32_init();
-    timers_init();
+    time_init();
     console_init();
     console_crash_on_input();
     board_init();
@@ -1635,7 +1635,7 @@ int main(void)
     if (ff_cfg.rotary == ROT_gray)
         rotary = (gpioc->idr >> 10) & 3;
     timer_init(&button_timer, button_timer_fn, NULL);
-    timer_set(&button_timer, stk_now());
+    timer_set(&button_timer, time_now());
 
     for (;;) {
 

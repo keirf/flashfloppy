@@ -91,7 +91,6 @@ typedef uint32_t stk_time_t;
 #define stk_add(x,d)  (((x)-(d)) & STK_MASK) /* y = x + d */
 #define stk_sub(x,d)  (((x)+(d)) & STK_MASK) /* y = x - d */
 #define stk_timesince(x) stk_diff(x,stk_now())
-int32_t stk_delta(stk_time_t a, stk_time_t b);
 
 #define stk_us(x) ((x) * STK_MHZ)
 #define stk_ms(x) stk_us((x) * 1000)

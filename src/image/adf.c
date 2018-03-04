@@ -46,7 +46,7 @@ static bool_t adf_open(struct image *im)
 }
 
 static void adf_setup_track(
-    struct image *im, uint16_t track, stk_time_t *start_pos)
+    struct image *im, uint16_t track, uint32_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
@@ -196,16 +196,16 @@ static bool_t adf_read_track(struct image *im)
 static void write_batch(struct image *im, unsigned int sect, unsigned int nr)
 {
     uint32_t *wrbuf = im->bufs.write_data.p;
-    stk_time_t t;
+    time_t t;
 
     if (nr == 0)
         return;
 
-    t = stk_now();
+    t = time_now();
     printk("Write %u/%u-%u... ", im->cur_track, sect, sect+nr-1);
     F_lseek(&im->fp, im->adf.trk_off + sect*512);
     F_write(&im->fp, wrbuf, 512*nr, NULL);
-    printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+    printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
 }
 
 static bool_t adf_write_track(struct image *im)

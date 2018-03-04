@@ -51,7 +51,7 @@ static void da_seek_track(struct image *im)
 }
 
 static void da_setup_track(
-    struct image *im, uint16_t track, stk_time_t *start_pos)
+    struct image *im, uint16_t track, uint32_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
@@ -214,7 +214,7 @@ static bool_t da_write_track(struct image *im)
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
     unsigned int sect, i;
-    stk_time_t t;
+    time_t t;
     uint16_t crc;
     uint8_t x;
 
@@ -278,10 +278,10 @@ static bool_t da_write_track(struct image *im)
         } else {
             /* All good: write out to mass storage. */
             printk("Write %08x+%u... ", dass->lba_base, sect-1);
-            t = stk_now();
+            t = time_now();
             if (disk_write(0, wrbuf, dass->lba_base+sect-1, 1) != RES_OK)
                 F_die(FR_DISK_ERR);
-            printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
         }
     }
 

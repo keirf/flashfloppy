@@ -36,26 +36,19 @@ void IRQ_30(void) __attribute__((alias("IRQ_timer")));
 
 static struct timer *head;
 
-int32_t stk_delta(stk_time_t a, stk_time_t b)
-{
-    int32_t delta = stk_diff(a, b);
-    if (delta & (STK_MASK^(STK_MASK>>1)))
-        delta = -((delta ^ STK_MASK) + 1);
-    return delta;
-}
-
 static void reprogram_timer(int32_t delta)
 {
     tim->cr1 = TIM_CR1;
     if (delta < 0x10000) {
         /* Fine-grained deadline (sub-microsecond accurate) */
-        tim->psc = SYSCLK_MHZ/STK_MHZ-1;
+        tim->psc = SYSCLK_MHZ/TIME_MHZ-1;
         tim->arr = (delta <= SLACK_TICKS) ? 1 : delta-SLACK_TICKS;
     } else {
         /* Coarse-grained deadline, fires in time to set a shorter,
          * fine-grained deadline. */
         tim->psc = sysclk_us(100)-1;
-        tim->arr = delta/stk_us(100)-50; /* 5ms early */
+        tim->arr = min_t(uint32_t, 0xffffu,
+                         delta/time_us(100)-50); /* 5ms early */
     }
     tim->egr = TIM_EGR_UG; /* update CNT, PSC, ARR */
     tim->sr = 0; /* dummy write, gives hardware time to process EGR.UG=1 */
@@ -88,10 +81,10 @@ static void _timer_cancel(struct timer *timer)
     t->next = TIMER_INACTIVE;
 }
 
-void timer_set(struct timer *timer, stk_time_t deadline)
+void timer_set(struct timer *timer, time_t deadline)
 {
     struct timer *t, **pprev;
-    stk_time_t now;
+    time_t now;
     int32_t delta;
     uint32_t oldpri;
 
@@ -101,10 +94,10 @@ void timer_set(struct timer *timer, stk_time_t deadline)
 
     timer->deadline = deadline;
 
-    now = stk_now();
-    delta = stk_delta(now, deadline);
+    now = time_now();
+    delta = time_diff(now, deadline);
     for (pprev = &head; (t = *pprev) != NULL; pprev = &t->next)
-        if (delta <= stk_delta(now, t->deadline))
+        if (delta <= time_diff(now, t->deadline))
             break;
     timer->next = *pprev;
     *pprev = timer;
@@ -139,7 +132,7 @@ static void IRQ_timer(void)
     tim->sr = 0;
 
     while ((t = head) != NULL) {
-        if ((delta = stk_delta(stk_now(), t->deadline)) > SLACK_TICKS) {
+        if ((delta = time_diff(time_now(), t->deadline)) > SLACK_TICKS) {
             reprogram_timer(delta);
             break;
         }
@@ -148,3 +141,13 @@ static void IRQ_timer(void)
         (*t->cb_fn)(t->cb_dat);
     }
 }
+
+/*
+ * Local variables:
+ * mode: C
+ * c-file-style: "Linux"
+ * c-basic-offset: 4
+ * tab-width: 4
+ * indent-tabs-mode: nil
+ * End:
+ */

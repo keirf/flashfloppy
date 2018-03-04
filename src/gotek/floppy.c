@@ -188,7 +188,7 @@ static void IRQ_STEP_changed(void)
         return;
 
     /* Valid step request for this drive: start the step operation. */
-    drv->step.start = stk_now();
+    drv->step.start = time_now();
     drv->step.state = STEP_started;
     if (drv->outp & m(outp_trk0))
         drive_change_output(drv, outp_trk0, FALSE);

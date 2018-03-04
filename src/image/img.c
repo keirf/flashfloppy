@@ -247,7 +247,7 @@ static void img_seek_track(
 }
 
 static void img_setup_track(
-    struct image *im, uint16_t track, stk_time_t *start_pos)
+    struct image *im, uint16_t track, uint32_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
@@ -416,7 +416,7 @@ static bool_t img_write_track(struct image *im)
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
     unsigned int i;
-    stk_time_t t;
+    time_t t;
     uint16_t crc;
     uint8_t x;
 
@@ -496,11 +496,11 @@ static bool_t img_write_track(struct image *im)
             printk("Write %u[%u]/%u... ", im->img.write_sector,
                    im->img.write_sector + im->img.sec_base,
                    im->img.nr_sectors);
-            t = stk_now();
+            t = time_now();
             F_lseek(&im->fp,
                     im->img.trk_off + im->img.write_sector*sec_sz(im));
             F_write(&im->fp, wrbuf, sec_sz(im), NULL);
-            printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
             break;
         }
     }

@@ -168,7 +168,7 @@ static void dsk_seek_track(
 }
 
 static void dsk_setup_track(
-    struct image *im, uint16_t track, stk_time_t *start_pos)
+    struct image *im, uint16_t track, uint32_t *start_pos)
 {
     struct tib *tib = tib_p(im);
     struct image_buf *rd = &im->bufs.read_data;
@@ -367,7 +367,7 @@ static bool_t dsk_write_track(struct image *im)
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     int32_t base = write->start / im->ticks_per_cell; /* in data bytes */
     unsigned int i;
-    stk_time_t t;
+    time_t t;
     uint16_t crc, sec_sz, off;
     uint8_t x;
 
@@ -464,12 +464,12 @@ static bool_t dsk_write_track(struct image *im)
                    (im->dsk.write_sector >= 0)
                    ? tib->sib[im->dsk.write_sector].r : 0xff,
                    tib->nr_secs);
-            t = stk_now();
+            t = time_now();
             for (i = off = 0; i < im->dsk.write_sector; i++)
                 off += tib->sib[i].actual_length;
             F_lseek(&im->fp, im->dsk.trk_off + off);
             F_write(&im->fp, wrbuf, sec_sz, NULL);
-            printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
             break;
         }
     }

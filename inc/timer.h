@@ -10,7 +10,7 @@
  */
 
 struct timer {
-    stk_time_t deadline;
+    time_t deadline;
     void (*cb_fn)(void *);
     void *cb_dat;
     struct timer *next;
@@ -18,7 +18,7 @@ struct timer {
 
 /* Safe to call from any priority level same or lower than TIMER_IRQ_PRI. */
 void timer_init(struct timer *timer, void (*cb_fn)(void *), void *cb_dat);
-void timer_set(struct timer *timer, stk_time_t deadline);
+void timer_set(struct timer *timer, time_t deadline);
 void timer_cancel(struct timer *timer);
 
 void timers_init(void);

@@ -121,7 +121,7 @@ void image_open(struct image *im, const struct slot *slot)
 }
 
 bool_t image_setup_track(
-    struct image *im, uint16_t track, stk_time_t *start_pos)
+    struct image *im, uint16_t track, uint32_t *start_pos)
 {
     if (track < 510) {
         /* If we are exiting D-A mode then need to re-read the config file. */

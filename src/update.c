@@ -280,7 +280,7 @@ int main(void)
     /* Initialise the world. */
     canary_init();
     stm32_init();
-    timers_init();
+    time_init();
     console_init();
     board_init();
     delay_ms(200); /* 5v settle */

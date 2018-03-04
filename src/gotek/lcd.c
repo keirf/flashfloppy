@@ -69,7 +69,7 @@ uint8_t lcd_columns, lcd_rows;
 
 /* Occasionally the I2C/DMA engine seems to get stuck. Detect this with 
  * a timeout timer and unwedge it by calling the I2C error handler. */
-#define DMA_TIMEOUT stk_ms(200)
+#define DMA_TIMEOUT time_ms(200)
 static struct timer timeout_timer;
 static void timeout_fn(void *unused)
 {
@@ -128,7 +128,7 @@ static void dma_start(unsigned int sz)
                      DMA_CCR_EN);
 
     /* Set the timeout timer in case the DMA hangs for any reason. */
-    timer_set(&timeout_timer, stk_add(stk_now(), DMA_TIMEOUT));
+    timer_set(&timeout_timer, time_add(time_now(), DMA_TIMEOUT));
 }
 
 /* Emit a 4-bit command to the HD44780 via the DMA buffer. */
@@ -390,7 +390,7 @@ bool_t lcd_init(void)
 
     /* Timeout handler for if I2C transmission borks. */
     timer_init(&timeout_timer, timeout_fn, NULL);
-    timer_set(&timeout_timer, stk_add(stk_now(), DMA_TIMEOUT));
+    timer_set(&timeout_timer, time_add(time_now(), DMA_TIMEOUT));
 
     if (is_oled_display) {
         oled_init();

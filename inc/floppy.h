@@ -124,7 +124,7 @@ static inline struct write *get_write(struct image *im, uint16_t idx)
 struct image_handler {
     bool_t (*open)(struct image *im);
     void (*setup_track)(
-        struct image *im, uint16_t track, stk_time_t *start_pos);
+        struct image *im, uint16_t track, uint32_t *start_pos);
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
     bool_t (*write_track)(struct image *im);
@@ -145,7 +145,7 @@ void image_open(struct image *im, const struct slot *slot);
  * 
  * Returns TRUE if the config file needs to be re-read (exiting D-A mode). */
 bool_t image_setup_track(
-    struct image *im, uint16_t track, stk_time_t *start_pos);
+    struct image *im, uint16_t track, uint32_t *start_pos);
 
 /* Read track data into memory. Returns TRUE if any new data was read. */
 bool_t image_read_track(struct image *im);

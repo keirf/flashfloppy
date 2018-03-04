@@ -113,7 +113,7 @@ static void hfe_seek_track(struct image *im, uint16_t track)
 }
 
 static void hfe_setup_track(
-    struct image *im, uint16_t track, stk_time_t *start_pos)
+    struct image *im, uint16_t track, uint32_t *start_pos)
 {
     struct image_buf *rd = &im->bufs.read_data;
     uint32_t sys_ticks;
@@ -269,7 +269,7 @@ static bool_t hfe_write_track(struct image *im)
     uint8_t *w, *wrbuf = im->bufs.write_data.p;
     uint32_t i, c = wr->cons / 8, p = wr->prod / 8;
     uint32_t batch = 0, batch_off = (im->hfe.trk_pos & ~255) << 1;
-    stk_time_t t;
+    time_t t;
 
     /* If we are processing final data then use the end index, rounded to
      * nearest. */
@@ -286,12 +286,12 @@ static bool_t hfe_write_track(struct image *im)
             im->bufs.write_data.prod = 256;
         } else {
             /* Whole track fits in our buffer! Stream it in immediately. */
-            t = stk_now();
+            t = time_now();
             printk("Read whole track %u... ", im->cur_track);
             F_lseek(&im->fp, im->hfe.trk_off * 512);
             F_read(&im->fp, wrbuf, im->bufs.write_data.prod, NULL);
             F_lseek(&im->fp, im->hfe.trk_off * 512);
-            printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
         }
     }
 
@@ -319,14 +319,14 @@ static bool_t hfe_write_track(struct image *im)
                 *w++ = _rbit32(buf[c++ % buflen]) >> 24;
 
             /* Write it back to mass storage straight away. */
-            t = stk_now();
+            t = time_now();
             printk("Write %u-%u (%u)... ", off, off+nr-1, nr);
             F_lseek(&im->fp,
                     im->hfe.trk_off * 512
                     + (im->cur_track & 1) * 256
                     + ((off & ~255) << 1) + (off & 255));
             F_write(&im->fp, wrbuf, nr, NULL);
-            printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
 
         } else {
 
@@ -355,12 +355,12 @@ static bool_t hfe_write_track(struct image *im)
 
     if (batch) { 
         unsigned int nr = batch * 512;
-        t = stk_now();
+        t = time_now();
         printk("Write %u-%u (%u)... ", batch_off, batch_off+nr-1, nr);
         w = wrbuf + batch_off;
         F_lseek(&im->fp, im->hfe.trk_off * 512 + batch_off);
         F_write(&im->fp, w, nr, NULL);
-        printk("%u us\n", stk_diff(t, stk_now()) / STK_MHZ);
+        printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
     }
 
     wr->cons = c * 8;
