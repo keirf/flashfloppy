@@ -31,7 +31,7 @@ void speaker_pulse(void)
     if (!volume)
         return;
     gpio_write_pin(gpio_spk, pin_spk, TRUE);
-    timer_set(&pulse_timer, time_add(time_now(), volume*volume*3));
+    timer_set(&pulse_timer, time_now() + volume*volume*3);
 }
 
 /*

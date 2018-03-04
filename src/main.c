@@ -311,7 +311,7 @@ static void button_timer_fn(void *unused)
 
     /* Latch final button state and reset the timer. */
     buttons = b;
-    timer_set(&button_timer, time_add(button_timer.deadline, time_ms(5)));
+    timer_set(&button_timer, button_timer.deadline + time_ms(5));
 }
 
 static void canary_init(void)
