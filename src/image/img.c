@@ -131,6 +131,7 @@ static bool_t img_open(struct image *im)
     const struct img_type *type;
     switch (ff_cfg.host) {
     case HOST_akai:
+    case HOST_gem:
         type = akai_type;
         break;
     default:

@@ -11,7 +11,8 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - ST (Atari ST)
   - TRD (Spectrum TR-DOS)
 - Pre-configured track layouts for Raw Sector Images:
-  - Akai synths (eg. S01, S20, S950)
+  - Akai (S01, S20, S950)
+  - General Music (S2, S3, S2R)
   - IBM PC and many others
 - No configuration required! Just dump images into the root
   of an empty USB stick.
