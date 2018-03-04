@@ -3,6 +3,14 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.14a - 4 March 2018
+ - Fix write pipeline: record track nr for delayed write processing
+ - General Music (GEM): New host option "host=gem" fr direct IMG support
+ - Direct support for Spectrum Opus Discovery (OPD) image files
+ - HFE, ADF: Batch writeback to the USB drive where possible
+ - FF.CFG: Replace "index-during-seek" with "index-suppression"
+ - Direct Access: Restart read at correct track position after a write
+
 ** v0.9.13a - 1 March 2018
  - HFE: Emulate non-standard drive speeds (eg. Sony 600 RPM drive)
  - HFE: Fix single-sector writes (broken since v0.9.8a)
