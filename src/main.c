@@ -1173,11 +1173,12 @@ static bool_t choose_new_image(uint8_t init_b)
             i = cfg.slot_nr = 0;
             cfg_update(CFG_KEEP_SLOT_NR);
             if (ff_cfg.twobutton_action == TWOBUTTON_rotary) {
-                /* Wait for button release, then update display, then
+                /* Wait for button release, then update display, or
                  * immediately enter parent-dir (if we're in a subfolder). */
                 while (buttons)
                     continue;
-                display_write_slot(TRUE);
+                if (cfg.depth == 0)
+                    display_write_slot(TRUE);
                 return (cfg.depth != 0);
             }
             display_write_slot(TRUE);
