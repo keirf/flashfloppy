@@ -25,7 +25,10 @@ static struct {
     struct short_slot autoboot, hxcsdfe;
     struct slot slot;
     uint32_t cfg_cdir, cur_cdir;
-    struct { uint16_t cdir, slot; } stack[20];
+    struct {
+        uint32_t cdir;
+        uint16_t slot;
+    } stack[20];
     uint8_t depth;
     bool_t usb_power_fault;
     uint8_t hxc_mode:1;
