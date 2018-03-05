@@ -356,7 +356,7 @@ bool_t lcd_init(void)
 
         is_oled_display = (ff_cfg.display_type & DISPLAY_lcd) ? FALSE
             : (ff_cfg.display_type & DISPLAY_oled) ? TRUE
-            : (a == OLED_ADDR);
+            : ((a&~1) == OLED_ADDR); /* 0x3c = 128x32, 0x3d = 128x64 */
 
         lcd_rows = 2;
         lcd_columns = 16;
