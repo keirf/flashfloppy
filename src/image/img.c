@@ -143,7 +143,12 @@ static bool_t img_open(struct image *im)
 
 static bool_t st_open(struct image *im)
 {
-    return _img_open(im, FALSE, img_type);
+    bool_t ok = _img_open(im, FALSE, img_type);
+    if (ok && im->img.nr_sectors == 9) {
+        /* TOS formats 720kB disks with skew. */
+        im->img.skew = 2;
+    }
+    return ok;
 }
 
 static bool_t adl_open(struct image *im)
@@ -217,6 +222,7 @@ static bool_t opd_open(struct image *im)
     im->img.sec_no = 1; /* 256-byte */
     im->img.interleave = 13;
     im->img.skew = 13;
+    im->img.skew_cyls_only = TRUE;
     im->img.sec_base = 0;
     im->img.nr_sectors = 18;
     im->img.gap3 = 12;
@@ -228,11 +234,12 @@ static void img_seek_track(
     struct image *im, uint16_t track, unsigned int cyl, unsigned int side)
 {
     uint32_t trk_len;
-    unsigned int i, pos;
+    unsigned int i, pos, trk = cyl * im->nr_sides + side;
 
     /* Create logical sector map in rotational order. */
     memset(im->img.sec_map, 0xff, im->img.nr_sectors);
-    pos = (cyl * (unsigned int)im->img.skew) % im->img.nr_sectors;
+    pos = ((im->img.skew_cyls_only ? cyl : trk) * im->img.skew)
+        % im->img.nr_sectors;
     for (i = 0; i < im->img.nr_sectors; i++) {
         while (im->img.sec_map[pos] != 0xff)
             pos = (pos + 1) % im->img.nr_sectors;
@@ -241,7 +248,7 @@ static void img_seek_track(
     }
 
     trk_len = im->img.nr_sectors * sec_sz(im);
-    im->img.trk_off = (cyl * im->nr_sides + side) * trk_len;
+    im->img.trk_off = trk * trk_len;
 
     im->cur_track = track;
 }
