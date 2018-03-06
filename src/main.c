@@ -1371,11 +1371,14 @@ static int floppy_main(void *unused)
             wait = 0;
             while (buttons != 0) {
                 delay_ms(1);
-                if ((display_mode == DM_LCD_1602) && (wait++ >= 2000)) {
+                if (wait++ >= 2000) {
                 toggle_wp:
                     wait = 0;
                     cfg.slot.attributes ^= AM_RDO;
                     display_wp_status();
+                    if (display_mode == DM_LED_7SEG)
+                        led_7seg_write_string((cfg.slot.attributes & AM_RDO)
+                                              ? "RDO" : "RIT");
                 }
             }
             /* Wait for any button to be pressed. */
@@ -1429,7 +1432,7 @@ static int floppy_main(void *unused)
                         b = B_SELECT;
                     }
                     delay_ms(1);
-                    if ((display_mode == DM_LCD_1602) && (wait++ >= 2000))
+                    if (wait++ >= 2000)
                         goto toggle_wp;
                 }
                 ima_mark_ejected(FALSE);
