@@ -1,8 +1,12 @@
 /*
  * img.c
  * 
- * IBM sector image (IMG/IMA), Atari ST sector image (ST) files,
- * and Acorn 8bit ADFS sector image (ADL/ADM) files
+ * Sector image files for IBM/ISO track formats:
+ *  IMG/IMA: IBM/PC and others
+ *  ST:      Atari ST
+ *  ADL/ADM: Acorn 8-bit ADFS
+ *  OPD:     Spectrum Opus Discovery
+ *  TRD:     Spectrum TR-DOS
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
