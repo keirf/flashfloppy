@@ -49,7 +49,15 @@ bool_t image_valid(FILINFO *fp)
 static bool_t try_handler(struct image *im, const struct slot *slot,
                           const struct image_handler *handler)
 {
+    struct image_bufs bufs = im->bufs;
     BYTE mode;
+
+    /* Reinitialise image structure, except for static buffers. */
+    memset(im, 0, sizeof(*im));
+    im->bufs = bufs;
+    im->write_bc_ticks = sysclk_us(2);
+    im->stk_per_rev = stk_ms(200);
+    im->cur_track = ~0;
 
     im->handler = handler;
 
@@ -73,23 +81,14 @@ void image_open(struct image *im, const struct slot *slot)
     };
 
     char ext[sizeof(slot->type)+1];
-    struct image_bufs bufs = im->bufs;
     const struct image_handler *hint;
     int i;
-
-    /* Reinitialise image structure, except for static buffers. */
-    memset(im, 0, sizeof(*im));
-    im->bufs = bufs;
-    im->write_bc_ticks = sysclk_us(2);
-    im->stk_per_rev = stk_ms(200);
-    im->cur_track = ~0;
 
     /* Extract filename extension (if available). */
     memcpy(ext, slot->type, sizeof(slot->type));
     ext[sizeof(slot->type)] = '\0';
 
     /* Use the extension as a hint to the correct image handler. */
-    
     hint = (!strcmp(ext, "adf") ? &adf_image_handler
             : !strcmp(ext, "dsk") ? &dsk_image_handler
             : !strcmp(ext, "hfe") ? &hfe_image_handler
