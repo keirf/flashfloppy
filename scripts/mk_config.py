@@ -20,7 +20,7 @@ def main(argv):
             opt = match.group(1)            
             val = match.group(2)
             if opt == "interface":
-                val = "FINTF_" + val.upper()
+                val = "FINTF_" + val.upper().replace("-","_")
             elif opt == "track-change":
                 val = "TRKCHG_" + val
             elif opt == "host":

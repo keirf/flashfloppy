@@ -463,6 +463,7 @@ static void read_ff_cfg(void)
         case FFCFG_interface:
             ff_cfg.interface =
                 !strcmp(opts.arg, "ibmpc") ? FINTF_IBMPC
+                : !strcmp(opts.arg, "ibmpc-hdout") ? FINTF_IBMPC_HDOUT
                 : !strcmp(opts.arg, "shugart") ? FINTF_SHUGART
                 : FINTF_JC;
             break;

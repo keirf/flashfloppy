@@ -66,7 +66,8 @@ static struct drive {
 #define outp_trk0   2
 #define outp_wrprot 3
 #define outp_rdy    4
-#define outp_nr     5
+#define outp_hden   5
+#define outp_nr     6
     uint8_t outp;
     struct {
 #define STEP_started  1 /* started by hi-pri IRQ */
@@ -119,13 +120,22 @@ const static uint8_t *fintf, fintfs[][outp_nr] = {
         [outp_index]  = pin_08,
         [outp_trk0]   = pin_26,
         [outp_wrprot] = pin_28,
-        [outp_rdy]    = pin_34 },
+        [outp_rdy]    = pin_34,
+        [outp_hden]   = pin_unset },
     [FINTF_IBMPC] = {
         [outp_dskchg] = pin_34,
         [outp_index]  = pin_08,
         [outp_trk0]   = pin_26,
         [outp_wrprot] = pin_28,
-        [outp_rdy]    = pin_unset }
+        [outp_rdy]    = pin_unset,
+        [outp_hden]   = pin_unset },
+    [FINTF_IBMPC_HDOUT] = {
+        [outp_dskchg] = pin_34,
+        [outp_index]  = pin_08,
+        [outp_trk0]   = pin_26,
+        [outp_wrprot] = pin_28,
+        [outp_rdy]    = pin_unset,
+        [outp_hden]   = pin_02 },
 };
 
 static void drive_change_output(struct drive *drv, uint8_t outp, bool_t assert)
@@ -156,6 +166,7 @@ void floppy_cancel(void)
      * Asserting WRPROT prevents any further calls to wdata_start(). */
     drive_change_output(drv, outp_rdy, FALSE);
     drive_change_output(drv, outp_wrprot, TRUE);
+    drive_change_output(drv, outp_hden, FALSE);
 
     /* Stop DMA/timer work. */
     IRQx_disable(dma_rdata_irq);
@@ -327,6 +338,9 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
     image_open(image, slot);
     drv->image = image;
     dma_rd->state = DMA_stopping;
+
+    if (image->write_bc_ticks < sysclk_ns(1500))
+        drive_change_output(drv, outp_hden, TRUE);
 
     drv->index_suppressed = FALSE;
     index.prev_time = time_now();
