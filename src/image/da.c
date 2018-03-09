@@ -263,7 +263,7 @@ static bool_t da_write_track(struct image *im)
                     dass->lba_base <<= 8;
                     dass->lba_base |= dac->param[3-i];
                 }
-                dass->nr_sec = (dac->param[5] <= 8) ? 8 : dac->param[5];
+                dass->nr_sec = dac->param[5] ?: 8;
                 printk("D-A LBA %08x, nr=%u\n", dass->lba_base, dass->nr_sec);
                 break;
             case CMD_SET_CYL:
