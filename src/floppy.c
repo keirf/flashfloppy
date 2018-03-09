@@ -200,7 +200,11 @@ static struct dma_ring *dma_ring_alloc(void)
 
 void floppy_set_fintf_mode(uint8_t fintf_mode)
 {
-    static const char * const fintf_name[] = { "Shugart", "IBM PC" };
+    static const char * const fintf_name[] = {
+        [FINTF_SHUGART] = "Shugart",
+        [FINTF_IBMPC] = "IBM PC",
+        [FINTF_IBMPC_HDOUT] = "IBM PC + HD_OUT"
+    };
     struct drive *drv = &drive;
     uint32_t old_active;
     uint8_t outp;
@@ -213,7 +217,7 @@ void floppy_set_fintf_mode(uint8_t fintf_mode)
     }
 
     /* Invalid interface mode? Do nothing. */
-    if (fintf_mode >= ARRAY_SIZE(fintf_name))
+    if (fintf_mode >= ARRAY_SIZE(fintfs))
         return;
 
     /* This mode is already set? Do nothing. */
