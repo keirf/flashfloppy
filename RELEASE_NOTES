@@ -3,6 +3,15 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.15a - 9 March 2018
+ - UI: Fix subfolder navigation when returning to parent folder (#66)
+ - OLED: Auto-detect OLED displays at I2C address 0x3d
+ - ST: Mimic TOS by applying track skew to ST image files (#44)
+ - 7-Seg LED: Allow write protection to be toggled as on LCD/OLED
+ - Support Ensoniq DD/HD custom IMG formats (host=ensoniq)
+ - Support IBM PC interface with density select (interface=ibmpc-hdout)
+ - Direct Access: Support track with fewer than 8 data sectors (#62)
+
 ** v0.9.14a - 4 March 2018
  - Fix write pipeline: record track number for delayed write processing
  - General Music (GEM): New host option "host=gem" for direct IMG support
