@@ -53,6 +53,12 @@ const static struct img_type {
 }, akai_type[] = {
     { 10, 2, 116, 1, 3, 1, 0 }, /* Akai HD: 10 * 1kB sectors */
     { 0 }
+}, ensoniq_type[] = {
+    {  9, 2, 84, 1, 2, 1, 0 },  /* PC 720kB */
+    { 10, 2, 30, 1, 2, 0, 0 },  /* Ensoniq 800kB */
+    { 18, 2, 84, 1, 2, 1, 0 },  /* PC 1.44MB */
+    { 20, 2, 40, 1, 2, 0, 0 },  /* Ensoniq 1.6B */
+    { 0 }
 };
 
 static bool_t _img_open(struct image *im, bool_t has_iam,
@@ -137,6 +143,9 @@ static bool_t img_open(struct image *im)
     case HOST_akai:
     case HOST_gem:
         type = akai_type;
+        break;
+    case HOST_ensoniq:
+        type = ensoniq_type;
         break;
     default:
         type = img_type;
