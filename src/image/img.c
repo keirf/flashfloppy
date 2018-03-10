@@ -47,8 +47,10 @@ const static struct img_type {
     { 36, 2, 84, 1, 2, 1, 0 },
     { 0 }
 }, adfs_type[] = {
-    { 16, 2, 57, 1, 1, 0, 0 }, /* ADFS L 640k */
-    { 16, 1, 57, 1, 1, 0, 0 }, /* ADFS M 320k */
+    {  5, 2, 116, 1, 3, 0, 1 }, /* ADFS D/E: 5 * 1kB, 800k */
+    { 10, 2, 116, 1, 3, 0, 2 }, /* ADFS F: 10 * 1kB, 1600k */
+    { 16, 2,  57, 1, 1, 0, 0 }, /* ADFS L 640k */
+    { 16, 1,  57, 1, 1, 0, 0 }, /* ADFS M 320k */
     { 0 }
 }, akai_type[] = {
     { 10, 2, 116, 1, 3, 1, 0 }, /* Akai HD: 10 * 1kB sectors */
@@ -136,6 +138,12 @@ static bool_t _img_open(struct image *im, bool_t has_iam,
     return TRUE;
 }
 
+static bool_t adfs_open(struct image *im)
+{
+    im->img.skew_cyls_only = TRUE;
+    return _img_open(im, TRUE, adfs_type);
+}
+
 static bool_t img_open(struct image *im)
 {
     const struct img_type *type;
@@ -162,11 +170,6 @@ static bool_t st_open(struct image *im)
         im->img.skew = 2;
     }
     return ok;
-}
-
-static bool_t adl_open(struct image *im)
-{
-    return _img_open(im, TRUE, adfs_type);
 }
 
 static bool_t trd_open(struct image *im)
@@ -548,8 +551,8 @@ const struct image_handler st_image_handler = {
     .syncword = 0x44894489
 };
 
-const struct image_handler adl_image_handler = {
-    .open = adl_open,
+const struct image_handler adfs_image_handler = {
+    .open = adfs_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,

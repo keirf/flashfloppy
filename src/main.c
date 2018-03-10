@@ -471,6 +471,7 @@ static void read_ff_cfg(void)
         case FFCFG_host:
             ff_cfg.host =
                 !strcmp(opts.arg, "akai") ? HOST_akai
+                : !strcmp(opts.arg, "acorn") ? HOST_acorn
                 : !strcmp(opts.arg, "ensoniq") ? HOST_ensoniq
                 : !strcmp(opts.arg, "gem") ? HOST_gem
                 : HOST_unspecified;

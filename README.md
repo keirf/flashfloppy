@@ -4,7 +4,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
 - Directly supports a wide range of image formats:
   - HFE, HFEv3 (Universal)
   - ADF (Commodore Amiga)
-  - ADM, ADL (Acorn ADFS)
+  - ADM, ADL, ADF (Acorn ADFS)
   - DSK (Amstrad CPC, Spectrum +3)
   - IMG/IMA (IBM MFM Raw Sector)
   - OPD (Spectrum Opus Discovery)

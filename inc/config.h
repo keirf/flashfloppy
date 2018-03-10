@@ -67,6 +67,7 @@ struct __packed ff_cfg {
 #define HOST_akai        1
 #define HOST_gem         2
 #define HOST_ensoniq     3
+#define HOST_acorn       4
     uint8_t host;
     /* Bitfields within display_type field. */
 #define DISPLAY_lcd    (1<<0)
