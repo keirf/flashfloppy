@@ -30,7 +30,7 @@ bool_t image_valid(FILINFO *fp)
     /* Check valid extension. */
     filename_extension(fp->fname, ext, sizeof(ext));
     if (!strcmp(ext, "adf")) {
-        return !(fp->fsize % (11*512));
+        return (ff_cfg.host == HOST_acorn) || !(fp->fsize % (11*512));
     } else if (!strcmp(ext, "dsk")
                || !strcmp(ext, "hfe")
                || !strcmp(ext, "img")
