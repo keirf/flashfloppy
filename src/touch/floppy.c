@@ -185,7 +185,7 @@ static void IRQ_input_changed(void)
             drive_change_output(drv, outp_trk0, FALSE);
             if (dma_rd != NULL)
                 rdata_stop();
-            IRQx_set_pending(STEP_IRQ);
+            IRQx_set_pending(FLOPPY_SOFTIRQ);
         }
     }
 

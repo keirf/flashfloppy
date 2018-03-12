@@ -15,10 +15,10 @@
 
 #define m(bitnr) (1u<<(bitnr))
 
-/* A soft IRQ for handling step pulses. */
+/* A soft IRQ for handling lower priority work items. */
 static void drive_step_timer(void *_drv);
-void IRQ_43(void) __attribute__((alias("IRQ_step")));
-#define STEP_IRQ 43
+void IRQ_43(void) __attribute__((alias("IRQ_soft")));
+#define FLOPPY_SOFTIRQ 43
 
 /* A DMA buffer for running a timer associated with a floppy-data I/O pin. */
 struct dma_ring {
@@ -89,6 +89,7 @@ static time_t sync_time, sync_pos;
 static struct {
     struct timer timer, timer_deassert;
     time_t prev_time;
+    bool_t fake_fired;
 } index;
 static void index_assert(void *);   /* index.timer */
 static void index_deassert(void *); /* index.timer_deassert */
@@ -168,22 +169,25 @@ void floppy_cancel(void)
     drive_change_output(drv, outp_wrprot, TRUE);
     drive_change_output(drv, outp_hden, FALSE);
 
-    /* Stop DMA/timer work. */
+    /* Stop DMA + timer work. */
     IRQx_disable(dma_rdata_irq);
     IRQx_disable(dma_wdata_irq);
-    timer_cancel(&index.timer);
-    timer_cancel(&index.timer_deassert);
     rdata_stop();
     wdata_stop();
     dma_rdata.ccr = 0;
     dma_wdata.ccr = 0;
 
     /* Clear soft state. */
+    timer_cancel(&index.timer);
+    barrier(); /* cancel index.timer /then/ clear soft state */
     drive.index_suppressed = FALSE;
     drive.image = NULL;
     max_read_us = 0;
     image = NULL;
     dma_rd = dma_wr = NULL;
+    index.fake_fired = FALSE;
+    barrier(); /* clear soft state /then/ cancel index.timer_deassert */
+    timer_cancel(&index.timer_deassert);
 
     /* Set outputs for empty drive. */
     barrier();
@@ -291,8 +295,8 @@ void floppy_init(uint8_t fintf_mode)
         IRQx_enable(e->irq);
     }
 
-    IRQx_set_prio(STEP_IRQ, FLOPPY_IRQ_LO_PRI);
-    IRQx_enable(STEP_IRQ);
+    IRQx_set_prio(FLOPPY_SOFTIRQ, FLOPPY_SOFTIRQ_PRI);
+    IRQx_enable(FLOPPY_SOFTIRQ);
 
     timer_init(&index.timer, index_assert, NULL);
     timer_init(&index.timer_deassert, index_deassert, NULL);
@@ -436,14 +440,14 @@ static void drive_set_restart_pos(struct drive *drv)
     uint32_t pos = max_t(int32_t, 0, time_diff(index.prev_time, time_now()));
     pos %= drv->image->stk_per_rev;
     drv->restart_pos = pos;
-    if (ff_cfg.index_suppression)
-        drv->index_suppressed = TRUE;
+    drv->index_suppressed = TRUE;
 }
 
 /* Called from IRQ context to stop the write stream. */
 static void wdata_stop(void)
 {
     struct write *write;
+    struct drive *drv = &drive;
     uint8_t prev_state = dma_wr->state;
 
     /* Already inactive? Nothing to do. */
@@ -462,12 +466,21 @@ static void wdata_stop(void)
 
     /* Restart read exactly where write ended. 
      * No more IDX pulses until write-out is complete. */
-    drive_set_restart_pos(&drive);
+    drive_set_restart_pos(drv);
 
     /* Remember where this write's DMA stream ended. */
     write = get_write(image, image->wr_prod);
     write->dma_end = ARRAY_SIZE(dma_wr->buf) - dma_wdata.cndtr;
     image->wr_prod++;
+
+    if (!ff_cfg.index_suppression) {
+        /* Opportunistically insert an INDEX pulse ahead of writeback. */
+        drive_change_output(drv, outp_index, TRUE);
+        index.fake_fired = TRUE;
+        IRQx_set_pending(FLOPPY_SOFTIRQ);
+        /* Position read head so it quickly triggers an INDEX pulse. */
+        drv->restart_pos = drv->image->stk_per_rev - stk_ms(20);
+    }
 }
 
 static void wdata_start(void)
@@ -539,7 +552,9 @@ static void rdata_stop(void)
     tim_rdata->cr1 = 0;
 
     /* track-change = instant: Restart read stream where we left off. */
-    if ((ff_cfg.track_change == TRKCHG_instant) && !drive.index_suppressed)
+    if ((ff_cfg.track_change == TRKCHG_instant)
+        && !drive.index_suppressed
+        && ff_cfg.index_suppression)
         drive_set_restart_pos(&drive);
 }
 
@@ -838,7 +853,7 @@ static void drive_step_timer(void *_drv)
 
     switch (drv->step.state) {
     case STEP_started:
-        /* nothing to do, IRQ_step() needs to reset our deadline */
+        /* nothing to do, IRQ_soft() needs to reset our deadline */
         break;
     case STEP_latched:
         speaker_pulse();
@@ -860,7 +875,7 @@ static void drive_step_timer(void *_drv)
     }
 }
 
-static void IRQ_step(void)
+static void IRQ_soft(void)
 {
     struct drive *drv = &drive;
 
@@ -868,6 +883,11 @@ static void IRQ_step(void)
         timer_cancel(&drv->step.timer);
         drv->step.state = STEP_latched;
         timer_set(&drv->step.timer, drv->step.start + time_ms(1));
+    }
+
+    if (index.fake_fired) {
+        index.fake_fired = FALSE;
+        timer_set(&index.timer_deassert, time_now() + time_us(500));
     }
 }
 

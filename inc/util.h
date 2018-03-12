@@ -215,7 +215,7 @@ void EXC_unused(void);
 #define TIMER_IRQ_PRI         4
 #define WDATA_IRQ_PRI         7
 #define RDATA_IRQ_PRI         8
-#define FLOPPY_IRQ_LO_PRI     9
+#define FLOPPY_SOFTIRQ_PRI    9
 #define I2C_IRQ_PRI          13
 #define USB_IRQ_PRI          14
 
