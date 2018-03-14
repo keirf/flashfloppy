@@ -186,7 +186,7 @@ static bool_t da_read_track(struct image *im)
         for (i = 0; i < SEC_SZ; i++)
             emit_byte(dat[i]);
         crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
-        crc = crc16_ccitt(buf, SEC_SZ, crc);
+        crc = crc16_ccitt(dat, SEC_SZ, crc);
         emit_byte(crc >> 8);
         emit_byte(crc);
         for (i = 0; i < GAP_3; i++)
