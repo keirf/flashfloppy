@@ -148,11 +148,12 @@ uint16_t bc_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     uint32_t x, y = 32, todo = nr;
     struct image_buf *bc = &im->bufs.read_bc;
     uint32_t *bc_b = bc->p, bc_c = bc->cons, bc_p = bc->prod & ~31;
+    unsigned int bc_mask = (bc->len / 4) - 1;
 
     /* Convert pre-generated bitcells into flux timings. */
     while (bc_c != bc_p) {
         y = bc_c % 32;
-        x = be32toh(bc_b[(bc_c/32)%(bc->len/4)]) << y;
+        x = be32toh(bc_b[(bc_c / 32) & bc_mask]) << y;
         bc_c += 32 - y;
         im->cur_bc += 32 - y;
         im->cur_ticks += (32 - y) * ticks_per_cell;

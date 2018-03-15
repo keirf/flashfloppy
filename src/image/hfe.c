@@ -265,7 +265,7 @@ static bool_t hfe_write_track(struct image *im)
     struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_bc;
     uint8_t *buf = wr->p;
-    unsigned int buflen = wr->len;
+    unsigned int bufmask = wr->len - 1;
     uint8_t *w, *wrbuf = im->bufs.write_data.p;
     uint32_t i, c = wr->cons / 8, p = wr->prod / 8;
     uint32_t batch = 0, batch_off = (im->hfe.trk_pos & ~255) << 1;
@@ -316,7 +316,7 @@ static bool_t hfe_write_track(struct image *im)
             /* Encode into a 256-byte area in our staging buffer. */
             w = wrbuf;
             for (i = 0; i < nr; i++)
-                *w++ = _rbit32(buf[c++ % buflen]) >> 24;
+                *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
 
             /* Write it back to mass storage straight away. */
             t = time_now();
@@ -335,7 +335,7 @@ static bool_t hfe_write_track(struct image *im)
                 + (im->cur_track & 1) * 256
                 + ((off & ~255) << 1) + (off & 255);
             for (i = 0; i < nr; i++)
-                *w++ = _rbit32(buf[c++ % buflen]) >> 24;
+                *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
             batch++;
 
         }

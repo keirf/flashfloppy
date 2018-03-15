@@ -315,32 +315,18 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
     memset(image, 0, sizeof(*image));
 
     /* Large buffer to absorb long write latencies at mass-storage layer. */
-    image->bufs.write_bc.len = 20*1024;
+    image->bufs.write_bc.len = 16*1024; /* 16kB, power of two. */
     image->bufs.write_bc.p = arena_alloc(image->bufs.write_bc.len);
 
-    /* Any remaining space is used for staging writes to mass storage, for 
-     * example when format conversion is required and it is not possible to 
-     * do this in place within the write_bc buffer. */
+    /* Smaller buffer for absorbing read latencies at mass-storage layer. */
+    image->bufs.read_bc.len = 8*1024; /* 8kB, power of two. */
+    image->bufs.read_bc.p = arena_alloc(image->bufs.read_bc.len);
+
+    /* Any remaining space is used for staging I/O to mass storage, shared
+     * between read and write paths (Change of use of this memory space is
+     * fully serialised). */
     image->bufs.write_data.len = arena_avail();
     image->bufs.write_data.p = arena_alloc(image->bufs.write_data.len);
-
-    /* Read BC buffer overlaps the second half of the write BC buffer.
-     * This is because:
-     *  (a) The read BC buffer does not need to absorb such large latencies
-     *      (reads are much more predictable than writes to mass storage).
-     *  (b) By dedicating the first half of the write buffer to writes, we
-     *      can safely start processing write flux while read-data is still
-     *      processing (eg. in-flight mass storage io). At say 10kB of
-     *      dedicated write buffer, this is good for >80ms before colliding
-     *      with read buffers, even at HD data rate (1us/bitcell).
-     *      This is more than enough time for read
-     *      processing to complete. */
-    image->bufs.read_bc.len = image->bufs.write_bc.len / 2;
-    image->bufs.read_bc.p = (char *)image->bufs.write_bc.p
-        + image->bufs.read_bc.len;
-
-    /* Read-data buffer can entirely share the space of the write-data buffer. 
-     * Change of use of this memory space is fully serialised. */
     image->bufs.read_data = image->bufs.write_data;
 
     image_open(image, slot);
@@ -976,7 +962,7 @@ static void IRQ_wdata_dma(void)
     uint16_t cell = image->write_bc_ticks, window;
     uint32_t bc_dat = 0, bc_prod, syncword = image->handler->syncword;
     uint32_t *bc_buf = image->bufs.write_bc.p;
-    unsigned int bc_buflen = image->bufs.write_bc.len / 4;
+    unsigned int bc_bufmask = (image->bufs.write_bc.len / 4) - 1;
     struct write *write = NULL;
 
     window = cell + (cell >> 1);
@@ -1011,18 +997,18 @@ static void IRQ_wdata_dma(void)
             bc_dat <<= 1;
             bc_prod++;
             if (!(bc_prod&31))
-                bc_buf[((bc_prod-1) / 32) % bc_buflen] = htobe32(bc_dat);
+                bc_buf[((bc_prod-1) / 32) & bc_bufmask] = htobe32(bc_dat);
         }
         bc_dat = (bc_dat << 1) | 1;
         bc_prod++;
         if (bc_dat == syncword)
             bc_prod &= ~31;
         if (!(bc_prod&31))
-            bc_buf[((bc_prod-1) / 32) % bc_buflen] = htobe32(bc_dat);
+            bc_buf[((bc_prod-1) / 32) & bc_bufmask] = htobe32(bc_dat);
     }
 
     if (bc_prod & 31)
-        bc_buf[(bc_prod / 32) % bc_buflen] = htobe32(bc_dat << (-bc_prod&31));
+        bc_buf[(bc_prod / 32) & bc_bufmask] = htobe32(bc_dat << (-bc_prod&31));
 
     /* Processing the tail end of a write? */
     if (write != NULL) {

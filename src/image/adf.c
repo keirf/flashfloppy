@@ -99,7 +99,7 @@ static bool_t adf_read_track(struct image *im)
     struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
     uint32_t pr, *bc_b = bc->p;
-    unsigned int i, bc_len, bc_p, bc_c;
+    unsigned int i, bc_len, bc_mask, bc_p, bc_c;
     unsigned int buflen = rd->len & ~511;
 
     if (rd->prod == rd->cons) {
@@ -115,11 +115,12 @@ static bool_t adf_read_track(struct image *im)
     bc_p = bc->prod / 32; /* MFM longs */
     bc_c = bc->cons / 32; /* MFM longs */
     bc_len = bc->len / 4; /* MFM longs */
+    bc_mask = bc_len - 1;
 
-    pr = be32toh(bc_b[(bc_p-1) % bc_len]);
-#define emit_raw(r) ({                                  \
-    uint32_t _r = (r);                                  \
-    bc_b[bc_p++ % bc_len] = htobe32(_r & ~(pr << 31));  \
+    pr = be32toh(bc_b[(bc_p-1) & bc_mask]);
+#define emit_raw(r) ({                                   \
+    uint32_t _r = (r);                                   \
+    bc_b[bc_p++ & bc_mask] = htobe32(_r & ~(pr << 31));  \
     pr = _r; })
 #define emit_long(l) ({                                         \
     uint32_t _l = (l);                                          \
@@ -214,7 +215,7 @@ static bool_t adf_write_track(struct image *im)
     struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_bc;
     uint32_t *buf = wr->p;
-    unsigned int buflen = wr->len / 4;
+    unsigned int bufmask = (wr->len / 4) - 1;
     uint32_t *w, *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 32, p = wr->prod / 32;
     uint32_t info, dsum, csum;
@@ -233,24 +234,24 @@ static bool_t adf_write_track(struct image *im)
     while ((p - c) >= (542/2)) {
 
         /* Scan for sync word. */
-        if (be32toh(buf[c++ % buflen]) != 0x44894489)
+        if (be32toh(buf[c++ & bufmask]) != 0x44894489)
             continue;
 
         /* Info word (format,track,sect,sect_to_gap). */
-        info = (buf[c++ % buflen] & 0x55555555) << 1;
-        info |= buf[c++ % buflen] & 0x55555555;
+        info = (buf[c++ & bufmask] & 0x55555555) << 1;
+        info |= buf[c++ & bufmask] & 0x55555555;
         csum = info ^ (info >> 1);
         info = be32toh(info);
         sect = (uint8_t)(info >> 8);
 
         /* Label area. Scan for header checksum only. */
         for (i = 0; i < 8; i++)
-            csum ^= buf[c++ % buflen];
+            csum ^= buf[c++ & bufmask];
         csum &= 0x55555555;
 
         /* Header checksum. */
-        csum ^= (buf[c++ % buflen] & 0x55555555) << 1;
-        csum ^= buf[c++ % buflen] & 0x55555555;
+        csum ^= (buf[c++ & bufmask] & 0x55555555) << 1;
+        csum ^= buf[c++ & bufmask] & 0x55555555;
         csum = be32toh(csum);
 
         /* Check the info word and header checksum.  */
@@ -268,14 +269,14 @@ static bool_t adf_write_track(struct image *im)
         }
 
         /* Data checksum. */
-        csum = (buf[c++ % buflen] & 0x55555555) << 1;
-        csum |= buf[c++ % buflen] & 0x55555555;
+        csum = (buf[c++ & bufmask] & 0x55555555) << 1;
+        csum |= buf[c++ & bufmask] & 0x55555555;
 
         /* Data area. Decode to a write buffer and keep a running checksum. */
         dsum = 0;
         for (i = dsum = 0; i < 128; i++) {
-            uint32_t o = buf[(c + 128) % buflen] & 0x55555555;
-            uint32_t e = buf[c++ % buflen] & 0x55555555;
+            uint32_t o = buf[(c + 128) & bufmask] & 0x55555555;
+            uint32_t e = buf[c++ & bufmask] & 0x55555555;
             dsum ^= o ^ e;
             *w++ = (e << 1) | o;
         }

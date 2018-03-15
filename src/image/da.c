@@ -111,7 +111,7 @@ static bool_t da_read_track(struct image *im)
     struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
     uint16_t *bc_b = bc->p;
-    unsigned int i, bc_len, bc_p, bc_c;
+    unsigned int i, bc_len, bc_mask, bc_p, bc_c;
     uint16_t pr = 0, crc;
     unsigned int buflen = rd->len & ~511;
 
@@ -135,12 +135,13 @@ static bool_t da_read_track(struct image *im)
     bc_p = bc->prod / 16; /* MFM words */
     bc_c = bc->cons / 16; /* MFM words */
     bc_len = bc->len / 2; /* MFM words */
+    bc_mask = bc_len - 1;
     if ((bc_len - (bc_p - bc_c)) < DAM)
         return FALSE;
 
-#define emit_raw(r) ({                                  \
-    uint16_t _r = (r);                                  \
-    bc_b[bc_p++ % bc_len] = htobe16(_r & ~(pr << 15));  \
+#define emit_raw(r) ({                                   \
+    uint16_t _r = (r);                                   \
+    bc_b[bc_p++ & bc_mask] = htobe16(_r & ~(pr << 15));  \
     pr = _r; })
 #define emit_byte(b) emit_raw(bintomfm(b))
     if (im->da.decode_pos == 0) {
@@ -209,7 +210,7 @@ static bool_t da_write_track(struct image *im)
     struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_bc;
     uint16_t *buf = wr->p;
-    unsigned int buflen = wr->len / 2;
+    unsigned int bufmask = (wr->len / 2) - 1;
     uint8_t *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
@@ -228,10 +229,10 @@ static bool_t da_write_track(struct image *im)
 
         /* Scan for sync words and IDAM. Because of the way we sync we expect
          * to see only 2*4489 and thus consume only 3 words for the header. */
-        if (be16toh(buf[c++ % buflen]) != 0x4489)
+        if (be16toh(buf[c++ & bufmask]) != 0x4489)
             continue;
         for (i = 0; i < 2; i++)
-            if ((x = mfmtobin(buf[c++ % buflen])) != 0xa1)
+            if ((x = mfmtobin(buf[c++ & bufmask])) != 0xa1)
                 break;
         if (x != 0xfb)
             continue;
@@ -243,7 +244,7 @@ static bool_t da_write_track(struct image *im)
         }
 
         for (i = 0; i < (SEC_SZ + 2); i++)
-            wrbuf[i] = mfmtobin(buf[c++ % buflen]);
+            wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
 
         crc = crc16_ccitt(wrbuf, SEC_SZ + 2, crc16_ccitt(header, 4, 0xffff));
         if (crc != 0) {
