@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.16a - 16 March 2018
+ - Support ADFS D/E/F images (suffix *.ADF, FF.CFG: host=acorn)
+ - Direct Access: Fix sector data CRCs
+ - Reliability improvements for Acorn systems (index-suppression=no)
+ - Rearrange floppy read/write buffering to avoid corruptions
+
 ** v0.9.15a - 9 March 2018
  - UI: Fix subfolder navigation when returning to parent folder (#66)
  - OLED: Auto-detect OLED displays at I2C address 0x3d
