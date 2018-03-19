@@ -332,9 +332,9 @@ static bool_t img_read_track(struct image *im)
     struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
     uint16_t *bc_b = bc->p;
-    unsigned int i, bc_len, bc_mask, bc_p, bc_c;
+    uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     uint16_t pr = 0, crc;
-    unsigned int buflen = rd->len & ~511;
+    unsigned int i, buflen = rd->len & ~511;
 
     if (rd->prod == rd->cons) {
         uint8_t sec = im->img.sec_map[im->img.trk_sec] - im->img.sec_base;
@@ -350,6 +350,7 @@ static bool_t img_read_track(struct image *im)
     bc_c = bc->cons / 16; /* MFM words */
     bc_len = bc->len / 2; /* MFM words */
     bc_mask = bc_len - 1;
+    bc_space = bc_len - ((bc_p - bc_c) & bc_mask);
 
 #define emit_raw(r) ({                                   \
     uint16_t _r = (r);                                   \
@@ -359,7 +360,7 @@ static bool_t img_read_track(struct image *im)
 
     if (im->img.decode_pos == 0) {
         /* Post-index track gap */
-        if ((bc_len - (bc_p - bc_c)) < im->img.idx_sz)
+        if (bc_space < im->img.idx_sz)
             return FALSE;
         for (i = 0; i < im->img.gap_4a; i++)
             emit_byte(0x4e);
@@ -375,7 +376,7 @@ static bool_t img_read_track(struct image *im)
         }
     } else if (im->img.decode_pos == (im->img.nr_sectors * 2 + 1)) {
         /* Pre-index track gap */
-        if ((bc_len - (bc_p - bc_c)) < im->img.gap4)
+        if (bc_space < im->img.gap4)
             return FALSE;
         for (i = 0; i < im->img.gap4; i++)
             emit_byte(0x4e);
@@ -386,7 +387,7 @@ static bool_t img_read_track(struct image *im)
         uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 1];
         uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe, cyl, hd, sec,
                             im->img.sec_no };
-        if ((bc_len - (bc_p - bc_c)) < im->img.idam_sz)
+        if (bc_space < im->img.idam_sz)
             return FALSE;
         for (i = 0; i < idam_gap_sync(im); i++)
             emit_byte(0x00);
@@ -403,7 +404,7 @@ static bool_t img_read_track(struct image *im)
         /* DAM */
         uint8_t *dat = &buf[(rd->cons/8)%buflen];
         uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
-        if ((bc_len - (bc_p - bc_c)) < im->img.dam_sz)
+        if (bc_space < im->img.dam_sz)
             return FALSE;
         for (i = 0; i < GAP_SYNC; i++)
             emit_byte(0x00);
@@ -467,7 +468,7 @@ static bool_t img_write_track(struct image *im)
         }
     }
 
-    while ((p - c) >= (3 + sec_sz(im) + 2)) {
+    while ((int16_t)(p - c) >= (3 + sec_sz(im) + 2)) {
 
         /* Scan for sync words and IDAM. Because of the way we sync we expect
          * to see only 2*4489 and thus consume only 3 words for the header. */

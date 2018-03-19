@@ -267,7 +267,7 @@ static bool_t hfe_write_track(struct image *im)
     uint8_t *buf = wr->p;
     unsigned int bufmask = wr->len - 1;
     uint8_t *w, *wrbuf = im->bufs.write_data.p;
-    uint32_t i, c = wr->cons / 8, p = wr->prod / 8;
+    uint32_t i, space, c = wr->cons / 8, p = wr->prod / 8;
     uint32_t batch = 0, batch_off = (im->hfe.trk_pos & ~255) << 1;
     time_t t;
 
@@ -301,14 +301,14 @@ static bool_t hfe_write_track(struct image *im)
         UINT nr;
 
         /* All bytes remaining in the raw-bitcell buffer. */
-        nr = p - c;
+        nr = space = (p - c) & bufmask;
         /* Limit to end of current 256-byte HFE block. */
         nr = min_t(UINT, nr, 256 - (off & 255));
         /* Limit to end of HFE track. */
         nr = min_t(UINT, nr, im->hfe.trk_len - off);
 
         /* Bail if no bytes to write, or if we could batch some more. */
-        if ((nr == 0) || ((nr == (p - c)) && !flush))
+        if ((nr == 0) || ((nr == space) && !flush))
             break;
 
         if (im->bufs.write_data.prod == 256) {
@@ -374,7 +374,6 @@ const struct image_handler hfe_image_handler = {
     .read_track = hfe_read_track,
     .rdata_flux = hfe_rdata_flux,
     .write_track = hfe_write_track,
-    .syncword = 0xffffffff
 };
 
 /*

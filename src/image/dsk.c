@@ -240,9 +240,9 @@ static bool_t dsk_read_track(struct image *im)
     struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = (uint8_t *)rd->p + 512; /* skip DIB/TIB */
     uint16_t *bc_b = bc->p;
-    unsigned int i, bc_len, bc_mask, bc_p, bc_c;
+    uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     uint16_t pr = 0, crc;
-    unsigned int buflen = rd->len & ~511;
+    unsigned int i, buflen = rd->len & ~511;
 
     if (tib->nr_secs == 0) {
         /* Unformatted. */
@@ -267,6 +267,7 @@ static bool_t dsk_read_track(struct image *im)
     bc_c = bc->cons / 16; /* MFM words */
     bc_len = bc->len / 2; /* MFM words */
     bc_mask = bc_len - 1;
+    bc_space = bc_len - ((bc_p - bc_c) & bc_mask);
 
 #define emit_raw(r) ({                                   \
     uint16_t _r = (r);                                   \
@@ -276,7 +277,7 @@ static bool_t dsk_read_track(struct image *im)
 
     if (im->dsk.decode_pos == 0) {
         /* Post-index track gap */
-        if ((bc_len - (bc_p - bc_c)) < (GAP_4A + GAP_SYNC + 4 + GAP_1))
+        if (bc_space < (GAP_4A + GAP_SYNC + 4 + GAP_1))
             return FALSE;
         for (i = 0; i < GAP_4A; i++)
             emit_byte(0x4e);
@@ -290,7 +291,7 @@ static bool_t dsk_read_track(struct image *im)
             emit_byte(0x4e);
     } else if (im->dsk.decode_pos == (tib->nr_secs * 2 + 1)) {
         /* Pre-index track gap */
-        if ((bc_len - (bc_p - bc_c)) < im->dsk.gap4)
+        if (bc_space < im->dsk.gap4)
             return FALSE;
         for (i = 0; i < im->dsk.gap4; i++)
             emit_byte(0x4e);
@@ -299,7 +300,7 @@ static bool_t dsk_read_track(struct image *im)
         /* IDAM */
         uint8_t sec = (im->dsk.decode_pos-1) >> 1;
         uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe };
-        if ((bc_len - (bc_p - bc_c)) < (GAP_SYNC + 8 + 2 + GAP_2))
+        if (bc_space < (GAP_SYNC + 8 + 2 + GAP_2))
             return FALSE;
         if ((tib->sib[sec].stat1 & 0x01) && !(tib->sib[sec].stat2 & 0x01))
             idam[3] = 0x00; /* Missing Address Mark (ID) */
@@ -323,8 +324,7 @@ static bool_t dsk_read_track(struct image *im)
         uint16_t sec_sz = tib->sib[sec].actual_length;
         uint8_t *dat = &buf[(rd->cons/8)%buflen];
         uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
-        if ((bc_len - (bc_p - bc_c)) < (GAP_SYNC + 4 + sec_sz + 2
-                                        + tib->gap3))
+        if (bc_space < (GAP_SYNC + 4 + sec_sz + 2 + tib->gap3))
             return FALSE;
         if ((tib->sib[sec].stat1 & 0x01) && (tib->sib[sec].stat2 & 0x01))
             dam[3] = 0x00; /* Missing Address Mark (Data) */
@@ -405,7 +405,7 @@ static bool_t dsk_write_track(struct image *im)
 
         sec_sz = (im->dsk.write_sector >= 0)
             ? tib->sib[im->dsk.write_sector].actual_length : 128;
-        if ((p - c) < (3 + sec_sz + 2))
+        if ((int16_t)(p - c) < (3 + sec_sz + 2))
             break;
 
         /* Scan for sync words and IDAM. Because of the way we sync we expect

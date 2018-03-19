@@ -111,9 +111,9 @@ static bool_t da_read_track(struct image *im)
     struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
     uint16_t *bc_b = bc->p;
-    unsigned int i, bc_len, bc_mask, bc_p, bc_c;
+    uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     uint16_t pr = 0, crc;
-    unsigned int buflen = rd->len & ~511;
+    unsigned int i, buflen = rd->len & ~511;
 
     if (rd->prod == rd->cons) {
         uint8_t sec = im->da.trk_sec;
@@ -136,7 +136,8 @@ static bool_t da_read_track(struct image *im)
     bc_c = bc->cons / 16; /* MFM words */
     bc_len = bc->len / 2; /* MFM words */
     bc_mask = bc_len - 1;
-    if ((bc_len - (bc_p - bc_c)) < DAM)
+    bc_space = bc_len - ((bc_p - bc_c) & bc_mask);
+    if (bc_space < DAM)
         return FALSE;
 
 #define emit_raw(r) ({                                   \
@@ -225,7 +226,7 @@ static bool_t da_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 15) / 16;
 
-    while ((p - c) >= (3 + SEC_SZ + 2)) {
+    while ((int16_t)(p - c) >= (3 + SEC_SZ + 2)) {
 
         /* Scan for sync words and IDAM. Because of the way we sync we expect
          * to see only 2*4489 and thus consume only 3 words for the header. */

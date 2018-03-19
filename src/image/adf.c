@@ -99,8 +99,8 @@ static bool_t adf_read_track(struct image *im)
     struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
     uint32_t pr, *bc_b = bc->p;
-    unsigned int i, bc_len, bc_mask, bc_p, bc_c;
-    unsigned int buflen = rd->len & ~511;
+    uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
+    unsigned int i, buflen = rd->len & ~511;
 
     if (rd->prod == rd->cons) {
         F_lseek(&im->fp, im->adf.trk_off + im->adf.trk_pos);
@@ -116,6 +116,7 @@ static bool_t adf_read_track(struct image *im)
     bc_c = bc->cons / 32; /* MFM longs */
     bc_len = bc->len / 4; /* MFM longs */
     bc_mask = bc_len - 1;
+    bc_space = bc_len - ((bc_p - bc_c) & bc_mask);
 
     pr = be32toh(bc_b[(bc_p-1) & bc_mask]);
 #define emit_raw(r) ({                                   \
@@ -131,7 +132,7 @@ static bool_t adf_read_track(struct image *im)
     if (im->adf.decode_pos == 0) {
 
         /* Post-index track gap */
-        if ((bc_len - (bc_p - bc_c)) < POST_IDX_GAP_BC/32)
+        if (bc_space < POST_IDX_GAP_BC/32)
             return FALSE;
         for (i = 0; i < POST_IDX_GAP_BC/32; i++)
             emit_long(0);
@@ -139,7 +140,7 @@ static bool_t adf_read_track(struct image *im)
     } else if (im->adf.decode_pos == NR_SECS+1) {
 
         /* Pre-index track gap */
-        if ((bc_len - (bc_p - bc_c)) < PRE_IDX_GAP_BC/32)
+        if (bc_space < PRE_IDX_GAP_BC/32)
             return FALSE;
         for (i = 0; i < PRE_IDX_GAP_BC/32-1; i++)
             emit_long(0);
@@ -150,7 +151,8 @@ static bool_t adf_read_track(struct image *im)
 
         uint32_t sector = im->adf.decode_pos - 1;
         uint32_t info, csum, *dat = (uint32_t *)&buf[(rd->cons/8)%buflen];
-        if ((bc_len - (bc_p - bc_c)) < (544*16)/32)
+
+        if (bc_space < (544*16)/32)
             return FALSE;
 
         /* Sector header */
@@ -231,7 +233,7 @@ static bool_t adf_write_track(struct image *im)
     max_batch = im->bufs.write_data.len / 512;
     w = wrbuf;
 
-    while ((p - c) >= (542/2)) {
+    while ((int16_t)(p - c) >= (542/2)) {
 
         /* Scan for sync word. */
         if (be32toh(buf[c++ & bufmask]) != 0x44894489)

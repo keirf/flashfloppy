@@ -318,6 +318,9 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
     image->bufs.write_bc.len = 16*1024; /* 16kB, power of two. */
     image->bufs.write_bc.p = arena_alloc(image->bufs.write_bc.len);
 
+    /* ~0 avoids sync match within fewer than 32 bits of scan start. */
+    image->write_bc_window = ~0;
+
     /* Smaller buffer for absorbing read latencies at mass-storage layer. */
     image->bufs.read_bc.len = 8*1024; /* 8kB, power of two. */
     image->bufs.read_bc.p = arena_alloc(image->bufs.read_bc.len);
@@ -1001,7 +1004,7 @@ static void IRQ_wdata_dma(void)
         }
         bc_dat = (bc_dat << 1) | 1;
         bc_prod++;
-        if (bc_dat == syncword)
+        if (syncword && (bc_dat == syncword))
             bc_prod &= ~31;
         if (!(bc_prod&31))
             bc_buf[((bc_prod-1) / 32) & bc_bufmask] = htobe32(bc_dat);
@@ -1017,7 +1020,8 @@ static void IRQ_wdata_dma(void)
         image->wr_bc++;
         /* Initialise decoder state for the start of the next write. */
         bc_prod = (bc_prod + 31) & ~31;
-        bc_dat = prev = 0;
+        bc_dat = ~0;
+        prev = 0;
     }
 
     /* Save our progress for next time. */
