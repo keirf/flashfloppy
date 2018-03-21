@@ -79,7 +79,6 @@ struct image_bufs {
 
 struct image {
     const struct image_handler *handler;
-    const struct image_handler *_handler;
 
     /* FatFS. */
     FIL fp;
