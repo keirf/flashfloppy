@@ -136,7 +136,7 @@ static bool_t da_read_track(struct image *im)
     bc_c = bc->cons / 16; /* MFM words */
     bc_len = bc->len / 2; /* MFM words */
     bc_mask = bc_len - 1;
-    bc_space = bc_len - ((bc_p - bc_c) & bc_mask);
+    bc_space = bc_len - (uint16_t)(bc_p - bc_c);
     if (bc_space < DAM)
         return FALSE;
 

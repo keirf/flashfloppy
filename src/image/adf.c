@@ -116,7 +116,7 @@ static bool_t adf_read_track(struct image *im)
     bc_c = bc->cons / 32; /* MFM longs */
     bc_len = bc->len / 4; /* MFM longs */
     bc_mask = bc_len - 1;
-    bc_space = bc_len - ((bc_p - bc_c) & bc_mask);
+    bc_space = bc_len - (uint16_t)(bc_p - bc_c);
 
     pr = be32toh(bc_b[(bc_p-1) & bc_mask]);
 #define emit_raw(r) ({                                   \
