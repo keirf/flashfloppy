@@ -152,6 +152,8 @@ static void hfe_setup_track(
     } else {
         /* Write mode. */
         im->hfe.trk_pos = im->cur_bc / 8;
+        im->hfe.write_batch.len = 0;
+        im->hfe.write_batch.dirty = FALSE;
     }
 }
 
@@ -262,6 +264,7 @@ out:
 
 static bool_t hfe_write_track(struct image *im)
 {
+    const unsigned int batch_secs = 8;
     bool_t flush;
     struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_bc;
@@ -269,7 +272,7 @@ static bool_t hfe_write_track(struct image *im)
     unsigned int bufmask = wr->len - 1;
     uint8_t *w, *wrbuf = im->bufs.write_data.p;
     uint32_t i, space, c = wr->cons / 8, p = wr->prod / 8;
-    uint32_t batch = 0, batch_off = (im->hfe.trk_pos & ~255) << 1;
+    bool_t writeback = FALSE;
     time_t t;
 
     /* If we are processing final data then use the end index, rounded to
@@ -279,26 +282,20 @@ static bool_t hfe_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 4) / 8;
 
-    if (!im->bufs.write_data.prod) {
-        /* How many bytes is the full track data? */
-        im->bufs.write_data.prod = ((im->hfe.trk_len * 2) + 511) & ~511;
-        if (im->bufs.write_data.prod > im->bufs.write_data.len) {
-            /* It doesn't fit in our staging buffer. Write block at a time. */
-            im->bufs.write_data.prod = 256;
-        } else {
-            /* Whole track fits in our buffer! Stream it in immediately. */
-            t = time_now();
-            printk("Read whole track %u... ", im->cur_track);
-            F_lseek(&im->fp, im->hfe.trk_off * 512);
-            F_read(&im->fp, wrbuf, im->bufs.write_data.prod, NULL);
-            F_lseek(&im->fp, im->hfe.trk_off * 512);
-            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
-        }
+    if (im->hfe.write_batch.len == 0) {
+        ASSERT(!im->hfe.write_batch.dirty);
+        im->hfe.write_batch.off = (im->hfe.trk_pos & ~255) << 1;
+        im->hfe.write_batch.len = min_t(
+            uint16_t, batch_secs * 512,
+            (((im->hfe.trk_len * 2) + 511) & ~511) - im->hfe.write_batch.off);
+        F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
+        F_read(&im->fp, wrbuf, im->hfe.write_batch.len, NULL);
+        F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
     }
 
     for (;;) {
 
-        uint32_t off = im->hfe.trk_pos;
+        uint32_t batch_off, off = im->hfe.trk_pos;
         UINT nr;
 
         /* All bytes remaining in the raw-bitcell buffer. */
@@ -308,60 +305,53 @@ static bool_t hfe_write_track(struct image *im)
         /* Limit to end of HFE track. */
         nr = min_t(UINT, nr, im->hfe.trk_len - off);
 
-        /* Bail if no bytes to write, or if we could batch some more. */
-        if ((nr == 0) || ((nr == space) && !flush))
+        /* Bail if no bytes to write. */
+        if (nr == 0)
             break;
 
-        if (im->bufs.write_data.prod == 256) {
-
-            /* Encode into a 256-byte area in our staging buffer. */
-            w = wrbuf;
-            for (i = 0; i < nr; i++)
-                *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
-
-            /* Write it back to mass storage straight away. */
-            t = time_now();
-            printk("Write %u-%u (%u)... ", off, off+nr-1, nr);
-            F_lseek(&im->fp,
-                    im->hfe.trk_off * 512
-                    + (im->cur_track & 1) * 256
-                    + ((off & ~255) << 1) + (off & 255));
-            F_write(&im->fp, wrbuf, nr, NULL);
-            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
-
-        } else {
-
-            /* Encode into the whole-track buffer for later write-out. */
-            w = wrbuf
-                + (im->cur_track & 1) * 256
-                + ((off & ~255) << 1) + (off & 255);
-            for (i = 0; i < nr; i++)
-                *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
-            batch++;
-
+        /* Bail if required data not in the write buffer. */
+        batch_off = (off & ~255) << 1; 
+        if ((batch_off < im->hfe.write_batch.off)
+            || (batch_off >= (im->hfe.write_batch.off
+                              + im->hfe.write_batch.len))) {
+            writeback = TRUE;
+            break;
         }
+
+        /* Encode into the sector buffer for later write-out. */
+        w = wrbuf
+            + (im->cur_track & 1) * 256
+            + batch_off - im->hfe.write_batch.off
+            + (off & 255);
+        for (i = 0; i < nr; i++)
+            *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
+        im->hfe.write_batch.dirty = TRUE;
 
         im->hfe.trk_pos += nr;
         if (im->hfe.trk_pos >= im->hfe.trk_len) {
             ASSERT(im->hfe.trk_pos == im->hfe.trk_len);
             im->hfe.trk_pos = 0;
-            if (batch) {
-                /* Process contiguous batch and ask to be called again for data
-                 * at start of track. */
-                flush = FALSE;
-                break;
-            }
         }
     }
 
-    if (batch) { 
-        unsigned int nr = batch * 512;
+    if (writeback) {
+        /* If writeback requested then ensure we get called again. */
+        flush = FALSE;
+    } else if (flush) {
+        /* If this is the final call, we should do writeback. */
+        writeback = TRUE;
+    }
+
+    if (writeback && im->hfe.write_batch.dirty) {
         t = time_now();
-        printk("Write %u-%u (%u)... ", batch_off, batch_off+nr-1, nr);
-        w = wrbuf + batch_off;
-        F_lseek(&im->fp, im->hfe.trk_off * 512 + batch_off);
-        F_write(&im->fp, w, nr, NULL);
+        printk("Write %u-%u (%u)... ",
+               im->hfe.write_batch.off,
+               im->hfe.write_batch.off + im->hfe.write_batch.len - 1,
+               im->hfe.write_batch.len);
+        F_write(&im->fp, wrbuf, im->hfe.write_batch.len, NULL);
         printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
+        im->hfe.write_batch.len = 0;
+        im->hfe.write_batch.dirty = FALSE;
     }
 
     wr->cons = c * 8;
