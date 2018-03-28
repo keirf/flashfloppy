@@ -129,7 +129,7 @@ struct image_handler {
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
     bool_t (*write_track)(struct image *im);
-    uint32_t syncword;
+    enum { SYNC_none=0, SYNC_fm, SYNC_mfm } sync;
 };
 
 /* Is given file valid to open as an image? */

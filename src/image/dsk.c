@@ -487,7 +487,7 @@ const struct image_handler dsk_image_handler = {
     .read_track = dsk_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = dsk_write_track,
-    .syncword = 0x44894489
+    .sync = SYNC_mfm
 };
 
 /*

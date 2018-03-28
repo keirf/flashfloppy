@@ -297,7 +297,7 @@ const struct image_handler da_image_handler = {
     .read_track = da_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = da_write_track,
-    .syncword = 0x44894489
+    .sync = SYNC_mfm
 };
 
 /*

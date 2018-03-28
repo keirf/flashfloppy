@@ -963,8 +963,9 @@ static void IRQ_wdata_dma(void)
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
     uint16_t cons, prod, prev, curr, next;
     uint16_t cell = image->write_bc_ticks, window;
-    uint32_t bc_dat = 0, bc_prod, syncword = image->handler->syncword;
+    uint32_t bc_dat = 0, bc_prod;
     uint32_t *bc_buf = image->bufs.write_bc.p;
+    unsigned int sync = image->handler->sync;
     unsigned int bc_bufmask = (image->bufs.write_bc.len / 4) - 1;
     struct write *write = NULL;
 
@@ -1004,8 +1005,18 @@ static void IRQ_wdata_dma(void)
         }
         bc_dat = (bc_dat << 1) | 1;
         bc_prod++;
-        if (syncword && (bc_dat == syncword))
-            bc_prod &= ~31;
+        switch (sync) {
+        case SYNC_fm:
+            /* FM clock sync clock byte is 0xc7. Check for:
+             * 1010 1010 1010 1010 1x1x 0x0x 0x1x 1x1x */
+            if ((bc_dat & 0xffffd555) == 0x55555015)
+                bc_prod = (bc_prod - 31) | 31;
+            break;
+        case SYNC_mfm:
+            if (bc_dat == 0x44894489)
+                bc_prod &= ~31;
+            break;
+        }
         if (!(bc_prod&31))
             bc_buf[((bc_prod-1) / 32) & bc_bufmask] = htobe32(bc_dat);
     }

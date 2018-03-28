@@ -544,7 +544,7 @@ const struct image_handler img_image_handler = {
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
-    .syncword = 0x44894489
+    .sync = SYNC_mfm
 };
 
 const struct image_handler st_image_handler = {
@@ -553,7 +553,7 @@ const struct image_handler st_image_handler = {
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
-    .syncword = 0x44894489
+    .sync = SYNC_mfm
 };
 
 const struct image_handler adfs_image_handler = {
@@ -562,7 +562,7 @@ const struct image_handler adfs_image_handler = {
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
-    .syncword = 0x44894489
+    .sync = SYNC_mfm
 };
 
 const struct image_handler trd_image_handler = {
@@ -571,7 +571,7 @@ const struct image_handler trd_image_handler = {
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
-    .syncword = 0x44894489
+    .sync = SYNC_mfm
 };
 
 const struct image_handler opd_image_handler = {
@@ -580,7 +580,7 @@ const struct image_handler opd_image_handler = {
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
-    .syncword = 0x44894489
+    .sync = SYNC_mfm
 };
 
 
@@ -749,11 +749,116 @@ static bool_t fm_read_track(struct image *im)
     return TRUE;
 }
 
+static bool_t fm_write_track(struct image *im)
+{
+    bool_t flush;
+    struct write *write = get_write(im, im->wr_cons);
+    struct image_buf *wr = &im->bufs.write_bc;
+    uint16_t *buf = wr->p;
+    unsigned int bufmask = (wr->len / 2) - 1;
+    uint8_t *wrbuf = im->bufs.write_data.p;
+    uint32_t c = wr->cons / 16, p = wr->prod / 16;
+    uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
+    unsigned int i;
+    time_t t;
+    uint16_t crc, sync;
+    uint8_t x;
+
+    /* If we are processing final data then use the end index, rounded up. */
+    barrier();
+    flush = (im->wr_cons != im->wr_bc);
+    if (flush)
+        p = (write->bc_end + 15) / 16;
+
+    if (im->img.write_sector == -1) {
+        /* Convert write offset to sector number (in rotational order). */
+        im->img.write_sector =
+            (base - im->img.idx_sz - im->img.idam_sz
+             + (im->img.idam_sz + im->img.dam_sz) / 2)
+            / (im->img.idam_sz + im->img.dam_sz);
+        if (im->img.write_sector >= im->img.nr_sectors) {
+            printk("IMG Bad Sector Offset: %u -> %u\n",
+                   base, im->img.write_sector);
+            im->img.write_sector = -2;
+        } else {
+            /* Convert rotational order to logical order. */
+            im->img.write_sector = im->img.sec_map[im->img.write_sector];
+            im->img.write_sector -= im->img.sec_base;
+        }
+    }
+
+    while ((int16_t)(p - c) >= (2 + sec_sz(im) + 2)) {
+
+        if (buf[c++ & bufmask] != 0xaaaa)
+            continue;
+        sync = buf[c & bufmask];
+        if (mfmtobin(sync >> 1) != FM_SYNC_CLK)
+            continue;
+        x = mfmtobin(sync);
+        c++;
+
+        switch (x) {
+
+        case 0xfe: /* IDAM */
+            wrbuf[0] = x;
+            for (i = 1; i < 7; i++)
+                wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+            crc = crc16_ccitt(wrbuf, i, 0xffff);
+            if (crc != 0) {
+                printk("IMG IDAM Bad CRC %04x, sector %u\n", crc, wrbuf[3]);
+                break;
+            }
+            im->img.write_sector = wrbuf[3] - im->img.sec_base;
+            if ((uint8_t)im->img.write_sector >= im->img.nr_sectors) {
+                printk("IMG IDAM Bad Sector: %u\n", wrbuf[3]);
+                im->img.write_sector = -2;
+            }
+            break;
+
+        case 0xfb: /* DAM */
+            for (i = 0; i < (sec_sz(im) + 2); i++)
+                wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+
+            crc = crc16_ccitt(wrbuf, sec_sz(im) + 2,
+                              crc16_ccitt(&x, 1, 0xffff));
+            if (crc != 0) {
+                printk("IMG Bad CRC %04x, sector %u[%u]\n",
+                       crc, im->img.write_sector,
+                       im->img.write_sector + im->img.sec_base);
+                break;
+            }
+
+            if (im->img.write_sector < 0) {
+                printk("IMG DAM for unknown sector (%d)\n",
+                       im->img.write_sector);
+                break;
+            }
+
+            /* All good: write out to mass storage. */
+            printk("Write %u[%u]/%u... ", im->img.write_sector,
+                   im->img.write_sector + im->img.sec_base,
+                   im->img.nr_sectors);
+            t = time_now();
+            F_lseek(&im->fp,
+                    im->img.trk_off + im->img.write_sector*sec_sz(im));
+            F_write(&im->fp, wrbuf, sec_sz(im), NULL);
+            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
+            break;
+        }
+    }
+
+    wr->cons = c * 16;
+
+    return flush;
+}
+
 const struct image_handler ssd_image_handler = {
     .open = ssd_open,
     .setup_track = img_setup_track,
     .read_track = fm_read_track,
     .rdata_flux = bc_rdata_flux,
+    .write_track = fm_write_track,
+    .sync = SYNC_fm
 };
 
 const struct image_handler dsd_image_handler = {
@@ -761,6 +866,8 @@ const struct image_handler dsd_image_handler = {
     .setup_track = img_setup_track,
     .read_track = fm_read_track,
     .rdata_flux = bc_rdata_flux,
+    .write_track = fm_write_track,
+    .sync = SYNC_fm
 };
 
 /*
