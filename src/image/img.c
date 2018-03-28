@@ -422,6 +422,9 @@ static bool_t img_read_track(struct image *im)
         rd->cons += sec_sz(im) * 8;
     }
 
+#undef emit_raw
+#undef emit_byte
+
     im->img.decode_pos++;
     bc->prod = bc_p * 16;
 
@@ -578,6 +581,186 @@ const struct image_handler opd_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
     .syncword = 0x44894489
+};
+
+
+/*
+ * FM-Specific Handlers
+ */
+
+/* 8271 mini-diskette values */
+#define FM_GAP_1 26
+#define FM_GAP_2 11
+#define FM_GAP_4A 16
+#define FM_GAP_SYNC 6
+#define FM_SYNC_CLK 0xc7
+
+static bool_t fm_open(struct image *im)
+{
+    uint32_t tracklen;
+
+    im->img.idx_sz = im->img.gap_4a = FM_GAP_4A;
+    im->img.idam_sz = FM_GAP_SYNC + 5 + 2 + FM_GAP_2;
+    im->img.dam_sz = FM_GAP_SYNC + 1 + sec_sz(im) + 2 + im->img.gap3;
+
+    /* Work out minimum track length (with no pre-index track gap). */
+    tracklen = (im->img.idam_sz + im->img.dam_sz) * im->img.nr_sectors;
+    tracklen += im->img.idx_sz;
+    tracklen *= 16;
+
+    /* Infer the data rate and hence the standard track length. */
+    im->img.data_rate = 250; /* SD */
+    im->tracklen_bc = im->img.data_rate * 200;
+
+    ASSERT(im->tracklen_bc > tracklen);
+
+    /* Round the track length up to a multiple of 32 bitcells. */
+    im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
+
+    im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
+                          / im->tracklen_bc);
+    im->img.gap4 = (im->tracklen_bc - tracklen) / 16;
+
+    im->write_bc_ticks = sysclk_ms(1) / im->img.data_rate;
+
+    return TRUE;
+}
+
+static bool_t ssd_open(struct image *im)
+{
+    im->nr_cyls = 80;
+    im->nr_sides = 1;
+    im->img.interleave = 1;
+    im->img.sec_no = 1; /* 256-byte */
+    im->img.sec_base = 0;
+    im->img.nr_sectors = 10;
+    im->img.gap3 = 21;
+
+    return fm_open(im);
+}
+
+static bool_t dsd_open(struct image *im)
+{
+    im->nr_cyls = 80;
+    im->nr_sides = 2;
+    im->img.interleave = 1;
+    im->img.sec_no = 1; /* 256-byte */
+    im->img.sec_base = 0;
+    im->img.nr_sectors = 10;
+    im->img.gap3 = 21;
+
+    return fm_open(im);
+}
+
+static uint16_t fm_sync(uint8_t dat, uint8_t clk)
+{
+    uint16_t _dat = mfmtab[dat] & 0x5555;
+    uint16_t _clk = (mfmtab[clk] & 0x5555) << 1;
+    return _clk | _dat;
+}
+
+static bool_t fm_read_track(struct image *im)
+{
+    struct image_buf *rd = &im->bufs.read_data;
+    struct image_buf *bc = &im->bufs.read_bc;
+    uint8_t *buf = rd->p;
+    uint16_t crc, *bc_b = bc->p;
+    uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
+    unsigned int i, buflen = rd->len & ~511;
+
+    if (rd->prod == rd->cons) {
+        uint8_t sec = im->img.sec_map[im->img.trk_sec] - im->img.sec_base;
+        F_lseek(&im->fp, im->img.trk_off + sec * sec_sz(im));
+        F_read(&im->fp, &buf[(rd->prod/8) % buflen], sec_sz(im), NULL);
+        rd->prod += sec_sz(im) * 8;
+        if (++im->img.trk_sec >= im->img.nr_sectors)
+            im->img.trk_sec = 0;
+    }
+
+    /* Generate some FM if there is space in the raw-bitcell ring buffer. */
+    bc_p = bc->prod / 16; /* FM words */
+    bc_c = bc->cons / 16; /* FM words */
+    bc_len = bc->len / 2; /* FM words */
+    bc_mask = bc_len - 1;
+    bc_space = bc_len - (uint16_t)(bc_p - bc_c);
+
+#define emit_raw(r) ({                          \
+    uint16_t _r = (r);                          \
+    bc_b[bc_p++ & bc_mask] = htobe16(_r); })
+#define emit_byte(b) emit_raw(mfmtab[(uint8_t)(b)] | 0xaaaa)
+
+    if (im->img.decode_pos == 0) {
+        /* Post-index track gap */
+        if (bc_space < im->img.idx_sz)
+            return FALSE;
+        for (i = 0; i < im->img.gap_4a; i++)
+            emit_byte(0xff);
+        ASSERT(!im->img.has_iam);
+    } else if (im->img.decode_pos == (im->img.nr_sectors * 2 + 1)) {
+        /* Pre-index track gap */
+        if (bc_space < im->img.gap4)
+            return FALSE;
+        for (i = 0; i < im->img.gap4; i++)
+            emit_byte(0xff);
+        im->img.decode_pos = (im->img.idx_sz != 0) ? -1 : 0;
+    } else if (im->img.decode_pos & 1) {
+        /* IDAM */
+        uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
+        uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 1];
+        uint8_t idam[5] = { 0xfe, cyl, hd, sec, im->img.sec_no };
+        if (bc_space < im->img.idam_sz)
+            return FALSE;
+        for (i = 0; i < FM_GAP_SYNC; i++)
+            emit_byte(0x00);
+        emit_raw(fm_sync(idam[0], FM_SYNC_CLK));
+        for (i = 1; i < 5; i++)
+            emit_byte(idam[i]);
+        crc = crc16_ccitt(idam, sizeof(idam), 0xffff);
+        emit_byte(crc >> 8);
+        emit_byte(crc);
+        for (i = 0; i < FM_GAP_2; i++)
+            emit_byte(0xff);
+    } else {
+        /* DAM */
+        uint8_t *dat = &buf[(rd->cons/8)%buflen];
+        uint8_t dam[1] = { 0xfb };
+        if (bc_space < im->img.dam_sz)
+            return FALSE;
+        for (i = 0; i < FM_GAP_SYNC; i++)
+            emit_byte(0x00);
+        emit_raw(fm_sync(dam[0], FM_SYNC_CLK));
+        for (i = 0; i < sec_sz(im); i++)
+            emit_byte(dat[i]);
+        crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
+        crc = crc16_ccitt(dat, sec_sz(im), crc);
+        emit_byte(crc >> 8);
+        emit_byte(crc);
+        for (i = 0; i < im->img.gap3; i++)
+            emit_byte(0xff);
+        rd->cons += sec_sz(im) * 8;
+    }
+
+#undef emit_raw
+#undef emit_byte
+
+    im->img.decode_pos++;
+    bc->prod = bc_p * 16;
+
+    return TRUE;
+}
+
+const struct image_handler ssd_image_handler = {
+    .open = ssd_open,
+    .setup_track = img_setup_track,
+    .read_track = fm_read_track,
+    .rdata_flux = bc_rdata_flux,
+};
+
+const struct image_handler dsd_image_handler = {
+    .open = dsd_open,
+    .setup_track = img_setup_track,
+    .read_track = fm_read_track,
+    .rdata_flux = bc_rdata_flux,
 };
 
 /*
