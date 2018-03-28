@@ -113,20 +113,19 @@ static bool_t da_read_track(struct image *im)
     uint16_t *bc_b = bc->p;
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     uint16_t pr = 0, crc;
-    unsigned int i, buflen = rd->len & ~511;
+    unsigned int i;
 
     if (rd->prod == rd->cons) {
         uint8_t sec = im->da.trk_sec;
-        void *p = &buf[(rd->prod/8) % buflen];
         if (sec == 0) {
-            struct da_status_sector *da = p;
+            struct da_status_sector *da = (struct da_status_sector *)buf;
             memset(da, 0, SEC_SZ);
             memcpy(da, dass, sizeof(*dass));
         } else {
-            if (disk_read(0, p, dass->lba_base+sec-1, 1) != RES_OK)
+            if (disk_read(0, buf, dass->lba_base+sec-1, 1) != RES_OK)
                 F_die(FR_DISK_ERR);
         }
-        rd->prod += SEC_SZ * 8;
+        rd->prod++;
         if (++im->da.trk_sec >= (dass->nr_sec + 1))
             im->da.trk_sec = 0;
     }
@@ -178,7 +177,6 @@ static bool_t da_read_track(struct image *im)
             emit_byte(0x4e);
     } else {
         /* DAM */
-        uint8_t *dat = &buf[(rd->cons/8)%buflen];
         uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
         for (i = 0; i < GAP_SYNC; i++)
             emit_byte(0x00);
@@ -186,14 +184,14 @@ static bool_t da_read_track(struct image *im)
             emit_raw(0x4489);
         emit_byte(dam[3]);
         for (i = 0; i < SEC_SZ; i++)
-            emit_byte(dat[i]);
+            emit_byte(buf[i]);
         crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
-        crc = crc16_ccitt(dat, SEC_SZ, crc);
+        crc = crc16_ccitt(buf, SEC_SZ, crc);
         emit_byte(crc >> 8);
         emit_byte(crc);
         for (i = 0; i < GAP_3; i++)
             emit_byte(0x4e);
-        rd->cons += SEC_SZ * 8;
+        rd->cons++;
     }
 
     im->da.decode_pos++;

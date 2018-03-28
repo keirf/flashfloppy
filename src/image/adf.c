@@ -97,15 +97,15 @@ static bool_t adf_read_track(struct image *im)
     const UINT sec_sz = 512;
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
-    uint8_t *buf = rd->p;
+    uint32_t *buf = rd->p;
     uint32_t pr, *bc_b = bc->p;
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
-    unsigned int i, buflen = rd->len & ~511;
+    unsigned int i;
 
     if (rd->prod == rd->cons) {
         F_lseek(&im->fp, im->adf.trk_off + im->adf.trk_pos);
-        F_read(&im->fp, &buf[(rd->prod/8) % buflen], sec_sz, NULL);
-        rd->prod += sec_sz * 8;
+        F_read(&im->fp, buf, sec_sz, NULL);
+        rd->prod++;
         im->adf.trk_pos += sec_sz;
         if (im->adf.trk_pos >= im->adf.trk_len)
             im->adf.trk_pos = 0;
@@ -149,8 +149,7 @@ static bool_t adf_read_track(struct image *im)
 
     } else {
 
-        uint32_t sector = im->adf.decode_pos - 1;
-        uint32_t info, csum, *dat = (uint32_t *)&buf[(rd->cons/8)%buflen];
+        uint32_t info, csum, sector = im->adf.decode_pos - 1;
 
         if (bc_space < (544*16)/32)
             return FALSE;
@@ -176,17 +175,17 @@ static bool_t adf_read_track(struct image *im)
         emit_long(0);
         emit_long(odd(csum));
         /* data checksum */
-        csum = amigados_checksum(dat, 512);
+        csum = amigados_checksum(buf, 512);
         emit_long(0);
         emit_long(odd(csum));
 
         /* Sector data */
 
         for (i = 0; i < 512/4; i++)
-            emit_long(even(be32toh(dat[i])));
+            emit_long(even(be32toh(buf[i])));
         for (i = 0; i < 512/4; i++)
-            emit_long(odd(be32toh(dat[i])));
-        rd->cons += sec_sz * 8;
+            emit_long(odd(be32toh(buf[i])));
+        rd->cons++;
 
     }
 

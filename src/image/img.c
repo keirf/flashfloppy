@@ -613,13 +613,13 @@ static bool_t mfm_read_track(struct image *im)
     uint16_t *bc_b = bc->p;
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     uint16_t pr = 0, crc;
-    unsigned int i, buflen = rd->len & ~511;
+    unsigned int i;
 
     if (rd->prod == rd->cons) {
         uint8_t sec = im->img.sec_map[im->img.trk_sec] - im->img.sec_base;
         F_lseek(&im->fp, im->img.trk_off + sec * sec_sz(im));
-        F_read(&im->fp, &buf[(rd->prod/8) % buflen], sec_sz(im), NULL);
-        rd->prod += sec_sz(im) * 8;
+        F_read(&im->fp, buf, sec_sz(im), NULL);
+        rd->prod++;
         if (++im->img.trk_sec >= im->img.nr_sectors)
             im->img.trk_sec = 0;
     }
@@ -681,7 +681,6 @@ static bool_t mfm_read_track(struct image *im)
             emit_byte(0x4e);
     } else {
         /* DAM */
-        uint8_t *dat = &buf[(rd->cons/8)%buflen];
         uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
         if (bc_space < im->img.dam_sz)
             return FALSE;
@@ -691,14 +690,14 @@ static bool_t mfm_read_track(struct image *im)
             emit_raw(0x4489);
         emit_byte(dam[3]);
         for (i = 0; i < sec_sz(im); i++)
-            emit_byte(dat[i]);
+            emit_byte(buf[i]);
         crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
-        crc = crc16_ccitt(dat, sec_sz(im), crc);
+        crc = crc16_ccitt(buf, sec_sz(im), crc);
         emit_byte(crc >> 8);
         emit_byte(crc);
         for (i = 0; i < im->img.gap3; i++)
             emit_byte(0x4e);
-        rd->cons += sec_sz(im) * 8;
+        rd->cons++;
     }
 
 #undef emit_raw
