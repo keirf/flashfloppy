@@ -90,6 +90,7 @@ static bool_t hfe_open(struct image *im)
     im->nr_sides = dhdr.nr_sides;
     im->write_bc_ticks = sysclk_us(500) / le16toh(dhdr.bitrate);
     im->ticks_per_cell = im->write_bc_ticks * 16;
+    im->sync = SYNC_none;
 
     /* Get an initial value for ticks per revolution. */
     hfe_seek_track(im, 0);
@@ -374,7 +375,6 @@ const struct image_handler hfe_image_handler = {
     .read_track = hfe_read_track,
     .rdata_flux = hfe_rdata_flux,
     .write_track = hfe_write_track,
-    .sync = SYNC_none
 };
 
 /*

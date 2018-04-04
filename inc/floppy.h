@@ -107,6 +107,7 @@ struct image {
     uint32_t ticks_since_flux; /* Ticks since last flux sample/reversal */
     uint32_t write_bc_window; /* Sliding window at head of bitcell stream */
     uint32_t stk_per_rev; /* Nr STK ticks per revolution. */
+    enum { SYNC_none=0, SYNC_fm, SYNC_mfm } sync;
 
     union {
         struct adf_image adf;
@@ -129,7 +130,6 @@ struct image_handler {
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
     bool_t (*write_track)(struct image *im);
-    enum { SYNC_none=0, SYNC_fm, SYNC_mfm } sync;
 };
 
 /* Is given file valid to open as an image? */

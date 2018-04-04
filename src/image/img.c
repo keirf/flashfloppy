@@ -544,7 +544,6 @@ const struct image_handler img_image_handler = {
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
-    .sync = SYNC_mfm
 };
 
 const struct image_handler st_image_handler = {
@@ -553,7 +552,6 @@ const struct image_handler st_image_handler = {
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
-    .sync = SYNC_mfm
 };
 
 const struct image_handler adfs_image_handler = {
@@ -562,7 +560,6 @@ const struct image_handler adfs_image_handler = {
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
-    .sync = SYNC_mfm
 };
 
 const struct image_handler trd_image_handler = {
@@ -571,7 +568,6 @@ const struct image_handler trd_image_handler = {
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
-    .sync = SYNC_mfm
 };
 
 const struct image_handler opd_image_handler = {
@@ -580,7 +576,6 @@ const struct image_handler opd_image_handler = {
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = img_write_track,
-    .sync = SYNC_mfm
 };
 
 
@@ -622,6 +617,8 @@ static bool_t fm_open(struct image *im)
     im->img.gap4 = (im->tracklen_bc - tracklen) / 16;
 
     im->write_bc_ticks = sysclk_ms(1) / im->img.data_rate;
+
+    im->sync = SYNC_fm;
 
     return TRUE;
 }
@@ -858,7 +855,6 @@ const struct image_handler ssd_image_handler = {
     .read_track = fm_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = fm_write_track,
-    .sync = SYNC_fm
 };
 
 const struct image_handler dsd_image_handler = {
@@ -867,7 +863,6 @@ const struct image_handler dsd_image_handler = {
     .read_track = fm_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = fm_write_track,
-    .sync = SYNC_fm
 };
 
 /*

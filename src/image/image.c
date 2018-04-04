@@ -59,9 +59,12 @@ static bool_t try_handler(struct image *im, const struct slot *slot,
     /* Reinitialise image structure, except for static buffers. */
     memset(im, 0, sizeof(*im));
     im->bufs = bufs;
+    im->cur_track = ~0;
+
+    /* Sensible defaults. */
+    im->sync = SYNC_mfm;
     im->write_bc_ticks = sysclk_us(2);
     im->stk_per_rev = stk_ms(200);
-    im->cur_track = ~0;
 
     im->handler = handler;
 

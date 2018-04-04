@@ -965,7 +965,7 @@ static void IRQ_wdata_dma(void)
     uint16_t cell = image->write_bc_ticks, window;
     uint32_t bc_dat = 0, bc_prod;
     uint32_t *bc_buf = image->bufs.write_bc.p;
-    unsigned int sync = image->handler->sync;
+    unsigned int sync = image->sync;
     unsigned int bc_bufmask = (image->bufs.write_bc.len / 4) - 1;
     struct write *write = NULL;
 
