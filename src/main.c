@@ -173,6 +173,7 @@ static void display_write_slot(bool_t nav_mode)
         : slot_type("opd") ? "OPD"
         : slot_type("ssd") ? "SSD"
         : slot_type("dsd") ? "DSD"
+        : slot_type("v9t9") ? "T99"
         : "UNK";
     snprintf(msg, sizeof(msg), "%03u/%03u%*s%s D:%u",
              cfg.slot_nr, cfg.max_slot_nr,
@@ -472,10 +473,11 @@ static void read_ff_cfg(void)
 
         case FFCFG_host:
             ff_cfg.host =
-                !strcmp(opts.arg, "akai") ? HOST_akai
-                : !strcmp(opts.arg, "acorn") ? HOST_acorn
+                !strcmp(opts.arg, "acorn") ? HOST_acorn
+                : !strcmp(opts.arg, "akai") ? HOST_akai
                 : !strcmp(opts.arg, "ensoniq") ? HOST_ensoniq
                 : !strcmp(opts.arg, "gem") ? HOST_gem
+                : !strcmp(opts.arg, "ti99") ? HOST_ti99
                 : HOST_unspecified;
             break;
 

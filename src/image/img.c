@@ -25,6 +25,11 @@ static bool_t fm_open(struct image *im);
 static bool_t fm_read_track(struct image *im);
 static bool_t fm_write_track(struct image *im);
 
+static bool_t ti99_open(struct image *im);
+
+#define LAYOUT_interleaved 0
+#define LAYOUT_sequential_reverse_side1 1
+
 #define sec_sz(im) (128u << (im)->img.sec_no)
 
 const static struct img_type {
@@ -117,6 +122,8 @@ static bool_t img_open(struct image *im)
     case HOST_ensoniq:
         type = ensoniq_type;
         break;
+    case HOST_ti99:
+        return ti99_open(im);
     default:
         type = img_type;
         break;
@@ -234,6 +241,63 @@ static bool_t dsd_open(struct image *im)
     return fm_open(im);
 }
 
+static bool_t ti99_open(struct image *im)
+{
+    unsigned int remainder = f_size(&im->fp) % 92160;
+
+    /* Some images have a 768-byte footer. */
+    if ((remainder != 0) && (remainder != 768))
+        return FALSE;
+
+    im->img.has_iam = FALSE;
+    im->img.interleave = 4;
+    im->img.skew = 3;
+    im->img.skew_cyls_only = TRUE;
+    im->img.sec_no = 1;
+    im->img.sec_base = 0;
+    im->img.layout = LAYOUT_sequential_reverse_side1;
+
+    switch (f_size(&im->fp) / 92160) {
+    case 1: /* SSSD */
+        im->nr_cyls = 40;
+        im->nr_sides = 1;
+        im->img.nr_sectors = 9;
+        im->img.gap3 = 44;
+        return fm_open(im);
+    case 2: /* DSSD (or SSDD) */
+        im->nr_cyls = 40;
+        im->nr_sides = 2;
+        im->img.nr_sectors = 9;
+        im->img.gap3 = 44;
+        return fm_open(im);
+    case 4: /* DSDD (or DSSD80) */
+        im->nr_cyls = 40;
+        im->nr_sides = 2;
+        im->img.nr_sectors = 18;
+        im->img.interleave = 5;
+        im->img.gap3 = 24;
+        return mfm_open(im);
+    case 8: /* DSDD80 */
+        im->nr_cyls = 80;
+        im->nr_sides = 2;
+        im->img.nr_sectors = 18;
+        im->img.interleave = 5;
+        im->img.gap3 = 24;
+        return mfm_open(im);
+    case 16: /* DSHD80 */
+        im->nr_cyls = 80;
+        im->nr_sides = 2;
+        im->img.nr_sectors = 36;
+        im->img.interleave = 5;
+        im->img.gap3 = 24;
+        return mfm_open(im);
+    default:
+        break;
+    }
+
+    return FALSE;
+}
+
 const struct image_handler img_image_handler = {
     .open = img_open,
     .setup_track = img_setup_track,
@@ -290,6 +354,14 @@ const struct image_handler dsd_image_handler = {
     .write_track = img_write_track,
 };
 
+const struct image_handler ti99_image_handler = {
+    .open = ti99_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
 
 /*
  * Generic Handlers
@@ -313,7 +385,14 @@ static void img_seek_track(
     }
 
     trk_len = im->img.nr_sectors * sec_sz(im);
-    im->img.trk_off = trk * trk_len;
+    switch (im->img.layout) {
+    case LAYOUT_sequential_reverse_side1:
+        im->img.trk_off = (side ? im->nr_cyls - cyl : cyl) * trk_len;
+        break;
+    default:
+        im->img.trk_off = trk * trk_len;
+        break;
+    }
 
     im->cur_track = track;
 }

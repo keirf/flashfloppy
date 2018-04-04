@@ -33,6 +33,7 @@ struct img_image {
     uint32_t trk_off;
     uint16_t trk_sec;
     int32_t decode_pos;
+    uint8_t layout; /* LAYOUT_* */
     bool_t has_iam;
     uint8_t gap3, gap_4a;
     int8_t write_sector;
