@@ -14,13 +14,16 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define GAP_1    50 /* Post-IAM */
-#define GAP_2    22 /* Post-IDAM */
-#define GAP_4A   80 /* Post-Index */
-#define GAP_SYNC 12
-
-/* Shrink the IDAM pre-sync gap if sectors are close together. */
-#define idam_gap_sync(im) min_t(uint8_t, (im)->img.gap3, GAP_SYNC)
+static void img_setup_track(
+    struct image *im, uint16_t track, uint32_t *start_pos);
+static bool_t img_read_track(struct image *im);
+static bool_t img_write_track(struct image *im);
+static bool_t mfm_open(struct image *im);
+static bool_t mfm_read_track(struct image *im);
+static bool_t mfm_write_track(struct image *im);
+static bool_t fm_open(struct image *im);
+static bool_t fm_read_track(struct image *im);
+static bool_t fm_write_track(struct image *im);
 
 #define sec_sz(im) (128u << (im)->img.sec_no)
 
@@ -66,8 +69,6 @@ const static struct img_type {
 static bool_t _img_open(struct image *im, bool_t has_iam,
                         const struct img_type *type)
 {
-    uint32_t tracklen;
-
     if (type != NULL) {
 
         unsigned int nr_cyls, cyl_sz;
@@ -95,47 +96,8 @@ static bool_t _img_open(struct image *im, bool_t has_iam,
     }
 
     im->img.has_iam = has_iam;
-    im->img.idx_sz = im->img.gap_4a = GAP_4A;
-    if (im->img.has_iam)
-        im->img.idx_sz += GAP_SYNC + 4 + GAP_1;
-    im->img.idam_sz = idam_gap_sync(im) + 8 + 2 + GAP_2;
-    im->img.dam_sz = GAP_SYNC + 4 + sec_sz(im) + 2 + im->img.gap3;
 
-    /* Work out minimum track length (with no pre-index track gap). */
-    tracklen = (im->img.idam_sz + im->img.dam_sz) * im->img.nr_sectors;
-    tracklen += im->img.idx_sz;
-    tracklen *= 16;
-
-    /* Infer the data rate and hence the standard track length. */
-    im->img.data_rate = (tracklen < 55000) ? 250 /* SD */
-        : (tracklen < 105000) ? 500 /* DD */
-        : (tracklen < 205000) ? 1000 /* HD */
-        : 2000; /* ED */
-    im->tracklen_bc = im->img.data_rate * 200;
-
-    /* Does the track data fit within standard track length? */
-    if (im->tracklen_bc < tracklen) {
-        if ((tracklen - im->img.gap_4a*16) <= im->tracklen_bc) {
-            /* Eliminate the post-index gap 4a if that suffices. */
-            tracklen -= im->img.gap_4a*16;
-            im->img.idx_sz -= im->img.gap_4a;
-            im->img.gap_4a = 0;
-        } else {
-            /* Extend the track length ("long track"). */
-            im->tracklen_bc = tracklen + 100;
-        }
-    }
-
-    /* Round the track length up to a multiple of 32 bitcells. */
-    im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
-
-    im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
-                          / im->tracklen_bc);
-    im->img.gap4 = (im->tracklen_bc - tracklen) / 16;
-
-    im->write_bc_ticks = sysclk_ms(1) / im->img.data_rate;
-
-    return TRUE;
+    return mfm_open(im);
 }
 
 static bool_t adfs_open(struct image *im)
@@ -246,6 +208,93 @@ static bool_t opd_open(struct image *im)
     return _img_open(im, TRUE, NULL);
 }
 
+static bool_t ssd_open(struct image *im)
+{
+    im->nr_cyls = 80;
+    im->nr_sides = 1;
+    im->img.interleave = 1;
+    im->img.sec_no = 1; /* 256-byte */
+    im->img.sec_base = 0;
+    im->img.nr_sectors = 10;
+    im->img.gap3 = 21;
+
+    return fm_open(im);
+}
+
+static bool_t dsd_open(struct image *im)
+{
+    im->nr_cyls = 80;
+    im->nr_sides = 2;
+    im->img.interleave = 1;
+    im->img.sec_no = 1; /* 256-byte */
+    im->img.sec_base = 0;
+    im->img.nr_sectors = 10;
+    im->img.gap3 = 21;
+
+    return fm_open(im);
+}
+
+const struct image_handler img_image_handler = {
+    .open = img_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler st_image_handler = {
+    .open = st_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler adfs_image_handler = {
+    .open = adfs_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler trd_image_handler = {
+    .open = trd_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler opd_image_handler = {
+    .open = opd_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler ssd_image_handler = {
+    .open = ssd_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler dsd_image_handler = {
+    .open = dsd_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+
+/*
+ * Generic Handlers
+ */
+
 static void img_seek_track(
     struct image *im, uint16_t track, unsigned int cyl, unsigned int side)
 {
@@ -327,6 +376,76 @@ static void img_setup_track(
 }
 
 static bool_t img_read_track(struct image *im)
+{
+    return (im->sync == SYNC_fm) ? fm_read_track(im) : mfm_read_track(im);
+}
+
+static bool_t img_write_track(struct image *im)
+{
+    return (im->sync == SYNC_fm) ? fm_write_track(im) : mfm_write_track(im);
+}
+
+
+/*
+ * MFM-Specific Handlers
+ */
+
+#define GAP_1    50 /* Post-IAM */
+#define GAP_2    22 /* Post-IDAM */
+#define GAP_4A   80 /* Post-Index */
+#define GAP_SYNC 12
+
+/* Shrink the IDAM pre-sync gap if sectors are close together. */
+#define idam_gap_sync(im) min_t(uint8_t, (im)->img.gap3, GAP_SYNC)
+
+static bool_t mfm_open(struct image *im)
+{
+    uint32_t tracklen;
+
+    im->img.idx_sz = im->img.gap_4a = GAP_4A;
+    if (im->img.has_iam)
+        im->img.idx_sz += GAP_SYNC + 4 + GAP_1;
+    im->img.idam_sz = idam_gap_sync(im) + 8 + 2 + GAP_2;
+    im->img.dam_sz = GAP_SYNC + 4 + sec_sz(im) + 2 + im->img.gap3;
+
+    /* Work out minimum track length (with no pre-index track gap). */
+    tracklen = (im->img.idam_sz + im->img.dam_sz) * im->img.nr_sectors;
+    tracklen += im->img.idx_sz;
+    tracklen *= 16;
+
+    /* Infer the data rate and hence the standard track length. */
+    im->img.data_rate = (tracklen < 55000) ? 250 /* SD */
+        : (tracklen < 105000) ? 500 /* DD */
+        : (tracklen < 205000) ? 1000 /* HD */
+        : 2000; /* ED */
+    im->tracklen_bc = im->img.data_rate * 200;
+
+    /* Does the track data fit within standard track length? */
+    if (im->tracklen_bc < tracklen) {
+        if ((tracklen - im->img.gap_4a*16) <= im->tracklen_bc) {
+            /* Eliminate the post-index gap 4a if that suffices. */
+            tracklen -= im->img.gap_4a*16;
+            im->img.idx_sz -= im->img.gap_4a;
+            im->img.gap_4a = 0;
+        } else {
+            /* Extend the track length ("long track"). */
+            im->tracklen_bc = tracklen + 100;
+        }
+    }
+
+    /* Round the track length up to a multiple of 32 bitcells. */
+    im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
+
+    im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
+                          / im->tracklen_bc);
+    im->img.gap4 = (im->tracklen_bc - tracklen) / 16;
+
+    im->write_bc_ticks = sysclk_ms(1) / im->img.data_rate;
+
+    return TRUE;
+}
+
+static bool_t mfm_read_track(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
@@ -431,7 +550,7 @@ static bool_t img_read_track(struct image *im)
     return TRUE;
 }
 
-static bool_t img_write_track(struct image *im)
+static bool_t mfm_write_track(struct image *im)
 {
     const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
 
@@ -538,46 +657,6 @@ static bool_t img_write_track(struct image *im)
     return flush;
 }
 
-const struct image_handler img_image_handler = {
-    .open = img_open,
-    .setup_track = img_setup_track,
-    .read_track = img_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = img_write_track,
-};
-
-const struct image_handler st_image_handler = {
-    .open = st_open,
-    .setup_track = img_setup_track,
-    .read_track = img_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = img_write_track,
-};
-
-const struct image_handler adfs_image_handler = {
-    .open = adfs_open,
-    .setup_track = img_setup_track,
-    .read_track = img_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = img_write_track,
-};
-
-const struct image_handler trd_image_handler = {
-    .open = trd_open,
-    .setup_track = img_setup_track,
-    .read_track = img_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = img_write_track,
-};
-
-const struct image_handler opd_image_handler = {
-    .open = opd_open,
-    .setup_track = img_setup_track,
-    .read_track = img_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = img_write_track,
-};
-
 
 /*
  * FM-Specific Handlers
@@ -621,32 +700,6 @@ static bool_t fm_open(struct image *im)
     im->sync = SYNC_fm;
 
     return TRUE;
-}
-
-static bool_t ssd_open(struct image *im)
-{
-    im->nr_cyls = 80;
-    im->nr_sides = 1;
-    im->img.interleave = 1;
-    im->img.sec_no = 1; /* 256-byte */
-    im->img.sec_base = 0;
-    im->img.nr_sectors = 10;
-    im->img.gap3 = 21;
-
-    return fm_open(im);
-}
-
-static bool_t dsd_open(struct image *im)
-{
-    im->nr_cyls = 80;
-    im->nr_sides = 2;
-    im->img.interleave = 1;
-    im->img.sec_no = 1; /* 256-byte */
-    im->img.sec_base = 0;
-    im->img.nr_sectors = 10;
-    im->img.gap3 = 21;
-
-    return fm_open(im);
 }
 
 static uint16_t fm_sync(uint8_t dat, uint8_t clk)
@@ -848,22 +901,6 @@ static bool_t fm_write_track(struct image *im)
 
     return flush;
 }
-
-const struct image_handler ssd_image_handler = {
-    .open = ssd_open,
-    .setup_track = img_setup_track,
-    .read_track = fm_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = fm_write_track,
-};
-
-const struct image_handler dsd_image_handler = {
-    .open = dsd_open,
-    .setup_track = img_setup_track,
-    .read_track = fm_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = fm_write_track,
-};
 
 /*
  * Local variables:
