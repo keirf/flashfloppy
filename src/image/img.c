@@ -32,42 +32,45 @@ static bool_t ti99_open(struct image *im);
 
 #define sec_sz(im) (128u << (im)->img.sec_no)
 
+#define _C(cyls) ((cyls) / 40)
 const static struct img_type {
     uint8_t nr_secs:6;
     uint8_t nr_sides:2;
     uint8_t gap3;
-    uint8_t interleave:2;
-    uint8_t no:2;
+    uint8_t interleave:3;
+    uint8_t no:3;
     uint8_t base:2;
-    uint8_t skew:2;
+    uint8_t skew:4;
+    uint8_t cyls:4;
 } img_type[] = {
-    {  9, 1, 84, 1, 2, 1, 0 },
-    { 10, 1, 30, 1, 2, 1, 0 },
-    { 11, 1,  3, 2, 2, 1, 0 },
-    {  8, 2, 84, 1, 2, 1, 0 },
-    {  9, 2, 84, 1, 2, 1, 0 },
-    { 10, 2, 30, 1, 2, 1, 0 },
-    { 11, 2,  3, 2, 2, 1, 0 },
-    { 18, 2, 84, 1, 2, 1, 0 },
-    { 19, 2, 70, 1, 2, 1, 0 },
-    { 21, 2, 18, 1, 2, 1, 0 },
-    { 20, 2, 40, 1, 2, 1, 0 },
-    { 36, 2, 84, 1, 2, 1, 0 },
+    {  9, 1, 84, 1, 2, 1, 0, _C(80) },
+    { 10, 1, 30, 1, 2, 1, 0, _C(80) },
+    { 11, 1,  3, 2, 2, 1, 0, _C(80) },
+    {  8, 2, 84, 1, 2, 1, 0, _C(80) },
+    {  9, 2, 84, 1, 2, 1, 0, _C(80) },
+    { 10, 2, 30, 1, 2, 1, 0, _C(80) },
+    { 11, 2,  3, 2, 2, 1, 0, _C(80) },
+    { 18, 2, 84, 1, 2, 1, 0, _C(80) },
+    { 19, 2, 70, 1, 2, 1, 0, _C(80) },
+    { 21, 2, 18, 1, 2, 1, 0, _C(80) },
+    { 20, 2, 40, 1, 2, 1, 0, _C(80) },
+    { 36, 2, 84, 1, 2, 1, 0, _C(80) },
     { 0 }
 }, adfs_type[] = {
-    {  5, 2, 116, 1, 3, 0, 1 }, /* ADFS D/E: 5 * 1kB, 800k */
-    { 10, 2, 116, 1, 3, 0, 2 }, /* ADFS F: 10 * 1kB, 1600k */
-    { 16, 2,  57, 1, 1, 0, 0 }, /* ADFS L 640k */
-    { 16, 1,  57, 1, 1, 0, 0 }, /* ADFS M 320k */
+    {  5, 2, 116, 1, 3, 0, 1, _C(80) }, /* ADFS D/E: 5 * 1kB, 800k */
+    { 10, 2, 116, 1, 3, 0, 2, _C(80) }, /* ADFS F: 10 * 1kB, 1600k */
+    { 16, 2,  57, 1, 1, 0, 0, _C(80) }, /* ADFS L 640k */
+    { 16, 1,  57, 1, 1, 0, 0, _C(80) }, /* ADFS M 320k */
+    { 16, 1,  57, 1, 1, 0, 0, _C(40) }, /* ADFS S 160k */
     { 0 }
 }, akai_type[] = {
-    { 10, 2, 116, 1, 3, 1, 0 }, /* Akai HD: 10 * 1kB sectors */
+    { 10, 2, 116, 1, 3, 1, 0, _C(80) }, /* Akai HD: 10 * 1kB sectors */
     { 0 }
 }, ensoniq_type[] = {
-    {  9, 2, 84, 1, 2, 1, 0 },  /* PC 720kB */
-    { 10, 2, 30, 1, 2, 0, 0 },  /* Ensoniq 800kB */
-    { 18, 2, 84, 1, 2, 1, 0 },  /* PC 1.44MB */
-    { 20, 2, 40, 1, 2, 0, 0 },  /* Ensoniq 1.6MB */
+    {  9, 2, 84, 1, 2, 1, 0, _C(80) },  /* PC 720kB */
+    { 10, 2, 30, 1, 2, 0, 0, _C(80) },  /* Ensoniq 800kB */
+    { 18, 2, 84, 1, 2, 1, 0, _C(80) },  /* PC 1.44MB */
+    { 20, 2, 40, 1, 2, 0, 0, _C(80) },  /* Ensoniq 1.6MB */
     { 0 }
 };
 
@@ -80,8 +83,20 @@ static bool_t _img_open(struct image *im, bool_t has_iam,
 
         /* Walk the layout/type hints looking for a match on file size. */
         for (; type->nr_secs != 0; type++) {
+            unsigned int min_cyls, max_cyls;
+            switch (type->cyls) {
+            case _C(40):
+                min_cyls = 38;
+                max_cyls = 42;
+                break;
+            case _C(80):
+            default:
+                min_cyls = 77;
+                max_cyls = 85;
+                break;
+            }
             cyl_sz = type->nr_secs * (128 << type->no) * type->nr_sides;
-            for (nr_cyls = 77; nr_cyls <= 85; nr_cyls++)
+            for (nr_cyls = min_cyls; nr_cyls <= max_cyls; nr_cyls++)
                 if ((nr_cyls * cyl_sz) == f_size(&im->fp))
                     goto found;
         }
