@@ -53,23 +53,6 @@ typedef struct __MassStorageParameter
     uint8_t MSWriteProtect;
 } MassStorageParameter_TypeDef;
 
-#define OPCODE_TEST_UNIT_READY            0X00
-#define OPCODE_READ_CAPACITY10            0x25
-#define OPCODE_MODE_SENSE6                0x1A
-#define OPCODE_READ10                     0x28
-#define OPCODE_WRITE10                    0x2A
-#define OPCODE_REQUEST_SENSE              0x03
-
-#define DESC_REQUEST_SENSE                0X00
-#define ALLOCATION_LENGTH_REQUEST_SENSE   63
-#define XFER_LEN_READ_CAPACITY10           8
-#define XFER_LEN_MODE_SENSE6              63
-
-#define MASK_MODE_SENSE_WRITE_PROTECT     0x80
-#define MODE_SENSE_PAGE_CONTROL_FIELD     0x00
-#define MODE_SENSE_PAGE_CODE              0x3F
-#define DISK_WRITE_PROTECTED              0x01
-
 extern MassStorageParameter_TypeDef USBH_MSC_Param;
 
 uint8_t USBH_MSC_TestUnitReady(USB_OTG_CORE_HANDLE *pdev);

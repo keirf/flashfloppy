@@ -42,7 +42,6 @@ MassStorageParameter_TypeDef USBH_MSC_Param;
  */
 uint8_t USBH_MSC_TestUnitReady (USB_OTG_CORE_HANDLE *pdev)
 {
-    uint8_t index;
     USBH_MSC_Status_TypeDef status = USBH_MSC_BUSY;
 
     if(HCD_IsDeviceConnected(pdev))
@@ -53,17 +52,15 @@ uint8_t USBH_MSC_TestUnitReady (USB_OTG_CORE_HANDLE *pdev)
             /*Prepare the CBW and relevent field*/
             USBH_MSC_CBWData.field.CBWTransferLength = 0;       /* No Data Transfer */
             USBH_MSC_CBWData.field.CBWFlags = USB_EP_DIR_OUT;
-            USBH_MSC_CBWData.field.CBWLength = CBW_LENGTH_TEST_UNIT_READY;
+            USBH_MSC_CBWData.field.CBWLength = 6;
             USBH_MSC_BOTXferParam.pRxTxBuff = USBH_MSC_CSWData.CSWArray;
             USBH_MSC_BOTXferParam.DataLength = USBH_MSC_CSW_MAX_LENGTH;
             USBH_MSC_BOTXferParam.MSCStateCurrent = USBH_MSC_TEST_UNIT_READY;
 
-            for(index = CBW_CB_LENGTH - 1; index != 0; index--)
-            {
-                USBH_MSC_CBWData.field.CBWCB[index] = 0x00;
-            }
+            memset(USBH_MSC_CBWData.field.CBWCB, 0,
+                   sizeof(USBH_MSC_CBWData.field.CBWCB));
 
-            USBH_MSC_CBWData.field.CBWCB[0]  = OPCODE_TEST_UNIT_READY;
+            USBH_MSC_CBWData.field.CBWCB[0] = 0x00;
             USBH_MSC_BOTXferParam.BOTState = USBH_MSC_SEND_CBW;
             /* Start the transfer, then let the state
                machine magage the other transactions */
@@ -114,7 +111,6 @@ uint8_t USBH_MSC_TestUnitReady (USB_OTG_CORE_HANDLE *pdev)
  */
 uint8_t USBH_MSC_ReadCapacity10(USB_OTG_CORE_HANDLE *pdev)
 {
-    uint8_t index;
     USBH_MSC_Status_TypeDef status = USBH_MSC_BUSY;
 
     if(HCD_IsDeviceConnected(pdev))
@@ -123,19 +119,17 @@ uint8_t USBH_MSC_ReadCapacity10(USB_OTG_CORE_HANDLE *pdev)
         {
         case CMD_SEND_STATE:
             /*Prepare the CBW and relevent field*/
-            USBH_MSC_CBWData.field.CBWTransferLength = XFER_LEN_READ_CAPACITY10;
+            USBH_MSC_CBWData.field.CBWTransferLength = 8;
             USBH_MSC_CBWData.field.CBWFlags = USB_EP_DIR_IN;
-            USBH_MSC_CBWData.field.CBWLength = CBW_LENGTH;
+            USBH_MSC_CBWData.field.CBWLength = 10;
 
             USBH_MSC_BOTXferParam.pRxTxBuff = Cfg_Rx_Buffer;
             USBH_MSC_BOTXferParam.MSCStateCurrent = USBH_MSC_READ_CAPACITY10;
 
-            for(index = CBW_CB_LENGTH -1; index != 0; index--)
-            {
-                USBH_MSC_CBWData.field.CBWCB[index] = 0x00;
-            }
+            memset(USBH_MSC_CBWData.field.CBWCB, 0,
+                   sizeof(USBH_MSC_CBWData.field.CBWCB));
 
-            USBH_MSC_CBWData.field.CBWCB[0]  = OPCODE_READ_CAPACITY10;
+            USBH_MSC_CBWData.field.CBWCB[0] = 0x25;
             USBH_MSC_BOTXferParam.BOTState = USBH_MSC_SEND_CBW;
 
             /* Start the transfer, then let the state machine manage the other
@@ -200,7 +194,6 @@ uint8_t USBH_MSC_ReadCapacity10(USB_OTG_CORE_HANDLE *pdev)
  */
 uint8_t USBH_MSC_ModeSense6(USB_OTG_CORE_HANDLE *pdev)
 {
-    uint8_t index;
     USBH_MSC_Status_TypeDef status = USBH_MSC_BUSY;
 
     if(HCD_IsDeviceConnected(pdev))
@@ -209,23 +202,19 @@ uint8_t USBH_MSC_ModeSense6(USB_OTG_CORE_HANDLE *pdev)
         {
         case CMD_SEND_STATE:
             /*Prepare the CBW and relevent field*/
-            USBH_MSC_CBWData.field.CBWTransferLength = XFER_LEN_MODE_SENSE6;
+            USBH_MSC_CBWData.field.CBWTransferLength = 63;
             USBH_MSC_CBWData.field.CBWFlags = USB_EP_DIR_IN;
-            USBH_MSC_CBWData.field.CBWLength = CBW_LENGTH;
+            USBH_MSC_CBWData.field.CBWLength = 6;
 
             USBH_MSC_BOTXferParam.pRxTxBuff = Cfg_Rx_Buffer;
             USBH_MSC_BOTXferParam.MSCStateCurrent = USBH_MSC_MODE_SENSE6;
 
-            for(index = CBW_CB_LENGTH - 1; index != 0; index--)
-            {
-                USBH_MSC_CBWData.field.CBWCB[index] = 0x00;
-            }
+            memset(USBH_MSC_CBWData.field.CBWCB, 0,
+                   sizeof(USBH_MSC_CBWData.field.CBWCB));
 
-            USBH_MSC_CBWData.field.CBWCB[0]  = OPCODE_MODE_SENSE6;
-            USBH_MSC_CBWData.field.CBWCB[2]  = MODE_SENSE_PAGE_CONTROL_FIELD | \
-                MODE_SENSE_PAGE_CODE;
-
-            USBH_MSC_CBWData.field.CBWCB[4]  = XFER_LEN_MODE_SENSE6;
+            USBH_MSC_CBWData.field.CBWCB[0]  = 0x1a; /* ModeSense6 */
+            USBH_MSC_CBWData.field.CBWCB[2]  = 0x3f; /* All pages */
+            USBH_MSC_CBWData.field.CBWCB[4]  = 63;
 
             USBH_MSC_BOTXferParam.BOTState = USBH_MSC_SEND_CBW;
 
@@ -244,14 +233,7 @@ uint8_t USBH_MSC_ModeSense6(USB_OTG_CORE_HANDLE *pdev)
                 /* Assign the Write Protect status */
                 /* If WriteProtect = 0, Writing is allowed
                    If WriteProtect != 0, Disk is Write Protected */
-                if ( Cfg_Rx_Buffer[2] & MASK_MODE_SENSE_WRITE_PROTECT)
-                {
-                    USBH_MSC_Param.MSWriteProtect   = DISK_WRITE_PROTECTED;
-                }
-                else
-                {
-                    USBH_MSC_Param.MSWriteProtect   = 0;
-                }
+                USBH_MSC_Param.MSWriteProtect = !!(Cfg_Rx_Buffer[2] & 0x80);
 
                 /* Commands successfully sent and Response Received  */
                 USBH_MSC_BOTXferParam.CmdStateMachine = CMD_SEND_STATE;
@@ -294,9 +276,6 @@ uint8_t USBH_MSC_RequestSense(USB_OTG_CORE_HANDLE *pdev)
 {
     USBH_MSC_Status_TypeDef status = USBH_MSC_BUSY;
 
-    uint8_t index;
-
-
     if(HCD_IsDeviceConnected(pdev))
     {
         switch(USBH_MSC_BOTXferParam.CmdStateMachine)
@@ -304,23 +283,18 @@ uint8_t USBH_MSC_RequestSense(USB_OTG_CORE_HANDLE *pdev)
         case CMD_SEND_STATE:
 
             /*Prepare the CBW and relevant field*/
-            USBH_MSC_CBWData.field.CBWTransferLength = \
-                ALLOCATION_LENGTH_REQUEST_SENSE;
+            USBH_MSC_CBWData.field.CBWTransferLength = 63;
             USBH_MSC_CBWData.field.CBWFlags = USB_EP_DIR_IN;
-            USBH_MSC_CBWData.field.CBWLength = CBW_LENGTH;
+            USBH_MSC_CBWData.field.CBWLength = 6;
             USBH_MSC_BOTXferParam.pRxTxBuff = Cfg_Rx_Buffer;
             USBH_MSC_BOTXferParam.MSCStateBkp = USBH_MSC_BOTXferParam.MSCStateCurrent;
             USBH_MSC_BOTXferParam.MSCStateCurrent = USBH_MSC_REQUEST_SENSE;
 
+            memset(USBH_MSC_CBWData.field.CBWCB, 0,
+                   sizeof(USBH_MSC_CBWData.field.CBWCB));
 
-            for(index = CBW_CB_LENGTH - 1; index != 0; index--)
-            {
-                USBH_MSC_CBWData.field.CBWCB[index] = 0x00;
-            }
-
-            USBH_MSC_CBWData.field.CBWCB[0]  = OPCODE_REQUEST_SENSE;
-            USBH_MSC_CBWData.field.CBWCB[1]  = DESC_REQUEST_SENSE;
-            USBH_MSC_CBWData.field.CBWCB[4]  = ALLOCATION_LENGTH_REQUEST_SENSE;
+            USBH_MSC_CBWData.field.CBWCB[0]  = 0x03;
+            USBH_MSC_CBWData.field.CBWCB[4]  = 63;
 
             USBH_MSC_BOTXferParam.BOTState = USBH_MSC_SEND_CBW;
             /* Start the transfer, then let the state machine manage
@@ -390,7 +364,6 @@ uint8_t USBH_MSC_Write10(USB_OTG_CORE_HANDLE *pdev,
                          uint32_t address,
                          uint32_t nbOfbytes)
 {
-    uint8_t index;
     USBH_MSC_Status_TypeDef status = USBH_MSC_BUSY;
     uint16_t nbOfPages;
 
@@ -401,16 +374,13 @@ uint8_t USBH_MSC_Write10(USB_OTG_CORE_HANDLE *pdev,
         case CMD_SEND_STATE:
             USBH_MSC_CBWData.field.CBWTransferLength = nbOfbytes;
             USBH_MSC_CBWData.field.CBWFlags = USB_EP_DIR_OUT;
-            USBH_MSC_CBWData.field.CBWLength = CBW_LENGTH;
+            USBH_MSC_CBWData.field.CBWLength = 10;
             USBH_MSC_BOTXferParam.pRxTxBuff = dataBuffer;
 
+            memset(USBH_MSC_CBWData.field.CBWCB, 0,
+                   sizeof(USBH_MSC_CBWData.field.CBWCB));
 
-            for(index = CBW_CB_LENGTH - 1; index != 0; index--)
-            {
-                USBH_MSC_CBWData.field.CBWCB[index] = 0x00;
-            }
-
-            USBH_MSC_CBWData.field.CBWCB[0]  = OPCODE_WRITE10;
+            USBH_MSC_CBWData.field.CBWCB[0]  = 0x2a;
 
             /*logical block address*/
             USBH_MSC_CBWData.field.CBWCB[2]  = (((uint8_t*)&address)[3]) ;
@@ -478,7 +448,6 @@ uint8_t USBH_MSC_Read10(USB_OTG_CORE_HANDLE *pdev,
                         uint32_t address,
                         uint32_t nbOfbytes)
 {
-    uint8_t index;
     static USBH_MSC_Status_TypeDef status = USBH_MSC_BUSY;
     uint16_t nbOfPages;
     status = USBH_MSC_BUSY;
@@ -491,16 +460,14 @@ uint8_t USBH_MSC_Read10(USB_OTG_CORE_HANDLE *pdev,
             /*Prepare the CBW and relevant field*/
             USBH_MSC_CBWData.field.CBWTransferLength = nbOfbytes;
             USBH_MSC_CBWData.field.CBWFlags = USB_EP_DIR_IN;
-            USBH_MSC_CBWData.field.CBWLength = CBW_LENGTH;
+            USBH_MSC_CBWData.field.CBWLength = 10;
 
             USBH_MSC_BOTXferParam.pRxTxBuff = dataBuffer;
 
-            for(index = CBW_CB_LENGTH - 1; index != 0; index--)
-            {
-                USBH_MSC_CBWData.field.CBWCB[index] = 0x00;
-            }
+            memset(USBH_MSC_CBWData.field.CBWCB, 0,
+                   sizeof(USBH_MSC_CBWData.field.CBWCB));
 
-            USBH_MSC_CBWData.field.CBWCB[0]  = OPCODE_READ10;
+            USBH_MSC_CBWData.field.CBWCB[0]  = 0x28;
 
             /*logical block address*/
 

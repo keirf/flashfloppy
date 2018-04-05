@@ -118,13 +118,7 @@ typedef union _USBH_CSW_Block
 #define USBH_MSC_DIR_OUT                  1
 #define USBH_MSC_BOTH_DIR                 2
 
-//#define USBH_MSC_PAGE_LENGTH                 0x40
 #define USBH_MSC_PAGE_LENGTH              512
-
-
-#define CBW_CB_LENGTH                     16
-#define CBW_LENGTH                        10
-#define CBW_LENGTH_TEST_UNIT_READY         6
 
 #define USB_REQ_BOT_RESET                0xFF
 #define USB_REQ_GET_MAX_LUN              0xFE
