@@ -52,7 +52,6 @@
 #define USBH_MAX_ERROR_COUNT                            2
 #define USBH_DEVICE_ADDRESS_DEFAULT                     0
 #define USBH_DEVICE_ADDRESS                             1
-#define CFG_DESC_MAX_SIZE                               512
 
 typedef enum {
     USBH_OK   = 0,

@@ -33,8 +33,6 @@
 
 MassStorageParameter_TypeDef USBH_MSC_Param;
 
-static uint8_t USBH_DataInBuffer[512];
-
 /**
  * @brief  USBH_MSC_TestUnitReady
  *         Issues 'Test unit ready' command to the device. Once the response
@@ -129,7 +127,7 @@ uint8_t USBH_MSC_ReadCapacity10(USB_OTG_CORE_HANDLE *pdev)
             USBH_MSC_CBWData.field.CBWFlags = USB_EP_DIR_IN;
             USBH_MSC_CBWData.field.CBWLength = CBW_LENGTH;
 
-            USBH_MSC_BOTXferParam.pRxTxBuff = USBH_DataInBuffer;
+            USBH_MSC_BOTXferParam.pRxTxBuff = Cfg_Rx_Buffer;
             USBH_MSC_BOTXferParam.MSCStateCurrent = USBH_MSC_READ_CAPACITY10;
 
             for(index = CBW_CB_LENGTH -1; index != 0; index--)
@@ -153,14 +151,14 @@ uint8_t USBH_MSC_ReadCapacity10(USB_OTG_CORE_HANDLE *pdev)
             if(USBH_MSC_BOTXferParam.BOTXferStatus == USBH_MSC_OK)
             {
                 /*assign the capacity*/
-                (((uint8_t*)&USBH_MSC_Param.MSCapacity )[3]) = USBH_DataInBuffer[0];
-                (((uint8_t*)&USBH_MSC_Param.MSCapacity )[2]) = USBH_DataInBuffer[1];
-                (((uint8_t*)&USBH_MSC_Param.MSCapacity )[1]) = USBH_DataInBuffer[2];
-                (((uint8_t*)&USBH_MSC_Param.MSCapacity )[0]) = USBH_DataInBuffer[3];
+                (((uint8_t*)&USBH_MSC_Param.MSCapacity )[3]) = Cfg_Rx_Buffer[0];
+                (((uint8_t*)&USBH_MSC_Param.MSCapacity )[2]) = Cfg_Rx_Buffer[1];
+                (((uint8_t*)&USBH_MSC_Param.MSCapacity )[1]) = Cfg_Rx_Buffer[2];
+                (((uint8_t*)&USBH_MSC_Param.MSCapacity )[0]) = Cfg_Rx_Buffer[3];
 
                 /*assign the page length*/
-                (((uint8_t*)&USBH_MSC_Param.MSPageLength )[1]) = USBH_DataInBuffer[6];
-                (((uint8_t*)&USBH_MSC_Param.MSPageLength )[0]) = USBH_DataInBuffer[7];
+                (((uint8_t*)&USBH_MSC_Param.MSPageLength )[1]) = Cfg_Rx_Buffer[6];
+                (((uint8_t*)&USBH_MSC_Param.MSPageLength )[0]) = Cfg_Rx_Buffer[7];
 
                 /* Commands successfully sent and Response Received  */
                 USBH_MSC_BOTXferParam.CmdStateMachine = CMD_SEND_STATE;
@@ -215,7 +213,7 @@ uint8_t USBH_MSC_ModeSense6(USB_OTG_CORE_HANDLE *pdev)
             USBH_MSC_CBWData.field.CBWFlags = USB_EP_DIR_IN;
             USBH_MSC_CBWData.field.CBWLength = CBW_LENGTH;
 
-            USBH_MSC_BOTXferParam.pRxTxBuff = USBH_DataInBuffer;
+            USBH_MSC_BOTXferParam.pRxTxBuff = Cfg_Rx_Buffer;
             USBH_MSC_BOTXferParam.MSCStateCurrent = USBH_MSC_MODE_SENSE6;
 
             for(index = CBW_CB_LENGTH - 1; index != 0; index--)
@@ -246,7 +244,7 @@ uint8_t USBH_MSC_ModeSense6(USB_OTG_CORE_HANDLE *pdev)
                 /* Assign the Write Protect status */
                 /* If WriteProtect = 0, Writing is allowed
                    If WriteProtect != 0, Disk is Write Protected */
-                if ( USBH_DataInBuffer[2] & MASK_MODE_SENSE_WRITE_PROTECT)
+                if ( Cfg_Rx_Buffer[2] & MASK_MODE_SENSE_WRITE_PROTECT)
                 {
                     USBH_MSC_Param.MSWriteProtect   = DISK_WRITE_PROTECTED;
                 }
@@ -310,7 +308,7 @@ uint8_t USBH_MSC_RequestSense(USB_OTG_CORE_HANDLE *pdev)
                 ALLOCATION_LENGTH_REQUEST_SENSE;
             USBH_MSC_CBWData.field.CBWFlags = USB_EP_DIR_IN;
             USBH_MSC_CBWData.field.CBWLength = CBW_LENGTH;
-            USBH_MSC_BOTXferParam.pRxTxBuff = USBH_DataInBuffer;
+            USBH_MSC_BOTXferParam.pRxTxBuff = Cfg_Rx_Buffer;
             USBH_MSC_BOTXferParam.MSCStateBkp = USBH_MSC_BOTXferParam.MSCStateCurrent;
             USBH_MSC_BOTXferParam.MSCStateCurrent = USBH_MSC_REQUEST_SENSE;
 
@@ -340,10 +338,10 @@ uint8_t USBH_MSC_RequestSense(USB_OTG_CORE_HANDLE *pdev)
             if(USBH_MSC_BOTXferParam.BOTXferStatus == USBH_MSC_OK)
             {
                 /* Get Sense data*/
-                (((uint8_t*)&USBH_MSC_Param.MSSenseKey )[3]) = USBH_DataInBuffer[0];
-                (((uint8_t*)&USBH_MSC_Param.MSSenseKey )[2]) = USBH_DataInBuffer[1];
-                (((uint8_t*)&USBH_MSC_Param.MSSenseKey )[1]) = USBH_DataInBuffer[2];
-                (((uint8_t*)&USBH_MSC_Param.MSSenseKey )[0]) = USBH_DataInBuffer[3];
+                (((uint8_t*)&USBH_MSC_Param.MSSenseKey )[3]) = Cfg_Rx_Buffer[0];
+                (((uint8_t*)&USBH_MSC_Param.MSSenseKey )[2]) = Cfg_Rx_Buffer[1];
+                (((uint8_t*)&USBH_MSC_Param.MSSenseKey )[1]) = Cfg_Rx_Buffer[2];
+                (((uint8_t*)&USBH_MSC_Param.MSSenseKey )[0]) = Cfg_Rx_Buffer[3];
 
                 /* Commands successfully sent and Response Received  */
                 USBH_MSC_BOTXferParam.CmdStateMachine = CMD_SEND_STATE;

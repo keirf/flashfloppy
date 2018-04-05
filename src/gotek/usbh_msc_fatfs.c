@@ -160,6 +160,11 @@ void usbh_msc_init(void)
               &USR_cb);
 }
 
+void usbh_msc_buffer_set(uint8_t *buf)
+{
+    Cfg_Rx_Buffer = buf;
+}
+
 void usbh_msc_process(void)
 {
     USBH_Process(&USB_OTG_Core, &USB_Host);

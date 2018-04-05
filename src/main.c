@@ -1655,10 +1655,13 @@ int main(void)
 
         banner();
 
+        arena_init();
+        usbh_msc_buffer_set(arena_alloc(512));
         while ((f_mount(&fatfs, "", 1) != FR_OK) && !cfg.usb_power_fault) {
             cfg_maybe_factory_reset();
             usbh_msc_process();
         }
+        usbh_msc_buffer_set((void *)0xdeadbeef);
 
         arena_init();
         fres = F_call_cancellable(floppy_main, NULL);

@@ -159,6 +159,7 @@ extern uint8_t lcd_columns, lcd_rows;
 
 /* Gotek: USB stack processing */
 void usbh_msc_init(void);
+void usbh_msc_buffer_set(uint8_t *buf);
 void usbh_msc_process(void);
 bool_t usbh_msc_connected(void);
 
@@ -177,6 +178,7 @@ static inline void lcd_backlight(bool_t on) {};
 static inline void lcd_sync(void) {}
 
 static inline void usbh_msc_init(void) {}
+static inline void usbh_msc_buffer_set(uint8_t *buf) {}
 static inline void usbh_msc_process(void) {}
 static inline bool_t usbh_msc_connected(void) { return FALSE; }
 

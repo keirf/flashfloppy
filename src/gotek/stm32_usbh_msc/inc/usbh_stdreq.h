@@ -45,8 +45,6 @@
 
 #define USBH_HID_CLASS                    0x03
 
-extern uint8_t USBH_CfgDesc[512];
-
 USBH_Status USBH_GetDescriptor(USB_OTG_CORE_HANDLE *pdev,
                                USBH_HOST           *phost,
                                uint8_t  req_type,

@@ -48,6 +48,8 @@
 
 int EXC_reset(void) __attribute__((alias("main")));
 
+static uint8_t USBH_Cfg_Rx_Buffer[512];
+
 /* FatFS */
 static FATFS fatfs;
 
@@ -311,6 +313,7 @@ int main(void)
     display_setting(TRUE);
 
     usbh_msc_init();
+    usbh_msc_buffer_set(USBH_Cfg_Rx_Buffer);
 
     /* Wait for buttons to be pressed. */
     wait_buttons(LOW);

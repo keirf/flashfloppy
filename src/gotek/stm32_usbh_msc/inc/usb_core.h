@@ -50,8 +50,7 @@
 #define USB_OTG_EP_RX_NAK       0x2000
 #define USB_OTG_EP_RX_VALID     0x3000
 
-#define   MAX_DATA_LENGTH                        0x200
-
+extern uint8_t *Cfg_Rx_Buffer;
 
 typedef enum {
     USB_OTG_OK = 0,
@@ -218,7 +217,6 @@ typedef struct _DCD {
 
 
 typedef struct _HCD {
-    uint8_t                  Rx_Buffer [MAX_DATA_LENGTH];
     __IO uint32_t            ConnSts;
     __IO uint32_t            PortEnabled;
     __IO uint32_t            ErrCnt[USB_OTG_MAX_TX_FIFOS];

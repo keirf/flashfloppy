@@ -28,8 +28,6 @@
 #include "usbh_ioreq.h"
 #include "usbh_stdreq.h"
 
-uint8_t USBH_CfgDesc[CFG_DESC_MAX_SIZE];
-
 static void USBH_ParseDevDesc (USBH_DevDesc_TypeDef* , uint8_t *buf, uint16_t length);
 
 USBH_Status USBH_ParseCfgDesc (USBH_CfgDesc_TypeDef* cfg_desc,
@@ -50,7 +48,7 @@ static void USBH_ParseStringDesc (uint8_t* psrc, uint8_t* pdest, uint16_t length
  *         received, it parses the device descriptor and updates the status.
  * @param  pdev: Selected device
  * @param  dev_desc: Device Descriptor buffer address
- * @param  pdev->host.Rx_Buffer: Receive Buffer address
+ * @param  Cfg_Rx_Buffer: Receive Buffer address
  * @param  length: Length of the descriptor
  * @retval Status
  */
@@ -65,11 +63,11 @@ USBH_Status USBH_Get_DevDesc(USB_OTG_CORE_HANDLE *pdev,
                                     phost,
                                     USB_REQ_RECIPIENT_DEVICE | USB_REQ_TYPE_STANDARD,
                                     USB_DESC_DEVICE,
-                                    pdev->host.Rx_Buffer,
+                                    Cfg_Rx_Buffer,
                                     length)) == USBH_OK)
     {
         /* Commands successfully sent and Response Received */
-        USBH_ParseDevDesc(&phost->device_prop.Dev_Desc, pdev->host.Rx_Buffer, length);
+        USBH_ParseDevDesc(&phost->device_prop.Dev_Desc, Cfg_Rx_Buffer, length);
     }
     return status;
 }
@@ -92,26 +90,19 @@ USBH_Status USBH_Get_CfgDesc(USB_OTG_CORE_HANDLE *pdev,
 
 {
     USBH_Status status, result;
-    uint16_t index = 0;
 
     if((status = USBH_GetDescriptor(pdev,
                                     phost,
                                     USB_REQ_RECIPIENT_DEVICE | USB_REQ_TYPE_STANDARD,
                                     USB_DESC_CONFIGURATION,
-                                    pdev->host.Rx_Buffer,
+                                    Cfg_Rx_Buffer,
                                     length)) == USBH_OK)
     {
-        /*save Cfg descriptor for class parsing usage */
-        for( ; index < length ; index ++)
-        {
-            USBH_CfgDesc[index] = pdev->host.Rx_Buffer[index];
-        }
-
         /* Commands successfully sent and Response Received  */
         result = USBH_ParseCfgDesc (&phost->device_prop.Cfg_Desc,
                                     phost->device_prop.Itf_Desc,
                                     phost->device_prop.Ep_Desc,
-                                    pdev->host.Rx_Buffer,
+                                    Cfg_Rx_Buffer,
                                     length);
         if (result != USBH_OK)  status= result;
 
@@ -143,11 +134,11 @@ USBH_Status USBH_Get_StringDesc(USB_OTG_CORE_HANDLE *pdev,
                                     phost,
                                     USB_REQ_RECIPIENT_DEVICE | USB_REQ_TYPE_STANDARD,
                                     USB_DESC_STRING | string_index,
-                                    pdev->host.Rx_Buffer,
+                                    Cfg_Rx_Buffer,
                                     length)) == USBH_OK)
     {
         /* Commands successfully sent and Response Received  */
-        USBH_ParseStringDesc(pdev->host.Rx_Buffer,buff, length);
+        USBH_ParseStringDesc(Cfg_Rx_Buffer, buff, length);
     }
     return status;
 }

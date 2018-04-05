@@ -28,6 +28,8 @@
 #include "usb_core.h"
 #include "usb_bsp.h"
 
+uint8_t *Cfg_Rx_Buffer;
+
 /**
  * @brief  USB_OTG_EnableCommonInt
  *         Initializes the commmon interrupts, used in both device and modes
