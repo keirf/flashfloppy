@@ -258,11 +258,35 @@ static bool_t dsd_open(struct image *im)
 
 static bool_t ti99_open(struct image *im)
 {
-    unsigned int remainder = f_size(&im->fp) % 92160;
+    struct vib {
+        uint8_t name[10];
+        uint16_t tot_secs;
+        uint8_t secs_per_track;
+        char id[3];
+        uint8_t protection;
+        uint8_t tracks_per_side;
+        uint8_t sides;
+        uint8_t density;
+    } vib;
+    bool_t have_vib;
+    unsigned int fsize = f_size(&im->fp);
 
-    /* Some images have a 768-byte footer. */
-    if ((remainder != 0) && (remainder != 768))
+    /* Must be a multiple of 256 sectors. */
+    if ((fsize % 256) != 0)
         return FALSE;
+    fsize /= 256;
+
+    /* Check for 3-sector footer containing a bad sector map. We ignore it. */
+    if ((fsize % 10) == 3)
+        fsize -= 3;
+
+    /* Main image must be non-zero size. */
+    if (fsize == 0)
+        return FALSE;
+
+    /* Check for Volume Information Block in sector 0. */
+    F_read(&im->fp, &vib, sizeof(vib), NULL);
+    have_vib = !strncmp(vib.id, "DSK", 3);
 
     im->img.has_iam = FALSE;
     im->img.interleave = 4;
@@ -272,42 +296,76 @@ static bool_t ti99_open(struct image *im)
     im->img.sec_base = 0;
     im->img.layout = LAYOUT_sequential_reverse_side1;
 
-    switch (f_size(&im->fp) / 92160) {
-    case 1: /* SSSD */
-        im->nr_cyls = 40;
-        im->nr_sides = 1;
-        im->img.nr_sectors = 9;
-        im->img.gap3 = 44;
-        return fm_open(im);
-    case 2: /* DSSD (or SSDD) */
-        im->nr_cyls = 40;
-        im->nr_sides = 2;
-        im->img.nr_sectors = 9;
-        im->img.gap3 = 44;
-        return fm_open(im);
-    case 4: /* DSDD (or DSSD80) */
-        im->nr_cyls = 40;
-        im->nr_sides = 2;
-        im->img.nr_sectors = 18;
-        im->img.interleave = 5;
-        im->img.gap3 = 24;
-        return mfm_open(im);
-    case 8: /* DSDD80 */
-        im->nr_cyls = 80;
-        im->nr_sides = 2;
-        im->img.nr_sectors = 18;
-        im->img.interleave = 5;
-        im->img.gap3 = 24;
-        return mfm_open(im);
-    case 16: /* DSHD80 */
-        im->nr_cyls = 80;
-        im->nr_sides = 2;
-        im->img.nr_sectors = 36;
-        im->img.interleave = 5;
-        im->img.gap3 = 24;
-        return mfm_open(im);
-    default:
-        break;
+    if ((fsize % (40*9)) == 0) {
+
+        /* 9/18/36 sectors-per-track formats. */
+        switch (fsize / (40*9)) {
+        case 1: /* SSSD */
+            im->nr_cyls = 40;
+            im->nr_sides = 1;
+            im->img.nr_sectors = 9;
+            im->img.gap3 = 44;
+            return fm_open(im);
+        case 2: /* DSSD (or SSDD) */
+            if (have_vib && (vib.sides == 1)) {
+                /* Disambiguated: This is SSDD. */
+                im->nr_cyls = 40;
+                im->nr_sides = 1;
+                im->img.nr_sectors = 18;
+                im->img.interleave = 5;
+                im->img.gap3 = 24;
+                return mfm_open(im);
+            }
+            /* Assume DSSD. */
+            im->nr_cyls = 40;
+            im->nr_sides = 2;
+            im->img.nr_sectors = 9;
+            im->img.gap3 = 44;
+            return fm_open(im);
+        case 4: /* DSDD (or DSSD80) */
+            if (have_vib && (vib.tracks_per_side == 80)) {
+                /* Disambiguated: This is DSSD80. */
+                im->nr_cyls = 80;
+                im->nr_sides = 2;
+                im->img.nr_sectors = 9;
+                im->img.gap3 = 44;
+                return fm_open(im);
+            }
+            /* Assume DSDD. */
+            im->nr_cyls = 40;
+            im->nr_sides = 2;
+            im->img.nr_sectors = 18;
+            im->img.interleave = 5;
+            im->img.gap3 = 24;
+            return mfm_open(im);
+        case 8: /* DSDD80 */
+            im->nr_cyls = 80;
+            im->nr_sides = 2;
+            im->img.nr_sectors = 18;
+            im->img.interleave = 5;
+            im->img.gap3 = 24;
+            return mfm_open(im);
+        case 16: /* DSHD80 */
+            im->nr_cyls = 80;
+            im->nr_sides = 2;
+            im->img.nr_sectors = 36;
+            im->img.interleave = 5;
+            im->img.gap3 = 24;
+            return mfm_open(im);
+        }
+
+    } else if ((fsize % (40*16)) == 0) {
+
+        /* SSDD/DSDD, 16 sectors */
+        im->nr_sides = fsize / (40*16);
+        if (im->nr_sides <= 2) {
+            im->nr_cyls = 40;
+            im->img.nr_sectors = 16;
+            im->img.interleave = 5;
+            im->img.gap3 = 44;
+            return mfm_open(im);
+        }
+
     }
 
     return FALSE;
