@@ -41,9 +41,16 @@ void F_die(FRESULT fr)
     handle_fr(fr);
 }
 
+static BYTE mask_mode(BYTE mode)
+{
+    if (usbh_msc_readonly())
+        mode &= FA_READ;
+    return mode;
+}
+
 FRESULT F_try_open(FIL *fp, const TCHAR *path, BYTE mode)
 {
-    FRESULT fr = f_open(fp, path, mode);
+    FRESULT fr = f_open(fp, path, mask_mode(mode));
     switch (fr) {
     case FR_NO_FILE:
     case FR_NO_PATH:
@@ -57,7 +64,7 @@ FRESULT F_try_open(FIL *fp, const TCHAR *path, BYTE mode)
 
 void F_open(FIL *fp, const TCHAR *path, BYTE mode)
 {
-    FRESULT fr = f_open(fp, path, mode);
+    FRESULT fr = f_open(fp, path, mask_mode(mode));
     handle_fr(fr);
 }
 
@@ -85,6 +92,11 @@ void F_write(FIL *fp, const void *buff, UINT btw, UINT *bw)
 {
     UINT _bw;
     FRESULT fr;
+    if (usbh_msc_readonly()) {
+        /* Read-only: silently drop. */
+        if (bw) *bw = btw;
+        return;
+    }
     if (!fp->dir_ptr) {
         /* File cannot be resized. Clip the write size. */
         btw = min_t(UINT, btw, f_size(fp) - f_tell(fp));
@@ -106,7 +118,7 @@ void F_sync(FIL *fp)
 
 void F_truncate(FIL *fp)
 {
-    FRESULT fr = f_truncate(fp);
+    FRESULT fr = usbh_msc_readonly() ? FR_OK : f_truncate(fp);
     handle_fr(fr);
 }
 

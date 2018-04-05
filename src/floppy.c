@@ -302,7 +302,7 @@ void floppy_init(uint8_t fintf_mode)
     timer_init(&index.timer_deassert, index_deassert, NULL);
 }
 
-void floppy_insert(unsigned int unit, const struct slot *slot)
+void floppy_insert(unsigned int unit, struct slot *slot)
 {
     struct drive *drv = &drive;
 
@@ -407,11 +407,10 @@ void floppy_insert(unsigned int unit, const struct slot *slot)
 
     /* Drive is ready. Set output signals appropriately. */
     drive_change_output(drv, outp_rdy, TRUE);
-    if ((slot->attributes & AM_RDO)
-        || !image->handler->write_track) {
-        printk("Image is R/O %s%s\n",
-               (slot->attributes & AM_RDO) ? "[fat-attr]" : "",
-               !image->handler->write_track ? "[no-handler]" : "");
+    if (!image->handler->write_track || usbh_msc_readonly())
+        slot->attributes |= AM_RDO;
+    if (slot->attributes & AM_RDO) {
+        printk("Image is R/O\n");
     } else {
         drive_change_output(drv, outp_wrprot, FALSE);
     }
@@ -687,7 +686,8 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Seek to the new track. */
         track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
-        if ((track >= 510) && (drv->outp & m(outp_wrprot))) {
+        if ((track >= 510) && (drv->outp & m(outp_wrprot))
+            && !usbh_msc_readonly()) {
             /* Remove write-protect when driven into D-A mode. */
             drive_change_output(drv, outp_wrprot, FALSE);
         }

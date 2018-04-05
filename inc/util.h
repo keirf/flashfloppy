@@ -162,6 +162,7 @@ void usbh_msc_init(void);
 void usbh_msc_buffer_set(uint8_t *buf);
 void usbh_msc_process(void);
 bool_t usbh_msc_connected(void);
+bool_t usbh_msc_readonly(void);
 
 #else /* !BUILD_GOTEK */
 

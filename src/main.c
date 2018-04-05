@@ -1142,7 +1142,8 @@ static void cfg_update(uint8_t slot_mode)
         hxc_cfg_update(slot_mode);
     else
         native_update(slot_mode);
-    if (!(cfg.slot.attributes & AM_DIR) && ff_cfg.write_protect)
+    if (!(cfg.slot.attributes & AM_DIR)
+        && (ff_cfg.write_protect || usbh_msc_readonly()))
         cfg.slot.attributes |= AM_RDO;
 }
 
@@ -1382,6 +1383,10 @@ static int floppy_main(void *unused)
                 toggle_wp:
                     wait = 0;
                     cfg.slot.attributes ^= AM_RDO;
+                    if (usbh_msc_readonly()) {
+                        /* Read-only filesystem: force AM_RDO always. */
+                        cfg.slot.attributes |= AM_RDO;
+                    }
                     display_wp_status();
                     if (display_mode == DM_LED_7SEG)
                         led_7seg_write_string((cfg.slot.attributes & AM_RDO)

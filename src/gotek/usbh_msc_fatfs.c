@@ -175,6 +175,11 @@ bool_t usbh_msc_connected(void)
     return msc_device_connected && HCD_IsDeviceConnected(&USB_OTG_Core);
 }
 
+bool_t usbh_msc_readonly(void)
+{
+    return usbh_msc_connected() && USBH_MSC_Param.MSWriteProtect;
+}
+
 /*
  * FatFS low-level driver callbacks.
  */
@@ -184,9 +189,9 @@ DSTATUS disk_initialize(BYTE pdrv)
     if (pdrv)
         return RES_PARERR;
 
-    dstatus |= STA_NOINIT;
-    if (msc_device_connected && HCD_IsDeviceConnected(&USB_OTG_Core))
-        dstatus &= ~STA_NOINIT;
+    dstatus = (!usbh_msc_connected() ? STA_NOINIT
+               : USBH_MSC_Param.MSWriteProtect ? STA_PROTECT
+               : 0);
 
     return dstatus;
 }

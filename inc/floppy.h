@@ -170,7 +170,7 @@ uint8_t mfmtobin(uint16_t x);
 
 /* External API. */
 void floppy_init(uint8_t fintf_mode);
-void floppy_insert(unsigned int unit, const struct slot *slot);
+void floppy_insert(unsigned int unit, struct slot *slot);
 void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
 void floppy_set_cyl(uint8_t unit, uint8_t cyl);
