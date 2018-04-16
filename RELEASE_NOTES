@@ -3,6 +3,18 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.17a - TBD (Forthcoming)
+ - New image types supported:
+   - Acorn DFS SSD/DSD
+   - Acorn ADFS 'S' (160kB)
+   - Akai 800kB (host=akai)
+   - Memotech IMG (host=memotech)
+   - TI-99/4A DSK/V9T9 (host=ti99)
+ - New interface types supported:
+   - Akai S950 (interface=akai-s950)
+ - OLED: Increase default initialisation probe to 3s
+ - USB: Respect volume write-protect status
+
 ** v0.9.16a - 16 March 2018
  - Support ADFS D/E/F images (suffix *.ADF, FF.CFG: host=acorn)
  - Direct Access: Fix sector data CRCs
