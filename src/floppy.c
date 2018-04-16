@@ -137,6 +137,13 @@ const static uint8_t *fintf, fintfs[][outp_nr] = {
         [outp_wrprot] = pin_28,
         [outp_rdy]    = pin_unset,
         [outp_hden]   = pin_02 },
+    [FINTF_AKAI_S950] = {
+        [outp_dskchg] = pin_unset,
+        [outp_index]  = pin_08,
+        [outp_trk0]   = pin_26,
+        [outp_wrprot] = pin_28,
+        [outp_rdy]    = pin_34,
+        [outp_hden]   = pin_02 },
 };
 
 static void drive_change_output(struct drive *drv, uint8_t outp, bool_t assert)
@@ -205,9 +212,10 @@ static struct dma_ring *dma_ring_alloc(void)
 void floppy_set_fintf_mode(uint8_t fintf_mode)
 {
     static const char * const fintf_name[] = {
-        [FINTF_SHUGART] = "Shugart",
-        [FINTF_IBMPC] = "IBM PC",
-        [FINTF_IBMPC_HDOUT] = "IBM PC + HD_OUT"
+        [FINTF_SHUGART]     = "Shugart",
+        [FINTF_IBMPC]       = "IBM PC",
+        [FINTF_IBMPC_HDOUT] = "IBM PC + HD_OUT",
+        [FINTF_AKAI_S950]   = "Akai S950"
     };
     struct drive *drv = &drive;
     uint32_t old_active;

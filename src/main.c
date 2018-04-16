@@ -465,9 +465,10 @@ static void read_ff_cfg(void)
 
         case FFCFG_interface:
             ff_cfg.interface =
-                !strcmp(opts.arg, "ibmpc") ? FINTF_IBMPC
+                !strcmp(opts.arg, "shugart") ? FINTF_SHUGART
+                : !strcmp(opts.arg, "ibmpc") ? FINTF_IBMPC
                 : !strcmp(opts.arg, "ibmpc-hdout") ? FINTF_IBMPC_HDOUT
-                : !strcmp(opts.arg, "shugart") ? FINTF_SHUGART
+                : !strcmp(opts.arg, "akai-s950") ? FINTF_AKAI_S950
                 : FINTF_JC;
             break;
 

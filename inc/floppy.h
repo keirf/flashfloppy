@@ -14,6 +14,7 @@
 #define FINTF_SHUGART     0
 #define FINTF_IBMPC       1
 #define FINTF_IBMPC_HDOUT 2
+#define FINTF_AKAI_S950   3
 
 struct adf_image {
     uint32_t trk_off;
