@@ -12,6 +12,8 @@
    - TI-99/4A DSK/V9T9 (host=ti99)
  - New interface types supported:
    - Akai S950 (interface=akai-s950)
+ - Bug fixes to read-data ring-buffer handling
+ - HFE: Improve write performance (batch reads/writes up to 8 blocks)
  - OLED: Increase default initialisation probe to 3s
  - USB: Respect volume write-protect status
 
