@@ -20,6 +20,7 @@ extern const struct image_handler trd_image_handler;
 extern const struct image_handler opd_image_handler;
 extern const struct image_handler ssd_image_handler;
 extern const struct image_handler dsd_image_handler;
+extern const struct image_handler sdu_image_handler;
 extern const struct image_handler ti99_image_handler;
 
 bool_t image_valid(FILINFO *fp)
@@ -45,6 +46,7 @@ bool_t image_valid(FILINFO *fp)
                || !strcmp(ext, "opd")
                || !strcmp(ext, "ssd")
                || !strcmp(ext, "dsd")
+               || !strcmp(ext, "sdu")
                || !strcmp(ext, "v9t9")) {
         return TRUE;
     }
@@ -111,6 +113,7 @@ void image_open(struct image *im, const struct slot *slot)
             : !strcmp(ext, "opd") ? &opd_image_handler
             : !strcmp(ext, "ssd") ? &ssd_image_handler
             : !strcmp(ext, "dsd") ? &dsd_image_handler
+            : !strcmp(ext, "sdu") ? &sdu_image_handler
             : !strcmp(ext, "v9t9") ? &ti99_image_handler
             : NULL);
     if (hint) {

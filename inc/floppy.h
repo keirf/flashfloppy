@@ -35,7 +35,7 @@ struct hfe_image {
 };
 
 struct img_image {
-    uint32_t trk_off;
+    uint32_t trk_off, base_off;
     uint16_t trk_sec;
     int32_t decode_pos;
     uint8_t layout; /* LAYOUT_* */

@@ -7,6 +7,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - DSK (Amstrad CPC, Spectrum +3)
   - IMG, IMA, DSK (IBM MFM Raw Sector)
   - OPD (Spectrum Opus Discovery)
+  - SDU (SAB Diskette Utility)
   - ST (Atari ST)
   - TRD (Spectrum TR-DOS)
   - V9T9, DSK (TI-99/4A)

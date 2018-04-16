@@ -9,6 +9,7 @@
    - Acorn ADFS 'S' (160kB)
    - Akai 800kB (host=akai)
    - Memotech IMG (host=memotech)
+   - SAB Diskette Utility (SDU)
    - TI-99/4A DSK/V9T9 (host=ti99)
  - New interface types supported:
    - Akai S950 (interface=akai-s950)

@@ -173,6 +173,7 @@ static void display_write_slot(bool_t nav_mode)
         : slot_type("opd") ? "OPD"
         : slot_type("ssd") ? "SSD"
         : slot_type("dsd") ? "DSD"
+        : slot_type("sdu") ? "SDU"
         : slot_type("v9t9") ? "T99"
         : "UNK";
     snprintf(msg, sizeof(msg), "%03u/%03u%*s%s D:%u",

@@ -76,6 +76,12 @@ const static struct img_type {
     { 16, 2, 57, 3, 1, 1, 0, _C(80) }, /* Type 07 */
 };
 
+static FSIZE_t im_size(struct image *im)
+{
+    return (f_size(&im->fp) < im->img.base_off) ? 0
+        : (f_size(&im->fp) - im->img.base_off);
+}
+
 static bool_t _img_open(struct image *im, bool_t has_iam,
                         const struct img_type *type)
 {
@@ -99,7 +105,7 @@ static bool_t _img_open(struct image *im, bool_t has_iam,
             }
             cyl_sz = type->nr_secs * (128 << type->no) * type->nr_sides;
             for (nr_cyls = min_cyls; nr_cyls <= max_cyls; nr_cyls++)
-                if ((nr_cyls * cyl_sz) == f_size(&im->fp))
+                if ((nr_cyls * cyl_sz) == im_size(im))
                     goto found;
         }
 
@@ -190,10 +196,10 @@ static bool_t trd_open(struct image *im)
         break;
     default:
         /* Guess geometry */
-        if (f_size(&im->fp) <= 40*16*256) {
+        if (im_size(im) <= 40*16*256) {
             im->nr_cyls = 40;
             im->nr_sides = 1;
-        } else if (f_size(&im->fp) < 40*2*16*256) {
+        } else if (im_size(im) < 40*2*16*256) {
             im->nr_cyls = 40;
             im->nr_sides = 1;
         } else {
@@ -214,7 +220,7 @@ static bool_t trd_open(struct image *im)
 
 static bool_t opd_open(struct image *im)
 {
-    switch (f_size(&im->fp)) {
+    switch (im_size(im)) {
     case 184320:
         im->nr_cyls = 40;
         im->nr_sides = 1;
@@ -264,6 +270,12 @@ static bool_t dsd_open(struct image *im)
     return fm_open(im);
 }
 
+static bool_t sdu_open(struct image *im)
+{
+    im->img.base_off = 46;
+    return img_open(im);
+}
+
 static bool_t ti99_open(struct image *im)
 {
     struct vib {
@@ -277,7 +289,7 @@ static bool_t ti99_open(struct image *im)
         uint8_t density;
     } vib;
     bool_t have_vib;
-    unsigned int fsize = f_size(&im->fp);
+    unsigned int fsize = im_size(im);
 
     /* Must be a multiple of 256 sectors. */
     if ((fsize % 256) != 0)
@@ -435,6 +447,14 @@ const struct image_handler dsd_image_handler = {
     .write_track = img_write_track,
 };
 
+const struct image_handler sdu_image_handler = {
+    .open = sdu_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
 const struct image_handler ti99_image_handler = {
     .open = ti99_open,
     .setup_track = img_setup_track,
@@ -474,6 +494,7 @@ static void img_seek_track(
         im->img.trk_off = trk * trk_len;
         break;
     }
+    im->img.trk_off += im->img.base_off;
 
     im->cur_track = track;
 }
