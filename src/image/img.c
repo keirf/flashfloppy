@@ -68,9 +68,7 @@ const static struct img_type {
     { 10, 2, 116, 1, 3, 1, 0, _C(80) }, /* Akai HD: 10 * 1kB sectors */
     { 0 }
 }, ensoniq_type[] = {
-    {  9, 2, 84, 1, 2, 1, 0, _C(80) },  /* PC 720kB */
     { 10, 2, 30, 1, 2, 0, 0, _C(80) },  /* Ensoniq 800kB */
-    { 18, 2, 84, 1, 2, 1, 0, _C(80) },  /* PC 1.44MB */
     { 20, 2, 40, 1, 2, 0, 0, _C(80) },  /* Ensoniq 1.6MB */
     { 0 }
 };
@@ -130,6 +128,7 @@ static bool_t adfs_open(struct image *im)
 static bool_t img_open(struct image *im)
 {
     const struct img_type *type;
+
     switch (ff_cfg.host) {
     case HOST_akai:
     case HOST_gem:
@@ -144,7 +143,9 @@ static bool_t img_open(struct image *im)
         type = img_type;
         break;
     }
-    return _img_open(im, TRUE, type);
+
+    /* Try specified host-specific geometries, falling back to default list. */
+    return _img_open(im, TRUE, type) || _img_open(im, TRUE, img_type);
 }
 
 static bool_t st_open(struct image *im)
