@@ -64,6 +64,7 @@ const static struct img_type {
     { 16, 1,  57, 1, 1, 0, 0, _C(40) }, /* ADFS S 160k */
     { 0 }
 }, akai_type[] = {
+    {  5, 2, 116, 1, 3, 1, 0, _C(80) }, /* Akai DD:  5 * 1kB sectors */
     { 10, 2, 116, 1, 3, 1, 0, _C(80) }, /* Akai HD: 10 * 1kB sectors */
     { 0 }
 }, ensoniq_type[] = {
