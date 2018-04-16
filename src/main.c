@@ -478,6 +478,7 @@ static void read_ff_cfg(void)
                 : !strcmp(opts.arg, "akai") ? HOST_akai
                 : !strcmp(opts.arg, "ensoniq") ? HOST_ensoniq
                 : !strcmp(opts.arg, "gem") ? HOST_gem
+                : !strcmp(opts.arg, "memotech") ? HOST_memotech
                 : !strcmp(opts.arg, "ti99") ? HOST_ti99
                 : HOST_unspecified;
             break;

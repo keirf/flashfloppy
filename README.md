@@ -15,6 +15,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - Akai (S01, S20, S950)
   - Ensoniq (ASR, TS, etc)
   - General Music (S2, S3, S2R)
+  - Memotech
   - IBM PC and many others
 
 ## Download

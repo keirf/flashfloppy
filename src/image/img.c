@@ -71,6 +71,9 @@ const static struct img_type {
     { 10, 2, 30, 1, 2, 0, 0, _C(80) },  /* Ensoniq 800kB */
     { 20, 2, 40, 1, 2, 0, 0, _C(80) },  /* Ensoniq 1.6MB */
     { 0 }
+}, memotech_type[] = {
+    { 16, 2, 57, 3, 1, 1, 0, _C(40) }, /* Type 03 */
+    { 16, 2, 57, 3, 1, 1, 0, _C(80) }, /* Type 07 */
 };
 
 static bool_t _img_open(struct image *im, bool_t has_iam,
@@ -136,6 +139,9 @@ static bool_t img_open(struct image *im)
         break;
     case HOST_ensoniq:
         type = ensoniq_type;
+        break;
+    case HOST_memotech:
+        type = memotech_type;
         break;
     case HOST_ti99:
         return ti99_open(im);
