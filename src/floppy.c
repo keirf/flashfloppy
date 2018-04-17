@@ -340,6 +340,9 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     image->bufs.write_data.p = arena_alloc(image->bufs.write_data.len);
     image->bufs.read_data = image->bufs.write_data;
 
+    /* Minimum allowable buffer space (assumed by hfe image handler). */
+    ASSERT(image->bufs.read_data.len >= 20*1024);
+
     image_open(image, slot);
     drv->image = image;
     dma_rd->state = DMA_stopping;

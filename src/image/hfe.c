@@ -68,6 +68,8 @@ enum {
     OP_skip = 12    /* +1byte: skip 0-8 bits in next byte */
 };
 
+#define RDATA_BUFLEN 16384
+
 static void hfe_seek_track(struct image *im, uint16_t track);
 
 static bool_t hfe_open(struct image *im)
@@ -142,6 +144,7 @@ static void hfe_setup_track(
     /* Aggressively batch our reads at HD data rate, as that can be faster 
      * than some USB drives will serve up a single block.*/
     im->hfe.batch_secs = (im->write_bc_ticks > sysclk_ns(1500)) ? 2 : 8;
+    ASSERT(RDATA_BUFLEN + im->hfe.batch_secs*512 <= im->bufs.read_data.len);
 
     if (start_pos) {
         /* Read mode. */
@@ -159,10 +162,10 @@ static void hfe_setup_track(
 
 static bool_t hfe_read_track(struct image *im)
 {
+    const unsigned int buflen = RDATA_BUFLEN, bufmask = buflen - 1;
     struct image_buf *rd = &im->bufs.read_data;
     uint8_t *buf = rd->p;
     unsigned int i, nr_sec;
-    unsigned int buflen = (rd->len & ~255) - im->hfe.batch_secs*512;
 
     nr_sec = min_t(unsigned int, im->hfe.batch_secs,
                    (im->hfe.trk_len+255 - im->hfe.trk_pos) / 256);
@@ -173,7 +176,7 @@ static bool_t hfe_read_track(struct image *im)
     F_read(&im->fp, &buf[buflen], nr_sec*512, NULL);
 
     for (i = 0; i < nr_sec; i++) {
-        memcpy(&buf[(rd->prod/8) % buflen],
+        memcpy(&buf[(rd->prod/8) & bufmask],
                &buf[buflen + i*512 + (im->cur_track&1)*256],
                256);
         barrier(); /* write data /then/ update producer */
@@ -189,12 +192,12 @@ static bool_t hfe_read_track(struct image *im)
 
 static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
+    const unsigned int buflen = RDATA_BUFLEN, bufmask = buflen - 1;
     struct image_buf *rd = &im->bufs.read_data;
     uint32_t ticks = im->ticks_since_flux;
     uint32_t ticks_per_cell = im->ticks_per_cell;
     uint32_t y = 8, todo = nr;
     uint8_t x, *buf = rd->p;
-    unsigned int buflen = (rd->len & ~255) - im->hfe.batch_secs*512;
     bool_t is_v3 = im->hfe.is_v3;
 
     while ((rd->prod - rd->cons) >= 3*8) {
@@ -208,7 +211,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             continue;
         }
         y = rd->cons % 8;
-        x = buf[(rd->cons/8) % buflen] >> y;
+        x = buf[(rd->cons/8) & bufmask] >> y;
         if (is_v3 && (y == 0) && ((x & 0xf) == 0xf)) {
             /* V3 byte-aligned opcode processing. */
             switch (x >> 4) {
@@ -219,7 +222,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
                 y = 8;
                 continue;
             case OP_bitrate:
-                x = _rbit32(buf[(rd->cons/8+1) % buflen]) >> 24;
+                x = _rbit32(buf[(rd->cons/8+1) & bufmask]) >> 24;
                 im->ticks_per_cell = ticks_per_cell = 
                     (sysclk_us(2) * 16 * x) / 72;
                 rd->cons += 2*8;
@@ -227,11 +230,11 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
                 y = 8;
                 continue;
             case OP_skip:
-                x = (_rbit32(buf[(rd->cons/8+1) % buflen]) >> 24) & 7;
+                x = (_rbit32(buf[(rd->cons/8+1) & bufmask]) >> 24) & 7;
                 rd->cons += 2*8 + x;
                 im->cur_bc += 2*8 + x;
                 y = rd->cons % 8;
-                x = buf[(rd->cons/8) % buflen] >> y;
+                x = buf[(rd->cons/8) & bufmask] >> y;
                 break;
             default:
                 /* ignore and process as normal data */
