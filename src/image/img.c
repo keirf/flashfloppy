@@ -272,8 +272,19 @@ static bool_t dsd_open(struct image *im)
 
 static bool_t sdu_open(struct image *im)
 {
+    /* Skip 46-byte SABDU header. */
     im->img.base_off = 46;
-    return img_open(im);
+
+    /* Geometry may be defined in SABDU header but for now guess 1.44MB PC. */
+    im->nr_cyls = 80;
+    im->nr_sides = 2;
+    im->img.sec_no = 2;
+    im->img.interleave = 1;
+    im->img.sec_base = 1;
+    im->img.nr_sectors = 18;
+    im->img.gap3 = 84;
+
+    return _img_open(im, TRUE, NULL);
 }
 
 static bool_t ti99_open(struct image *im)
