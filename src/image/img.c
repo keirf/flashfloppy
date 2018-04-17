@@ -272,17 +272,29 @@ static bool_t dsd_open(struct image *im)
 
 static bool_t sdu_open(struct image *im)
 {
+    uint16_t header[23];
+
+    /* Read basic (cyls, heads, spt) geometry from the image header.
+     * NB. (c,h,s) triple is repeated in the header: choose one arbitrarily. */
+    F_read(&im->fp, header, sizeof(header), NULL);
+    im->nr_cyls = le16toh(header[15]);
+    im->nr_sides = le16toh(header[16]);
+    im->img.nr_sectors = le16toh(header[17]);
+
+    /* Sanity-check the geometry, accepting 180k/360k/720k/1.44M PC sizes. */
+    if (((im->nr_cyls != 40) && (im->nr_cyls != 80))
+        || ((im->nr_sides != 1) && (im->nr_sides != 2))
+        || ((im->img.nr_sectors != 9) && (im->img.nr_sectors != 18)))
+        return FALSE;
+
+    /* Fill in the rest of the geometry. */
+    im->img.sec_no = 2; /* 512-byte sectors */
+    im->img.interleave = 1; /* no interleave */
+    im->img.sec_base = 1; /* standard numbering */
+    im->img.gap3 = 84; /* standard gap3 */
+
     /* Skip 46-byte SABDU header. */
     im->img.base_off = 46;
-
-    /* Geometry may be defined in SABDU header but for now guess 1.44MB PC. */
-    im->nr_cyls = 80;
-    im->nr_sides = 2;
-    im->img.sec_no = 2;
-    im->img.interleave = 1;
-    im->img.sec_base = 1;
-    im->img.nr_sectors = 18;
-    im->img.gap3 = 84;
 
     return _img_open(im, TRUE, NULL);
 }
