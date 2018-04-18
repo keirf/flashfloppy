@@ -40,6 +40,10 @@ static struct {
     uint8_t ffcfg_has_display_scroll_rate:1;
 } cfg;
 
+/* If TRUE, reset to start of filename when selecting a new image. 
+ * If FALSE, try to maintain scroll offset when browsing through images. */
+#define cfg_scroll_reset TRUE
+
 uint8_t board_id;
 
 static uint32_t backlight_ticks;
@@ -146,7 +150,7 @@ static void display_write_slot(bool_t nav_mode)
             led_7seg_write_decimal(cfg.slot_nr);
         return;
     }
-    if (nav_mode) {
+    if (nav_mode && !cfg_scroll_reset) {
         lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
         if (lcd_scroll.end == 0) {
             snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
@@ -1474,6 +1478,8 @@ static int floppy_main(void *unused)
 
             /* Wait a few seconds for further button presses before acting on 
              * the new image selection. */
+            if (cfg_scroll_reset)
+                lcd_scroll.off = lcd_scroll.end = 0;
             lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
             lcd_scroll.ticks = time_ms(ff_cfg.nav_scroll_pause);
             wait_ms = (cfg.slot.attributes & AM_DIR) ?
