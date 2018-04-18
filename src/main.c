@@ -1576,6 +1576,37 @@ static void banner(void)
     }
 }
 
+static void maybe_show_version(void)
+{
+    uint8_t b, nb;
+    char *p, *np, msg[3];
+    int len;
+
+    /* LCD/OLED already displays version info in idle state. */
+    if (display_mode != DM_LED_7SEG)
+        return;
+
+    /* Check if right button is pressed and released. */
+    if ((b = buttons) != B_RIGHT)
+        return;
+    while ((nb = buttons) == b)
+        continue;
+    if (nb)
+        return;
+
+    /* Iterate through the dotted sections of the version number. */
+    for (p = FW_VER; p != NULL; p = np ? np+1 : NULL) {
+        np = strchr(p, '.');
+        memset(msg, sizeof(msg), ' ');
+        len = min_t(int, np ? np - p : strnlen(p, sizeof(msg)), sizeof(msg));
+        memcpy(&msg[sizeof(msg) - len], p, len);
+        led_7seg_write_string(msg);
+        delay_ms(1000);
+    }
+
+    banner();
+}
+
 static void handle_errors(FRESULT fres)
 {
     char msg[17];
@@ -1666,6 +1697,7 @@ int main(void)
         arena_init();
         usbh_msc_buffer_set(arena_alloc(512));
         while ((f_mount(&fatfs, "", 1) != FR_OK) && !cfg.usb_power_fault) {
+            maybe_show_version();
             cfg_maybe_factory_reset();
             usbh_msc_process();
         }

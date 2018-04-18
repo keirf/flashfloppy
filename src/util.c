@@ -140,6 +140,16 @@ int strncmp(const char *s1, const char *s2, size_t n)
     return 0;
 }
 
+char *strchr(const char *s, int c)
+{
+    int d;
+    while ((d = *s)) {
+        if (d == c) return (char *)s;
+        s++;
+    }
+    return NULL;
+}
+
 char *strrchr(const char *s, int c)
 {
     char *p = NULL;
