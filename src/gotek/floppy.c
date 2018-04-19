@@ -84,6 +84,7 @@ static void board_floppy_init(void)
  * Note that the entirety of the SELA handler is in SRAM (.data) -- not only 
  * is this faster to execute, but allows us to co-locate gpio_out_active for 
  * even faster access in the time-critical speculative entry point. */
+extern void IRQ_SELA_changed(void);
 asm (
 "    .data\n"
 "    .thumb\n"
@@ -106,11 +107,25 @@ extern uint32_t gpio_out_active;
 /* GPIO register to either assert or deassert active output pins. */
 extern uint32_t gpio_out_setreset;
 
+static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpio_out_setreset)
+    __attribute__((used)) __attribute__((section(".data#")));
+static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
+    __attribute__((used)) __attribute__((section(".data#")));
+
+/* Intermediate SELA-changed handler for generating the Amiga HD RDY signal. */
+static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpio_out_setreset)
+{
+    /* If deasserting the bus, toggle pin 34 for next time we take the bus. */
+    if (!(_gpio_out_setreset & 4))
+        gpio_out_active ^= m(pin_34);
+
+    /* Continue to the main SELA-changed IRQ entry point. */
+    _IRQ_SELA_changed(_gpio_out_active);
+}
+
 /* Main entry point for SELA-changed IRQ. This fixes up GPIO pins if we 
  * mis-speculated, also handles the timer-driver RDATA pin, and sets up the 
  * speculative entry point for the next interrupt. */
-static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
-    __attribute__((used)) __attribute__((section(".data#")));
 static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
 {
     /* Clear SELA-changed flag. */
@@ -143,6 +158,24 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
         gpio_out_setreset &= ~4; /* gpio_out->bsrr */
     else
         gpio_out_setreset |= 4; /* gpio_out->brr */
+}
+
+/* Update the SELA handler. Used for switching in the Amiga HD-ID "magic". 
+ * Must be called with interrupts disabled. */
+static void update_SELA_irq(bool_t amiga_hd_id)
+{
+    uint32_t SELA_handler = amiga_hd_id ? (uint32_t)Amiga_HD_ID
+        : (uint32_t)_IRQ_SELA_changed;
+
+    /* Create a new tail-call instruction for IRQ_SELA_changed. */
+    SELA_handler -= (uint32_t)IRQ_SELA_changed + 6 + 4;
+    SELA_handler = 0xe000 | (SELA_handler >> 1);
+
+    /* If the tail-call instruction has changed, modify IRQ_SELA_changed. */
+    if (unlikely(((uint16_t *)IRQ_SELA_changed)[3] != SELA_handler)) {
+        ((uint16_t *)IRQ_SELA_changed)[3] = SELA_handler;
+        cpu_sync(); /* synchronise self-modifying code */
+    }
 }
 
 static bool_t drive_is_writing(void)

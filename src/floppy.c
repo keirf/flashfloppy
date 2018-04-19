@@ -144,6 +144,13 @@ const static uint8_t *fintf, fintfs[][outp_nr] = {
         [outp_wrprot] = pin_28,
         [outp_rdy]    = pin_34,
         [outp_hden]   = pin_02 },
+    [FINTF_AMIGA] = {
+        [outp_dskchg] = pin_02,
+        [outp_index]  = pin_08,
+        [outp_trk0]   = pin_26,
+        [outp_wrprot] = pin_28,
+        [outp_rdy]    = pin_unset,
+        [outp_hden]   = pin_unset },
 };
 
 static void drive_change_output(struct drive *drv, uint8_t outp, bool_t assert)
@@ -162,6 +169,31 @@ static void drive_change_output(struct drive *drv, uint8_t outp, bool_t assert)
     IRQ_global_enable();
 }
 
+static void update_amiga_id(bool_t amiga_hd_id)
+{
+    /* Only for the Amiga interface, with hacked RDY (pin 34) signal. */
+    if (fintf != fintfs[FINTF_AMIGA])
+        return;
+
+    IRQ_global_disable();
+
+    /* If mounting an HD image then we signal to the host by toggling pin 34 
+     * every time the drive is selected. */
+    update_SELA_irq(amiga_hd_id);
+
+    /* DD-ID: !!HACK!! We permanently assert pin 34, even when no disk is
+     * inserted. Properly we should only do this when MTR is asserted. */
+    /* HD ID: !!HACK!! Without knowledge of MTR signal we cannot synchronise
+     * the HD-ID sequence 101010... with the host poll loop. It turns out that
+     * starting with pin 34 asserted when the HD image is mounted seems to
+     * generally work! */
+    gpio_out_active |= m(pin_34);
+    if (drive.sel)
+        gpio_write_pins(gpio_out, m(pin_34), O_TRUE);
+
+    IRQ_global_enable();
+}
+
 void floppy_cancel(void)
 {
     struct drive *drv = &drive;
@@ -175,6 +207,7 @@ void floppy_cancel(void)
     drive_change_output(drv, outp_rdy, FALSE);
     drive_change_output(drv, outp_wrprot, TRUE);
     drive_change_output(drv, outp_hden, FALSE);
+    update_amiga_id(FALSE);
 
     /* Stop DMA + timer work. */
     IRQx_disable(dma_rdata_irq);
@@ -215,7 +248,8 @@ void floppy_set_fintf_mode(uint8_t fintf_mode)
         [FINTF_SHUGART]     = "Shugart",
         [FINTF_IBMPC]       = "IBM PC",
         [FINTF_IBMPC_HDOUT] = "IBM PC + HD_OUT",
-        [FINTF_AKAI_S950]   = "Akai S950"
+        [FINTF_AKAI_S950]   = "Akai S950",
+        [FINTF_AMIGA]       = "Amiga"
     };
     struct drive *drv = &drive;
     uint32_t old_active;
@@ -251,10 +285,18 @@ void floppy_set_fintf_mode(uint8_t fintf_mode)
         }
     }
 
-    gpio_write_pins(gpio_out, old_active & ~gpio_out_active, O_FALSE);
-    gpio_write_pins(gpio_out, ~old_active & gpio_out_active, O_TRUE);
+    /* Default handler for IRQ_SELA_changed */
+    update_SELA_irq(FALSE);
+
+    if (drv->sel) {
+        gpio_write_pins(gpio_out, old_active & ~gpio_out_active, O_FALSE);
+        gpio_write_pins(gpio_out, ~old_active & gpio_out_active, O_TRUE);
+    }
 
     IRQ_global_enable();
+
+    /* Default to Amiga-DD identity until HD image is mounted. */
+    update_amiga_id(FALSE);
 }
 
 void floppy_init(uint8_t fintf_mode)
@@ -418,6 +460,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
 
     /* Drive is ready. Set output signals appropriately. */
     drive_change_output(drv, outp_rdy, TRUE);
+    update_amiga_id(image->stk_per_rev > stk_ms(300));
     if (!image->handler->write_track || usbh_msc_readonly())
         slot->attributes |= AM_RDO;
     if (slot->attributes & AM_RDO) {
