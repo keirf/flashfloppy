@@ -46,6 +46,7 @@ static void da_seek_track(struct image *im)
              ? ff_cfg.da_report_version : DA_FW_VER);
     dass->nr_sec = 8;
 
+    im->sync = SYNC_mfm;
     im->write_bc_ticks = sysclk_us(2);
     im->ticks_per_cell = im->write_bc_ticks * 16;
 }
