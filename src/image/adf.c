@@ -9,14 +9,10 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define TRACKS_PER_DISK 160
-#define NR_SECS 11
-#define BYTES_PER_TRACK (NR_SECS*512)
 /* Amiga writes short bitcells (PAL: 14/7093790 us) hence long tracks. 
  * For better loader compatibility it is sensible to emulate this. */
-#define TRACKLEN_BC 101376 /* multiple of 32 */
+#define DD_TRACKLEN_BC 101376 /* multiple of 32 */
 #define POST_IDX_GAP_BC 1024
-#define PRE_IDX_GAP_BC (TRACKLEN_BC - NR_SECS*544*16 - POST_IDX_GAP_BC)
 
 /* Shift even/odd bits into MFM data-bit positions */
 #define even(x) ((x)>>1)
@@ -35,12 +31,27 @@ static uint32_t amigados_checksum(void *dat, unsigned int bytes)
 
 static bool_t adf_open(struct image *im)
 {
-    if (f_size(&im->fp) % BYTES_PER_TRACK)
+    if (f_size(&im->fp) % (11*512))
         return FALSE;
 
-    im->nr_cyls = f_size(&im->fp) / (2 * BYTES_PER_TRACK);
     im->nr_sides = 2;
-    im->ticks_per_cell = (sysclk_stk(im->stk_per_rev) * 16u) / TRACKLEN_BC;
+    im->adf.nr_secs = 11;
+    im->tracklen_bc = DD_TRACKLEN_BC;
+    im->ticks_per_cell = (sysclk_stk(im->stk_per_rev) * 16u) / im->tracklen_bc;
+
+    im->nr_cyls = f_size(&im->fp) / (2 * 11 * 512);
+
+    if (im->nr_cyls > 90) {
+        /* HD image: twice as many sectors per track, same data rate. */
+        im->nr_cyls /= 2;
+        im->stk_per_rev *= 2;
+        im->adf.nr_secs *= 2;
+        im->tracklen_bc *= 2;
+    }
+
+    im->adf.pre_idx_gap_bc = (im->tracklen_bc
+                              - im->adf.nr_secs * 544 * 16
+                              - POST_IDX_GAP_BC);
 
     return TRUE;
 }
@@ -58,9 +69,8 @@ static void adf_setup_track(
     side = min_t(uint8_t, side, im->nr_sides-1);
     track = cyl*2 + side;
 
-    im->adf.trk_off = track * BYTES_PER_TRACK;
-    im->adf.trk_len = BYTES_PER_TRACK;
-    im->tracklen_bc = TRACKLEN_BC;
+    im->adf.trk_len = im->adf.nr_secs * 512;
+    im->adf.trk_off = track * im->adf.trk_len;
     im->ticks_since_flux = 0;
     im->cur_track = track;
 
@@ -137,12 +147,12 @@ static bool_t adf_read_track(struct image *im)
         for (i = 0; i < POST_IDX_GAP_BC/32; i++)
             emit_long(0);
 
-    } else if (im->adf.decode_pos == NR_SECS+1) {
+    } else if (im->adf.decode_pos == im->adf.nr_secs+1) {
 
         /* Pre-index track gap */
-        if (bc_space < PRE_IDX_GAP_BC/32)
+        if (bc_space < im->adf.pre_idx_gap_bc/32)
             return FALSE;
-        for (i = 0; i < PRE_IDX_GAP_BC/32-1; i++)
+        for (i = 0; i < im->adf.pre_idx_gap_bc/32-1; i++)
             emit_long(0);
         emit_raw(0xaaaaaaa0); /* write splice */
         im->adf.decode_pos = -1;
@@ -164,7 +174,7 @@ static bool_t adf_read_track(struct image *im)
         info = ((0xff << 24)
                 | (im->cur_track << 16)
                 | (sector << 8)
-                | (NR_SECS - sector));
+                | (im->adf.nr_secs - sector));
         emit_long(even(info));
         emit_long(odd(info));
         /* label */
@@ -257,7 +267,7 @@ static bool_t adf_write_track(struct image *im)
 
         /* Check the info word and header checksum.  */
         if (((info>>16) != ((0xff<<8) | im->cur_track))
-            || (sect >= NR_SECS) || (csum != 0)) {
+            || (sect >= im->adf.nr_secs) || (csum != 0)) {
             printk("Bad header: info=%08x csum=%08x\n", info, csum);
             continue;
         }
