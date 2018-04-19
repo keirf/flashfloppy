@@ -286,10 +286,12 @@ static bool_t sdu_open(struct image *im)
     im->nr_sides = le16toh(header.max.h);
     im->img.nr_sectors = le16toh(header.max.s);
 
-    /* Sanity-check the geometry, accepting 180k/360k/720k/1.44M PC sizes. */
+    /* Check the geometry. Accept 180k/360k/720k/1.44M/2.88M PC sizes. */
     if (((im->nr_cyls != 40) && (im->nr_cyls != 80))
         || ((im->nr_sides != 1) && (im->nr_sides != 2))
-        || ((im->img.nr_sectors != 9) && (im->img.nr_sectors != 18)))
+        || ((im->img.nr_sectors != 9)
+            && (im->img.nr_sectors != 18)
+            && (im->img.nr_sectors != 36)))
         return FALSE;
 
     /* Fill in the rest of the geometry. */
