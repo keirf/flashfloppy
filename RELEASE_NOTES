@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.18a - 19 April 2018
+ - Fix HxC compatibility mode ("LBA change test failed")
+ - SDU: Improve geometry detection
+ - More bug fixes to read-data ring-buffer handling
+ - LED 888 Display: Show firmware version when right/up button pressed
+ - LCD/OLED: When browsing through images, reset scroll to start of each file
+
 ** v0.9.17a - 17 April 2018
  - New image types supported:
    - Acorn DFS SSD/DSD
