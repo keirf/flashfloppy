@@ -81,6 +81,11 @@ static bool_t dsk_open(struct image *im)
     im->nr_sides = dib->nr_sides;
     printk("DSK: %u cyls, %u sides\n", im->nr_cyls, im->nr_sides);
 
+    /* DSK data rate is fixed at 2us bitcell. Where the specified track layout 
+     * will not fit in regular 100k-bitcell track we simply extend the track 
+     * length and thus the period between index pulses. */
+    im->ticks_per_cell = im->write_bc_ticks * 16;
+
     return TRUE;
 }
 
@@ -99,9 +104,7 @@ static void dsk_seek_track(
         printk("T%u.%u: Unformatted\n", cyl, side);
         memset(tib, 0, sizeof(*tib));
         im->tracklen_bc = 100160;
-        im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
-                              / im->tracklen_bc);
-        return;
+        goto out;
     }
 
     im->dsk.trk_off = 0x100;
@@ -154,17 +157,15 @@ static void dsk_seek_track(
     tracklen *= 16;
 
     /* Calculate and round the track length. */
-    im->tracklen_bc = 100000;
-    if (im->tracklen_bc < tracklen)
-        im->tracklen_bc = tracklen + 1000;
+    im->tracklen_bc = max_t(unsigned int, 100000, tracklen + 20*16);
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
-
-    /* Calculate output data rate (bitcell size). */
-    im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
-                          / im->tracklen_bc);
 
     /* Now calculate the pre-index track gap. */
     im->dsk.gap4 = (im->tracklen_bc - tracklen) / 16;
+
+out:
+    /* Calculate ticks per revolution */
+    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
 }
 
 static void dsk_setup_track(
