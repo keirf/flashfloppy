@@ -170,6 +170,11 @@ static bool_t st_open(struct image *im)
     return ok;
 }
 
+static bool_t mgt_open(struct image *im)
+{
+    return _img_open(im, TRUE, img_type);
+}
+
 static bool_t trd_open(struct image *im)
 {
     uint8_t geometry;
@@ -439,6 +444,14 @@ const struct image_handler st_image_handler = {
 
 const struct image_handler adfs_image_handler = {
     .open = adfs_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler mgt_image_handler = {
+    .open = mgt_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,

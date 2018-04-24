@@ -173,6 +173,7 @@ static void display_write_slot(bool_t nav_mode)
         : slot_type("st") ? "ST "
         : slot_type("adl") ? "ADL"
         : slot_type("adm") ? "ADM"
+        : slot_type("mgt") ? "MGT"
         : slot_type("trd") ? "TRD"
         : slot_type("opd") ? "OPD"
         : slot_type("ssd") ? "SSD"
