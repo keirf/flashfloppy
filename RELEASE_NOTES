@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.19a - 1 May 2018
+ - Amiga: Support high-density disk images
+   - ADF: 1760kB images
+   - Generate HD-ID pattern on pin 34 (interface=amiga)
+ - DSK: Fixes for Sam Coupe, and others with long tracks
+
 ** v0.9.18a - 19 April 2018
  - Fix HxC compatibility mode ("LBA change test failed")
  - SDU: Improve geometry detection
