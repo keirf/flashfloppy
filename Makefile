@@ -1,6 +1,7 @@
 
 PROJ = FlashFloppy
 VER = v0.9.19a
+PYTHON = python2
 
 SUBDIRS += src bootloader reloader
 
@@ -16,16 +17,18 @@ all:
 		Reloader.elf Reloader.bin Reloader.hex
 	srec_cat bootloader/Bootloader.hex -Intel src/$(PROJ).hex -Intel \
 	-o FF.hex -Intel
-	python ./scripts/mk_update.py src/$(PROJ).bin FF.upd
-	python ./scripts/mk_update.py bootloader/Bootloader.bin BL.rld
-	python ./scripts/mk_update.py reloader/Reloader.bin RL.upd
+	$(PYTHON) ./scripts/mk_update.py src/$(PROJ).bin FF.upd
+	$(PYTHON) ./scripts/mk_update.py bootloader/Bootloader.bin BL.rld
+	$(PYTHON) ./scripts/mk_update.py reloader/Reloader.bin RL.upd
+	$(PYTHON) ./scripts/dfu-convert.py -i FF.hex FF.dfu
 
 clean:
-	rm -f *.hex *.upd *.rld
+	rm -f *.hex *.upd *.rld *.dfu
 	$(MAKE) -f $(ROOT)/Rules.mk $@
 
 gotek: export gotek=y
 gotek: all
+	mv FF.dfu FF_Gotek-$(VER).dfu
 	mv FF.upd FF_Gotek-$(VER).upd
 	mv FF.hex FF_Gotek-$(VER).hex
 	mv BL.rld FF_Gotek-Bootloader-$(VER).rld
@@ -39,6 +42,7 @@ dist:
 	mkdir -p flashfloppy_$(VER)/reloader
 	$(MAKE) clean
 	$(MAKE) gotek
+	cp -a FF_Gotek-$(VER).dfu flashfloppy_$(VER)/
 	cp -a FF_Gotek-$(VER).upd flashfloppy_$(VER)/
 	cp -a FF_Gotek-$(VER).hex flashfloppy_$(VER)/
 	cp -a FF_Gotek-Reloader-$(VER).upd flashfloppy_$(VER)/reloader/

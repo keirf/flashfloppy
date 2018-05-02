@@ -9,4 +9,5 @@
 *.rej
 *.rld
 *.upd
+*.dfu
 /flashfloppy_*
