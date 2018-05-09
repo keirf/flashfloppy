@@ -487,6 +487,7 @@ static void read_ff_cfg(void)
                 : !strcmp(opts.arg, "gem") ? HOST_gem
                 : !strcmp(opts.arg, "memotech") ? HOST_memotech
                 : !strcmp(opts.arg, "ti99") ? HOST_ti99
+                : !strcmp(opts.arg, "uknc") ? HOST_uknc
                 : HOST_unspecified;
             break;
 
