@@ -23,7 +23,7 @@ all:
 	$(PYTHON) ./scripts/dfu-convert.py -i FF.hex FF.dfu
 
 clean:
-	rm -f *.hex *.upd *.rld *.dfu
+	rm -f *.hex *.upd *.rld *.dfu *.html
 	$(MAKE) -f $(ROOT)/Rules.mk $@
 
 gotek: export gotek=y
@@ -36,6 +36,10 @@ gotek: all
 
 touch: export touch=y
 touch: all
+
+HXC_FF_URL := https://www.github.com/keirf/HxC_FF_File_Selector
+HXC_FF_URL := $(HXC_FF_URL)/releases/download
+HXC_FF_VER := v1.70-ff
 
 dist:
 	rm -rf flashfloppy_*
@@ -52,10 +56,16 @@ dist:
 	cp -a README.md flashfloppy_$(VER)/
 	cp -a RELEASE_NOTES flashfloppy_$(VER)/
 	cp -a examples flashfloppy_$(VER)/
+	[ -e HxC_Compat_Mode-$(HXC_FF_VER).zip ] || \
+	wget -q --show-progress $(HXC_FF_URL)/$(HXC_FF_VER)/HxC_Compat_Mode-$(HXC_FF_VER).zip
+	rm -rf index.html
+	unzip -q HxC_Compat_Mode-$(HXC_FF_VER).zip
+	mv HxC_Compat_Mode flashfloppy_$(VER)
 	zip -r flashfloppy_$(VER).zip flashfloppy_$(VER)
 
 mrproper: clean
 	rm -rf flashfloppy_*
+	rm -rf HxC_Compat_Mode-$(HXC_FF_VER).zip
 
 endif
 

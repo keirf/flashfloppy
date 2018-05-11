@@ -11,3 +11,5 @@
 *.upd
 *.dfu
 /flashfloppy_*
+/index.html
+/HxC_Compat*
