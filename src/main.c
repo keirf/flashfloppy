@@ -1606,7 +1606,7 @@ static void maybe_show_version(void)
     /* Iterate through the dotted sections of the version number. */
     for (p = FW_VER; p != NULL; p = np ? np+1 : NULL) {
         np = strchr(p, '.');
-        memset(msg, sizeof(msg), ' ');
+        memset(msg, ' ', sizeof(msg));
         len = min_t(int, np ? np - p : strnlen(p, sizeof(msg)), sizeof(msg));
         memcpy(&msg[sizeof(msg) - len], p, len);
         led_7seg_write_string(msg);
