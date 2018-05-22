@@ -174,6 +174,7 @@ static void display_write_slot(bool_t nav_mode)
         : slot_type("adl") ? "ADL"
         : slot_type("adm") ? "ADM"
         : slot_type("mgt") ? "MGT"
+        : slot_type("fdi") ? "FDI"
         : slot_type("trd") ? "TRD"
         : slot_type("opd") ? "OPD"
         : slot_type("ssd") ? "SSD"
@@ -486,6 +487,7 @@ static void read_ff_cfg(void)
                 : !strcmp(opts.arg, "ensoniq") ? HOST_ensoniq
                 : !strcmp(opts.arg, "gem") ? HOST_gem
                 : !strcmp(opts.arg, "memotech") ? HOST_memotech
+                : !strcmp(opts.arg, "pc98") ? HOST_pc98
                 : !strcmp(opts.arg, "ti99") ? HOST_ti99
                 : !strcmp(opts.arg, "uknc") ? HOST_uknc
                 : HOST_unspecified;
