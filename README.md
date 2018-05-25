@@ -5,6 +5,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - ADF (Commodore Amiga)
   - ADM, ADL, ADF, DSD, SSD (Acorn DFS and ADFS)
   - DSK (Amstrad CPC, Spectrum +3, Sam Coupe)
+  - FDI (NEC PC-98)
   - IMG, IMA, DSK (IBM MFM Raw Sector)
   - MGT (Spectrum DISCiPLE/+D)
   - OPD (Spectrum Opus Discovery)
@@ -18,6 +19,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - Ensoniq (ASR, TS, etc)
   - General Music (S2, S3, S2R)
   - Memotech
+  - NEC PC-98
   - UKNC, DVK (Soviet PDP-11)
   - IBM PC and many others
 
