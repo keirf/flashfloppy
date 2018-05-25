@@ -676,6 +676,17 @@ static bool_t img_write_track(struct image *im)
     return (im->sync == SYNC_fm) ? fm_write_track(im) : mfm_write_track(im);
 }
 
+static void img_dump_info(struct image *im)
+{
+    printk("%s RAW IMG:\n", (im->sync == SYNC_fm) ? "FM" : "MFM");
+    printk(" rpm: %u, tracklen: %u, datarate: %u\n",
+           im->img.rpm, im->tracklen_bc, im->img.data_rate);
+    printk(" gap2: %u, gap3: %u, gap4a: %u, gap4: %u\n",
+           im->img.gap_2, im->img.gap_3, im->img.gap_4a, im->img.gap_4);
+    printk(" ticks_per_cell: %u, write_bc_ticks: %u\n",
+           im->ticks_per_cell, im->write_bc_ticks);
+}
+
 
 /*
  * MFM-Specific Handlers
@@ -746,6 +757,8 @@ static bool_t mfm_open(struct image *im)
     im->write_bc_ticks = sysclk_ms(1) / im->img.data_rate;
 
     im->sync = SYNC_mfm;
+
+    img_dump_info(im);
 
     return TRUE;
 }
@@ -1012,6 +1025,8 @@ static bool_t fm_open(struct image *im)
     im->write_bc_ticks = sysclk_ms(1) / im->img.data_rate;
 
     im->sync = SYNC_fm;
+
+    img_dump_info(im);
 
     return TRUE;
 }
