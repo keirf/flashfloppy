@@ -4,7 +4,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
 - Directly supports a wide range of image formats:
   - ADF (Commodore Amiga)
   - ADM, ADL, ADF, DSD, SSD (Acorn DFS and ADFS)
-  - DSK (Amstrad CPC, Spectrum +3, Sam Coupe)
+  - DSK (Amstrad CPC, Spectrum +3, Sam Coupe, Microbee)
   - FDI (NEC PC-98)
   - IMG, IMA, DSK (IBM MFM Raw Sector)
   - MGT (Spectrum DISCiPLE/+D)
