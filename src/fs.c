@@ -126,7 +126,7 @@ void F_truncate(FIL *fp)
 
 void F_lseek(FIL *fp, DWORD ofs)
 {
-    FRESULT fr = f_lseek(fp, ofs);
+    FRESULT fr;
 #if !FF_FS_READONLY
     if (!fp->dir_ptr) {
         /* File cannot be resized. Clip the seek offset. */

@@ -141,6 +141,12 @@ void image_open(struct image *im, const struct slot *slot)
     F_die(FR_BAD_IMAGE);
 }
 
+void image_extend(struct image *im)
+{
+    if (im->handler->extend && im->fp.dir_ptr && ff_cfg.extend_image)
+        im->handler->extend(im);
+}
+
 bool_t image_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {

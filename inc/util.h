@@ -55,6 +55,7 @@ struct slot {
     uint8_t attributes;
     uint32_t firstCluster;
     uint32_t size;
+    uint32_t dir_sect, dir_ptr;
 };
 void fatfs_from_slot(FIL *file, const struct slot *slot, BYTE mode);
 

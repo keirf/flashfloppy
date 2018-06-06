@@ -136,6 +136,7 @@ static inline struct write *get_write(struct image *im, uint16_t idx)
 
 struct image_handler {
     bool_t (*open)(struct image *im);
+    void (*extend)(struct image *im);
     void (*setup_track)(
         struct image *im, uint16_t track, uint32_t *start_pos);
     bool_t (*read_track)(struct image *im);
@@ -148,6 +149,9 @@ bool_t image_valid(FILINFO *fp);
 
 /* Open specified image file on mass storage device. */
 void image_open(struct image *im, const struct slot *slot);
+
+/* Extend a trunated image file. */
+void image_extend(struct image *im);
 
 /* Seek to given track and start reading track data at specified rotational
  * position (specified as number of SYSCLK ticks past the index mark).

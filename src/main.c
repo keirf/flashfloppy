@@ -348,6 +348,7 @@ static void slot_from_short_slot(
     slot->attributes = short_slot->attributes;
     slot->firstCluster = short_slot->firstCluster;
     slot->size = short_slot->size;
+    slot->dir_sect = slot->dir_ptr = 0;
 }
 
 static void fatfs_to_short_slot(
@@ -379,7 +380,8 @@ void fatfs_from_slot(FIL *file, const struct slot *slot, BYTE mode)
     file->obj.sclust = slot->firstCluster;
     file->obj.objsize = slot->size;
     file->flag = mode;
-    /* WARNING: dir_ptr, dir_sect are unknown. */
+    file->dir_sect = slot->dir_sect;
+    file->dir_ptr = (void *)slot->dir_ptr;
 }
 
 static void fatfs_to_slot(struct slot *slot, FIL *file, const char *name)
@@ -390,6 +392,8 @@ static void fatfs_to_slot(struct slot *slot, FIL *file, const char *name)
     slot->attributes = file->obj.attr;
     slot->firstCluster = file->obj.sclust;
     slot->size = file->obj.objsize;
+    slot->dir_sect = file->dir_sect;
+    slot->dir_ptr = (uint32_t)file->dir_ptr;
     snprintf(slot->name, sizeof(slot->name), "%s", name);
     if ((dot = strrchr(slot->name, '.')) != NULL) {
         snprintf(slot->type, sizeof(slot->type), "%s", dot+1);
@@ -636,6 +640,10 @@ static void read_ff_cfg(void)
             snprintf(ff_cfg.da_report_version,
                      sizeof(ff_cfg.da_report_version),
                      "%s", opts.arg);
+            break;
+
+        case FFCFG_extend_image:
+            ff_cfg.extend_image = !strcmp(opts.arg, "yes");
             break;
 
         }

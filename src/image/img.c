@@ -14,6 +14,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+static void img_extend(struct image *im);
 static void img_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos);
 static bool_t img_read_track(struct image *im);
@@ -536,6 +537,7 @@ const struct image_handler pc98fdi_image_handler = {
 
 const struct image_handler trd_image_handler = {
     .open = trd_open,
+    .extend = img_extend,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
@@ -552,6 +554,7 @@ const struct image_handler opd_image_handler = {
 
 const struct image_handler ssd_image_handler = {
     .open = ssd_open,
+    .extend = img_extend,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
@@ -560,6 +563,7 @@ const struct image_handler ssd_image_handler = {
 
 const struct image_handler dsd_image_handler = {
     .open = dsd_open,
+    .extend = img_extend,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
@@ -586,6 +590,18 @@ const struct image_handler ti99_image_handler = {
 /*
  * Generic Handlers
  */
+
+static void img_extend(struct image *im)
+{
+    unsigned int sz = (im->img.nr_sectors * sec_sz(im)
+                       * im->nr_sides * im->nr_cyls) + im->img.base_off;
+    if (f_size(&im->fp) >= sz)
+        return;
+    F_lseek(&im->fp, sz);
+    F_sync(&im->fp);
+    if (f_tell(&im->fp) != sz)
+        F_die(FR_DISK_FULL);
+}
 
 static void img_seek_track(
     struct image *im, uint16_t track, unsigned int cyl, unsigned int side)
