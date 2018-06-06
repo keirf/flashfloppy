@@ -270,7 +270,7 @@ static bool_t pc_dos_open(struct image *im)
     F_lseek(&im->fp, 24); /* BPB_SecPerTrk */
     F_read(&im->fp, &spt, 2, NULL);
     spt = le16toh(spt);
-    if (spt == 0)
+    if ((spt == 0) || (spt > ARRAY_SIZE(im->img.sec_map)))
         goto fail;
     im->img.nr_sectors = spt;
     F_lseek(&im->fp, 26); /* BPB_NumHeads */
@@ -782,6 +782,12 @@ static bool_t mfm_open(struct image *im)
     uint32_t tracklen;
     unsigned int i;
 
+    if ((im->nr_sides < 1) || (im->nr_sides > 2)
+        || (im->nr_cyls < 1) || (im->nr_cyls > 254)
+        || (im->img.nr_sectors < 1)
+        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map))
+        return FALSE;
+
     im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: GAP_2;
     im->img.gap_3 = im->img.gap_3 ?: GAP_3[im->img.sec_no];
@@ -1072,6 +1078,12 @@ static bool_t fm_open(struct image *im)
 {
     const uint8_t FM_GAP_3[] = { 27, 42, 58, 138, 255, 255, 255, 255 };
     uint32_t tracklen;
+
+    if ((im->nr_sides < 1) || (im->nr_sides > 2)
+        || (im->nr_cyls < 1) || (im->nr_cyls > 254)
+        || (im->img.nr_sectors < 1)
+        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map))
+        return FALSE;
 
     im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: FM_GAP_2;
