@@ -785,7 +785,7 @@ static bool_t mfm_open(struct image *im)
     if ((im->nr_sides < 1) || (im->nr_sides > 2)
         || (im->nr_cyls < 1) || (im->nr_cyls > 254)
         || (im->img.nr_sectors < 1)
-        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map))
+        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map)))
         return FALSE;
 
     im->img.rpm = im->img.rpm ?: 300;
@@ -1082,7 +1082,7 @@ static bool_t fm_open(struct image *im)
     if ((im->nr_sides < 1) || (im->nr_sides > 2)
         || (im->nr_cyls < 1) || (im->nr_cyls > 254)
         || (im->img.nr_sectors < 1)
-        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map))
+        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map)))
         return FALSE;
 
     im->img.rpm = im->img.rpm ?: 300;
