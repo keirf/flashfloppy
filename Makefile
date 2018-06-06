@@ -1,6 +1,6 @@
 
 PROJ = FlashFloppy
-VER = v0.9.19a
+VER = v0.9.20a
 PYTHON = python2
 
 SUBDIRS += src bootloader reloader

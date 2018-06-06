@@ -3,6 +3,15 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.20a - 6 June 2018
+ - New image types supported:
+   - IMG: UKNC/DVK (Soviet PDP-11 clones) (host=uknc)
+   - IMG/FDI: NEC PC-98 (host=pc98)
+   - IMG: Common retro IBM/PC formats work out of the box
+   - IMG: Detect disk layout from PC DOS BPB (host=pc-dos)
+ - Auto-extend truncated images (SSD, DSD, TRD images only)
+   - "image-extend=no" disables this feature
+
 ** v0.9.19a - 1 May 2018
  - Amiga: Support high-density disk images
    - ADF: 1760kB images
