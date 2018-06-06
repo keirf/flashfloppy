@@ -26,6 +26,7 @@ static bool_t fm_open(struct image *im);
 static bool_t fm_read_track(struct image *im);
 static bool_t fm_write_track(struct image *im);
 
+static bool_t pc_dos_open(struct image *im);
 static bool_t ti99_open(struct image *im);
 
 #define LAYOUT_interleaved 0
@@ -169,6 +170,13 @@ static bool_t img_open(struct image *im)
     case HOST_memotech:
         type = memotech_type;
         break;
+    case HOST_pc98:
+        type = pc98_type;
+        break;
+    case HOST_pc_dos:
+        if (pc_dos_open(im))
+            return TRUE;
+        goto fallback;
     case HOST_ti99:
         return ti99_open(im);
     case HOST_uknc:
@@ -176,9 +184,6 @@ static bool_t img_open(struct image *im)
         im->img.gap_4a = 27;
         im->img.post_crc_syncs = 1;
         return _img_open(im, FALSE, uknc_type);
-    case HOST_pc98:
-        type = pc98_type;
-        break;
     default:
         type = img_type;
         break;
@@ -188,6 +193,7 @@ static bool_t img_open(struct image *im)
     if (_img_open(im, TRUE, type))
         return TRUE;
 
+fallback:
     /* Fall back to default list. */
     memset(&im->img, 0, sizeof(im->img));
     return _img_open(im, TRUE, img_type);
@@ -242,6 +248,51 @@ static bool_t pc98fdi_open(struct image *im)
     /* Skip 4096-byte header. */
     im->img.base_off = le32toh(header.header_size);
     return _img_open(im, TRUE, NULL);
+}
+
+static bool_t pc_dos_open(struct image *im)
+{
+    uint16_t id, bps, spt, heads, tot_sec;
+
+    F_lseek(&im->fp, 510); /* BS_55AA */
+    F_read(&im->fp, &id, 2, NULL);
+    id = le16toh(id);
+    if (id != 0xaa55)
+        goto fail;
+    F_lseek(&im->fp, 11); /* BPB_BytsPerSec */
+    F_read(&im->fp, &bps, 2, NULL);
+    bps = le16toh(bps);
+    for (im->img.sec_no = 0; im->img.sec_no <= 6; im->img.sec_no++)
+        if (sec_sz(im) == bps)
+            break;
+    if (im->img.sec_no > 6) /* >8kB? */
+        goto fail;
+    F_lseek(&im->fp, 24); /* BPB_SecPerTrk */
+    F_read(&im->fp, &spt, 2, NULL);
+    spt = le16toh(spt);
+    if (spt == 0)
+        goto fail;
+    im->img.nr_sectors = spt;
+    F_lseek(&im->fp, 26); /* BPB_NumHeads */
+    F_read(&im->fp, &heads, 2, NULL);
+    heads = le16toh(heads);
+    if ((heads != 1) && (heads != 2))
+        goto fail;
+    im->nr_sides = heads;
+    F_lseek(&im->fp, 19); /* BPB_TotSec */
+    F_read(&im->fp, &tot_sec, 2, NULL);
+    tot_sec = le16toh(tot_sec);
+    im->nr_cyls = (tot_sec + im->img.nr_sectors*im->nr_sides - 1)
+        / (im->img.nr_sectors * im->nr_sides);
+    if (im->nr_cyls == 0)
+        goto fail;
+    im->img.interleave = 1;
+    im->img.sec_base = 1;
+    im->img.skew = 0;
+    return mfm_open(im);
+
+fail:
+    return FALSE;
 }
 
 static bool_t trd_open(struct image *im)
@@ -727,11 +778,13 @@ static void img_dump_info(struct image *im)
 
 static bool_t mfm_open(struct image *im)
 {
+    const uint8_t GAP_3[] = { 32, 54, 84, 116, 255, 255, 255, 255 };
     uint32_t tracklen;
     unsigned int i;
 
     im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: GAP_2;
+    im->img.gap_3 = im->img.gap_3 ?: GAP_3[im->img.sec_no];
     im->img.gap_4a = im->img.gap_4a ?: GAP_4A;
 
     im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
@@ -1017,10 +1070,12 @@ static bool_t mfm_write_track(struct image *im)
 
 static bool_t fm_open(struct image *im)
 {
+    const uint8_t FM_GAP_3[] = { 27, 42, 58, 138, 255, 255, 255, 255 };
     uint32_t tracklen;
 
     im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: FM_GAP_2;
+    im->img.gap_3 = im->img.gap_3 ?: FM_GAP_3[im->img.sec_no];
     im->img.gap_4a = im->img.gap_4a ?: FM_GAP_4A;
 
     im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
