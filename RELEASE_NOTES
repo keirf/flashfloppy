@@ -10,7 +10,7 @@
    - IMG: Common retro IBM/PC formats work out of the box
    - IMG: Detect disk layout from PC DOS BPB (host=pc-dos)
  - Auto-extend truncated images (SSD, DSD, TRD images only)
-   - "image-extend=no" disables this feature
+   - "extend-image=no" disables this feature
 
 ** v0.9.19a - 1 May 2018
  - Amiga: Support high-density disk images
