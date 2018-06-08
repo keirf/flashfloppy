@@ -491,6 +491,7 @@ static void read_ff_cfg(void)
                 : !strcmp(opts.arg, "ensoniq") ? HOST_ensoniq
                 : !strcmp(opts.arg, "gem") ? HOST_gem
                 : !strcmp(opts.arg, "memotech") ? HOST_memotech
+                : !strcmp(opts.arg, "msx") ? HOST_msx
                 : !strcmp(opts.arg, "pc98") ? HOST_pc98
                 : !strcmp(opts.arg, "pc-dos") ? HOST_pc_dos
                 : !strcmp(opts.arg, "ti99") ? HOST_ti99
