@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.21a - 11 June 2018
+ - New default 6x13 font (Codec, by Chris Cannam)
+ - IMG: Support MSX (host=msx)
+ - HxC-Compat File Selectors:
+   - New font on Amiga and Atari ST
+   - Faster folder navigation on Amiga
+
 ** v0.9.20a - 6 June 2018
  - New image types supported:
    - IMG: UKNC/DVK (Soviet PDP-11 clones) (host=uknc)
