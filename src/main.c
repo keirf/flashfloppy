@@ -558,6 +558,7 @@ static void read_ff_cfg(void)
         case FFCFG_twobutton_action:
             ff_cfg.twobutton_action =
                 !strcmp(opts.arg, "rotary") ? TWOBUTTON_rotary
+                : !strcmp(opts.arg, "rotary-fast") ? TWOBUTTON_rotary_fast
                 : !strcmp(opts.arg, "eject") ? TWOBUTTON_eject
                 : TWOBUTTON_zero;
             break;
@@ -1185,6 +1186,8 @@ static bool_t choose_new_image(uint8_t init_b)
             time_t delay = time_ms(1000) / (changes + 1);
             if (delay < time_ms(50))
                 delay = time_ms(50);
+            if (ff_cfg.twobutton_action == TWOBUTTON_rotary_fast)
+                delay = time_ms(40);
             if (time_diff(last_change, time_now()) < delay)
                 continue;
             changes++;
@@ -1205,7 +1208,8 @@ static bool_t choose_new_image(uint8_t init_b)
             }
             i = cfg.slot_nr = 0;
             cfg_update(CFG_KEEP_SLOT_NR);
-            if (ff_cfg.twobutton_action == TWOBUTTON_rotary) {
+            if ((ff_cfg.twobutton_action == TWOBUTTON_rotary)
+                || (ff_cfg.twobutton_action == TWOBUTTON_rotary_fast)) {
                 /* Wait for button release, then update display, or
                  * immediately enter parent-dir (if we're in a subfolder). */
                 while (buttons)

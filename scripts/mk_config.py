@@ -34,7 +34,7 @@ def main(argv):
             elif opt == "rotary":
                 val = "ROT_" + val
             elif opt == "twobutton-action":
-                val = "TWOBUTTON_" + val
+                val = "TWOBUTTON_" + val.replace("-","_")
             elif opt == "nav-mode":
                 val = "NAVMODE_" + val
             else:
