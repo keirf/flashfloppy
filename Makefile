@@ -39,7 +39,7 @@ touch: all
 
 HXC_FF_URL := https://www.github.com/keirf/HxC_FF_File_Selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
-HXC_FF_VER := v1.70-ff
+HXC_FF_VER := v1.71-ff
 
 dist:
 	rm -rf flashfloppy_*
