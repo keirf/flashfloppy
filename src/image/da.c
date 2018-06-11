@@ -203,8 +203,6 @@ static bool_t da_read_track(struct image *im)
 
 static bool_t da_write_track(struct image *im)
 {
-    const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
-
     bool_t flush;
     struct da_status_sector *dass = &im->da.dass;
     struct write *write = get_write(im, im->wr_cons);
@@ -227,6 +225,8 @@ static bool_t da_write_track(struct image *im)
 
     while ((int16_t)(p - c) >= (3 + SEC_SZ + 2)) {
 
+        uint32_t _c = c;
+
         /* Scan for sync words and IDAM. Because of the way we sync we expect
          * to see only 2*4489 and thus consume only 3 words for the header. */
         if (be16toh(buf[c++ & bufmask]) != 0x4489)
@@ -234,19 +234,42 @@ static bool_t da_write_track(struct image *im)
         for (i = 0; i < 2; i++)
             if ((x = mfmtobin(buf[c++ & bufmask])) != 0xa1)
                 break;
-        if (x != 0xfb)
+
+        switch (x) {
+
+        case 0x01: /* Named Sector */ {
+            uint8_t header[5] = { 0xa1, 0xa1, 0xa1, 0x01, 0x00 };
+            sect = header[4] = mfmtobin(buf[c++ & bufmask]);
+            crc = crc16_ccitt(header, 5, 0xffff);
+            break;
+        }
+
+        case 0xfb: /* Ordinary Sector */ {
+            const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
+            sect = base / (IDAM + DAM);
+            crc = crc16_ccitt(header, 4, 0xffff);
+            break;
+        }
+
+        default: /* Unknown sector type */
             continue;
 
-        sect = base / (IDAM + DAM);
+        }
+
         if (sect > dass->nr_sec) {
             printk("D-A Bad Sector %u\n", sect);
             continue;
         }
 
+        if ((int16_t)(p - c) < (SEC_SZ + 2)) {
+            c = _c;
+            break;
+        }
+
         for (i = 0; i < (SEC_SZ + 2); i++)
             wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
 
-        crc = crc16_ccitt(wrbuf, SEC_SZ + 2, crc16_ccitt(header, 4, 0xffff));
+        crc = crc16_ccitt(wrbuf, SEC_SZ + 2, crc);
         if (crc != 0) {
             printk("D-A Bad CRC %04x, sector %u\n", crc, sect);
             continue;
