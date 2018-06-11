@@ -6,6 +6,8 @@
 ** v0.9.21a - 11 June 2018
  - New default 6x13 font (Codec, by Chris Cannam)
  - IMG: Support MSX (host=msx)
+ - Accelerate the stock Gotek buttons when using a rotary encoder
+   - FF.CFG: "twobutton-action = rotary-fast"
  - HxC-Compat File Selectors:
    - New font on Amiga and Atari ST
    - Faster folder navigation on Amiga
