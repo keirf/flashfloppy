@@ -20,11 +20,12 @@ def main(argv):
     prev = first - 1
     # Find font size
     for line in in_f:
-        match = re.match("^FONTBOUNDINGBOX ([0-9]+) ([0-9]+)", line)
+        match = re.match("^FONTBOUNDINGBOX ([0-9]+) ([0-9]+) ([0-9]+) ([-0-9]+)", line)
         if match:
             break
     width = int(match.group(1))
     height = int(match.group(2))
+    y_base = int(match.group(4))
     gap = 16 - height
     tgap = gap / 2
     bgap = gap - tgap
@@ -46,19 +47,31 @@ def main(argv):
         assert code == prev + 1
         prev = code
         # Scan for start of bitmap data
+        x_shift = 0
+        top_space = 0
+        bottom_space = 0
         for line in in_f:
+            bbx = re.match("^BBX ([0-9]+) ([0-9]+) ([0-9]+) ([-0-9]+)", line)
+            if bbx:
+                x_shift = int(bbx.group(3))
+                y_height = int(bbx.group(2))
+                y_shift = int(bbx.group(4))
+                bottom_space = y_shift - y_base
+                top_space = height - (bottom_space + y_height)
             if re.match("BITMAP", line):
                 break
         # Process bitmap data up to end-char
         char = []
-        for i in range(tgap):
+        top_space += tgap
+        for i in range(top_space):
             char.append(0)
         for line in in_f:
             if re.match("ENDCHAR", line):
                 break
             match = re.match("([0-9A-F]+)", line)
-            char.append(int(match.group(1), 16))
-        for i in range(bgap):
+            char.append(int(match.group(1), 16) >> x_shift)
+        bottom_space += bgap
+        for i in range(bottom_space):
             char.append(0)
         # Convert row-wise data to column-wise
         while char:
