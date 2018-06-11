@@ -760,7 +760,8 @@ static bool_t img_write_track(struct image *im)
 
 static void img_dump_info(struct image *im)
 {
-    printk("%s RAW IMG:\n", (im->sync == SYNC_fm) ? "FM" : "MFM");
+    printk("%s RAW IMG %u-%u-%u:\n", (im->sync == SYNC_fm) ? "FM" : "MFM",
+           im->nr_cyls, im->nr_sides, im->img.nr_sectors);
     printk(" rpm: %u, tracklen: %u, datarate: %u\n",
            im->img.rpm, im->tracklen_bc, im->img.data_rate);
     printk(" gap2: %u, gap3: %u, gap4a: %u, gap4: %u\n",
