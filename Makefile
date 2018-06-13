@@ -7,8 +7,10 @@ SUBDIRS += src bootloader reloader
 .PHONY: all clean flash start serial gotek touch
 
 ifneq ($(RULES_MK),y)
-PYTHON = python2
+
+.DEFAULT_GOAL := gotek
 export ROOT := $(CURDIR)
+
 all:
 	$(MAKE) -f $(ROOT)/Rules.mk all
 
