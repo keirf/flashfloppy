@@ -59,7 +59,7 @@ static unsigned int oled_prep_buffer(void);
 static volatile uint8_t refresh_count;
 
 /* I2C data buffer. Data is DMAed to the I2C peripheral. */
-static uint32_t buffer[256/4];
+static uint8_t buffer[256];
 
 /* Text buffer, rendered into I2C data and placed into buffer[]. */
 static char text[2][21];
@@ -150,7 +150,7 @@ static void emit8(uint8_t **p, uint8_t val, uint8_t signals)
 /* Snapshot text buffer into the command buffer. */
 static unsigned int lcd_prep_buffer(void)
 {
-    uint8_t *q = (uint8_t *)buffer;
+    uint8_t *q = buffer;
     unsigned int i, j;
 
     /* We transmit complete display on every DMA. */
@@ -162,7 +162,7 @@ static unsigned int lcd_prep_buffer(void)
             emit8(&q, text[i][j], _RS);
     }
 
-    return q - (uint8_t *)buffer;
+    return q - buffer;
 }
 
 static void IRQ_dma1_ch4_tc(void)
@@ -410,13 +410,13 @@ bool_t lcd_init(void)
     write4(2 << 4);
 
     /* More initialisation from the datasheet. Send by DMA. */
-    p = (uint8_t *)buffer;
+    p = buffer;
     emit8(&p, CMD_FUNCTIONSET | FS_2LINE, 0);
     emit8(&p, CMD_DISPLAYCTL, 0);
     emit8(&p, CMD_ENTRYMODE | 2, 0);
     emit8(&p, CMD_DISPLAYCTL | 4, 0); /* display on */
     i2c->cr2 |= I2C_CR2_DMAEN;
-    dma_start(p - (uint8_t *)buffer);
+    dma_start(p - buffer);
     
     /* Wait for DMA engine to initialise RAM, then turn on backlight. */
     if (!reinit) {
@@ -443,7 +443,7 @@ static void oled_convert_text_row_6x13(char *pc)
 {
     unsigned int i, c;
     const uint8_t *p;
-    uint8_t *q = (uint8_t *)buffer;
+    uint8_t *q = buffer;
     const unsigned int w = 6;
 
     q[0] = q[128] = 0;
@@ -464,21 +464,21 @@ static void oled_convert_text_row_6x13(char *pc)
 }
 
 #ifdef font_extra
-extern const uint32_t oled_font_8x16[];
+extern const uint8_t oled_font_8x16[];
 static void oled_convert_text_row_8x16(char *pc)
 {
     unsigned int i, c;
-    const uint32_t *p;
-    uint32_t *q = buffer;
+    const uint8_t *p;
+    uint8_t *q = buffer;
+    const unsigned int w = 8;
 
     for (i = 0; i < lcd_columns; i++) {
         if ((c = *pc++ - 0x20) > 0x5e)
             c = '.' - 0x20;
-        p = &oled_font_8x16[c * 4];
-        *q++ = *p++;
-        *q++ = *p++;
-        q[32-2] = *p++;
-        q[32-1] = *p++;
+        p = &oled_font_8x16[c * w * 2];
+        memcpy(q, p, w);
+        memcpy(q+128, p+w, w);
+        q += w;
     }
 }
 #endif
@@ -555,7 +555,7 @@ static unsigned int oled_prep_buffer(void)
         while (i2c->cr1 & I2C_CR1_STOP)
             continue;
         /* Kick off new I2C transaction. */
-        return oled_start_i2c((uint8_t *)buffer);
+        return oled_start_i2c(buffer);
     }
 
     /* Convert one row of text[] into buffer[] writes. */
@@ -592,7 +592,7 @@ static void oled_init(void)
      * utilising alternate display lines (which is a sane fallback). 
      * NB. 128x64 displays may have I2C address 0x3c same as 128x32 display. */
 
-    uint8_t *p = (uint8_t *)buffer;
+    uint8_t *p = buffer;
 
     /* Disable I2C (currently in Standard Mode). */
     i2c->cr1 = 0;
@@ -616,7 +616,7 @@ static void oled_init(void)
 
     /* Send the initialisation command sequence by DMA. */
     i2c->cr2 |= I2C_CR2_DMAEN;
-    dma_start(p - (uint8_t *)buffer);
+    dma_start(p - buffer);
 }
 
 /*

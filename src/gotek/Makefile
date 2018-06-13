@@ -17,4 +17,4 @@ usb%.o: CFLAGS += -Istm32_usbh_msc/inc/ -include usbh_conf.h
 	$(PYTHON) $(ROOT)/scripts/mk_font.py $< $*
 
 clean::
-	rm -f oled_font_6x13.c
+	rm -f oled_font_*.c
