@@ -29,7 +29,6 @@ def main(argv):
     gap = 16 - height
     tgap = gap / 2
     bgap = gap - tgap
-    print "Font: %ux%u" % (width, height)
     out_f.write("const uint8_t %s[] = {\n" % argv[2])
     for line in in_f:
         # Look for a new character encoding

@@ -25,8 +25,8 @@ SUBDIRS-$(touch) += touch
 
 flash_cfg.o: ff_cfg_defaults.h
 
-ff_cfg_defaults.h: ../examples/FF.CFG
-	python ../scripts/mk_config.py $< $@
+ff_cfg_defaults.h: $(ROOT)/examples/FF.CFG
+	$(PYTHON) $(ROOT)/scripts/mk_config.py $< $@
 
 clean::
 	rm -f ff_cfg_defaults.h

@@ -1,26 +1,16 @@
 
 PROJ = FlashFloppy
 VER = v0.9.21a
-PYTHON = python2
 
 SUBDIRS += src bootloader reloader
 
 .PHONY: all clean flash start serial gotek touch
 
 ifneq ($(RULES_MK),y)
+PYTHON = python2
 export ROOT := $(CURDIR)
 all:
-	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
-	bootloader=y $(MAKE) -C bootloader -f $(ROOT)/Rules.mk \
-		Bootloader.elf Bootloader.bin Bootloader.hex
-	reloader=y $(MAKE) -C reloader -f $(ROOT)/Rules.mk \
-		Reloader.elf Reloader.bin Reloader.hex
-	srec_cat bootloader/Bootloader.hex -Intel src/$(PROJ).hex -Intel \
-	-o FF.hex -Intel
-	$(PYTHON) ./scripts/mk_update.py src/$(PROJ).bin FF.upd
-	$(PYTHON) ./scripts/mk_update.py bootloader/Bootloader.bin BL.rld
-	$(PYTHON) ./scripts/mk_update.py reloader/Reloader.bin RL.upd
-	$(PYTHON) ./scripts/dfu-convert.py -i FF.hex FF.dfu
+	$(MAKE) -f $(ROOT)/Rules.mk all
 
 clean:
 	rm -f *.hex *.upd *.rld *.dfu *.html
@@ -66,6 +56,21 @@ dist:
 mrproper: clean
 	rm -rf flashfloppy_*
 	rm -rf HxC_Compat_Mode-$(HXC_FF_VER).zip
+
+else
+
+all:
+	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
+	bootloader=y $(MAKE) -C bootloader -f $(ROOT)/Rules.mk \
+		Bootloader.elf Bootloader.bin Bootloader.hex
+	reloader=y $(MAKE) -C reloader -f $(ROOT)/Rules.mk \
+		Reloader.elf Reloader.bin Reloader.hex
+	srec_cat bootloader/Bootloader.hex -Intel src/$(PROJ).hex -Intel \
+	-o FF.hex -Intel
+	$(PYTHON) ./scripts/mk_update.py src/$(PROJ).bin FF.upd
+	$(PYTHON) ./scripts/mk_update.py bootloader/Bootloader.bin BL.rld
+	$(PYTHON) ./scripts/mk_update.py reloader/Reloader.bin RL.upd
+	$(PYTHON) ./scripts/dfu-convert.py -i FF.hex FF.dfu
 
 endif
 
