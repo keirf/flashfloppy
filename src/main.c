@@ -270,6 +270,14 @@ static uint8_t rotary;
 #define B_SELECT 4
 static void button_timer_fn(void *unused)
 {
+    /* Rotary encoder outputs a Gray code, counting clockwise: 00-01-11-10. */
+    const uint32_t rotary_transitions[] = {
+        [ROT_none]    = 0x00000000, /* No encoder */
+        [ROT_full]    = 0x20000100, /* 4 transitions (full cycle) per detent */
+        [ROT_half]    = 0x24000018, /* 2 transitions (half cycle) per detent */
+        [ROT_quarter] = 0x24428118  /* 1 transition (quarter cyc) per detent */
+    };
+
     static uint16_t bl, br, bs;
     uint8_t b = 0;
 
@@ -300,25 +308,8 @@ static void button_timer_fn(void *unused)
     if (bs == 0)
         b |= B_SELECT;
 
-    switch (ff_cfg.rotary) {
-    case ROT_gray: {
-        /* Gray code, counting clockwise: 00-01-11-10. */
-        const uint32_t dirs = 0x24428118;
-        rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
-        b |= (dirs >> (rotary << 1)) & 3;
-        break;
-    }
-    case ROT_simple:
-        /* Rotary encoder: we look for a 1->0 edge (falling edge) on pin A. Pin
-         * B then tells us the direction (left or right). */
-        rotary <<= 1;
-        rotary |= gpio_read_pin(gpioc, 10);
-        if ((rotary & 0x03) == 0x02)
-            b |= (gpio_read_pin(gpioc, 11) == 0) ? B_LEFT : B_RIGHT;
-        break;
-    default:
-        break;
-    }
+    rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
+    b |= (rotary_transitions[ff_cfg.rotary & 3] >> (rotary << 1)) & 3;
 
     b = lcd_handle_backlight(b);
 
@@ -565,9 +556,11 @@ static void read_ff_cfg(void)
 
         case FFCFG_rotary:
             ff_cfg.rotary =
-                !strcmp(opts.arg, "gray") ? ROT_gray
+                !strcmp(opts.arg, "gray") ? ROT_quarter /* obsolete name */
+                : !strcmp(opts.arg, "quarter") ? ROT_quarter
+                : !strcmp(opts.arg, "half") ? ROT_half
                 : !strcmp(opts.arg, "none") ? ROT_none
-                : ROT_simple;
+                : ROT_full;
             break;
 
             /* DISPLAY */
@@ -1710,8 +1703,7 @@ int main(void)
 
     usbh_msc_init();
 
-    if (ff_cfg.rotary == ROT_gray)
-        rotary = (gpioc->idr >> 10) & 3;
+    rotary = (gpioc->idr >> 10) & 3;
     timer_init(&button_timer, button_timer_fn, NULL);
     timer_set(&button_timer, time_now());
 

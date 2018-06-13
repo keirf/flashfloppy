@@ -89,9 +89,10 @@ struct __packed ff_cfg {
 #define DISPLAY_oled_128x32_narrow (DISPLAY_oled | DISPLAY_narrow)
     uint8_t display_type;
     bool_t _unused0;
-#define ROT_none   0
-#define ROT_simple 1
-#define ROT_gray   2
+#define ROT_none    0
+#define ROT_full    1
+#define ROT_half    3
+#define ROT_quarter 2
     uint8_t rotary;
     bool_t write_protect;
     uint16_t nav_scroll_rate;
