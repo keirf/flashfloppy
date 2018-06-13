@@ -97,7 +97,7 @@ build.o: $(OBJS)
 	$(CC) $(AFLAGS) -c $< -o $@
 
 clean:: $(addprefix _clean_,$(SUBDIRS) $(SUBDIRS-n) $(SUBDIRS-))
-	rm -f *~ *.o *.elf *.hex *.bin *.ld $(DEPS)
+	rm -f *.orig *.rej *~ *.o *.elf *.hex *.bin *.ld $(DEPS)
 _clean_%: FORCE
 	$(MAKE) -f $(ROOT)/Rules.mk -C $* clean
 
