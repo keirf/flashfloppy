@@ -13,8 +13,8 @@ SUBDIRS += stm32_usbh_msc
 
 usb%.o: CFLAGS += -Istm32_usbh_msc/inc/ -include usbh_conf.h
 
-%.c: $(ROOT)/fonts/%.bdf
-	$(PYTHON) $(ROOT)/scripts/mk_font.py $< $*
+oled_font_%.c: $(ROOT)/fonts/%.bdf
+	$(PYTHON) $(ROOT)/scripts/mk_font.py $< oled_font_$*
 
 clean::
 	rm -f oled_font_*.c
