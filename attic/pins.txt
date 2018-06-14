@@ -1,0 +1,119 @@
+Floppy:
+-------
+GPIn: (all must be 5v tolerant, *=not)
+ PB0*  DIR
+ PA1*  STEP
+ PA0*  SELA
+ PA3*  SELB  [Enhanced Boards only]
+ PB9   WGATE
+ PB4   SIDE
+ PA15  MOTOR [Enhanced Boards only]
+GPOut:
+ PB7   CHNG
+ PB8   INDEX
+ PB6   TRK0
+ PB5   WRPROT
+ PB3   RDY
+TimerOut:
+ PA7   RDATA (Timer3/2, UP:DMA1/3)
+TimerIn: (must be 5v tolerant)
+ PA8   WDATA (Timer1/1, CC1:DMA1/2)
+
+Debug Console:
+--------------
+USART1: (Rx:DMA1/5, Tx:DMA1/4)
+ PA9   TX
+ PA10  RX
+
+Enhanced Gotek Pin Assignments:
+-------------------------------
+GPIn:
+ PA3     SELB (if unused, connect to VDD/3.3v)
+ PA4     USB_ENA (active-low push-pull output to power switch)
+ PA5     USB_FAULT (active-low open-drain signal from power switch)
+ PA15    MOTOR (connect to floppy pin 16, and to 5v via 1K)
+ PC15-12 Board ID (connect to VSS/GND)
+
+Jumpers & Switches:
+-------------------
+All are OFF=floating, ON=ground. Must be pulled up.
+GPIn:
+ PC6   JUMPER_JA / BT_SELECT
+ PA2   JUMPER_JB / SPEAKER
+ PB1   JUMPER_JC / INTF_SELECT
+ PC8   BT_LEFT
+ PC7   BT_RIGHT
+ PC10  J7_PIN1 / ROTARY_A(CLK)
+ PC11  J7_PIN2 / ROTARY_B(DT)
+ PA14  JTCK_SWCLK
+
+1602 LCD Display:
+-----------------
+I2C2: (Tx:DMA1/4, Rx:DMA1/5)
+ PB10  I2C_CLK_2
+ PB11  I2C_DAT_2
+
+LED Display:
+------------
+Custom I2C-like protocol.
+TimerOut:
+ PB10  DISP_DAT
+ PB11  DISP_CLK
+
+Serial Flash:
+-------------
+If unused, pull all high.
+GPOut:
+ PB12  CS
+SPI2: (Rx:DMA1/4, Tx:DMA1/5)
+ PB13  CK
+ PB14  MISO
+ PB15  MOSI
+
+USB:
+----
+Pull the GPIOs high, they are disconnected on USB setup anyway.
+ PA11  USB_DM
+ PA12  USB_DP
+
+Speaker (switching NPN BJT):
+----------------------------
+ PA2   Speaker Pulse, Active High
+
+Unused Pins
+-----------
+Input weak pull-up/down.
+ PA3-6,13,15    n/c   (floats) -- pull high
+ PB2            n/c   (floats) -- pull high
+ PC0-5,9,12-15  n/c   (floats) -- pull high
+
+Floppy drive 34-pin Shugart(-ish) interface. For reference:
+-----------------------------------------------------------
+  2: <- CHNG(Amiga) / -> DENSEL(PC)
+  3: oo (key)
+  4: oo
+  6: oo
+  8: <- INDEX
+ 10: -> SEL0
+ 12: -> SEL1
+ 14: -> SEL2
+ 16: -> MTR
+ 18: -> DIR
+ 20: -> STEP
+ 22: -> DKWD
+ 24: -> DKWE
+ 26: <- TRK0
+ 28: <- WRPROT
+ 30: <- DKRD
+ 32: -> SIDE
+ 34: <- CHNG(PC) / RDY(Amiga)
+All odd pins are ground.
+
+Supercard Pro / Kryoflux:
+-------------------------
+Drive the bus with high-drive octal line drivers ('244/'245).
+Pins 8/26-30/34 are configured as input, with 1k pull-ups.
+All other pins are *push-pull* outputs (not open collector!).
+Note pin 2 is a push-pull output, we must take care not to drive it to
+0V from the floppy side unless we are on a host (eg Amiga) which is
+expecting to receive a signal there.
