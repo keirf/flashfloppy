@@ -20,8 +20,7 @@ OBJS-$(debug) += console.o
 
 SUBDIRS += fatfs
 SUBDIRS += image
-SUBDIRS-$(gotek) += gotek
-SUBDIRS-$(touch) += touch
+SUBDIRS += gotek
 
 flash_cfg.o: ff_cfg_defaults.h
 

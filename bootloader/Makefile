@@ -19,5 +19,4 @@ OBJS += flash_cfg.o
 OBJS-$(debug) += console.o
 
 SUBDIRS += fatfs
-SUBDIRS-$(gotek) += gotek
-SUBDIRS-$(touch) += touch
+SUBDIRS += gotek

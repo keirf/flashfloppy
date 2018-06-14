@@ -27,7 +27,6 @@
 #include "timer.h"
 #include "fs.h"
 #include "floppy.h"
-#include "touch_panel.h"
 #include "config.h"
 
 /*

@@ -142,8 +142,6 @@ extern uint8_t display_mode;
 void speaker_init(void);
 void speaker_pulse(void);
 
-#ifdef BUILD_GOTEK
-
 /* Gotek: 3-digit 7-segment display */
 void led_7seg_init(void);
 void led_7seg_write_string(const char *p);
@@ -166,33 +164,7 @@ void usbh_msc_process(void);
 bool_t usbh_msc_connected(void);
 bool_t usbh_msc_readonly(void);
 
-#else /* !BUILD_GOTEK */
-
-static inline void led_7seg_init(void) {}
-static inline void led_7seg_write_string(const char *p) {}
-static inline void led_7seg_write_decimal(unsigned int val) {}
-static inline void led_7seg_display_setting(bool_t enable) {}
-static inline int led_7seg_nr_digits(void) { return 0; }
-
-static inline bool_t lcd_init(void) { return FALSE; }
-static inline void lcd_clear(void) {}
-static inline void lcd_write(int col, int row, int min, const char *str) {}
-static inline void lcd_backlight(bool_t on) {};
-static inline void lcd_sync(void) {}
-
-static inline void usbh_msc_init(void) {}
-static inline void usbh_msc_buffer_set(uint8_t *buf) {}
-static inline void usbh_msc_process(void) {}
-static inline bool_t usbh_msc_connected(void) { return FALSE; }
-
-#endif /* !BUILD_GOTEK */
-
 extern uint8_t board_id;
-
-/* Touch board revisions */
-#define BRDREV_MM150 0
-#define BRDREV_TB160 1
-#define BRDREV_LC150 7
 
 /* Gotek board revisions */
 #define BRDREV_Gotek_standard 0xf

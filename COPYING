@@ -1,6 +1,5 @@
 All code is licensed as follows, with these exceptions:
  - src/fatfs/*
- - src/touch/ili9341.c
  - src/gotek/stm32_usbh_msc/*
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 This is free and unencumbered software released into the public domain.
@@ -45,18 +44,6 @@ This software is provided by the copyright holder and contributors "AS IS"
 and any warranties related to this software are DISCLAIMED.
 The copyright owner or contributors be NOT LIABLE for any damages caused
 by use of this software.
--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-
-All code within src/touch/ili9341.c is licensed as follows:
--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-Adafruit invests time and resources providing this open source code,
-please support Adafruit and open-source hardware by purchasing
-products from Adafruit!
-
-Written by Limor Fried/Ladyada for Adafruit Industries.
-Modified and adapted for STM32 by Keir Fraser <keir.xen@gmail.com>
-MIT license, all text above must be included in any redistribution
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 

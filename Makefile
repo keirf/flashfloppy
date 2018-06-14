@@ -4,7 +4,7 @@ VER = v0.9.21a
 
 SUBDIRS += src bootloader reloader
 
-.PHONY: all clean flash start serial gotek touch
+.PHONY: all clean flash start serial gotek
 
 ifneq ($(RULES_MK),y)
 
@@ -25,9 +25,6 @@ gotek: all
 	mv FF.hex FF_Gotek-$(VER).hex
 	mv BL.rld FF_Gotek-Bootloader-$(VER).rld
 	mv RL.upd FF_Gotek-Reloader-$(VER).upd
-
-touch: export touch=y
-touch: all
 
 HXC_FF_URL := https://www.github.com/keirf/HxC_FF_File_Selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download

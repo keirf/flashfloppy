@@ -108,11 +108,7 @@ struct exti_irq {
     uint16_t pr_mask; /* != 0: irq- and exti-pending flags are cleared */
 };
 
-#if BUILD_TOUCH
-#include "touch/floppy.c"
-#elif BUILD_GOTEK
 #include "gotek/floppy.c"
-#endif
 
 #define pin_unset 17
 const static uint8_t *fintf, fintfs[][outp_nr] = {

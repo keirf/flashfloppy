@@ -28,9 +28,6 @@ ifeq ($(bootloader),y)
 FLAGS += -DBOOTLOADER=1
 endif
 
-FLAGS-$(gotek) += -DBUILD_GOTEK=1
-FLAGS-$(touch) += -DBUILD_TOUCH=1
-
 FLAGS += -MMD -MF .$(@F).d
 DEPS = .*.d
 

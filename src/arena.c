@@ -9,11 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if BUILD_GOTEK
 #define ram_kb 64
-#elif BUILD_TOUCH
-#define ram_kb 20
-#endif
 
 #define ram_bytes (ram_kb*1024)
 
