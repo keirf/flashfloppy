@@ -59,7 +59,7 @@ static unsigned int oled_prep_buffer(void);
 static volatile uint8_t refresh_count;
 
 /* I2C data buffer. Data is DMAed to the I2C peripheral. */
-static uint8_t buffer[256];
+static uint8_t buffer[256] __aligned(4);
 
 /* Text buffer, rendered into I2C data and placed into buffer[]. */
 static char text[2][21];
