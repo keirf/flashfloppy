@@ -20,3 +20,4 @@ OBJS-$(debug) += console.o
 
 SUBDIRS += fatfs
 SUBDIRS += gotek
+SUBDIRS += usb

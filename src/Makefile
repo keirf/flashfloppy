@@ -21,6 +21,7 @@ OBJS-$(debug) += console.o
 SUBDIRS += fatfs
 SUBDIRS += image
 SUBDIRS += gotek
+SUBDIRS += usb
 
 flash_cfg.o: ff_cfg_defaults.h
 

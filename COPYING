@@ -1,6 +1,6 @@
 All code is licensed as follows, with these exceptions:
  - src/fatfs/*
- - src/gotek/stm32_usbh_msc/*
+ - src/usb/stm32_usbh_msc/*
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 This is free and unencumbered software released into the public domain.
 
@@ -47,7 +47,7 @@ by use of this software.
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 
-All code within src/gotek/stm32_usbh_msc/* is licensed as follows:
+All code within src/usb/stm32_usbh_msc/* is licensed as follows:
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 Copyright (C) 2015 STMicroelectronics International N.V.. All rights reserved.
 
