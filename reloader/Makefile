@@ -5,7 +5,6 @@ OBJS += fpec.o
 
 OBJS += cancellation.o
 OBJS += crc.o
-OBJS += display.o
 OBJS += vectors.o
 OBJS += fs.o
 OBJS += spi.o
@@ -18,6 +17,7 @@ OBJS += flash_cfg.o
 
 OBJS-$(debug) += console.o
 
+SUBDIRS += display
 SUBDIRS += fatfs
 SUBDIRS += gotek
 SUBDIRS += usb

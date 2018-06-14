@@ -142,14 +142,14 @@ extern uint8_t display_mode;
 void speaker_init(void);
 void speaker_pulse(void);
 
-/* Gotek: 3-digit 7-segment display */
+/* Display: 3-digit 7-segment display */
 void led_7seg_init(void);
 void led_7seg_write_string(const char *p);
 void led_7seg_write_decimal(unsigned int val);
 void led_7seg_display_setting(bool_t enable);
 int led_7seg_nr_digits(void);
 
-/* Gotek: I2C 16x2 LCD */
+/* Display: I2C 16x2 LCD */
 bool_t lcd_init(void);
 void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
@@ -157,7 +157,7 @@ void lcd_backlight(bool_t on);
 void lcd_sync(void);
 extern uint8_t lcd_columns, lcd_rows;
 
-/* Gotek: USB stack processing */
+/* USB stack processing */
 void usbh_msc_init(void);
 void usbh_msc_buffer_set(uint8_t *buf);
 void usbh_msc_process(void);

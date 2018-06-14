@@ -2,7 +2,6 @@ OBJS += arena.o
 OBJS += cancellation.o
 OBJS += config.o
 OBJS += crc.o
-OBJS += display.o
 OBJS += flash_cfg.o
 OBJS += vectors.o
 OBJS += floppy.o
@@ -18,6 +17,7 @@ OBJS += util.o
 
 OBJS-$(debug) += console.o
 
+SUBDIRS += display
 SUBDIRS += fatfs
 SUBDIRS += image
 SUBDIRS += gotek
