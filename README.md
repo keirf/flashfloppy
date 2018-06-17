@@ -16,6 +16,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - HFE, HFEv3 (Universal)
 - Pre-configured track layouts for Raw Sector Images:
   - Akai (S01, S20, S950)
+  - DEC (RX33, RX50)
   - Ensoniq (ASR, TS, etc)
   - General Music (S2, S3, S2R)
   - Memotech

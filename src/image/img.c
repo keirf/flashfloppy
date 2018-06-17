@@ -78,6 +78,9 @@ const static struct img_type {
     {  5, 2, 116, 1, 3, 1, 0, _C(80), _R(300) }, /* Akai DD:  5*1kB sectors */
     { 10, 2, 116, 1, 3, 1, 0, _C(80), _R(300) }, /* Akai HD: 10*1kB sectors */
     { 0 }
+}, dec_type[] = {
+    { 10, 1, 30, 1, 2, 1, 0, _C(80), _R(300) }, /* RX50 (400k) */
+    { 0 } /* RX33 (1.2MB) from default list */
 }, ensoniq_type[] = {
     { 10, 2, 30, 1, 2, 0, 0, _C(80), _R(300) },  /* Ensoniq 800kB */
     { 20, 2, 40, 1, 2, 0, 0, _C(80), _R(300) },  /* Ensoniq 1.6MB */
@@ -166,6 +169,9 @@ static bool_t img_open(struct image *im)
     case HOST_akai:
     case HOST_gem:
         type = akai_type;
+        break;
+    case HOST_dec:
+        type = dec_type;
         break;
     case HOST_ensoniq:
         type = ensoniq_type;

@@ -479,6 +479,7 @@ static void read_ff_cfg(void)
             ff_cfg.host =
                 !strcmp(opts.arg, "acorn") ? HOST_acorn
                 : !strcmp(opts.arg, "akai") ? HOST_akai
+                : !strcmp(opts.arg, "dec") ? HOST_dec
                 : !strcmp(opts.arg, "ensoniq") ? HOST_ensoniq
                 : !strcmp(opts.arg, "gem") ? HOST_gem
                 : !strcmp(opts.arg, "memotech") ? HOST_memotech
