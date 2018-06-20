@@ -24,8 +24,9 @@ static bool_t fm_write_track(struct image *im);
 static bool_t pc_dos_open(struct image *im);
 static bool_t ti99_open(struct image *im);
 
-#define LAYOUT_interleaved 0
-#define LAYOUT_sequential_reverse_side1 1
+#define LAYOUT_interleaved              0
+#define LAYOUT_interleaved_swap_sides   1
+#define LAYOUT_sequential_reverse_side1 2
 
 #define sec_sz(im) (128u << (im)->img.sec_no)
 
@@ -211,6 +212,7 @@ fallback:
 
 static bool_t d81_open(struct image *im)
 {
+    im->img.layout = LAYOUT_interleaved_swap_sides;
     return _img_open(im, TRUE, d81_type);
 }
 
@@ -699,6 +701,9 @@ static void img_seek_track(
     case LAYOUT_sequential_reverse_side1:
         im->img.trk_off = (side ? im->nr_cyls - cyl : cyl) * trk_len;
         break;
+    case LAYOUT_interleaved_swap_sides:
+        trk ^= im->nr_sides - 1;
+        /* fall through */
     default:
         im->img.trk_off = trk * trk_len;
         break;
