@@ -1,12 +1,7 @@
 /*
  * img.c
  * 
- * Sector image files for IBM/ISO track formats:
- *  IMG/IMA: IBM/PC and others
- *  ST:      Atari ST
- *  ADL/ADM: Acorn 8-bit ADFS
- *  OPD:     Spectrum Opus Discovery
- *  TRD:     Spectrum TR-DOS
+ * Sector image files for IBM/ISO track formats.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -77,6 +72,9 @@ const static struct img_type {
 }, akai_type[] = {
     {  5, 2, 116, 1, 3, 1, 0, _C(80), _R(300) }, /* Akai DD:  5*1kB sectors */
     { 10, 2, 116, 1, 3, 1, 0, _C(80), _R(300) }, /* Akai HD: 10*1kB sectors */
+    { 0 }
+}, d81_type[] = {
+    { 10, 2, 30, 1, 2, 1, 0, _C(80), _R(300) },
     { 0 }
 }, dec_type[] = {
     { 10, 1, 30, 1, 2, 1, 0, _C(80), _R(300) }, /* RX50 (400k) */
@@ -209,6 +207,11 @@ fallback:
     /* Fall back to default list. */
     memset(&im->img, 0, sizeof(im->img));
     return _img_open(im, TRUE, img_type);
+}
+
+static bool_t d81_open(struct image *im)
+{
+    return _img_open(im, TRUE, d81_type);
 }
 
 static bool_t st_open(struct image *im)
@@ -560,6 +563,14 @@ static bool_t ti99_open(struct image *im)
 
 const struct image_handler img_image_handler = {
     .open = img_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler d81_image_handler = {
+    .open = d81_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,

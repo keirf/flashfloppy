@@ -13,6 +13,7 @@ extern const struct image_handler adf_image_handler;
 extern const struct image_handler hfe_image_handler;
 extern const struct image_handler img_image_handler;
 extern const struct image_handler st_image_handler;
+extern const struct image_handler d81_image_handler;
 extern const struct image_handler dsk_image_handler;
 extern const struct image_handler da_image_handler;
 extern const struct image_handler adfs_image_handler;
@@ -37,7 +38,8 @@ bool_t image_valid(FILINFO *fp)
     filename_extension(fp->fname, ext, sizeof(ext));
     if (!strcmp(ext, "adf")) {
         return (ff_cfg.host == HOST_acorn) || !(fp->fsize % (11*512));
-    } else if (!strcmp(ext, "dsk")
+    } else if (!strcmp(ext, "d81")
+               || !strcmp(ext, "dsk")
                || !strcmp(ext, "hfe")
                || !strcmp(ext, "img")
                || !strcmp(ext, "ima")
@@ -106,6 +108,7 @@ void image_open(struct image *im, const struct slot *slot)
     /* Use the extension as a hint to the correct image handler. */
     hint = (!strcmp(ext, "adf") ? ((ff_cfg.host == HOST_acorn)
                                    ? &adfs_image_handler : &adf_image_handler)
+            : !strcmp(ext, "d81") ? &d81_image_handler
             : !strcmp(ext, "dsk") ? &dsk_image_handler
             : !strcmp(ext, "hfe") ? &hfe_image_handler
             : !strcmp(ext, "img") ? &img_image_handler

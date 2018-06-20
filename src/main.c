@@ -166,6 +166,7 @@ static void display_write_slot(bool_t nav_mode)
     }
     type = (cfg.slot.attributes & AM_DIR) ? "DIR"
         : slot_type("adf") ? "ADF"
+        : slot_type("d81") ? "D81"
         : slot_type("dsk") ? "DSK"
         : slot_type("hfe") ? "HFE"
         : slot_type("img") ? "IMG"
