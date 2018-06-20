@@ -3,7 +3,7 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
-** v0.9.22a - forthcoming
+** v0.9.22a - 20 June 2018
  - OLED: Support SH1106 controller (1.3-inch displays)
    - FF.CFG: display-type = oled-128x64-sh1106
  - Support a wider range of rotary encoders
