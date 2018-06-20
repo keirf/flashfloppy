@@ -582,6 +582,8 @@ static void read_ff_cfg(void)
                     ff_cfg.display_type |= DISPLAY_rotate;
                 if (!strcmp(p, "narrow"))
                     ff_cfg.display_type |= DISPLAY_narrow;
+                if (!strcmp(p, "sh1106"))
+                    ff_cfg.display_type |= DISPLAY_sh1106;
             }
             break;
         }

@@ -510,16 +510,25 @@ static unsigned int oled_queue_cmds(
 
 static unsigned int oled_start_i2c(uint8_t *buf)
 {
-    static const uint8_t setup_addr_cmds[] = {
+    static const uint8_t ssd1306_addr_cmds[] = {
         0x20, 0,      /* horizontal addressing mode */
         0x21, 0, 127, /* column address range: 0-127 */
         0x22, 0, 3    /* page address range: 0-3 */
+    }, sh1106_addr_cmds[] = {
+        0x02, 0x10,   /* column address: 2 */
     };
 
     uint8_t *p = buf;
 
     /* Set up the display address range. */
-    p += oled_queue_cmds(p, setup_addr_cmds, sizeof(setup_addr_cmds));
+    if (ff_cfg.display_type & DISPLAY_sh1106) {
+        p += oled_queue_cmds(p, sh1106_addr_cmds, sizeof(sh1106_addr_cmds));
+        /* Page address: according to oled_row. */
+        *p++ = 0x80;
+        *p++ = 0xb0 + oled_row;
+    } else {
+        p += oled_queue_cmds(p, ssd1306_addr_cmds, sizeof(ssd1306_addr_cmds));
+    }
 
     /* Display on/off according to backlight setting. */
     *p++ = 0x80;
@@ -527,7 +536,6 @@ static unsigned int oled_start_i2c(uint8_t *buf)
 
     /* All subsequent bytes are data bytes. */
     *p++ = 0x40;
-    oled_row = 0;
 
     /* Start the I2C transaction. */
     i2c->cr2 |= I2C_CR2_ITEVTEN;
@@ -536,14 +544,12 @@ static unsigned int oled_start_i2c(uint8_t *buf)
     return p - buf;
 }
 
-/* Snapshot text buffer into the bitmap buffer. */
-static unsigned int oled_prep_buffer(void)
+static unsigned int ssd1306_prep_buffer(void)
 {
     /* If we have completed a complete fill of the OLED display, start a new 
      * I2C transaction. The OLED display seems to occasionally silently lose 
      * a byte and then we lose sync with the display address. */
     if (oled_row == 2) {
-        refresh_count++;
         /* Wait for BTF. */
         while (!(i2c->sr1 & I2C_SR1_BTF)) {
             /* Any errors: bail and leave it to the Error ISR. */
@@ -555,6 +561,8 @@ static unsigned int oled_prep_buffer(void)
         while (i2c->cr1 & I2C_CR1_STOP)
             continue;
         /* Kick off new I2C transaction. */
+        oled_row = 0;
+        refresh_count++;
         return oled_start_i2c(buffer);
     }
 
@@ -562,6 +570,49 @@ static unsigned int oled_prep_buffer(void)
     oled_convert_text_row(text[oled_row++]);
 
     return 256;
+}
+
+static unsigned int sh1106_prep_buffer(void)
+{
+    uint8_t *p = buffer;
+
+    /* Convert one row of text[] into buffer[] writes. */
+    oled_convert_text_row(text[oled_row/2]);
+    if (!(oled_row & 1))
+        memcpy(&buffer[128], &buffer[0], 128);
+
+    /* Wait for BTF. */
+    while (!(i2c->sr1 & I2C_SR1_BTF)) {
+        /* Any errors: bail and leave it to the Error ISR. */
+        if (i2c->sr1 & I2C_SR1_ERRORS)
+            return 0;
+    }
+    /* Send STOP. Clears SR1_TXE and SR1_BTF. */
+    i2c->cr1 |= I2C_CR1_STOP;
+    while (i2c->cr1 & I2C_CR1_STOP)
+        continue;
+
+    /* Every 8 rows needs a new page address and hence new I2C transaction. */
+    p += oled_start_i2c(p);
+
+    /* Patch the data bytes onto the end of the address setup sequence. */
+    memcpy(p, &buffer[128], 128);
+    p += 128;
+
+    if (++oled_row == 4) {
+        oled_row = 0;
+        refresh_count++;
+    }
+
+    return p - buffer;
+}
+
+/* Snapshot text buffer into the bitmap buffer. */
+static unsigned int oled_prep_buffer(void)
+{
+    return (ff_cfg.display_type & DISPLAY_sh1106)
+        ? sh1106_prep_buffer()
+        : ssd1306_prep_buffer();
 }
 
 static void oled_init(void)
@@ -612,6 +663,7 @@ static void oled_init(void)
     p += oled_queue_cmds(p, cmds, sizeof(rot_cmds));
 
     /* Start off the I2C transaction. */
+    oled_row = 0;
     p += oled_start_i2c(p);
 
     /* Send the initialisation command sequence by DMA. */
