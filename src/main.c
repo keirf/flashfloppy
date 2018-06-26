@@ -585,6 +585,8 @@ static void read_ff_cfg(void)
                     ff_cfg.display_type |= DISPLAY_narrow;
                 if (!strcmp(p, "sh1106"))
                     ff_cfg.display_type |= DISPLAY_sh1106;
+                if (!strcmp(p, "128x64"))
+                    ff_cfg.display_type |= DISPLAY_oled_128x64;
             }
             break;
         }
