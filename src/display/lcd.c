@@ -157,9 +157,9 @@ static unsigned int lcd_prep_buffer(void)
     /* We transmit complete display on every DMA. */
     refresh_count++;
 
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < lcd_rows; i++) {
         emit8(&q, CMD_SETDDRADDR | (i*64), 0);
-        for (j = 0; j < 16; j++)
+        for (j = 0; j < lcd_columns; j++)
             emit8(&q, text[i][j], _RS);
     }
 
@@ -360,12 +360,15 @@ bool_t lcd_init(void)
             : ((a&~1) == OLED_ADDR);
 
         lcd_rows = 2;
-        lcd_columns = 16;
 
         if (is_oled_display) {
             oled_height = (ff_cfg.display_type & DISPLAY_oled_64) ? 64 : 32;
-            if (ff_cfg.oled_font == FONT_6x13)
-                lcd_columns = (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
+            lcd_columns = (ff_cfg.oled_font == FONT_8x16) ? 16
+                : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
+        } else {
+            lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
+            lcd_columns = max_t(uint8_t, lcd_columns, 16);
+            lcd_columns = min_t(uint8_t, lcd_columns, 40);
         }
 
         printk("I2C: %s found at 0x%02x\n",

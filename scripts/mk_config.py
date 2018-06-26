@@ -28,7 +28,19 @@ def main(argv):
             elif opt == "oled-font":
                 val = "FONT_" + val
             elif opt == "display-type":
-                val = "DISPLAY_" + val.replace("-","_")
+                opts = []
+                for x in val.split("-"):
+                    size = re.match("([0-9]+)x([0-9]+)", x)
+                    if size:
+                        w = int(size.group(1))
+                        h = int(size.group(2))
+                        if w == 128 and h == 64:
+                            opts += ['DISPLAY_oled_64']
+                        elif h == 2 and w >= 16 and w <= 40:
+                            opts += ['DISPLAY_lcd_columns(%d)' % w]
+                    else:
+                        opts += ['DISPLAY_' + x]
+                val = '|'.join(opts)
             elif opt == "image-on-startup":
                 val = "IMGS_" + val
             elif opt == "rotary":

@@ -568,25 +568,34 @@ static void read_ff_cfg(void)
             /* DISPLAY */
 
         case FFCFG_display_type: {
-            char *p, *q;
+            char *p, *q, *r;
             ff_cfg.display_type = DISPLAY_auto;
             for (p = opts.arg; *p != '\0'; p = q) {
                 for (q = p; *q && *q != '-'; q++)
                     continue;
                 if (*q == '-')
                     *q++ = '\0';
-                if (!strcmp(p, "lcd"))
+                if (!strcmp(p, "lcd")) {
                     ff_cfg.display_type = DISPLAY_lcd;
-                if (!strcmp(p, "oled"))
+                } else if (!strcmp(p, "oled")) {
                     ff_cfg.display_type = DISPLAY_oled;
-                if (!strcmp(p, "rotate"))
+                } else if (!strcmp(p, "rotate")) {
                     ff_cfg.display_type |= DISPLAY_rotate;
-                if (!strcmp(p, "narrow"))
+                } else if (!strcmp(p, "narrow")) {
                     ff_cfg.display_type |= DISPLAY_narrow;
-                if (!strcmp(p, "sh1106"))
+                } else if (!strcmp(p, "sh1106")) {
                     ff_cfg.display_type |= DISPLAY_sh1106;
-                if (!strcmp(p, "128x64"))
-                    ff_cfg.display_type |= DISPLAY_oled_128x64;
+                } else if ((r = strchr(p, 'x')) != NULL) {
+                    unsigned int w, h;
+                    *r++ = '\0';
+                    w = strtol(p, NULL, 10);
+                    h = strtol(r, NULL, 10);
+                    if ((ff_cfg.display_type & DISPLAY_oled) && (h == 64)) {
+                        ff_cfg.display_type |= DISPLAY_oled_64;
+                    } else if (ff_cfg.display_type & DISPLAY_lcd) {
+                        ff_cfg.display_type |= DISPLAY_lcd_columns(w);
+                    }
+                }
             }
             break;
         }
