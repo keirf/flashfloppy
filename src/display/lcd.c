@@ -516,6 +516,45 @@ static unsigned int oled_queue_cmds(
     return p - buf;
 }
 
+static void oled_double_height(uint8_t *dst, uint8_t *src, uint8_t mask)
+{
+    const uint8_t tbl[] = {
+        0x00, 0x03, 0x0c, 0x0f, 0x30, 0x33, 0x3c, 0x3f,
+        0xc0, 0xc3, 0xcc, 0xcf, 0xf0, 0xf3, 0xfc, 0xff
+    };
+    uint8_t x, *p, *q;
+    unsigned int i;
+    if ((mask == 3) && (src == dst)) {
+        p = src + 128;
+        q = dst + 256;
+        for (i = 0; i < 128; i++) {
+            x = *--p;
+            *--q = tbl[x>>4];
+        }
+        p = src + 128;
+        for (i = 0; i < 128; i++) {
+            x = *--p;
+            *--q = tbl[x&15];
+        }
+    } else {
+        p = src;
+        q = dst;
+        if (mask & 1) {
+            for (i = 0; i < 128; i++) {
+                x = *p++;
+                *q++ = tbl[x&15];
+            }
+        }
+        if (mask & 2) {
+            p = src;
+            for (i = 0; i < 128; i++) {
+                x = *p++;
+                *q++ = tbl[x>>4];
+            }
+        }
+    }
+}
+
 static unsigned int oled_start_i2c(uint8_t *buf)
 {
     static const uint8_t ssd1306_addr_cmds[] = {
@@ -578,7 +617,14 @@ static unsigned int ssd1306_prep_buffer(void)
     }
 
     /* Convert one row of text[] into buffer[] writes. */
-    oled_convert_text_row(text[oled_row++&1]);
+    if (oled_height == 64) {
+        oled_convert_text_row(text[oled_row/2]);
+        oled_double_height(buffer, &buffer[(oled_row & 1) ? 128 : 0], 0x3);
+    } else {
+        oled_convert_text_row(text[oled_row]);
+    }
+
+    oled_row++;
 
     return 256;
 }
@@ -588,9 +634,15 @@ static unsigned int sh1106_prep_buffer(void)
     uint8_t *p = buffer;
 
     /* Convert one row of text[] into buffer[] writes. */
-    oled_convert_text_row(text[(oled_row/2)&1]);
-    if (!(oled_row & 1))
-        memcpy(&buffer[128], &buffer[0], 128);
+    if (oled_height == 64) {
+        oled_convert_text_row(text[oled_row/4]);
+        oled_double_height(&buffer[128], &buffer[(oled_row & 2) ? 128 : 0],
+                           (oled_row & 1) + 1);
+    } else {
+        oled_convert_text_row(text[oled_row/2]);
+        if (!(oled_row & 1))
+            memcpy(&buffer[128], &buffer[0], 128);
+    }
 
     /* Wait for BTF. */
     while (!(i2c->sr1 & I2C_SR1_BTF)) {
@@ -648,12 +700,7 @@ static void oled_init(void)
         0xc0,       /* com scan direction (default) */
     };
     const uint8_t *cmds;
-    uint8_t _cmds[2];
-    /* NB. Changes for 128x64 display: 0xa8, 63, 0xda, 0x12, 0x81, 0xcf. 
-     * Otherwise above settings create a double-height 128x32 viewport
-     * utilising alternate display lines (which is a sane fallback). 
-     * NB. 128x64 displays may have I2C address 0x3c same as 128x32 display. */
-
+    uint8_t dynamic_cmds[4], *dc;
     uint8_t *p = buffer;
 
     /* Disable I2C (currently in Standard Mode). */
@@ -666,13 +713,16 @@ static void oled_init(void)
     i2c->cr1 = I2C_CR1_PE;
     i2c->cr2 |= I2C_CR2_ITERREN;
 
-    /* Initialisation sequence for SSD1306. */
+    /* Initialisation sequence for SSD1306/SH1106. */
     p += oled_queue_cmds(p, init_cmds, sizeof(init_cmds));
 
-    /* Multiplex ratio (lcd height - 1). */
-    _cmds[0] = 0xa8;
-    _cmds[1] = oled_height - 1;
-    p += oled_queue_cmds(p, _cmds, 2);
+    /* Dynamically-generated initialisation commands. */
+    dc = dynamic_cmds;
+    *dc++ = 0xa8; /* Multiplex ratio (lcd height - 1) */
+    *dc++ = oled_height - 1;
+    *dc++ = 0xda; /* COM pins configuration */
+    *dc++ = (oled_height == 64) ? 0x12 : 0x02;
+    p += oled_queue_cmds(p, dynamic_cmds, dc - dynamic_cmds);
 
     /* Display is right-way-up, or rotated. */
     cmds = (ff_cfg.display_type & DISPLAY_rotate) ? rot_cmds : norot_cmds;
