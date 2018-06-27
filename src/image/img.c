@@ -386,11 +386,12 @@ static bool_t opd_open(struct image *im)
     return _img_open(im, TRUE, NULL);
 }
 
-static bool_t ssd_open(struct image *im)
+static bool_t dfs_open(struct image *im)
 {
     im->nr_cyls = 80;
-    im->nr_sides = 1;
     im->img.interleave = 1;
+    im->img.skew = 3;
+    im->img.skew_cyls_only = TRUE;
     im->img.sec_no = 1; /* 256-byte */
     im->img.sec_base = 0;
     im->img.nr_sectors = 10;
@@ -399,17 +400,16 @@ static bool_t ssd_open(struct image *im)
     return fm_open(im);
 }
 
+static bool_t ssd_open(struct image *im)
+{
+    im->nr_sides = 1;
+    return dfs_open(im);
+}
+
 static bool_t dsd_open(struct image *im)
 {
-    im->nr_cyls = 80;
     im->nr_sides = 2;
-    im->img.interleave = 1;
-    im->img.sec_no = 1; /* 256-byte */
-    im->img.sec_base = 0;
-    im->img.nr_sectors = 10;
-    im->img.gap_3 = 21;
-
-    return fm_open(im);
+    return dfs_open(im);
 }
 
 static bool_t sdu_open(struct image *im)
