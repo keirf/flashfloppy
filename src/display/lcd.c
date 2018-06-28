@@ -63,7 +63,7 @@ static volatile uint8_t refresh_count;
 static uint8_t buffer[256] __aligned(4);
 
 /* Text buffer, rendered into I2C data and placed into buffer[]. */
-static char text[2][21];
+static char text[2][40];
 
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
