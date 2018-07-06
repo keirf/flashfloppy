@@ -3,6 +3,14 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.23a - 6 July 2018
+ - DSK (Spectrum, CPC): Support weak-data copy protection
+   - Used on most of the top commercial titles
+ - OLED: Utilise all rows on 128x64 displays
+ - LCD: Support up to 40x2 displays
+ - SSD, DSD (BBC): Add correct sector skew across tracks
+ - IMG: 1680kB DMF has 2:1 sector interleave
+
 ** v0.9.22a - 20 June 2018
  - OLED: Support SH1106 controller (1.3-inch displays)
    - FF.CFG: display-type = oled-128x64-sh1106
