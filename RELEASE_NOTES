@@ -3,6 +3,9 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.24a - 9 July 2018
+ - DSK (Spectrum, CPC, Sam Coupe): Bug fixes. Please upgrade!
+
 ** v0.9.23a - 6 July 2018
  - DSK (Spectrum, CPC): Support weak-data copy protection
    - Used on most of the top commercial titles
