@@ -40,6 +40,8 @@ struct tib { /* track/cyl info */
 static uint16_t sec_len(struct sib *sib)
 {
     uint16_t len = 128 << sib->n;
+    if (sib->actual_length == 0)
+        return 0;
     return (sib->actual_length % len) ? sib->actual_length : len;
 }
 
