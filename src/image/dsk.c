@@ -292,7 +292,7 @@ static bool_t dsk_read_track(struct image *im)
             }
         }
         F_lseek(&im->fp, im->dsk.trk_off + off);
-        F_read(&im->fp, buf, sec_len(&tib->sib[i]), NULL);
+        F_read(&im->fp, buf, len, NULL);
         rd->prod++;
     }
 
