@@ -201,6 +201,7 @@ static void dsk_setup_track(
         im->dsk.trk_pos = im->dsk.rd_sec_pos = 0;
         decode_off = im->cur_bc / 16;
         if (decode_off < im->dsk.idx_sz) {
+            /* Post-index track gap */
             im->dsk.decode_pos = 0;
         } else {
             decode_off -= im->dsk.idx_sz;
@@ -212,14 +213,15 @@ static void dsk_setup_track(
                 decode_off -= sec_sz;
             }
             if (i < tib->nr_secs) {
+                /* IDAM */
                 im->dsk.trk_pos = i;
                 im->dsk.decode_pos = i * 4 + 1;
                 if (decode_off >= im->dsk.idam_sz) {
-                    /* IDAM */
+                    /* DAM */
                     decode_off -= im->dsk.idam_sz;
                     im->dsk.decode_pos++;
                     if (decode_off >= im->dsk.dam_sz_pre) {
-                        /* DAM */
+                        /* Data or Post Data */
                         decode_off -= im->dsk.dam_sz_pre;
                         im->dsk.decode_pos++;
                         if (decode_off < sec_len(&tib->sib[i])) {
@@ -230,11 +232,12 @@ static void dsk_setup_track(
                             /* Post Data */
                             decode_off -= sec_len(&tib->sib[i]);
                             im->dsk.decode_pos++;
+                            im->dsk.trk_pos = (i + 1) % tib->nr_secs;
                         }
                     }
                 }
             } else {
-                im->dsk.trk_pos = 0;
+                /* Pre-index track gap */
                 im->dsk.decode_pos = tib->nr_secs * 4 + 1;
             }
         }
