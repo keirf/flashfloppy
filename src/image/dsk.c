@@ -198,7 +198,8 @@ static void dsk_setup_track(
     if (tib->nr_secs != 0) {
 
         /* Calculate start position within the track. */
-        im->dsk.trk_pos = im->dsk.rd_sec_pos = 0;
+        im->dsk.crc = 0xffff;
+        im->dsk.trk_pos = im->dsk.rd_sec_pos = im->dsk.decode_data_pos = 0;
         decode_off = im->cur_bc / 16;
         if (decode_off < im->dsk.idx_sz) {
             /* Post-index track gap */
@@ -227,6 +228,7 @@ static void dsk_setup_track(
                         if (decode_off < sec_len(&tib->sib[i])) {
                             /* Data */
                             im->dsk.rd_sec_pos = decode_off / 1024;
+                            im->dsk.decode_data_pos = im->dsk.rd_sec_pos;
                             decode_off %= 1024;
                         } else {
                             /* Post Data */
@@ -239,11 +241,10 @@ static void dsk_setup_track(
             } else {
                 /* Pre-index track gap */
                 im->dsk.decode_pos = tib->nr_secs * 4 + 1;
+                im->dsk.decode_data_pos = decode_off / 1024;
+                decode_off %= 1024;
             }
         }
-
-        im->dsk.decode_data_pos = im->dsk.rd_sec_pos;
-        im->dsk.crc = 0xffff;
     }
 
     rd->prod = rd->cons = 0;
@@ -328,11 +329,19 @@ static bool_t dsk_read_track(struct image *im)
             emit_byte(0x4e);
     } else if (im->dsk.decode_pos == (tib->nr_secs * 4 + 1)) {
         /* Pre-index track gap */
-        if (bc_space < im->dsk.gap4)
+        uint16_t sz = im->dsk.gap4 - im->dsk.decode_data_pos * 1024;
+        if (bc_space < min_t(unsigned int, sz, 1024))
             return FALSE;
-        for (i = 0; i < im->dsk.gap4; i++)
+        if (sz > 1024) {
+            sz = 1024;
+            im->dsk.decode_data_pos++;
+            im->dsk.decode_pos--;
+        } else {
+            im->dsk.decode_data_pos = 0;
+            im->dsk.decode_pos = -1;
+        }
+        for (i = 0; i < sz; i++)
             emit_byte(0x4e);
-        im->dsk.decode_pos = -1;
     } else {
         uint8_t sec = (im->dsk.decode_pos-1) >> 2;
         switch ((im->dsk.decode_pos - 1) & 3) {
