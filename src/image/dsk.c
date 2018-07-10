@@ -170,14 +170,73 @@ out:
     im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
 }
 
+static uint32_t calc_start_pos(struct image *im)
+{
+    struct tib *tib = tib_p(im);
+    uint32_t decode_off;
+    unsigned int i;
+
+    if (tib->nr_secs == 0)
+        return 0;
+
+    /* Calculate start position within the track. */
+    im->dsk.crc = 0xffff;
+    im->dsk.trk_pos = im->dsk.rd_sec_pos = im->dsk.decode_data_pos = 0;
+    decode_off = im->cur_bc / 16;
+    if (decode_off < im->dsk.idx_sz) {
+        /* Post-index track gap */
+        im->dsk.decode_pos = 0;
+    } else {
+        decode_off -= im->dsk.idx_sz;
+        for (i = 0; i < tib->nr_secs; i++) {
+            uint16_t sec_sz = im->dsk.idam_sz + im->dsk.dam_sz_pre
+                + sec_len(&tib->sib[i]) + im->dsk.dam_sz_post;
+            if (decode_off < sec_sz)
+                break;
+            decode_off -= sec_sz;
+        }
+        if (i < tib->nr_secs) {
+            /* IDAM */
+            im->dsk.trk_pos = i;
+            im->dsk.decode_pos = i * 4 + 1;
+            if (decode_off >= im->dsk.idam_sz) {
+                /* DAM */
+                decode_off -= im->dsk.idam_sz;
+                im->dsk.decode_pos++;
+                if (decode_off >= im->dsk.dam_sz_pre) {
+                    /* Data or Post Data */
+                    decode_off -= im->dsk.dam_sz_pre;
+                    im->dsk.decode_pos++;
+                    if (decode_off < sec_len(&tib->sib[i])) {
+                        /* Data */
+                        im->dsk.rd_sec_pos = decode_off / 1024;
+                        im->dsk.decode_data_pos = im->dsk.rd_sec_pos;
+                        decode_off %= 1024;
+                    } else {
+                        /* Post Data */
+                        decode_off -= sec_len(&tib->sib[i]);
+                        im->dsk.decode_pos++;
+                        im->dsk.trk_pos = (i + 1) % tib->nr_secs;
+                    }
+                }
+            }
+        } else {
+            /* Pre-index track gap */
+            im->dsk.decode_pos = tib->nr_secs * 4 + 1;
+            im->dsk.decode_data_pos = decode_off / 1024;
+            decode_off %= 1024;
+        }
+    }
+
+    return decode_off;
+}
+
 static void dsk_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
-    struct tib *tib = tib_p(im);
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
-    unsigned int i;
-    uint32_t decode_off = 0, sys_ticks = start_pos ? *start_pos : 0;
+    uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
     uint8_t cyl = track/2, side = track&1;
 
     side = min_t(uint8_t, side, im->nr_sides-1);
@@ -195,57 +254,7 @@ static void dsk_setup_track(
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
 
-    if (tib->nr_secs != 0) {
-
-        /* Calculate start position within the track. */
-        im->dsk.crc = 0xffff;
-        im->dsk.trk_pos = im->dsk.rd_sec_pos = im->dsk.decode_data_pos = 0;
-        decode_off = im->cur_bc / 16;
-        if (decode_off < im->dsk.idx_sz) {
-            /* Post-index track gap */
-            im->dsk.decode_pos = 0;
-        } else {
-            decode_off -= im->dsk.idx_sz;
-            for (i = 0; i < tib->nr_secs; i++) {
-                uint16_t sec_sz = im->dsk.idam_sz + im->dsk.dam_sz_pre
-                    + sec_len(&tib->sib[i]) + im->dsk.dam_sz_post;
-                if (decode_off < sec_sz)
-                    break;
-                decode_off -= sec_sz;
-            }
-            if (i < tib->nr_secs) {
-                /* IDAM */
-                im->dsk.trk_pos = i;
-                im->dsk.decode_pos = i * 4 + 1;
-                if (decode_off >= im->dsk.idam_sz) {
-                    /* DAM */
-                    decode_off -= im->dsk.idam_sz;
-                    im->dsk.decode_pos++;
-                    if (decode_off >= im->dsk.dam_sz_pre) {
-                        /* Data or Post Data */
-                        decode_off -= im->dsk.dam_sz_pre;
-                        im->dsk.decode_pos++;
-                        if (decode_off < sec_len(&tib->sib[i])) {
-                            /* Data */
-                            im->dsk.rd_sec_pos = decode_off / 1024;
-                            im->dsk.decode_data_pos = im->dsk.rd_sec_pos;
-                            decode_off %= 1024;
-                        } else {
-                            /* Post Data */
-                            decode_off -= sec_len(&tib->sib[i]);
-                            im->dsk.decode_pos++;
-                            im->dsk.trk_pos = (i + 1) % tib->nr_secs;
-                        }
-                    }
-                }
-            } else {
-                /* Pre-index track gap */
-                im->dsk.decode_pos = tib->nr_secs * 4 + 1;
-                im->dsk.decode_data_pos = decode_off / 1024;
-                decode_off %= 1024;
-            }
-        }
-    }
+    decode_off = calc_start_pos(im);
 
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
