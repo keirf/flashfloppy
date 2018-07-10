@@ -108,9 +108,8 @@ static void dsk_seek_track(
 
     if (cyl >= im->nr_cyls) {
     unformatted:
-        printk("T%u.%u: Unformatted\n", cyl, side);
+        printk("T%u.%u: Empty\n", cyl, side);
         memset(tib, 0, sizeof(*tib));
-        im->tracklen_bc = 100160;
         goto out;
     }
 
@@ -144,6 +143,7 @@ static void dsk_seek_track(
         tib->sib[i].actual_length = im->dsk.extended
             ? le16toh(tib->sib[i].actual_length) : 128 << tib->sec_sz;
 
+out:
     im->dsk.idx_sz = GAP_4A;
     im->dsk.idx_sz += GAP_SYNC + 4 + GAP_1;
     im->dsk.idam_sz = GAP_SYNC + 8 + 2 + GAP_2;
@@ -165,7 +165,6 @@ static void dsk_seek_track(
     /* Now calculate the pre-index track gap. */
     im->dsk.gap4 = (im->tracklen_bc - tracklen) / 16;
 
-out:
     /* Calculate ticks per revolution */
     im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
 }
@@ -175,9 +174,6 @@ static uint32_t calc_start_pos(struct image *im)
     struct tib *tib = tib_p(im);
     uint32_t decode_off;
     unsigned int i;
-
-    if (tib->nr_secs == 0)
-        return 0;
 
     /* Calculate start position within the track. */
     im->dsk.crc = 0xffff;
@@ -277,13 +273,7 @@ static bool_t dsk_read_track(struct image *im)
     uint16_t pr = 0, crc;
     unsigned int i;
 
-    if (tib->nr_secs == 0) {
-        /* Unformatted. */
-        bc->prod = bc->cons + bc->len*8;
-        return TRUE;
-    }
-
-    if (rd->prod == rd->cons) {
+    if (tib->nr_secs && (rd->prod == rd->cons)) {
         uint16_t off = 0, len;
         for (i = 0; i < im->dsk.trk_pos; i++)
             off += tib->sib[i].actual_length;
@@ -324,7 +314,7 @@ static bool_t dsk_read_track(struct image *im)
 
     if (im->dsk.decode_pos == 0) {
         /* Post-index track gap */
-        if (bc_space < (GAP_4A + GAP_SYNC + 4 + GAP_1))
+        if (bc_space < im->dsk.idx_sz)
             return FALSE;
         for (i = 0; i < GAP_4A; i++)
             emit_byte(0x4e);
@@ -455,11 +445,6 @@ static bool_t dsk_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 15) / 16;
 
-    if (tib->nr_secs == 0) {
-        /* Unformatted. */
-        goto out;
-    }
-
     if (im->dsk.write_sector == -1) {
         /* Convert write offset to sector number (in rotational order). */
         base -= im->dsk.idx_sz + im->dsk.idam_sz;
@@ -554,7 +539,6 @@ static bool_t dsk_write_track(struct image *im)
 
     wr->cons = c * 16;
 
-out:
     return flush;
 }
 
