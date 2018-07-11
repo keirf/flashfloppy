@@ -36,11 +36,6 @@ def main(argv):
     if x[0] != 'Track-Info' or track != 0 or side != 0 or n != 2 or nr != 9:
         print "Not a Speedlock image - Track header"
         return
-    # Check sector 0 data for the Speedlock signature
-    sec0 = trk_dat[256:256+512]
-    if sec0.find(b'SPEEDLOCK') < 0:
-        print "Not a Speedlock image - No Speedlock signature"
-        return
     # Check sector headers for Speedlock-iness
     sinfo = trk_dat[24:256]
     for i in range(nr):
