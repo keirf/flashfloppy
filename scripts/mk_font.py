@@ -27,7 +27,7 @@ def main(argv):
     height = int(match.group(2))
     y_base = int(match.group(4))
     gap = 16 - height
-    tgap = gap / 2
+    tgap = gap // 2
     bgap = gap - tgap
     out_f.write("const uint8_t %s[] __aligned(4) = {\n" % argv[2])
     for line in in_f:
@@ -79,11 +79,11 @@ def main(argv):
             for i in range(width):
                 col = 0
                 for j in range(8):
-                    col /= 2
+                    col //= 2
                     if char[j] & mask:
                         col = col + 0x80
                 out_f.write("0x%02x, " % (col))
-                mask /= 2
+                mask //= 2
             char = char[8:]
             if not char:
                 out_f.write(" /* '%c' %02u */" % (code, code-first))

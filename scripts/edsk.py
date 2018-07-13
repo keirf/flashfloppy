@@ -23,19 +23,19 @@ def main(argv):
         if int(x[0]) != 0:
             populated += 1
         tsz = tsz[1:]
-    print "%u cylinders, %u sides, %u non-empty tracks" \
-        % (tracks, sides, populated)
+    print("%u cylinders, %u sides, %u non-empty tracks"
+          % (tracks, sides, populated))
     while True:
         in_dat = in_dat[256:]
         if not in_dat:
             break
         x = struct.unpack("<10s", in_dat[:10])
-        if x[0] != 'Track-Info':
+        if x[0] != b'Track-Info':
             continue
         (track, side) = struct.unpack("BB", in_dat[16:18])
         (n, nr, gap, filler) = struct.unpack("BBBB", in_dat[20:24])
-        print "T%u.%u: N=%u nr=%u gap=%u fill=%x" \
-            % (track, side, n, nr, gap, filler)
+        print("T%u.%u: N=%u nr=%u gap=%u fill=%x"
+              % (track, side, n, nr, gap, filler))
         sinfo = in_dat[24:256]
         while sinfo and nr != 0:
             (c,h,r,n,s1,s2,alen) = struct.unpack("<BBBBBBH", sinfo[:8])
@@ -63,8 +63,8 @@ def main(argv):
                 special += ['XXXX-UNKNOWN']
             if alen != 128<<n:
                 special += ['Weird Size']
-            print "  %u.%u id=%u n=%u(%u) stat=%02x:%02x %u\t" \
-                % (c,h,r,n,128<<n,_s1,_s2,alen) + str(special)
+            print("  %u.%u id=%u n=%u(%u) stat=%02x:%02x %u\t"
+                  % (c,h,r,n,128<<n,_s1,_s2,alen) + str(special))
             sinfo = sinfo[8:]
             nr -= 1
     

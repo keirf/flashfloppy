@@ -13,16 +13,16 @@ def compute_crc(data):
   return 0xFFFFFFFF & -zlib.crc32(data) -1
 
 def build(file,targets,device=DEFAULT_DEVICE):
-  data = ''
+  data = b''
   for t,target in enumerate(targets):
-    tdata = ''
+    tdata = b''
     for image in target:
       tdata += struct.pack('<2I',image['address'],len(image['data']))+image['data']
-    tdata = struct.pack('<6sBI255s2I','Target',0,1,'ST...',len(tdata),len(target)) + tdata
+    tdata = struct.pack('<6sBI255s2I',b'Target',0,1,b'ST...',len(tdata),len(target)) + tdata
     data += tdata
-  data  = struct.pack('<5sBIB','DfuSe',1,len(data)+11,len(targets)) + data
+  data  = struct.pack('<5sBIB',b'DfuSe',1,len(data)+11,len(targets)) + data
   v,d=map(lambda x: int(x,0) & 0xFFFF, device.split(':',1))
-  data += struct.pack('<4H3sB',0,d,v,0x011a,'UFD',16)
+  data += struct.pack('<4H3sB',0,d,v,0x011a,b'UFD',16)
   crc   = compute_crc(data)
   data += struct.pack('<I',crc)
   open(file,'wb').write(data)
@@ -53,7 +53,7 @@ if __name__=="__main__":
     try:
       v,d=map(lambda x: int(x,0) & 0xFFFF, device.split(':',1))
     except:
-      print "Invalid device '%s'." % device
+      print("Invalid device '%s'." % device)
       sys.exit(1)
     build(outfile,[target],device)
   else:
