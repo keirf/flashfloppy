@@ -99,6 +99,18 @@ struct __packed ff_cfg {
     uint16_t display_scroll_pause;
     bool_t index_suppression;
     bool_t extend_image;
+#define PIN_auto   0
+#define PIN_nc     PIN_high
+#define PIN_high   (outp_nr + 1)
+#define PIN_rdy    (outp_rdy + 1)
+#define PIN_dens   (outp_hden + 1)
+#define PIN_chg    (outp_dskchg + 1)
+#define PIN_invert 0x80
+#define PIN_low    (PIN_high | PIN_invert)
+#define PIN_nrdy   (PIN_rdy | PIN_invert)
+#define PIN_ndens  (PIN_dens | PIN_invert)
+#define PIN_nchg   (PIN_chg | PIN_invert)
+    uint8_t pin02, pin34;
 };
 
 extern struct ff_cfg ff_cfg;

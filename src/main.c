@@ -431,6 +431,24 @@ static bool_t native_dir_next(void)
     return TRUE;
 }
 
+/* Parse pinNN= config value. */
+static uint8_t parse_pin_str(const char *s)
+{
+    uint8_t pin = 0;
+    if (*s == 'n') {
+        pin = PIN_invert;
+        s++;
+    }
+    pin ^= !strcmp(s, "low") ? PIN_low
+        : !strcmp(s, "high") ? PIN_high
+        : !strcmp(s, "c") ? (PIN_invert | PIN_nc)
+        : !strcmp(s, "rdy") ? PIN_rdy
+        : !strcmp(s, "dens") ? PIN_dens
+        : !strcmp(s, "chg") ? PIN_chg
+        : PIN_auto;
+    return pin;
+}
+
 static void read_ff_cfg(void)
 {
     enum {
@@ -474,6 +492,14 @@ static void read_ff_cfg(void)
                 : !strcmp(opts.arg, "akai-s950") ? FINTF_AKAI_S950
                 : !strcmp(opts.arg, "amiga") ? FINTF_AMIGA
                 : FINTF_JC;
+            break;
+
+        case FFCFG_pin02:
+            ff_cfg.pin02 = parse_pin_str(opts.arg);
+            break;
+
+        case FFCFG_pin34:
+            ff_cfg.pin34 = parse_pin_str(opts.arg);
             break;
 
         case FFCFG_host:
@@ -667,8 +693,11 @@ static void read_ff_cfg(void)
 
 static void process_ff_cfg_opts(const struct ff_cfg *old)
 {
-    /* interface: Inform the floppy subsystem. */
-    floppy_set_fintf_mode(ff_cfg.interface);
+    /* interface, pin02, pin34: Inform the floppy subsystem. */
+    if ((ff_cfg.interface != old->interface)
+        || (ff_cfg.pin02 != old->pin02)
+        || (ff_cfg.pin34 != old->pin34))
+        floppy_set_fintf_mode();
 
     /* ejected-on-startup: Set the ejected state appropriately. */
     if (ff_cfg.ejected_on_startup)
@@ -1712,7 +1741,7 @@ int main(void)
 
     flash_ff_cfg_read();
 
-    floppy_init(ff_cfg.interface);
+    floppy_init();
 
     display_init();
 

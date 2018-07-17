@@ -17,6 +17,15 @@
 #define FINTF_AKAI_S950   3
 #define FINTF_AMIGA       4
 
+#define outp_dskchg 0
+#define outp_index  1
+#define outp_trk0   2
+#define outp_wrprot 3
+#define outp_rdy    4
+#define outp_hden   5
+#define outp_nr     6
+#define outp_unused outp_nr
+
 struct adf_image {
     uint32_t trk_off;
     uint16_t trk_pos, trk_len;
@@ -187,14 +196,14 @@ static inline uint16_t bintomfm(uint8_t x) { return mfmtab[x]; }
 uint8_t mfmtobin(uint16_t x);
 
 /* External API. */
-void floppy_init(uint8_t fintf_mode);
+void floppy_init(void);
 void floppy_insert(unsigned int unit, struct slot *slot);
 void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
 void floppy_set_cyl(uint8_t unit, uint8_t cyl);
 void floppy_get_track(uint8_t *p_cyl, uint8_t *p_side, uint8_t *p_sel,
                       uint8_t *p_writing);
-void floppy_set_fintf_mode(uint8_t fintf_mode);
+void floppy_set_fintf_mode(void);
 
 /*
  * Local variables:

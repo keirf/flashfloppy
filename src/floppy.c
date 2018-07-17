@@ -61,13 +61,6 @@ static struct drive {
     bool_t writing;
     bool_t sel;
     bool_t index_suppressed; /* disable IDX while writing to USB stick */
-#define outp_dskchg 0
-#define outp_index  1
-#define outp_trk0   2
-#define outp_wrprot 3
-#define outp_rdy    4
-#define outp_hden   5
-#define outp_nr     6
     uint8_t outp;
     struct {
 #define STEP_started  1 /* started by hi-pri IRQ */
@@ -100,7 +93,7 @@ static void rdata_stop(void);
 static void wdata_start(void);
 static void wdata_stop(void);
 
-static void drive_change_output(
+static always_inline void drive_change_output(
     struct drive *drv, uint8_t outp, bool_t assert);
 
 struct exti_irq {
@@ -110,65 +103,85 @@ struct exti_irq {
 
 #include "gotek/floppy.c"
 
-#define pin_unset 17
-const static uint8_t *fintf, fintfs[][outp_nr] = {
+static uint8_t pin02, pin02_inverted;
+static uint8_t pin34, pin34_inverted;
+static uint8_t fintf_mode;
+const static struct fintf {
+    uint8_t pin02:4;
+    uint8_t pin34:4;
+} fintfs[] = {
     [FINTF_SHUGART] = {
-        [outp_dskchg] = pin_02,
-        [outp_index]  = pin_08,
-        [outp_trk0]   = pin_26,
-        [outp_wrprot] = pin_28,
-        [outp_rdy]    = pin_34,
-        [outp_hden]   = pin_unset },
+        .pin02 = outp_dskchg,
+        .pin34 = outp_rdy },
     [FINTF_IBMPC] = {
-        [outp_dskchg] = pin_34,
-        [outp_index]  = pin_08,
-        [outp_trk0]   = pin_26,
-        [outp_wrprot] = pin_28,
-        [outp_rdy]    = pin_unset,
-        [outp_hden]   = pin_unset },
+        .pin02 = outp_unused,
+        .pin34 = outp_dskchg },
     [FINTF_IBMPC_HDOUT] = {
-        [outp_dskchg] = pin_34,
-        [outp_index]  = pin_08,
-        [outp_trk0]   = pin_26,
-        [outp_wrprot] = pin_28,
-        [outp_rdy]    = pin_unset,
-        [outp_hden]   = pin_02 },
+        .pin02 = outp_hden,
+        .pin34 = outp_dskchg },
     [FINTF_AKAI_S950] = {
-        [outp_dskchg] = pin_unset,
-        [outp_index]  = pin_08,
-        [outp_trk0]   = pin_26,
-        [outp_wrprot] = pin_28,
-        [outp_rdy]    = pin_34,
-        [outp_hden]   = pin_02 },
+        .pin02 = outp_hden,
+        .pin34 = outp_rdy },
     [FINTF_AMIGA] = {
-        [outp_dskchg] = pin_02,
-        [outp_index]  = pin_08,
-        [outp_trk0]   = pin_26,
-        [outp_wrprot] = pin_28,
-        [outp_rdy]    = pin_unset,
-        [outp_hden]   = pin_unset },
+        .pin02 = outp_dskchg,
+        .pin34 = outp_unused }
 };
+
+static always_inline void drive_change_pin(struct drive *drv, uint8_t pin, bool_t assert)
+{
+    uint16_t pin_mask = m(pin);
+
+    /* Logically assert or deassert the pin. */
+    if (assert)
+        gpio_out_active |= pin_mask;
+    else
+        gpio_out_active &= ~pin_mask;
+
+    /* Update the physical output pin, if the drive is selected. */
+    if (drv->sel)
+        gpio_write_pins(gpio_out, pin_mask, assert ? O_TRUE : O_FALSE);
+}
+
+static void _drive_change_output(
+    struct drive *drv, uint8_t outp, bool_t assert)
+{
+    if (pin02 == outp)
+        drive_change_pin(drv, pin_02, assert ^ pin02_inverted);
+    if (pin34 == outp)
+        drive_change_pin(drv, pin_34, assert ^ pin34_inverted);
+}
 
 static void drive_change_output(struct drive *drv, uint8_t outp, bool_t assert)
 {
-    uint16_t pin_mask = m(fintf[outp]);
+    uint8_t outp_mask = m(outp);
+    uint8_t pin;
+
     IRQ_global_disable();
-    if (assert) {
-        drv->outp |= m(outp);
-        gpio_out_active |= pin_mask;
-    } else {
-        drv->outp &= ~m(outp);
-        gpio_out_active &= ~pin_mask;
+
+    /* Logically assert or deassert the output line. */
+    if (assert)
+        drv->outp |= outp_mask;
+    else
+        drv->outp &= ~outp_mask;
+
+    switch (outp) {
+    case outp_index:  pin = pin_08; break;
+    case outp_trk0:   pin = pin_26; break;
+    case outp_wrprot: pin = pin_28; break;
+    default:
+        _drive_change_output(drv, outp, assert);
+        goto out;
     }
-    if (drv->sel)
-        gpio_write_pins(gpio_out, pin_mask, assert ? O_TRUE : O_FALSE);
+    drive_change_pin(drv, pin, assert);
+
+out:
     IRQ_global_enable();
 }
 
 static void update_amiga_id(bool_t amiga_hd_id)
 {
     /* Only for the Amiga interface, with hacked RDY (pin 34) signal. */
-    if (fintf != fintfs[FINTF_AMIGA])
+    if (fintf_mode != FINTF_AMIGA)
         return;
 
     IRQ_global_disable();
@@ -238,7 +251,7 @@ static struct dma_ring *dma_ring_alloc(void)
     return dma;
 }
 
-void floppy_set_fintf_mode(uint8_t fintf_mode)
+void floppy_set_fintf_mode(void)
 {
     static const char * const fintf_name[] = {
         [FINTF_SHUGART]     = "Shugart",
@@ -247,39 +260,41 @@ void floppy_set_fintf_mode(uint8_t fintf_mode)
         [FINTF_AKAI_S950]   = "Akai S950",
         [FINTF_AMIGA]       = "Amiga"
     };
+    static const char *const outp_name[] = {
+        [outp_dskchg] = "chg",
+        [outp_rdy] = "rdy",
+        [outp_hden] = "dens",
+        [outp_unused] = "high"
+    };
     struct drive *drv = &drive;
     uint32_t old_active;
-    uint8_t outp;
+    uint8_t mode = ff_cfg.interface;
 
-    if (fintf_mode == FINTF_JC) {
+    if (mode == FINTF_JC) {
         /* Jumper JC selects default floppy interface configuration:
          *   - No Jumper: Shugart
          *   - Jumpered:  IBM PC */
-        fintf_mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_IBMPC;
+        mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_IBMPC;
     }
 
-    /* Invalid interface mode? Do nothing. */
-    if (fintf_mode >= ARRAY_SIZE(fintfs))
-        return;
-
-    /* This mode is already set? Do nothing. */
-    if (fintf == fintfs[fintf_mode])
-        return;
-
-    printk("Interface: %s\n", fintf_name[fintf_mode]);
+    ASSERT(mode < ARRAY_SIZE(fintfs));
 
     IRQ_global_disable();
 
-    fintf = fintfs[fintf_mode];
+    fintf_mode = mode;
+    pin02 = ff_cfg.pin02 ? ff_cfg.pin02 - 1 : fintfs[mode].pin02;
+    pin34 = ff_cfg.pin34 ? ff_cfg.pin34 - 1 : fintfs[mode].pin34;
+    pin02_inverted = !!(pin02 & PIN_invert);
+    pin34_inverted = !!(pin34 & PIN_invert);
+    pin02 &= ~PIN_invert;
+    pin34 &= ~PIN_invert;
 
     old_active = gpio_out_active;
-    gpio_out_active = 0;
-    for (outp = 0; outp < outp_nr; outp++) {
-        if (drv->outp & m(outp)) {
-            uint16_t mask = m(fintf[outp]);
-            gpio_out_active |= mask;
-        }
-    }
+    gpio_out_active &= ~(m(pin_02) | m(pin_34));
+    if (((drv->outp >> pin02) ^ pin02_inverted) & 1)
+        gpio_out_active |= m(pin_02);
+    if (((drv->outp >> pin34) ^ pin34_inverted) & 1)
+        gpio_out_active |= m(pin_34);
 
     /* Default handler for IRQ_SELA_changed */
     update_SELA_irq(FALSE);
@@ -293,15 +308,20 @@ void floppy_set_fintf_mode(uint8_t fintf_mode)
 
     /* Default to Amiga-DD identity until HD image is mounted. */
     update_amiga_id(FALSE);
+
+    printk("Interface: %s (pin2=%s%s, pin34=%s%s)\n",
+           fintf_name[mode],
+           pin02_inverted ? "not-" : "", outp_name[pin02] ?: "?",
+           pin34_inverted ? "not-" : "", outp_name[pin34] ?: "?");
 }
 
-void floppy_init(uint8_t fintf_mode)
+void floppy_init(void)
 {
     struct drive *drv = &drive;
     const struct exti_irq *e;
     unsigned int i;
 
-    floppy_set_fintf_mode(fintf_mode);
+    floppy_set_fintf_mode();
 
     board_floppy_init();
 
