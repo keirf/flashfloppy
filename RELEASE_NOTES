@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.25a - 18 July 2018
+ - DSK (Spectrum, CPC, Sam Coupe): Fix tracks with little or no data in them
+ - FF.CFG: New options pin02= and pin34= allow precise interface configuration
+
 ** v0.9.24a - 9 July 2018
  - DSK (Spectrum, CPC, Sam Coupe): Bug fixes. Please upgrade!
 
