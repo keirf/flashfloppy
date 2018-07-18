@@ -370,7 +370,7 @@ static bool_t dsk_read_track(struct image *im)
             uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
             if (bc_space < im->dsk.dam_sz_pre)
                 return FALSE;
-            if ((tib->sib[sec].stat1 & 0x01) && (tib->sib[sec].stat2 & 0x01))
+            if (tib->sib[sec].stat2 & 0x01)
                 dam[3] = 0x00; /* Missing Address Mark (Data) */
             else if (tib->sib[sec].stat2 & 0x40)
                 dam[3] = 0xf8; /* Found DDAM */

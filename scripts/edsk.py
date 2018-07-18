@@ -42,13 +42,12 @@ def main(argv):
             special = []
             _s1 = s1
             _s2 = s2
-            if s1 & 0x01:
-                if s2 & 0x01:
-                    special += ['DAM Missing']
-                else:
-                    special += ['IDAM Missing']
-                s1 &= ~0x01
-                s2 &= ~0x01
+            if s2 & 0x01:
+                special += ['DAM Missing']
+            elif s1 & 0x01:
+                special += ['IDAM Missing']
+            s1 &= ~0x01
+            s2 &= ~0x01
             if s1 & 0x20:
                 if s2 & 0x20:
                     special += ['Data CRC']
