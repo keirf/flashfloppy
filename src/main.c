@@ -494,14 +494,6 @@ static void read_ff_cfg(void)
                 : FINTF_JC;
             break;
 
-        case FFCFG_pin02:
-            ff_cfg.pin02 = parse_pin_str(opts.arg);
-            break;
-
-        case FFCFG_pin34:
-            ff_cfg.pin34 = parse_pin_str(opts.arg);
-            break;
-
         case FFCFG_host:
             ff_cfg.host =
                 !strcmp(opts.arg, "acorn") ? HOST_acorn
@@ -518,6 +510,13 @@ static void read_ff_cfg(void)
                 : HOST_unspecified;
             break;
 
+        case FFCFG_pin02:
+            ff_cfg.pin02 = parse_pin_str(opts.arg);
+            break;
+
+        case FFCFG_pin34:
+            ff_cfg.pin34 = parse_pin_str(opts.arg);
+            break;
 
         case FFCFG_write_protect:
             ff_cfg.write_protect = !strcmp(opts.arg, "yes");
