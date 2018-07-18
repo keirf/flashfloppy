@@ -127,7 +127,8 @@ const static struct fintf {
         .pin34 = outp_unused }
 };
 
-static always_inline void drive_change_pin(struct drive *drv, uint8_t pin, bool_t assert)
+static always_inline void drive_change_pin(
+    struct drive *drv, uint8_t pin, bool_t assert)
 {
     uint16_t pin_mask = m(pin);
 
@@ -140,18 +141,29 @@ static always_inline void drive_change_pin(struct drive *drv, uint8_t pin, bool_
     /* Update the physical output pin, if the drive is selected. */
     if (drv->sel)
         gpio_write_pins(gpio_out, pin_mask, assert ? O_TRUE : O_FALSE);
+
+    /* Caller expects us to re-enable interrupts. */
+    IRQ_global_enable();
 }
 
 static void _drive_change_output(
     struct drive *drv, uint8_t outp, bool_t assert)
 {
-    if (pin02 == outp)
+    IRQ_global_enable();
+
+    if (pin02 == outp) {
+        IRQ_global_disable();
         drive_change_pin(drv, pin_02, assert ^ pin02_inverted);
-    if (pin34 == outp)
+    }
+
+    if (pin34 == outp) {
+        IRQ_global_disable();
         drive_change_pin(drv, pin_34, assert ^ pin34_inverted);
+    }
 }
 
-static void drive_change_output(struct drive *drv, uint8_t outp, bool_t assert)
+static void drive_change_output(
+    struct drive *drv, uint8_t outp, bool_t assert)
 {
     uint8_t outp_mask = m(outp);
     uint8_t pin;
@@ -170,12 +182,9 @@ static void drive_change_output(struct drive *drv, uint8_t outp, bool_t assert)
     case outp_wrprot: pin = pin_28; break;
     default:
         _drive_change_output(drv, outp, assert);
-        goto out;
+        return;
     }
     drive_change_pin(drv, pin, assert);
-
-out:
-    IRQ_global_enable();
 }
 
 static void update_amiga_id(bool_t amiga_hd_id)
