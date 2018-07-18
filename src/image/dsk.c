@@ -37,12 +37,14 @@ struct tib { /* track/cyl info */
     } sib[1];
 };
 
-static uint16_t sec_len(struct sib *sib)
+#define n_sz(_sib) (128u << min_t(unsigned, (_sib)->n, 8))
+
+static uint16_t data_sz(struct sib *sib)
 {
-    uint16_t len = 128 << sib->n;
+    uint16_t n_sz = n_sz(sib);
     if (sib->actual_length == 0)
         return 0;
-    return (sib->actual_length % len) ? sib->actual_length : len;
+    return (sib->actual_length % n_sz) ? sib->actual_length : n_sz;
 }
 
 static struct dib *dib_p(struct image *im)
@@ -141,7 +143,8 @@ static void dsk_seek_track(
     /* Compute per-sector actual length. */
     for (i = 0; i < tib->nr_secs; i++)
         tib->sib[i].actual_length = im->dsk.extended
-            ? le16toh(tib->sib[i].actual_length) : 128 << tib->sec_sz;
+            ? le16toh(tib->sib[i].actual_length)
+            : 128 << min_t(unsigned, tib->sec_sz, 8);
 
 out:
     im->dsk.idx_sz = GAP_4A;
@@ -155,7 +158,7 @@ out:
         * tib->nr_secs;
     tracklen += im->dsk.idx_sz;
     for (i = 0; i < tib->nr_secs; i++)
-        tracklen += sec_len(&tib->sib[i]);
+        tracklen += data_sz(&tib->sib[i]);
     tracklen *= 16;
 
     /* Calculate and round the track length. */
@@ -186,7 +189,7 @@ static uint32_t calc_start_pos(struct image *im)
         decode_off -= im->dsk.idx_sz;
         for (i = 0; i < tib->nr_secs; i++) {
             uint16_t sec_sz = im->dsk.idam_sz + im->dsk.dam_sz_pre
-                + sec_len(&tib->sib[i]) + im->dsk.dam_sz_post;
+                + data_sz(&tib->sib[i]) + im->dsk.dam_sz_post;
             if (decode_off < sec_sz)
                 break;
             decode_off -= sec_sz;
@@ -203,14 +206,14 @@ static uint32_t calc_start_pos(struct image *im)
                     /* Data or Post Data */
                     decode_off -= im->dsk.dam_sz_pre;
                     im->dsk.decode_pos++;
-                    if (decode_off < sec_len(&tib->sib[i])) {
+                    if (decode_off < data_sz(&tib->sib[i])) {
                         /* Data */
                         im->dsk.rd_sec_pos = decode_off / 1024;
                         im->dsk.decode_data_pos = im->dsk.rd_sec_pos;
                         decode_off %= 1024;
                     } else {
                         /* Post Data */
-                        decode_off -= sec_len(&tib->sib[i]);
+                        decode_off -= data_sz(&tib->sib[i]);
                         im->dsk.decode_pos++;
                         im->dsk.trk_pos = (i + 1) % tib->nr_secs;
                     }
@@ -277,7 +280,7 @@ static bool_t dsk_read_track(struct image *im)
         uint16_t off = 0, len;
         for (i = 0; i < im->dsk.trk_pos; i++)
             off += tib->sib[i].actual_length;
-        len = sec_len(&tib->sib[i]);
+        len = data_sz(&tib->sib[i]);
         if (len != tib->sib[i].actual_length) {
             /* Weak sector -- pick different data each revolution. */
             off += len * (im->dsk.rev % (tib->sib[i].actual_length / len));
@@ -383,7 +386,7 @@ static bool_t dsk_read_track(struct image *im)
             break;
         }
         case 2: /* Data */ {
-            uint16_t sec_sz = sec_len(&tib->sib[sec]);
+            uint16_t sec_sz = data_sz(&tib->sib[sec]);
             sec_sz -= im->dsk.decode_data_pos * 1024;
             if (bc_space < min_t(unsigned int, sec_sz, 1024))
                 return FALSE;
@@ -453,7 +456,7 @@ static bool_t dsk_write_track(struct image *im)
             if ((base >= -64) && (base <= 64))
                 break;
             base -= im->dsk.idam_sz + im->dsk.dam_sz_pre
-                + sec_len(&tib->sib[i]) + im->dsk.dam_sz_post;
+                + data_sz(&tib->sib[i]) + im->dsk.dam_sz_post;
         }
         im->dsk.write_sector = i;
         if (im->dsk.write_sector >= tib->nr_secs) {
@@ -466,7 +469,7 @@ static bool_t dsk_write_track(struct image *im)
     for (;;) {
 
         sec_sz = (im->dsk.write_sector >= 0)
-            ? sec_len(&tib->sib[im->dsk.write_sector]) : 128;
+            ? data_sz(&tib->sib[im->dsk.write_sector]) : 128;
         if ((int16_t)(p - c) < (3 + sec_sz + 2))
             break;
 
