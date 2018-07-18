@@ -42,6 +42,10 @@ def main(argv):
             special = []
             _s1 = s1
             _s2 = s2
+            _n = n
+            if _n > 8:
+                _n = 8
+            nsz = 128 << _n
             if s2 & 0x01:
                 special += ['DAM Missing']
             elif s1 & 0x01:
@@ -60,10 +64,18 @@ def main(argv):
                 s2 &= ~0x40
             if s1 or s2:
                 special += ['XXXX-UNKNOWN']
-            if alen != 128<<n:
-                special += ['Weird Size']
+            if alen < nsz:
+                if alen % 0x80 == 0:
+                    special += ['Incomplete']
+                else:
+                    special += ['Small GAPS']
+            elif alen > nsz:
+                if alen % nsz == 0:
+                    special += ['Weak (%u)' % (alen / nsz)]
+                else:
+                    special += ['Large GAPS']
             print("  %u.%u id=%u n=%u(%u) stat=%02x:%02x %u\t"
-                  % (c,h,r,n,128<<n,_s1,_s2,alen) + str(special))
+                  % (c,h,r,n,nsz,_s1,_s2,alen) + str(special))
             sinfo = sinfo[8:]
             nr -= 1
     
