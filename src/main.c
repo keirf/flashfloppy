@@ -181,6 +181,8 @@ static void display_write_slot(bool_t nav_mode)
         : slot_type("ssd") ? "SSD"
         : slot_type("dsd") ? "DSD"
         : slot_type("sdu") ? "SDU"
+        : slot_type("jvc") ? "JVC"
+        : slot_type("vdk") ? "VDK"
         : slot_type("v9t9") ? "T99"
         : "UNK";
     snprintf(msg, sizeof(msg), "%03u/%03u%*s%s D:%u",
@@ -505,6 +507,7 @@ static void read_ff_cfg(void)
                 : !strcmp(opts.arg, "msx") ? HOST_msx
                 : !strcmp(opts.arg, "pc98") ? HOST_pc98
                 : !strcmp(opts.arg, "pc-dos") ? HOST_pc_dos
+                : !strcmp(opts.arg, "tandy-coco") ? HOST_tandy_coco
                 : !strcmp(opts.arg, "ti99") ? HOST_ti99
                 : !strcmp(opts.arg, "uknc") ? HOST_uknc
                 : HOST_unspecified;

@@ -24,6 +24,8 @@ extern const struct image_handler opd_image_handler;
 extern const struct image_handler ssd_image_handler;
 extern const struct image_handler dsd_image_handler;
 extern const struct image_handler sdu_image_handler;
+extern const struct image_handler jvc_image_handler;
+extern const struct image_handler vdk_image_handler;
 extern const struct image_handler ti99_image_handler;
 
 bool_t image_valid(FILINFO *fp)
@@ -53,6 +55,8 @@ bool_t image_valid(FILINFO *fp)
                || !strcmp(ext, "ssd")
                || !strcmp(ext, "dsd")
                || !strcmp(ext, "sdu")
+               || !strcmp(ext, "jvc")
+               || !strcmp(ext, "vdk")
                || !strcmp(ext, "v9t9")) {
         return TRUE;
     }
@@ -109,7 +113,8 @@ void image_open(struct image *im, const struct slot *slot)
     hint = (!strcmp(ext, "adf") ? ((ff_cfg.host == HOST_acorn)
                                    ? &adfs_image_handler : &adf_image_handler)
             : !strcmp(ext, "d81") ? &d81_image_handler
-            : !strcmp(ext, "dsk") ? &dsk_image_handler
+            : !strcmp(ext, "dsk") ? ((ff_cfg.host == HOST_tandy_coco)
+                                     ? &jvc_image_handler: &dsk_image_handler)
             : !strcmp(ext, "hfe") ? &hfe_image_handler
             : !strcmp(ext, "img") ? &img_image_handler
             : !strcmp(ext, "ima") ? &img_image_handler
@@ -123,6 +128,8 @@ void image_open(struct image *im, const struct slot *slot)
             : !strcmp(ext, "ssd") ? &ssd_image_handler
             : !strcmp(ext, "dsd") ? &dsd_image_handler
             : !strcmp(ext, "sdu") ? &sdu_image_handler
+            : !strcmp(ext, "jvc") ? &jvc_image_handler
+            : !strcmp(ext, "vdk") ? &vdk_image_handler
             : !strcmp(ext, "v9t9") ? &ti99_image_handler
             : NULL);
     if (hint) {

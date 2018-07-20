@@ -563,6 +563,85 @@ static bool_t ti99_open(struct image *im)
     return FALSE;
 }
 
+static bool_t jvc_open(struct image *im)
+{
+    struct jvc {
+        uint8_t spt, sides, ssize_code, sec_id, attr;
+    } jvc = {
+        18, 1, 1, 1, 0
+    };
+    unsigned int bps, bpc;
+
+    im->img.base_off = f_size(&im->fp) & 255;
+
+    /* Check the image header. */
+    F_read(&im->fp, &jvc,
+           min_t(unsigned, im->img.base_off, sizeof(jvc)), NULL);
+    if (jvc.attr || ((jvc.sides != 1) && (jvc.sides != 2)) || (jvc.spt == 0))
+        return FALSE;
+
+    im->nr_sides = jvc.sides;
+    im->img.sec_no = jvc.ssize_code & 3;
+    im->img.interleave = 3; /* RSDOS likes a 3:1 interleave (ref. xroar) */
+    im->img.sec_base = jvc.sec_id;
+    im->img.nr_sectors = jvc.spt;
+
+    /* Calculate number of cylinders. */
+    bps = 128 << im->img.sec_no;
+    bpc = bps * im->img.nr_sectors * im->nr_sides;
+    im->nr_cyls = im_size(im) / bpc;
+    if ((im->nr_cyls >= 88) && (im->nr_sides == 1)) {
+        im->nr_sides++;
+        im->nr_cyls /= 2;
+        bpc *= 2;
+    }
+    if ((im_size(im) % bpc) >= bps)
+        im->nr_cyls++;
+
+    im->img.gap_3 = 20;
+    im->img.gap_4a = 54;
+    im->img.has_iam = TRUE;
+
+    return mfm_open(im);
+}
+
+static bool_t vdk_open(struct image *im)
+{
+    struct vdk {
+        char id[2];
+        uint16_t hlen;
+        uint8_t misc[4];
+        uint8_t cyls, heads;
+        uint8_t flags, compression;
+    } vdk;
+
+    /* Check the image header. */
+    F_read(&im->fp, &vdk, sizeof(vdk), NULL);
+    if (strncmp(vdk.id, "dk", 2) || le16toh(vdk.hlen < 12))
+        return FALSE;
+
+    /* Read (cyls, heads) geometry from the image header. */
+    im->nr_cyls = vdk.cyls;
+    im->nr_sides = vdk.heads;
+
+    /* Check the geometry. */
+    if ((im->nr_sides != 1) && (im->nr_sides != 2))
+        return FALSE;
+
+    /* Fill in the rest of the geometry. */
+    im->img.sec_no = 1; /* 256-byte sectors */
+    im->img.interleave = 2; /* DDOS likes a 2:1 interleave (ref. xroar) */
+    im->img.sec_base = 1;
+    im->img.nr_sectors = 18;
+    im->img.gap_3 = 20;
+    im->img.gap_4a = 54;
+    im->img.has_iam = TRUE;
+
+    im->img.base_off = le16toh(vdk.hlen);
+
+    return mfm_open(im);
+}
+
 const struct image_handler img_image_handler = {
     .open = img_open,
     .setup_track = img_setup_track,
@@ -648,6 +727,22 @@ const struct image_handler dsd_image_handler = {
 
 const struct image_handler sdu_image_handler = {
     .open = sdu_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler jvc_image_handler = {
+    .open = jvc_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler vdk_image_handler = {
+    .open = vdk_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
