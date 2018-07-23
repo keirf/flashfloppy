@@ -25,20 +25,26 @@ def main(argv):
         tsz = tsz[1:]
     print("%u cylinders, %u sides, %u non-empty tracks"
           % (tracks, sides, populated))
+    in_dat = in_dat[256:]
     while True:
-        in_dat = in_dat[256:]
         if not in_dat:
             break
         x = struct.unpack("<10s", in_dat[:10])
         if x[0] != b'Track-Info':
+            in_dat = in_dat[256:]
             continue
         (track, side) = struct.unpack("BB", in_dat[16:18])
         (n, nr, gap, filler) = struct.unpack("BBBB", in_dat[20:24])
         print("T%u.%u: N=%u nr=%u gap=%u fill=%x"
               % (track, side, n, nr, gap, filler))
         sinfo = in_dat[24:256]
+        in_dat = in_dat[256:]
+        tot_dlen = 0
         while sinfo and nr != 0:
             (c,h,r,n,s1,s2,alen) = struct.unpack("<BBBBBBH", sinfo[:8])
+            sdat = in_dat[:alen]
+            in_dat = in_dat[alen:]
+            tot_dlen += alen
             special = []
             _s1 = s1
             _s2 = s2
@@ -74,10 +80,16 @@ def main(argv):
                     special += ['Weak (%u)' % (alen / nsz)]
                 else:
                     special += ['Large GAPS']
+            if alen % 0x80 != 0 and alen >= 13:
+                remainder = bytearray(sdat[-13:])
+                if remainder[0] != 0 and all([v == 0 for v in remainder[1:]]):
+                    special += ["Pre-Sync??"]
             print("  %u.%u id=%u n=%u(%u) stat=%02x:%02x %u\t"
                   % (c,h,r,n,nsz,_s1,_s2,alen) + str(special))
             sinfo = sinfo[8:]
             nr -= 1
+        if tot_dlen % 256 != 0:
+            in_dat = in_dat[256 - (tot_dlen % 256) : ]
     
 if __name__ == "__main__":
     main(sys.argv)
