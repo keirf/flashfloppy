@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.26a - 24 July 2018
+ - DSK (CPC): More fixes for copy-protected tracks
+ - New image types supported:
+   - JVC, DSK: Tandy Coco (host=tandy-coco)
+   - VDK: Dragon
+
 ** v0.9.25a - 18 July 2018
  - DSK (Spectrum, CPC, Sam Coupe): Fix tracks with little or no data in them
  - FF.CFG: New options pin02= and pin34= allow precise interface configuration
