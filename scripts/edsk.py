@@ -7,7 +7,7 @@
 # This is free and unencumbered software released into the public domain.
 # See the file COPYING for more details, or visit <http://unlicense.org>.
 
-import struct, sys
+import struct, sys, binascii
 
 def main(argv):
     in_f = open(argv[1], "rb")
@@ -84,8 +84,10 @@ def main(argv):
                 remainder = bytearray(sdat[-13:])
                 if remainder[0] != 0 and all([v == 0 for v in remainder[1:]]):
                     special += ["Pre-Sync??"]
-            print("  %u.%u id=%u n=%u(%u) stat=%02x:%02x %u\t"
-                  % (c,h,r,n,nsz,_s1,_s2,alen) + str(special))
+            print("  %u.%u id=%u n=%u(%u) stat=%02x:%02x %u crc=%08x\t"
+                  % (c,h,r,n,nsz,_s1,_s2,alen,binascii.crc32(sdat)&0xffffffff)
+                  + str(special))
+#            print(binascii.hexlify(sdat))
             sinfo = sinfo[8:]
             nr -= 1
         if tot_dlen % 256 != 0:

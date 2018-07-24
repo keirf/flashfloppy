@@ -47,6 +47,12 @@ static uint16_t data_sz(struct sib *sib)
     return (sib->actual_length % n_sz) ? sib->actual_length : n_sz;
 }
 
+static bool_t is_gaps_sector(struct sib *sib)
+{
+    uint16_t dsz = data_sz(sib);
+    return ((dsz & (dsz-1)) || (dsz & 0x7f));
+}
+
 static struct dib *dib_p(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
@@ -157,8 +163,11 @@ out:
     tracklen = (im->dsk.idam_sz + im->dsk.dam_sz_pre + im->dsk.dam_sz_post)
         * tib->nr_secs;
     tracklen += im->dsk.idx_sz;
-    for (i = 0; i < tib->nr_secs; i++)
+    for (i = 0; i < tib->nr_secs; i++) {
         tracklen += data_sz(&tib->sib[i]);
+        if (is_gaps_sector(&tib->sib[i]))
+            tracklen -= im->dsk.dam_sz_post;
+    }
     tracklen *= 16;
 
     /* Calculate and round the track length. */
@@ -190,6 +199,8 @@ static uint32_t calc_start_pos(struct image *im)
         for (i = 0; i < tib->nr_secs; i++) {
             uint16_t sec_sz = im->dsk.idam_sz + im->dsk.dam_sz_pre
                 + data_sz(&tib->sib[i]) + im->dsk.dam_sz_post;
+            if (is_gaps_sector(&tib->sib[i]))
+                sec_sz -= im->dsk.dam_sz_post;
             if (decode_off < sec_sz)
                 break;
             decode_off -= sec_sz;
@@ -404,6 +415,8 @@ static bool_t dsk_read_track(struct image *im)
             break;
         }
         case 3: /* Post Data */ {
+            if (is_gaps_sector(&tib->sib[sec]))
+                break;
             if (bc_space < im->dsk.dam_sz_post)
                 return FALSE;
             crc = im->dsk.crc;
@@ -457,6 +470,8 @@ static bool_t dsk_write_track(struct image *im)
                 break;
             base -= im->dsk.idam_sz + im->dsk.dam_sz_pre
                 + data_sz(&tib->sib[i]) + im->dsk.dam_sz_post;
+            if (is_gaps_sector(&tib->sib[i]))
+                base += im->dsk.dam_sz_post;
         }
         im->dsk.write_sector = i;
         if (im->dsk.write_sector >= tib->nr_secs) {
