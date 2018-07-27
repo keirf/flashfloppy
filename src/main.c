@@ -415,7 +415,7 @@ static void dump_file(void)
 
 static bool_t native_dir_next(void)
 {
-    do {
+    for (;;) {
         F_readdir(&fs->dp, &fs->fp);
         if (fs->fp.fname[0] == '\0')
             return FALSE;
@@ -427,9 +427,15 @@ static bool_t native_dir_next(void)
             continue;
         /* Allow folder navigation when LCD/OLED display is attached. */
         if ((fs->fp.fattrib & AM_DIR) && (display_mode == DM_LCD_1602)
-            && ((cfg.depth != 0) || strcmp(fs->fp.fname, "FF")))
+            /* Skip FF/ in root folder */
+            && ((cfg.depth != 0) || strcmp(fs->fp.fname, "FF"))
+            /* Skip __MACOSX/ zip-file resource-fork folder */
+            && strcmp(fs->fp.fname, "__MACOSX"))
             break;
-    } while (!image_valid(&fs->fp));
+        /* Allow valid image files. */
+        if (image_valid(&fs->fp))
+            break;
+    }
     return TRUE;
 }
 
