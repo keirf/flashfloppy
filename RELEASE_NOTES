@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.27a - 27 July 2018
+ - Direct Navigation: Fix hidden-file and dot-file filtering
+ - Direct Navigation: Filter __MACOSX/ resource-fork folders
+
 ** v0.9.26a - 24 July 2018
  - DSK (CPC): More fixes for copy-protected tracks
  - New image types supported:
