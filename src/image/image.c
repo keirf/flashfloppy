@@ -17,6 +17,7 @@ extern const struct image_handler d81_image_handler;
 extern const struct image_handler dsk_image_handler;
 extern const struct image_handler da_image_handler;
 extern const struct image_handler adfs_image_handler;
+extern const struct image_handler mbd_image_handler;
 extern const struct image_handler mgt_image_handler;
 extern const struct image_handler pc98fdi_image_handler;
 extern const struct image_handler trd_image_handler;
@@ -48,6 +49,7 @@ bool_t image_valid(FILINFO *fp)
                || !strcmp(ext, "st")
                || !strcmp(ext, "adl")
                || !strcmp(ext, "adm")
+               || !strcmp(ext, "mbd")
                || !strcmp(ext, "mgt")
                || !strcmp(ext, "fdi")
                || !strcmp(ext, "trd")
@@ -121,6 +123,7 @@ void image_open(struct image *im, const struct slot *slot)
             : !strcmp(ext, "st") ? &st_image_handler
             : !strcmp(ext, "adl") ? &adfs_image_handler
             : !strcmp(ext, "adm") ? &adfs_image_handler
+            : !strcmp(ext, "mbd") ? &mbd_image_handler
             : !strcmp(ext, "mgt") ? &mgt_image_handler
             : !strcmp(ext, "fdi") ? &pc98fdi_image_handler
             : !strcmp(ext, "trd") ? &trd_image_handler

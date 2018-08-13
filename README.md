@@ -9,6 +9,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - FDI (NEC PC-98)
   - IMG, IMA, DSK (IBM MFM Raw Sector)
   - JVC, DSK (Tandy Color Computer 'CoCo')
+  - MBD (Spectrum MB02)
   - MGT (Spectrum DISCiPLE/+D)
   - OPD (Spectrum Opus Discovery)
   - SDU (SAB Diskette Utility)

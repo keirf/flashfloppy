@@ -84,6 +84,12 @@ const static struct img_type {
     { 10, 2, 30, 1, 2, 0, 0, _C(80), _R(300) },  /* Ensoniq 800kB */
     { 20, 2, 40, 1, 2, 0, 0, _C(80), _R(300) },  /* Ensoniq 1.6MB */
     { 0 }
+}, mbd_type[] = {
+    { 11, 2,  30, 1, 3, 1, 0, _C(80), _R(300) },
+    {  5, 2, 116, 3, 1, 1, 0, _C(80), _R(300) },
+    { 11, 2,  30, 1, 3, 1, 0, _C(40), _R(300) },
+    {  5, 2, 116, 3, 1, 1, 0, _C(40), _R(300) },
+    { 0 }
 }, memotech_type[] = {
     { 16, 2, 57, 3, 1, 1, 0, _C(40), _R(300) }, /* Type 03 */
     { 16, 2, 57, 3, 1, 1, 0, _C(80), _R(300) }, /* Type 07 */
@@ -224,6 +230,11 @@ static bool_t st_open(struct image *im)
         im->img.skew = 2;
     }
     return ok;
+}
+
+static bool_t mbd_open(struct image *im)
+{
+    return _img_open(im, TRUE, mbd_type);
 }
 
 static bool_t mgt_open(struct image *im)
@@ -668,6 +679,14 @@ const struct image_handler st_image_handler = {
 
 const struct image_handler adfs_image_handler = {
     .open = adfs_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler mbd_image_handler = {
+    .open = mbd_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
