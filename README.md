@@ -22,6 +22,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - Akai (S01, S20, S950)
   - DEC (RX33, RX50)
   - Ensoniq (ASR, TS, etc)
+  - Fluke (9100)
   - General Music (S2, S3, S2R)
   - Memotech
   - MSX

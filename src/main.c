@@ -509,6 +509,7 @@ static void read_ff_cfg(void)
                 : !strcmp(opts.arg, "akai") ? HOST_akai
                 : !strcmp(opts.arg, "dec") ? HOST_dec
                 : !strcmp(opts.arg, "ensoniq") ? HOST_ensoniq
+                : !strcmp(opts.arg, "fluke") ? HOST_fluke
                 : !strcmp(opts.arg, "gem") ? HOST_gem
                 : !strcmp(opts.arg, "memotech") ? HOST_memotech
                 : !strcmp(opts.arg, "msx") ? HOST_msx

@@ -84,6 +84,9 @@ const static struct img_type {
     { 10, 2, 30, 1, 2, 0, 0, _C(80), _R(300) },  /* Ensoniq 800kB */
     { 20, 2, 40, 1, 2, 0, 0, _C(80), _R(300) },  /* Ensoniq 1.6MB */
     { 0 }
+}, fluke_type[] = {
+    { 16, 2, 57, 2, 1, 0, 0, _C(80), _R(300) },
+    { 0 }
 }, mbd_type[] = {
     { 11, 2,  30, 1, 3, 1, 0, _C(80), _R(300) },
     {  5, 2, 116, 3, 1, 1, 0, _C(80), _R(300) },
@@ -180,6 +183,9 @@ static bool_t img_open(struct image *im)
         break;
     case HOST_ensoniq:
         type = ensoniq_type;
+        break;
+    case HOST_fluke:
+        type = fluke_type;
         break;
     case HOST_memotech:
         type = memotech_type;
