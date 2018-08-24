@@ -28,6 +28,8 @@ ifeq ($(bootloader),y)
 FLAGS += -DBOOTLOADER=1
 endif
 
+FLAGS += -DFLASH_MEM_SIZE=0x40000
+
 FLAGS += -MMD -MF .$(@F).d
 DEPS = .*.d
 

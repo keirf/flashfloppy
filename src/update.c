@@ -33,9 +33,9 @@
  */
 
 #ifndef RELOADER
-/* Main bootloader: flashes the main firmware (last 96kB of Flash). */
+/* Main bootloader: flashes the main firmware (last 96kB or 224kB of Flash). */
 #define FIRMWARE_START 0x08008000
-#define FIRMWARE_END   (0x08020000 - FLASH_PAGE_SIZE)
+#define FIRMWARE_END   (0x08000000 +FLASH_MEM_SIZE -FLASH_PAGE_SIZE)
 #define FILE_PATTERN   "ff_gotek*.upd"
 #define is_reloader    FALSE
 #else
