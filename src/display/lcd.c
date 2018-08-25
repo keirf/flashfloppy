@@ -446,6 +446,7 @@ fail:
     return FALSE;
 }
 
+#if (KANJI_FONT==0) || defined(BOOTLOADER) || defined(RELOADER)
 extern const uint8_t oled_font_6x13[];
 static void oled_convert_text_row_6x13(char *pc)
 {
@@ -470,7 +471,6 @@ static void oled_convert_text_row_6x13(char *pc)
     memset(q, 0, 127-lcd_columns*w);
     memset(q+128, 0, 127-lcd_columns*w);
 }
-
 #ifdef font_extra
 extern const uint8_t oled_font_8x16[];
 static void oled_convert_text_row_8x16(char *pc)
@@ -489,7 +489,111 @@ static void oled_convert_text_row_8x16(char *pc)
         q += w;
     }
 }
-#endif
+#endif // font_extra 
+#else // KANJI_FONT
+extern const uint8_t oled_font_6x13[];
+static void oled_convert_text_row_6x13(char *pc)
+{
+    unsigned int i;
+    const uint8_t *p;
+    uint8_t *q = buffer;
+    const unsigned int w = 6;
+    uint8_t c8;
+    uint16_t c16;
+
+    q[0] = q[128] = 0;
+    q++;
+
+    for (i = 0; i < lcd_columns; i++)
+    {
+        c8 = (uint8_t)(*pc++);
+        if(is_sjis_1st(c8) )
+        {
+            // DBCS , SJIS-KANJI code
+            if( i<(lcd_columns-1) )
+            {
+                // get code
+                c16 = (((uint16_t)c8)<<8) | (uint8_t)(*pc++);
+                // get font pattern
+                p = font_get_nl(c16);
+                // draw pattern
+                memcpy(q,     p    , w*2);
+                memcpy(q+128, p+16 , w*2);
+                q += w*2;
+                i++;
+            }
+            else
+            {   // missing 2nd byte
+                memset(q    , 0, w);
+                memset(q+128, 0, w);
+                q += w;
+            }
+        }
+        else
+        {
+            // SBCS
+            if (((char)(c8 -= 0x20)) > 0x5e)
+                c8 = '.' - 0x20;
+            p = &oled_font_6x13[c8 * w * 2];
+            memcpy(q, p, w);
+            memcpy(q+128, p+w, w);
+            q += w;
+        }
+    }
+    /* Fill remainder of buffer[] with zeroes. */
+    memset(q, 0, 127-lcd_columns*w);
+    memset(q+128, 0, 127-lcd_columns*w);
+}
+#ifdef font_extra
+extern const uint8_t oled_font_8x16[];
+static void oled_convert_text_row_8x16(char *pc)
+{
+    unsigned int i;
+    const uint8_t *p;
+    uint8_t *q = buffer;
+    const unsigned int w = 8;
+    uint8_t c8;
+    uint16_t c16;
+
+    for (i = 0; i < lcd_columns; i++)
+    {
+        c8 = (uint8_t)(*pc++);
+        if(is_sjis_1st(c8) )
+        {
+            // DBCS , SJIS-KANJI code
+            if( i<(lcd_columns-1) )
+            {
+                // get code
+                c16 = (((uint16_t)c8)<<8) | (uint8_t)(*pc++);
+                // get font pattern
+                p = font_get_nl(c16);
+                // draw pattern
+                memcpy(q,     p    , w*2);
+                memcpy(q+128, p+16 , w*2);
+                q += w*2;
+                i++;
+            }
+            else
+            {   // missing 2nd byte
+                memset(q    , 0, w);
+                memset(q+128, 0, w);
+                q += w;
+            }
+        }
+        else
+        {
+            // SBCS
+            if (((char)(c8 -= 0x20)) > 0x5e)
+                c8 = '.' - 0x20;
+            p = &oled_font_8x16[c8 * w * 2];
+            memcpy(q, p, w);
+            memcpy(q+128, p+w, w);
+            q += w;
+        }
+    }
+}
+#endif // font_extra 
+#endif // KANJI_FONT
 
 static void oled_convert_text_row(char *pc)
 {

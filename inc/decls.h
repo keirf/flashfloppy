@@ -29,6 +29,8 @@
 #include "floppy.h"
 #include "config.h"
 
+#include "font.h"
+
 /*
  * Local variables:
  * mode: C

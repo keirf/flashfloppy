@@ -1,3 +1,4 @@
+//#define MIN_TABLE
 /*------------------------------------------------------------------------*/
 /* Unicode handling functions for FatFs R0.13+                            */
 /*------------------------------------------------------------------------*/
@@ -22,7 +23,6 @@
 / by use of this software.
 */
 
-
 #include "ff.h"
 
 #if FF_USE_LFN
@@ -36,8 +36,10 @@
 /*------------------------------------------------------------------------*/
 
 #if FF_CODE_PAGE == 932 || FF_CODE_PAGE == 0	/* Japanese */
-static
-const WCHAR uni2oem932[] = {	/* Unicode --> Shift_JIS pairs */
+#ifdef MIN_TABLE
+#include "u2oemindex932.c"
+#else
+static const WCHAR uni2oem932[] = {	/* Unicode --> Shift_JIS pairs */
 	0x00A7, 0x8198, 0x00A8, 0x814E, 0x00B0, 0x818B, 0x00B1, 0x817D,	0x00B4, 0x814C, 0x00B6, 0x81F7, 0x00D7, 0x817E, 0x00F7, 0x8180,
 	0x0391, 0x839F, 0x0392, 0x83A0, 0x0393, 0x83A1, 0x0394, 0x83A2,	0x0395, 0x83A3, 0x0396, 0x83A4, 0x0397, 0x83A5, 0x0398, 0x83A6,
 	0x0399, 0x83A7, 0x039A, 0x83A8, 0x039B, 0x83A9, 0x039C, 0x83AA,	0x039D, 0x83AB, 0x039E, 0x83AC, 0x039F, 0x83AD, 0x03A0, 0x83AE,
@@ -963,9 +965,9 @@ const WCHAR uni2oem932[] = {	/* Unicode --> Shift_JIS pairs */
 	0xFF99, 0x00D9, 0xFF9A, 0x00DA, 0xFF9B, 0x00DB, 0xFF9C, 0x00DC,	0xFF9D, 0x00DD, 0xFF9E, 0x00DE, 0xFF9F, 0x00DF, 0xFFE0, 0x8191,
 	0xFFE1, 0x8192, 0xFFE2, 0x81CA, 0xFFE3, 0x8150, 0xFFE4, 0xFA55,	0xFFE5, 0x818F, 0, 0
 };
+#endif
 
-static
-const WCHAR oem2uni932[] = {	/* Shift_JIS --> Unicode pairs */
+static const WCHAR oem2uni932[] = {	/* Shift_JIS --> Unicode pairs */
 	0x00A1, 0xFF61, 0x00A2, 0xFF62, 0x00A3, 0xFF63, 0x00A4, 0xFF64,	0x00A5, 0xFF65, 0x00A6, 0xFF66, 0x00A7, 0xFF67, 0x00A8, 0xFF68,
 	0x00A9, 0xFF69, 0x00AA, 0xFF6A, 0x00AB, 0xFF6B, 0x00AC, 0xFF6C,	0x00AD, 0xFF6D, 0x00AE, 0xFF6E, 0x00AF, 0xFF6F, 0x00B0, 0xFF70,
 	0x00B1, 0xFF71, 0x00B2, 0xFF72, 0x00B3, 0xFF73, 0x00B4, 0xFF74,	0x00B5, 0xFF75, 0x00B6, 0xFF76, 0x00B7, 0xFF77, 0x00B8, 0xFF78,
@@ -1892,6 +1894,7 @@ const WCHAR oem2uni932[] = {	/* Shift_JIS --> Unicode pairs */
 	0xFC47, 0x9D70, 0xFC48, 0x9D6B, 0xFC49, 0xFA2D, 0xFC4A, 0x9E19,	0xFC4B, 0x9ED1, 0, 0
 };
 #endif
+
 
 #if FF_CODE_PAGE == 936 || FF_CODE_PAGE == 0	/* Simplified Chinese */
 static
@@ -15304,12 +15307,31 @@ WCHAR ff_uni2oem (	/* Returns OEM code character, zero on error */
 	WCHAR c = 0;
 	UINT i, n, li, hi;
 
-
 	if (uni < 0x80) {	/* ASCII char */
 		c = uni;
 
 	} else {			/* Non-ASCII char */
 		if (cp == FF_CODE_PAGE) {	/* Is it a valid code page? */
+#ifdef MIN_TABLE
+			const WCHAR *ixp;
+			WCHAR uni_tbl;
+			p   = CVTBL(oem2uni, FF_CODE_PAGE);   // oem->uni
+			p++; // offset unicode               
+			ixp = CVTBL(uni2oemix, FF_CODE_PAGE); // uni -> oem2uni
+			hi = sizeof CVTBL(uni2oemix, FF_CODE_PAGE) / 2 - 1;
+			li = 0;
+			for (n = 16; n; n--) {
+				i = li + (hi - li) / 2;
+				uni_tbl = p[ ixp[i]*2 ]; // unicode
+				if (uni == uni_tbl) break;
+				if (uni > uni_tbl) {
+					li = i;
+				} else {
+					hi = i;
+				}
+			}
+			if (n != 0) c = p[ ixp[i]*2-1 ]; // oemcode
+#else
 			p = CVTBL(uni2oem, FF_CODE_PAGE);
 			hi = sizeof CVTBL(uni2oem, FF_CODE_PAGE) / 4 - 1;
 			li = 0;
@@ -15323,6 +15345,7 @@ WCHAR ff_uni2oem (	/* Returns OEM code character, zero on error */
 				}
 			}
 			if (n != 0) c = p[i * 2 + 1];
+#endif
 		}
 	}
 	return c;
@@ -15336,14 +15359,14 @@ WCHAR ff_oem2uni (	/* Returns Unicode character, zero on error */
 {
 	const WCHAR *p;
 	WCHAR c = 0;
-	UINT i, n, li, hi;
+	UINT i = 0, n, li, hi;
 
 
-	if (oem < 0x80) {	/* ASCII char */
+	if (oem < 0x80) {	/* ASCII? */
 		c = oem;
 
 	} else {			/* Extended char */
-		if (cp == FF_CODE_PAGE) {	/* Is it a valid code page? */
+		if (cp == FF_CODE_PAGE) {	/* Is it valid code page? */
 			p = CVTBL(oem2uni, FF_CODE_PAGE);
 			hi = sizeof CVTBL(oem2uni, FF_CODE_PAGE) / 4 - 1;
 			li = 0;

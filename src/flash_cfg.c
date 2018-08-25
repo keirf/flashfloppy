@@ -29,7 +29,7 @@ union cfg_slot {
     uint16_t words[SLOTW_NR];
 };
 
-#define SLOT_BASE (union cfg_slot *)(0x8020000 - FLASH_PAGE_SIZE)
+#define SLOT_BASE (union cfg_slot *)(0x8000000 +FLASH_MEM_SIZE -FLASH_PAGE_SIZE)
 #define SLOT_NR   (FLASH_PAGE_SIZE / sizeof(union cfg_slot))
 
 #define slot_is_blank(_slot) ((_slot)->words[0] == 0xffff)
