@@ -9,6 +9,12 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#ifdef KANJI_FONT
+// DBCS font file names
+#define FONT_NAME12 "./font1212.bin"
+#define FONT_NAME16 "./font1616.bin"
+#endif
+
 int EXC_reset(void) __attribute__((alias("main")));
 
 static FATFS fatfs;
@@ -110,6 +116,26 @@ static void lcd_scroll_init(uint16_t pause, uint16_t rate)
         lcd_scroll.off = lcd_scroll.pause || !lcd_scroll.end
             ? 0 : lcd_scroll.end + diff;
 }
+
+#ifdef KANJI_FONT
+// check 2nd byte of DBCS in string
+static bool_t is_sjis2nd(const char *str,int n)
+{
+    int i;
+    bool_t dbcs_1st;
+    uint8_t c8;
+
+    dbcs_1st = FALSE;
+    for(i=0;i<n;i++)
+    {
+        c8 = (uint8_t)(str[i]);
+        if(c8==0) return 0;
+        dbcs_1st = dbcs_1st ? FALSE : is_sjis_1st(c8);
+    }
+    return dbcs_1st;
+}
+#endif
+
 static void lcd_scroll_name(void)
 {
     char msg[25];
@@ -123,6 +149,10 @@ static void lcd_scroll_name(void)
         if ((lcd_scroll.off == 0)
             || (lcd_scroll.off == lcd_scroll.end))
             lcd_scroll.ticks = time_ms(lcd_scroll.pause);
+#ifdef KANJI_FONT
+        // mask kanji-2nd byte in left eddge
+        if(is_sjis2nd(cfg.slot.name,lcd_scroll.off)) msg[0]=' '; // left eddge fix
+#endif
     } else {
         const unsigned int scroll_gap = 4;
         lcd_scroll.off++;
@@ -130,6 +160,9 @@ static void lcd_scroll_name(void)
             snprintf(msg, sizeof(msg), "%s%*s%s",
                      cfg.slot.name + lcd_scroll.off,
                      scroll_gap, "", cfg.slot.name);
+#ifdef KANJI_FONT
+            if(is_sjis2nd(cfg.slot.name,lcd_scroll.off)) msg[0]=' '; // left eddge fix
+#endif
         } else {
             snprintf(msg, sizeof(msg), "%*s%s",
                      scroll_gap - (lcd_scroll.off - lcd_scroll.end), "",
@@ -150,6 +183,10 @@ static void display_write_slot(bool_t nav_mode)
             led_7seg_write_decimal(cfg.slot_nr);
         return;
     }
+#ifdef KANJI_FONT
+    // cache DBCS font pattern in file name
+    font_cache(cfg.slot.name);
+#endif
     if (nav_mode && !cfg_scroll_reset) {
         lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
         if (lcd_scroll.end == 0) {
@@ -1774,9 +1811,15 @@ int main(void)
         usbh_msc_buffer_set((void *)0xdeadbeef);
 
         arena_init();
+#ifdef KANJI_FONT
+        // open kanji-font file
+        font_init( (ff_cfg.oled_font == FONT_8x16) ? FONT_NAME16 : FONT_NAME12);
+#endif
         fres = F_call_cancellable(floppy_main, NULL);
         floppy_cancel();
-
+#ifdef KANJI_FONT
+        font_close();
+#endif
         handle_errors(fres);
     }
 

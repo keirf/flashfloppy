@@ -9,7 +9,11 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define FW_VER "0.9.27a"
+#if FLASH_MEM_SIZE==0x40000
+#define FW_VER "0.9.27a:256KB"
+#else
+#define FW_VER "0.9.27a:128KB"
+#endif
 
 #ifndef NDEBUG
 #define ASSERT(p) do { if (!(p)) illegal(); } while (0)
