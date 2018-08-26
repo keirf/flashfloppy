@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.28a - 26 August 2018
+ - New image types supported:
+   - IMG: Fluke 9100 (host=fluke)
+   - MBD: Spectrum MB02
+ - LCD/OLED: Display folder names in brackets
+
 ** v0.9.27a - 27 July 2018
  - Direct Navigation: Fix hidden-file and dot-file filtering
  - Direct Navigation: Filter __MACOSX/ resource-fork folders
