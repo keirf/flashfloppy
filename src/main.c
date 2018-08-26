@@ -144,12 +144,16 @@ static void lcd_scroll_name(void)
 /* Write slot info to display. */
 static void display_write_slot(bool_t nav_mode)
 {
-    char msg[25], *type;
+    const struct image_type *type;
+    char msg[25], typename[4] = "";
+    unsigned int i;
+
     if (display_mode != DM_LCD_1602) {
         if (display_mode == DM_LED_7SEG)
             led_7seg_write_decimal(cfg.slot_nr);
         return;
     }
+
     if (nav_mode && !cfg_scroll_reset) {
         lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
         if (lcd_scroll.end == 0) {
@@ -164,38 +168,32 @@ static void display_write_slot(bool_t nav_mode)
         snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
         lcd_write(0, 0, -1, msg);
     }
-    type = (cfg.slot.attributes & AM_DIR) ? "DIR"
-        : slot_type("adf") ? "ADF"
-        : slot_type("d81") ? "D81"
-        : slot_type("dsk") ? "DSK"
-        : slot_type("hfe") ? "HFE"
-        : slot_type("img") ? "IMG"
-        : slot_type("ima") ? "IMA"
-        : slot_type("st") ? "ST "
-        : slot_type("adl") ? "ADL"
-        : slot_type("adm") ? "ADM"
-        : slot_type("mbd") ? "MBD"
-        : slot_type("mgt") ? "MGT"
-        : slot_type("fdi") ? "FDI"
-        : slot_type("trd") ? "TRD"
-        : slot_type("opd") ? "OPD"
-        : slot_type("ssd") ? "SSD"
-        : slot_type("dsd") ? "DSD"
-        : slot_type("sdu") ? "SDU"
-        : slot_type("jvc") ? "JVC"
-        : slot_type("vdk") ? "VDK"
-        : slot_type("v9t9") ? "T99"
-        : "UNK";
-    snprintf(msg, sizeof(msg), "%03u/%03u%*s%s D:%u",
+
+    if (slot_type("v9t9")) {
+        snprintf(typename, sizeof(typename), "T99");
+    } else if (!(cfg.slot.attributes & AM_DIR)) {
+        for (type = &image_type[0]; type->handler != NULL; type++)
+            if (slot_type(type->ext))
+                break;
+        if (type->handler != NULL) {
+            snprintf(typename, sizeof(typename), "%s", type->ext);
+            for (i = 0; i < sizeof(typename); i++)
+                typename[i] = toupper(typename[i]);
+        }
+    }
+
+    snprintf(msg, sizeof(msg), "%03u/%03u%*s%3s D:%u",
              cfg.slot_nr, cfg.max_slot_nr,
              (lcd_columns > 16) ? 3 : 1, "",
-             type, cfg.depth);
+             typename, cfg.depth);
+
     if (cfg.hxc_mode) {
         /* HxC mode: Exclude depth from the info message. */
         char *p = strrchr(msg, 'D');
         if (p)
             *p = '\0';
     }
+
     lcd_write(0, 1, -1, msg);
     lcd_on();
 }
@@ -973,7 +971,7 @@ static void native_update(uint8_t slot_mode)
     if (fs->fp.fattrib & AM_DIR) {
         /* Leave the full pathname cached in fs->fp. */
         cfg.slot.attributes = fs->fp.fattrib;
-        snprintf(cfg.slot.name, sizeof(cfg.slot.name), "%s", fs->fp.fname);
+        snprintf(cfg.slot.name, sizeof(cfg.slot.name), "[%s]", fs->fp.fname);
     } else {
         F_open(&fs->file, fs->fp.fname, FA_READ);
         fs->file.obj.attr = fs->fp.fattrib;

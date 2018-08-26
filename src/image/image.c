@@ -29,6 +29,30 @@ extern const struct image_handler jvc_image_handler;
 extern const struct image_handler vdk_image_handler;
 extern const struct image_handler ti99_image_handler;
 
+const struct image_type image_type[] = {
+    { "adf", &adf_image_handler },
+    { "d81", &d81_image_handler },
+    { "dsk", &dsk_image_handler },
+    { "hfe", &hfe_image_handler },
+    { "img", &img_image_handler },
+    { "ima", &img_image_handler },
+    { "st",  &st_image_handler },
+    { "adl", &adfs_image_handler },
+    { "adm", &adfs_image_handler },
+    { "mbd", &mbd_image_handler },
+    { "mgt", &mgt_image_handler },
+    { "fdi", &pc98fdi_image_handler },
+    { "trd", &trd_image_handler },
+    { "opd", &opd_image_handler },
+    { "ssd", &ssd_image_handler },
+    { "dsd", &dsd_image_handler },
+    { "sdu", &sdu_image_handler },
+    { "jvc", &jvc_image_handler },
+    { "vdk", &vdk_image_handler },
+    { "v9t9", &ti99_image_handler },
+    { "", NULL }
+};
+
 bool_t image_valid(FILINFO *fp)
 {
     char ext[8];
@@ -41,26 +65,11 @@ bool_t image_valid(FILINFO *fp)
     filename_extension(fp->fname, ext, sizeof(ext));
     if (!strcmp(ext, "adf")) {
         return (ff_cfg.host == HOST_acorn) || !(fp->fsize % (11*512));
-    } else if (!strcmp(ext, "d81")
-               || !strcmp(ext, "dsk")
-               || !strcmp(ext, "hfe")
-               || !strcmp(ext, "img")
-               || !strcmp(ext, "ima")
-               || !strcmp(ext, "st")
-               || !strcmp(ext, "adl")
-               || !strcmp(ext, "adm")
-               || !strcmp(ext, "mbd")
-               || !strcmp(ext, "mgt")
-               || !strcmp(ext, "fdi")
-               || !strcmp(ext, "trd")
-               || !strcmp(ext, "opd")
-               || !strcmp(ext, "ssd")
-               || !strcmp(ext, "dsd")
-               || !strcmp(ext, "sdu")
-               || !strcmp(ext, "jvc")
-               || !strcmp(ext, "vdk")
-               || !strcmp(ext, "v9t9")) {
-        return TRUE;
+    } else {
+        const struct image_type *type;
+        for (type = &image_type[0]; type->handler != NULL; type++)
+            if (!strcmp(ext, type->ext))
+                return TRUE;
     }
 
     return FALSE;
@@ -105,6 +114,7 @@ void image_open(struct image *im, const struct slot *slot)
 
     char ext[sizeof(slot->type)+1];
     const struct image_handler *hint;
+    const struct image_type *type;
     int i;
 
     /* Extract filename extension (if available). */
@@ -112,29 +122,23 @@ void image_open(struct image *im, const struct slot *slot)
     ext[sizeof(slot->type)] = '\0';
 
     /* Use the extension as a hint to the correct image handler. */
-    hint = (!strcmp(ext, "adf") ? ((ff_cfg.host == HOST_acorn)
-                                   ? &adfs_image_handler : &adf_image_handler)
-            : !strcmp(ext, "d81") ? &d81_image_handler
-            : !strcmp(ext, "dsk") ? ((ff_cfg.host == HOST_tandy_coco)
-                                     ? &jvc_image_handler: &dsk_image_handler)
-            : !strcmp(ext, "hfe") ? &hfe_image_handler
-            : !strcmp(ext, "img") ? &img_image_handler
-            : !strcmp(ext, "ima") ? &img_image_handler
-            : !strcmp(ext, "st") ? &st_image_handler
-            : !strcmp(ext, "adl") ? &adfs_image_handler
-            : !strcmp(ext, "adm") ? &adfs_image_handler
-            : !strcmp(ext, "mbd") ? &mbd_image_handler
-            : !strcmp(ext, "mgt") ? &mgt_image_handler
-            : !strcmp(ext, "fdi") ? &pc98fdi_image_handler
-            : !strcmp(ext, "trd") ? &trd_image_handler
-            : !strcmp(ext, "opd") ? &opd_image_handler
-            : !strcmp(ext, "ssd") ? &ssd_image_handler
-            : !strcmp(ext, "dsd") ? &dsd_image_handler
-            : !strcmp(ext, "sdu") ? &sdu_image_handler
-            : !strcmp(ext, "jvc") ? &jvc_image_handler
-            : !strcmp(ext, "vdk") ? &vdk_image_handler
-            : !strcmp(ext, "v9t9") ? &ti99_image_handler
-            : NULL);
+    for (type = &image_type[0]; type->handler != NULL; type++)
+        if (!strcmp(ext, type->ext))
+            break;
+    hint = type->handler;
+
+    /* Apply host-specific overrides to the hint. */
+    switch (ff_cfg.host) {
+    case HOST_acorn:
+        if (hint == &adf_image_handler)
+            hint = &adfs_image_handler;
+        break;
+    case HOST_tandy_coco:
+        if (hint == &dsk_image_handler)
+            hint = &jvc_image_handler;
+        break;
+    }
+
     if (hint) {
         if (try_handler(im, slot, hint))
             return;

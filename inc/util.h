@@ -77,6 +77,7 @@ int strncmp(const char *s1, const char *s2, size_t n);
 char *strchr(const char *s, int c);
 char *strrchr(const char *s, int c);
 int tolower(int c);
+int toupper(int c);
 int isspace(int c);
 
 long int strtol(const char *nptr, char **endptr, int base);

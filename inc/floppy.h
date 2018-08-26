@@ -157,6 +157,12 @@ struct image_handler {
     bool_t (*write_track)(struct image *im);
 };
 
+/* List of supported image types. */
+extern const struct image_type {
+    char ext[8];
+    const struct image_handler *handler;
+} image_type[];
+
 /* Is given file valid to open as an image? */
 bool_t image_valid(FILINFO *fp);
 
