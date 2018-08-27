@@ -3,5 +3,11 @@
 ** Tatsuyuki Sato
 ************************************
 
+** 27 July 2018
+ - Supported FlashSize 128KB w/o bootloader
+ - Minimize Unicode->OEM conversion table (FatFs)
+ - Added standalone build binlary (w/o bootloader)
+ - Change output location to bin directory
+
 ** 26 July 2018
  - initial release

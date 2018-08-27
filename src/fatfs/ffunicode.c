@@ -1,4 +1,5 @@
-//#define MIN_TABLE
+#define FF_MIN_TABLE
+//define DFF_UNICODE_DYNAMIC
 /*------------------------------------------------------------------------*/
 /* Unicode handling functions for FatFs R0.13+                            */
 /*------------------------------------------------------------------------*/
@@ -36,8 +37,8 @@
 /*------------------------------------------------------------------------*/
 
 #if FF_CODE_PAGE == 932 || FF_CODE_PAGE == 0	/* Japanese */
-#ifdef MIN_TABLE
-#include "u2oemindex932.c"
+#ifdef FF_MIN_TABLE
+//
 #else
 static const WCHAR uni2oem932[] = {	/* Unicode --> Shift_JIS pairs */
 	0x00A7, 0x8198, 0x00A8, 0x814E, 0x00B0, 0x818B, 0x00B1, 0x817D,	0x00B4, 0x814C, 0x00B6, 0x81F7, 0x00D7, 0x817E, 0x00F7, 0x8180,
@@ -1893,6 +1894,13 @@ static const WCHAR oem2uni932[] = {	/* Shift_JIS --> Unicode pairs */
 	0xFBFC, 0x9AD9, 0xFC40, 0x9ADC, 0xFC41, 0x9B75, 0xFC42, 0x9B72,	0xFC43, 0x9B8F, 0xFC44, 0x9BB1, 0xFC45, 0x9BBB, 0xFC46, 0x9C00,
 	0xFC47, 0x9D70, 0xFC48, 0x9D6B, 0xFC49, 0xFA2D, 0xFC4A, 0x9E19,	0xFC4B, 0x9ED1, 0, 0
 };
+#ifdef FF_MIN_TABLE
+#ifdef DFF_UNICODE_DYNAMIC
+static WCHAR uni2oix932[sizeof(oem2uni932)/4 -4];
+#else
+#include "u2oix932.c"
+#endif // 
+#endif // FF_MIN_TABLE
 #endif
 
 
@@ -15238,8 +15246,53 @@ const WCHAR uc869[] = {	/*  CP869(Greek 2) to Unicode conversion table */
 };
 #endif
 
-
-
+#if FF_CODE_PAGE != 0 && FF_CODE_PAGE >= 900
+#ifdef DFF_UNICODE_DYNAMIC
+/*------------------------------------------------------------------------*/
+/* quick sort                                                             */
+/*------------------------------------------------------------------------*/
+static void ff_lfn_qsort(const WCHAR *o2u,WCHAR *numbers,WCHAR left, WCHAR right)
+{
+    WCHAR pivot_num,pivot, l_hold, r_hold;
+    r_hold = right;
+	pivot  = numbers[l_hold = left];
+    pivot_num = o2u[pivot*2];
+    while (left < right)
+    {
+        while ((o2u[numbers[right]*2] >= pivot_num) && (left < right)) right--;
+        if (left != right)
+        {
+            numbers[left] = numbers[right];
+            left++;
+        }
+        while ((o2u[numbers[left]*2] <= pivot_num) && (left < right)) left++;
+        if (left != right)
+        {
+            numbers[right] = numbers[left];
+            right--;
+        }
+    }
+    numbers[left] = pivot;
+    pivot = left;
+    if (l_hold < pivot) ff_lfn_qsort(o2u,numbers,l_hold ,pivot-1);
+    if (r_hold > pivot) ff_lfn_qsort(o2u,numbers,pivot+1, r_hold);
+}
+/*------------------------------------------------------------------------*/
+/* build unicode to oem2uni reverse index table                           */
+/*------------------------------------------------------------------------*/
+static void ff_build_u2oix(const WCHAR *o2u,WCHAR *u2ix)
+{
+	WCHAR total_count;
+	// build index table with totoal count
+	for(total_count=0;o2u[total_count*2]!=0;total_count++)
+	{
+		u2ix[total_count] = total_count;
+	}
+	// quick sort as UNICODE[]
+	return ff_lfn_qsort(o2u+1,u2ix,0,total_count-1);
+}
+#endif // DFF_UNICODE_DYNAMIC
+#endif
 
 /*------------------------------------------------------------------------*/
 /* OEM <==> Unicode conversions for static code page configuration        */
@@ -15312,13 +15365,13 @@ WCHAR ff_uni2oem (	/* Returns OEM code character, zero on error */
 
 	} else {			/* Non-ASCII char */
 		if (cp == FF_CODE_PAGE) {	/* Is it a valid code page? */
-#ifdef MIN_TABLE
+#ifdef FF_MIN_TABLE
 			const WCHAR *ixp;
 			WCHAR uni_tbl;
 			p   = CVTBL(oem2uni, FF_CODE_PAGE);   // oem->uni
 			p++; // offset unicode               
-			ixp = CVTBL(uni2oemix, FF_CODE_PAGE); // uni -> oem2uni
-			hi = sizeof CVTBL(uni2oemix, FF_CODE_PAGE) / 2 - 1;
+			ixp = CVTBL(uni2oix, FF_CODE_PAGE); // uni -> oem2uni
+			hi  = sizeof CVTBL(oem2uni, FF_CODE_PAGE) / 4 - 1;
 			li = 0;
 			for (n = 16; n; n--) {
 				i = li + (hi - li) / 2;
@@ -15384,6 +15437,19 @@ WCHAR ff_oem2uni (	/* Returns Unicode character, zero on error */
 	}
 	return c;
 }
+
+#ifdef FF_MIN_TABLE
+/*------------------------------------------------------------------------*/
+/* initialize unicode conversion table                                    */
+/*------------------------------------------------------------------------*/
+void ff_lfn_init(void)
+{
+#ifdef DFF_UNICODE_DYNAMIC
+	ff_build_u2oix(CVTBL(oem2uni, FF_CODE_PAGE),CVTBL(uni2oix, FF_CODE_PAGE) );
+#endif
+}
+#endif // FF_MIN_ABLE
+
 #endif
 
 

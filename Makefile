@@ -1,8 +1,8 @@
 
 PROJ = FlashFloppy
-VER = v0.9.27a.256KB.cp932
+VER = v0.9.27a.cp932
 
-SUBDIRS += src bootloader reloader
+SUBDIRS += src bootloader reloader standalone
 
 .PHONY: all clean flash start serial gotek
 
@@ -15,16 +15,18 @@ all:
 	$(MAKE) -f $(ROOT)/Rules.mk all
 
 clean:
-	rm -f *.hex *.upd *.rld *.dfu *.html
+	rm -f bin/*.hex bin/*.upd bin/*.rld bin/*.dfu *.html
 	$(MAKE) -f $(ROOT)/Rules.mk $@
 
 gotek: export gotek=y
 gotek: all
-	mv FF.dfu FF_Gotek-$(VER).dfu
-	mv FF.upd FF_Gotek-$(VER).upd
-	mv FF.hex FF_Gotek-$(VER).hex
-	mv BL.rld FF_Gotek-Bootloader-$(VER).rld
-	mv RL.upd FF_Gotek-Reloader-$(VER).upd
+	mv FF.dfu bin/FF_Gotek-$(VER).dfu
+	mv FF.upd bin/FF_Gotek-$(VER).upd
+	mv FF.hex bin/FF_Gotek-$(VER).hex
+	mv BL.rld bin/FF_Gotek-Bootloader-$(VER).rld
+	mv RL.upd bin/FF_Gotek-Reloader-$(VER).upd
+	mv ST.hex bin/FF_Gotek-Standalone-$(VER).hex
+	mv ST.dfu bin/FF_Gotek-Standalone-$(VER).dfu
 
 HXC_FF_URL := https://www.github.com/keirf/HxC_FF_File_Selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
@@ -60,16 +62,19 @@ else
 
 all:
 	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
+	nobootloader=y $(MAKE) -C standalone -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
 	bootloader=y $(MAKE) -C bootloader -f $(ROOT)/Rules.mk \
 		Bootloader.elf Bootloader.bin Bootloader.hex
 	reloader=y $(MAKE) -C reloader -f $(ROOT)/Rules.mk \
 		Reloader.elf Reloader.bin Reloader.hex
 	srec_cat bootloader/Bootloader.hex -Intel src/$(PROJ).hex -Intel \
 	-o FF.hex -Intel
+	cp standalone/$(PROJ).hex ST.hex
 	$(PYTHON) ./scripts/mk_update.py src/$(PROJ).bin FF.upd
 	$(PYTHON) ./scripts/mk_update.py bootloader/Bootloader.bin BL.rld
 	$(PYTHON) ./scripts/mk_update.py reloader/Reloader.bin RL.upd
 	$(PYTHON) ./scripts/dfu-convert.py -i FF.hex FF.dfu
+	$(PYTHON) ./scripts/dfu-convert.py -i ST.hex ST.dfu
 
 endif
 

@@ -28,8 +28,15 @@ ifeq ($(bootloader),y)
 FLAGS += -DBOOTLOADER=1
 endif
 
-FLAGS += -DFLASH_MEM_SIZE=0x40000
 FLAGS += -DKANJI_FONT=1
+
+ifeq ($(nobootloader),y)
+FLAGS += -DNOBOOTLOADER=1
+FLAGS += -DFLASH_MEM_SIZE=0x20000
+else
+FLAGS += -DFLASH_MEM_SIZE=0x40000
+endif
+
 
 FLAGS += -MMD -MF .$(@F).d
 DEPS = .*.d

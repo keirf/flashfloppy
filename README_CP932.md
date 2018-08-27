@@ -1,29 +1,41 @@
 ************************************
-** FlashFloppy cp932 MOD readme
+** FlashFloppy cp932 日本語 KANJI MOD readme
 ** Tatsuyuki Sato
 ************************************
 
 GOTEK FlashFloppyの日本語対応版です。
-フラッシュメモリ容量が256KB以上のMCUで動きます。容量が128KBのMCUでは動きません。
-東雲フォントから'font_gen/bdf2mb.exe'を使ってフォントファイルを生成して、6x13の場合は'font1212.bin'を、8x16の場合は'font1616.bin'をUSBストレージのルートディレクトリに配置します。
-256KB版のブートローダーが必要なので、ファームウェアの更新する前にブートローダーを256KB対応に変更してください。
-FDDエミュレーション中はフォントファイルをアクセスしませんが、OLEDの描画遅延が多少増加するため、データアクセスのポーリング周期にも多少の影響が出ます。
+日本語ファイル名をマウントとOLEDへの漢字表示が可能になります。
+OLEDで漢字表示を行うためには、フォントファイルをUSBストレージのルートディレクトリに配置する必要があります。
+フォントサイズが6x13では'font1212.bin'、8x16では'font1616.bin'のファイルが使用されいます。
 
-This is the GOTEK FlashFloppy with the code page cp932 modification.
-It can mount Japanese-KANJI filename with no error.
-Also this can display KANJI font in OLED.
+1.スタンドアロンバージョン : standalone verseion w.o.bootloader
 
-It supports only MCU with 256KBytes of Flash memory.
-because OEM and UTF16 conversion tabel are too big.
-The firmware update is possible with 256KB bootloader.
-First,You need to update the boot loader to 256KB version with the reloader first.
+全てのGOTEKで動きますが、bootloaderと共存できません。
+FF_Gotek-Static-{ver.}.hex : serial update
+FF_Gotek-Static-{ver.}.dfu : USB-DFU update
 
-The KANJI font pattern is dinamicaly read from the USB storage.
-The font file is required in the root directory to display KANJI to OLED,'font1212.bin' for 6x13 mode,or 'font1616.bin' for 8x16 mode.
-The font files can also be generated from SHINONOME-FONT using 'font_gen/bdf2mb.exe'.
-It data format is MB832001-042,MB831000-042 plus 044,or combined MB83256-19 to 26.
+2.ノーマル256KBバージョン : normal 256KB version.
 
-The KANJI fonts are loaded into RAM before displaying file names.
-I do not access the font file during emulation, but the latency of I2C interrupt handling time slightly increases.
-So,it gives a slight delay to the data access polling interval.
+フラッシュメモリ容量が256KB以上のGOTEKだけで動きます。(only FlashMemory 256KB+)
+SERIALまたはDFUから更新した場合、bootloaderも256KB対応版になります。
+
+FF_Gotek-{ver.}.cp932.hex  : serial upate
+FF_Gotek-{ver.}.cp932.dfu  : USB-DFU udpate
+
+.updでアップデートを行う場合は、先にブートローダーを256KB対応版に更新しておく必要があります。
+(update 256KB bootloader first)
+
+FF_Gotek-Reloader-{ver.}.cp932.upd   : reloader
+FF_Gotek-Bootloader-{ver.}.cp932.rld : 256KB BootLoader for reloader
+FF_Gotek-{ver.}.cp932.upd            : USB storage update (256 BL required)
+
+************************************
+**
+************************************
+
+フォントのファイルフォーマットはMB831000-042とMB831000-044を結合したもと互換性があります。
+フォントファイルが東雲フォントファミリーの.bdfファイルから'font_gen/bdf2mb.exe'を使って生成できます。
+
+漢字のフォントはファイルを表示前に全てRAMにロードされていますが、OLEDの更新割り込みで僅かに遅延が増加します。
+それはFDデータのポーリング周期に僅かに影響を及ぼします。
 
