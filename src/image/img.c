@@ -21,6 +21,7 @@ static bool_t fm_open(struct image *im);
 static bool_t fm_read_track(struct image *im);
 static bool_t fm_write_track(struct image *im);
 
+static bool_t msx_open(struct image *im);
 static bool_t pc_dos_open(struct image *im);
 static bool_t ti99_open(struct image *im);
 
@@ -98,6 +99,7 @@ const static struct img_type {
     { 16, 2, 57, 3, 1, 1, 0, _C(80), _R(300) }, /* Type 07 */
     { 0 }
 }, msx_type[] = {
+    {  8, 1, 84, 1, 2, 1, 0, _C(80), _R(300) }, /* 320k */
     {  9, 1, 84, 1, 2, 1, 0, _C(80), _R(300) }, /* 360k */
     { 0 } /* all other formats from default list */
 }, pc98_type[] = {
@@ -191,8 +193,9 @@ static bool_t img_open(struct image *im)
         type = memotech_type;
         break;
     case HOST_msx:
-        type = msx_type;
-        break;
+        if (msx_open(im))
+            return TRUE;
+        goto fallback;
     case HOST_pc98:
         type = pc98_type;
         break;
@@ -284,42 +287,105 @@ static bool_t pc98fdi_open(struct image *im)
     return _img_open(im, TRUE, NULL);
 }
 
-static bool_t pc_dos_open(struct image *im)
+struct bpb {
+    uint16_t sig;
+    uint16_t bytes_per_sec;
+    uint16_t sec_per_track;
+    uint16_t num_heads;
+    uint16_t tot_sec;
+};
+    
+static void bpb_read(struct image *im, struct bpb *bpb)
 {
-    uint16_t id, bps, spt, heads, tot_sec;
+    uint16_t x;
 
     F_lseek(&im->fp, 510); /* BS_55AA */
-    F_read(&im->fp, &id, 2, NULL);
-    id = le16toh(id);
-    if (id != 0xaa55)
-        goto fail;
+    F_read(&im->fp, &x, 2, NULL);
+    bpb->sig = le16toh(x);
+
     F_lseek(&im->fp, 11); /* BPB_BytsPerSec */
-    F_read(&im->fp, &bps, 2, NULL);
-    bps = le16toh(bps);
+    F_read(&im->fp, &x, 2, NULL);
+    bpb->bytes_per_sec = le16toh(x);
+
+    F_lseek(&im->fp, 24); /* BPB_SecPerTrk */
+    F_read(&im->fp, &x, 2, NULL);
+    bpb->sec_per_track = le16toh(x);
+
+    F_lseek(&im->fp, 26); /* BPB_NumHeads */
+    F_read(&im->fp, &x, 2, NULL);
+    bpb->num_heads = le16toh(x);
+
+    F_lseek(&im->fp, 19); /* BPB_TotSec */
+    F_read(&im->fp, &x, 2, NULL);
+    bpb->tot_sec = le16toh(x);
+}
+
+static bool_t msx_open(struct image *im)
+{
+    struct bpb bpb;
+
+    /* Try to disambiguate overloaded image sizes via the boot sector. */
+    switch (im_size(im)) {
+    case 320*1024: /* 80/1/8 or 40/2/8? */
+    case 360*1024: /* 80/1/9 or 40/2/9? */
+        bpb_read(im, &bpb);
+        /* BS_55AA (bpb.sig) is not valid in MSXDOS so don't check it. */
+        if ((bpb.bytes_per_sec == 512)
+            && ((bpb.num_heads == 1) || (bpb.num_heads == 2))
+            && (bpb.tot_sec == (im_size(im) / bpb.bytes_per_sec))
+            && ((bpb.sec_per_track == 8) || (bpb.sec_per_track == 9))) {
+            im->img.sec_no = 2;
+            im->img.nr_sectors = bpb.sec_per_track;
+            im->nr_sides = bpb.num_heads;
+            im->nr_cyls = (im->nr_sides == 1) ? 80 : 40;
+            im->img.interleave = 1;
+            im->img.sec_base = 1;
+            im->img.skew = 0;
+            im->img.has_iam = TRUE;
+            if (mfm_open(im))
+                return TRUE;
+        }
+        break;
+    }
+
+    /* Use the MSX-specific list. */
+    memset(&im->img, 0, sizeof(im->img));
+    if (_img_open(im, TRUE, msx_type))
+        return TRUE;
+
+    /* Caller falls back to the generic list. */
+    return FALSE;
+}
+
+static bool_t pc_dos_open(struct image *im)
+{
+    struct bpb bpb;
+
+    bpb_read(im, &bpb);
+
+    if (bpb.sig != 0xaa55)
+        goto fail;
+
     for (im->img.sec_no = 0; im->img.sec_no <= 6; im->img.sec_no++)
-        if (sec_sz(im) == bps)
+        if (sec_sz(im) == bpb.bytes_per_sec)
             break;
     if (im->img.sec_no > 6) /* >8kB? */
         goto fail;
-    F_lseek(&im->fp, 24); /* BPB_SecPerTrk */
-    F_read(&im->fp, &spt, 2, NULL);
-    spt = le16toh(spt);
-    if ((spt == 0) || (spt > ARRAY_SIZE(im->img.sec_map)))
+
+    if ((bpb.sec_per_track == 0)
+        || (bpb.sec_per_track > ARRAY_SIZE(im->img.sec_map)))
         goto fail;
-    im->img.nr_sectors = spt;
-    F_lseek(&im->fp, 26); /* BPB_NumHeads */
-    F_read(&im->fp, &heads, 2, NULL);
-    heads = le16toh(heads);
-    if ((heads != 1) && (heads != 2))
+    im->img.nr_sectors = bpb.sec_per_track;
+
+    if ((bpb.num_heads != 1) && (bpb.num_heads != 2))
         goto fail;
-    im->nr_sides = heads;
-    F_lseek(&im->fp, 19); /* BPB_TotSec */
-    F_read(&im->fp, &tot_sec, 2, NULL);
-    tot_sec = le16toh(tot_sec);
-    im->nr_cyls = (tot_sec + im->img.nr_sectors*im->nr_sides - 1)
+    im->nr_sides = bpb.num_heads;
+
+    im->nr_cyls = (bpb.tot_sec + im->img.nr_sectors*im->nr_sides - 1)
         / (im->img.nr_sectors * im->nr_sides);
     if (im->nr_cyls == 0)
         goto fail;
+
     im->img.interleave = 1;
     im->img.sec_base = 1;
     im->img.skew = 0;
