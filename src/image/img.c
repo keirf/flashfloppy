@@ -323,6 +323,7 @@ static bool_t pc_dos_open(struct image *im)
     im->img.interleave = 1;
     im->img.sec_base = 1;
     im->img.skew = 0;
+    im->img.has_iam = TRUE;
     return mfm_open(im);
 
 fail:
