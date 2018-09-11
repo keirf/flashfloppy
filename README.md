@@ -24,6 +24,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - Ensoniq (ASR, TS, etc)
   - Fluke (9100)
   - General Music (S2, S3, S2R)
+  - Kaypro
   - Memotech
   - MSX
   - NEC PC-98
