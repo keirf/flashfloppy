@@ -1180,25 +1180,24 @@ indexed_mode:
                     uint16_t, cfg.max_slot_nr, idx);
             }
             F_closedir(&fs->dp);
+            if (!slot_valid(cfg.max_slot_nr))
+                F_die(FR_NO_DIRENTS);
         }
 
         /* Index mode: populate current slot. */
-        for (;;) {
-            snprintf(name, sizeof(name), "DSKA%04u.*", cfg.slot_nr);
-            F_findfirst(&fs->dp, &fs->fp, "", name);
-            F_closedir(&fs->dp);
-            /* Found a valid image? */
-            if (fs->fp.fname[0])
-                break;
-            /* Fall back to slot 0. If already there, bail with error. */
-            if (cfg.slot_nr == 0)
-                F_die(FR_BAD_IMAGE);
-            cfg.slot_nr = 0;
+        snprintf(name, sizeof(name), "DSKA%04u.*", cfg.slot_nr);
+        printk("[%s]\n", name);
+        F_findfirst(&fs->dp, &fs->fp, "", name);
+        F_closedir(&fs->dp);
+        if (fs->fp.fname[0]) {
+            /* Found a valid image. */
+            F_open(&fs->file, fs->fp.fname, FA_READ);
+            fs->file.obj.attr = fs->fp.fattrib;
+            fatfs_to_slot(&cfg.slot, &fs->file, fs->fp.fname);
+            F_close(&fs->file);
+        } else {
+            memset(&cfg.slot, 0, sizeof(cfg.slot));
         }
-        F_open(&fs->file, fs->fp.fname, FA_READ);
-        fs->file.obj.attr = fs->fp.fattrib;
-        fatfs_to_slot(&cfg.slot, &fs->file, fs->fp.fname);
-        F_close(&fs->file);
     }
 
     for (i = 0; i < sizeof(cfg.slot.type); i++)
@@ -1687,7 +1686,7 @@ static void handle_errors(FRESULT fres)
         printk("USB Power Fault detected!\n");
         snprintf(msg, sizeof(msg), "USB Power Fault");
     } else if (usbh_msc_connected() && (fres != FR_OK)) {
-        printk("FATFS RETURN CODE: %u\n", fres);
+        printk("**Error %u\n", fres);
         snprintf(msg, sizeof(msg),
                  (display_mode == DM_LED_7SEG)
                  ? ((fres >= 30) ? "E%02u" : "F%02u")
