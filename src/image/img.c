@@ -140,46 +140,42 @@ static uint8_t sec_base(struct image *im)
 static bool_t _img_open(struct image *im, bool_t has_iam,
                         const struct img_type *type)
 {
-    if (type != NULL) {
+    unsigned int nr_cyls, cyl_sz;
 
-        unsigned int nr_cyls, cyl_sz;
-
-        /* Walk the layout/type hints looking for a match on file size. */
-        for (; type->nr_secs != 0; type++) {
-            unsigned int min_cyls, max_cyls;
-            switch (type->cyls) {
-            case _C(40):
-                min_cyls = 38;
-                max_cyls = 42;
-                break;
-            case _C(80):
-            default:
-                min_cyls = 77;
-                max_cyls = 85;
-                break;
-            }
-            cyl_sz = type->nr_secs * (128 << type->no) * type->nr_sides;
-            for (nr_cyls = min_cyls; nr_cyls <= max_cyls; nr_cyls++)
-                if ((nr_cyls * cyl_sz) == im_size(im))
-                    goto found;
+    /* Walk the layout/type hints looking for a match on file size. */
+    for (; type->nr_secs != 0; type++) {
+        unsigned int min_cyls, max_cyls;
+        switch (type->cyls) {
+        case _C(40):
+            min_cyls = 38;
+            max_cyls = 42;
+            break;
+        case _C(80):
+        default:
+            min_cyls = 77;
+            max_cyls = 85;
+            break;
         }
-
-        return FALSE;
-
-    found:
-        im->nr_cyls = nr_cyls;
-        im->nr_sides = type->nr_sides;
-        im->img.sec_no = type->no;
-        im->img.interleave = type->interleave;
-        im->img.skew = type->skew;
-        im->img.nr_sectors = type->nr_secs;
-        im->img.gap_3 = type->gap3;
-        im->img.rpm = (type->rpm + 5) * 60;
-        im->img.sec_base[0] = im->img.sec_base[1] = type->base;
-        if (type->inter_track_numbering == _ITN)
-            im->img.sec_base[1] += im->img.nr_sectors;
+        cyl_sz = type->nr_secs * (128 << type->no) * type->nr_sides;
+        for (nr_cyls = min_cyls; nr_cyls <= max_cyls; nr_cyls++)
+            if ((nr_cyls * cyl_sz) == im_size(im))
+                goto found;
     }
 
+    return FALSE;
+
+found:
+    im->nr_cyls = nr_cyls;
+    im->nr_sides = type->nr_sides;
+    im->img.sec_no = type->no;
+    im->img.interleave = type->interleave;
+    im->img.skew = type->skew;
+    im->img.nr_sectors = type->nr_secs;
+    im->img.gap_3 = type->gap3;
+    im->img.rpm = (type->rpm + 5) * 60;
+    im->img.sec_base[0] = im->img.sec_base[1] = type->base;
+    if (type->inter_track_numbering == _ITN)
+        im->img.sec_base[1] += im->img.nr_sectors;
     im->img.has_iam = has_iam;
 
     return mfm_open(im);
@@ -305,9 +301,10 @@ static bool_t pc98fdi_open(struct image *im)
     im->img.interleave = 1;
     im->img.sec_base[0] = im->img.sec_base[1] = 1;
     im->img.skew = 0;
+    im->img.has_iam = TRUE;
     /* Skip 4096-byte header. */
     im->img.base_off = le32toh(header.header_size);
-    return _img_open(im, TRUE, NULL);
+    return mfm_open(im);
 }
 
 struct bpb {
@@ -463,8 +460,9 @@ static bool_t trd_open(struct image *im)
     im->img.sec_base[0] = im->img.sec_base[1] = 1;
     im->img.nr_sectors = 16;
     im->img.gap_3 = 57;
+    im->img.has_iam = TRUE;
 
-    return _img_open(im, TRUE, NULL);
+    return mfm_open(im);
 }
 
 static bool_t opd_open(struct image *im)
@@ -489,8 +487,9 @@ static bool_t opd_open(struct image *im)
     im->img.sec_base[0] = im->img.sec_base[1] = 0;
     im->img.nr_sectors = 18;
     im->img.gap_3 = 12;
+    im->img.has_iam = TRUE;
 
-    return _img_open(im, TRUE, NULL);
+    return mfm_open(im);
 }
 
 static bool_t dfs_open(struct image *im)
@@ -548,11 +547,12 @@ static bool_t sdu_open(struct image *im)
     im->img.interleave = 1; /* no interleave */
     im->img.sec_base[0] = im->img.sec_base[1] = 1; /* standard numbering */
     im->img.gap_3 = 84; /* standard gap3 */
+    im->img.has_iam = TRUE;
 
     /* Skip 46-byte SABDU header. */
     im->img.base_off = 46;
 
-    return _img_open(im, TRUE, NULL);
+    return mfm_open(im);
 }
 
 static bool_t ti99_open(struct image *im)
