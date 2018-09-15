@@ -140,6 +140,12 @@ static uint8_t sec_base(struct image *im)
     return im->img.sec_base[im->cur_track & (im->nr_sides - 1)];
 }
 
+static unsigned int enc_sec_sz(struct image *im)
+{
+    return im->img.idam_sz + im->img.dam_sz_pre
+        + sec_sz(im) + im->img.dam_sz_post;
+}
+
 static bool_t _img_open(struct image *im, const struct img_type *type)
 {
     unsigned int nr_cyls, cyl_sz, nr_sides;
@@ -941,6 +947,60 @@ static void img_seek_track(
     im->img.trk_off += im->img.base_off;
 }
 
+static uint32_t calc_start_pos(struct image *im)
+{
+    uint32_t decode_off;
+
+    im->img.crc = 0xffff;
+    im->img.trk_sec = im->img.rd_sec_pos = im->img.decode_data_pos = 0;
+    decode_off = im->cur_bc / 16;
+    if (decode_off < im->img.idx_sz) {
+        /* Post-index track gap */
+        im->img.decode_pos = 0;
+    } else {
+        unsigned int ess = enc_sec_sz(im);
+        decode_off -= im->img.idx_sz;
+        im->img.decode_pos = decode_off / ess;
+        if (im->img.decode_pos < im->img.nr_sectors) {
+            /* IDAM */
+            im->img.trk_sec = im->img.decode_pos;
+            im->img.decode_pos = im->img.decode_pos * 4 + 1;
+            decode_off -= im->img.trk_sec * ess;
+            if (decode_off >= im->img.idam_sz) {
+                /* DAM */
+                decode_off -= im->img.idam_sz;
+                im->img.decode_pos++;
+                if (decode_off >= im->img.dam_sz_pre) {
+                    /* Data or Post Data */
+                    decode_off -= im->img.dam_sz_pre;
+                    im->img.decode_pos++;
+                    if (decode_off < sec_sz(im)) {
+                        /* Data */
+                        im->img.rd_sec_pos = decode_off / 1024;
+                        im->img.decode_data_pos = im->img.rd_sec_pos;
+                        decode_off %= 1024;
+                    } else {
+                        /* Post Data */
+                        decode_off -= sec_sz(im);
+                        im->img.decode_pos++;
+                        /* Start fetch at next sector. */
+                        im->img.trk_sec = (im->img.trk_sec + 1)
+                            % im->img.nr_sectors;
+                    }
+                }
+            }
+        } else {
+            /* Pre-index track gap */
+            decode_off -= im->img.nr_sectors * ess;
+            im->img.decode_pos = im->img.nr_sectors * 4 + 1;
+            im->img.decode_data_pos = decode_off / 1024;
+            decode_off %= 1024;
+        }
+    }
+
+    return decode_off;
+}
+
 static void img_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
@@ -957,7 +1017,6 @@ static void img_setup_track(
     if (track != im->cur_track)
         img_seek_track(im, track, cyl, side);
 
-    im->img.trk_sec = 0;
     im->img.write_sector = -1;
 
     im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
@@ -967,26 +1026,7 @@ static void img_setup_track(
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
 
-    decode_off = im->cur_bc / 16;
-    if (decode_off < im->img.idx_sz) {
-        im->img.decode_pos = 0;
-    } else {
-        decode_off -= im->img.idx_sz;
-        im->img.decode_pos = decode_off / (im->img.idam_sz + im->img.dam_sz);
-        if (im->img.decode_pos < im->img.nr_sectors) {
-            im->img.trk_sec = im->img.decode_pos;
-            im->img.decode_pos = im->img.decode_pos * 2 + 1;
-            decode_off %= im->img.idam_sz + im->img.dam_sz;
-            if (decode_off >= im->img.idam_sz) {
-                decode_off -= im->img.idam_sz;
-                im->img.decode_pos++;
-            }
-        } else {
-            im->img.decode_pos = im->img.nr_sectors * 2 + 1;
-            decode_off -= im->img.nr_sectors
-                * (im->img.idam_sz + im->img.dam_sz);
-        }
-    }
+    decode_off = calc_start_pos(im);
 
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
@@ -1018,6 +1058,34 @@ static void img_dump_info(struct image *im)
            im->img.gap_2, im->img.gap_3, im->img.gap_4a, im->img.gap_4);
     printk(" ticks_per_cell: %u, write_bc_ticks: %u has_iam: %u\n",
            im->ticks_per_cell, im->write_bc_ticks, im->img.has_iam);
+}
+
+static void img_fetch_data(struct image *im)
+{
+    struct image_buf *rd = &im->bufs.read_data;
+    uint8_t sec, *buf = rd->p;
+    uint16_t off, len;
+
+    if (rd->prod != rd->cons)
+        return;
+
+    sec = im->img.sec_map[im->img.trk_sec] - sec_base(im);
+    off = sec * sec_sz(im) + im->img.rd_sec_pos * 1024;
+    len = sec_sz(im) - im->img.rd_sec_pos * 1024;
+
+    if (len > 1024) {
+        len = 1024;
+        im->img.rd_sec_pos++;
+    } else {
+        im->img.rd_sec_pos = 0;
+        if (++im->img.trk_sec >= im->img.nr_sectors)
+            im->img.trk_sec = 0;
+    }
+
+    F_lseek(&im->fp, im->img.trk_off + off);
+    F_read(&im->fp, buf, len, NULL);
+
+    rd->prod++;
 }
 
 
@@ -1056,13 +1124,14 @@ static bool_t mfm_open(struct image *im)
     if (im->img.has_iam)
         im->img.idx_sz += GAP_SYNC + 4 + GAP_1;
     im->img.idam_sz = idam_gap_sync(im) + 8 + 2 + im->img.gap_2;
-    im->img.dam_sz = GAP_SYNC + 4 + sec_sz(im) + 2 + im->img.gap_3;
+    im->img.dam_sz_pre = GAP_SYNC + 4;
+    im->img.dam_sz_post = 2 + im->img.gap_3;
 
     im->img.idam_sz += im->img.post_crc_syncs;
-    im->img.dam_sz += im->img.post_crc_syncs;
+    im->img.dam_sz_post += im->img.post_crc_syncs;
 
     /* Work out minimum track length (with no pre-index track gap). */
-    tracklen = (im->img.idam_sz + im->img.dam_sz) * im->img.nr_sectors;
+    tracklen = enc_sec_sz(im) * im->img.nr_sectors;
     tracklen += im->img.idx_sz;
     tracklen *= 16;
 
@@ -1114,14 +1183,7 @@ static bool_t mfm_read_track(struct image *im)
     uint16_t pr = 0, crc;
     unsigned int i;
 
-    if (rd->prod == rd->cons) {
-        uint8_t sec = im->img.sec_map[im->img.trk_sec] - sec_base(im);
-        F_lseek(&im->fp, im->img.trk_off + sec * sec_sz(im));
-        F_read(&im->fp, buf, sec_sz(im), NULL);
-        rd->prod++;
-        if (++im->img.trk_sec >= im->img.nr_sectors)
-            im->img.trk_sec = 0;
-    }
+    img_fetch_data(im);
 
     /* Generate some MFM if there is space in the raw-bitcell ring buffer. */
     bc_p = bc->prod / 16; /* MFM words */
@@ -1152,55 +1214,88 @@ static bool_t mfm_read_track(struct image *im)
             for (i = 0; i < GAP_1; i++)
                 emit_byte(0x4e);
         }
-    } else if (im->img.decode_pos == (im->img.nr_sectors * 2 + 1)) {
+    } else if (im->img.decode_pos == (im->img.nr_sectors * 4 + 1)) {
         /* Pre-index track gap */
-        if (bc_space < im->img.gap_4)
+        uint16_t sz = im->img.gap_4 - im->img.decode_data_pos * 1024;
+        if (bc_space < min_t(unsigned int, sz, 1024))
             return FALSE;
-        for (i = 0; i < im->img.gap_4; i++)
-            emit_byte(0x4e);
-        im->img.decode_pos = (im->img.idx_sz != 0) ? -1 : 0;
-    } else if (im->img.decode_pos & 1) {
-        /* IDAM */
-        uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
-        uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 1];
-        uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe, cyl, hd, sec,
-                            im->img.sec_no };
-        if (bc_space < im->img.idam_sz)
-            return FALSE;
-        for (i = 0; i < idam_gap_sync(im); i++)
-            emit_byte(0x00);
-        for (i = 0; i < 3; i++)
-            emit_raw(0x4489);
-        for (; i < 8; i++)
-            emit_byte(idam[i]);
-        crc = crc16_ccitt(idam, sizeof(idam), 0xffff);
-        emit_byte(crc >> 8);
-        emit_byte(crc);
-        for (i = 0; i < im->img.post_crc_syncs; i++)
-            emit_raw(0x4489);
-        for (i = 0; i < im->img.gap_2; i++)
+        if (sz > 1024) {
+            sz = 1024;
+            im->img.decode_data_pos++;
+            im->img.decode_pos--;
+        } else {
+            im->img.decode_data_pos = 0;
+            im->img.decode_pos = (im->img.idx_sz != 0) ? -1 : 0;
+        }
+        for (i = 0; i < sz; i++)
             emit_byte(0x4e);
     } else {
-        /* DAM */
-        uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
-        if (bc_space < im->img.dam_sz)
-            return FALSE;
-        for (i = 0; i < GAP_SYNC; i++)
-            emit_byte(0x00);
-        for (i = 0; i < 3; i++)
-            emit_raw(0x4489);
-        emit_byte(dam[3]);
-        for (i = 0; i < sec_sz(im); i++)
-            emit_byte(buf[i]);
-        crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
-        crc = crc16_ccitt(buf, sec_sz(im), crc);
-        emit_byte(crc >> 8);
-        emit_byte(crc);
-        for (i = 0; i < im->img.post_crc_syncs; i++)
-            emit_raw(0x4489);
-        for (i = 0; i < im->img.gap_3; i++)
-            emit_byte(0x4e);
-        rd->cons++;
+        switch ((im->img.decode_pos - 1) & 3) {
+        case 0: /* IDAM */ {
+            uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
+            uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 2];
+            uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe, cyl, hd, sec,
+                                im->img.sec_no };
+            if (bc_space < im->img.idam_sz)
+                return FALSE;
+            for (i = 0; i < idam_gap_sync(im); i++)
+                emit_byte(0x00);
+            for (i = 0; i < 3; i++)
+                emit_raw(0x4489);
+            for (; i < 8; i++)
+                emit_byte(idam[i]);
+            crc = crc16_ccitt(idam, sizeof(idam), 0xffff);
+            emit_byte(crc >> 8);
+            emit_byte(crc);
+            for (i = 0; i < im->img.post_crc_syncs; i++)
+                emit_raw(0x4489);
+            for (i = 0; i < im->img.gap_2; i++)
+                emit_byte(0x4e);
+            break;
+        }
+        case 1: /* DAM */ {
+            uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
+            if (bc_space < im->img.dam_sz_pre)
+                return FALSE;
+            for (i = 0; i < GAP_SYNC; i++)
+                emit_byte(0x00);
+            for (i = 0; i < 3; i++)
+                emit_raw(0x4489);
+            emit_byte(dam[3]);
+            im->img.crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
+            break;
+        }
+        case 2: /* Data */ {
+            uint16_t sec_sz = sec_sz(im);
+            sec_sz -= im->img.decode_data_pos * 1024;
+            if (bc_space < min_t(unsigned int, sec_sz, 1024))
+                return FALSE;
+            if (sec_sz > 1024) {
+                sec_sz = 1024;
+                im->img.decode_data_pos++;
+                im->img.decode_pos--;
+            } else {
+                im->img.decode_data_pos = 0;
+            }
+            for (i = 0; i < sec_sz; i++)
+                emit_byte(buf[i]);
+            im->img.crc = crc16_ccitt(buf, sec_sz, im->img.crc);
+            rd->cons++;
+            break;
+        }
+        case 3: /* Post Data */ {
+            if (bc_space < im->img.dam_sz_post)
+                return FALSE;
+            crc = im->img.crc;
+            emit_byte(crc >> 8);
+            emit_byte(crc);
+            for (i = 0; i < im->img.post_crc_syncs; i++)
+                emit_raw(0x4489);
+            for (i = 0; i < im->img.gap_3; i++)
+                emit_byte(0x4e);
+            break;
+        }
+        }
     }
 
 #undef emit_raw
@@ -1238,9 +1333,8 @@ static bool_t mfm_write_track(struct image *im)
     if (im->img.write_sector == -1) {
         /* Convert write offset to sector number (in rotational order). */
         im->img.write_sector =
-            (base - im->img.idx_sz - im->img.idam_sz
-             + (im->img.idam_sz + im->img.dam_sz) / 2)
-            / (im->img.idam_sz + im->img.dam_sz);
+            (base - im->img.idx_sz - im->img.idam_sz + enc_sec_sz(im)/2)
+            / enc_sec_sz(im);
         if (im->img.write_sector >= im->img.nr_sectors) {
             printk("IMG Bad Sector Offset: %u -> %u\n",
                    base, im->img.write_sector);
@@ -1351,10 +1445,11 @@ static bool_t fm_open(struct image *im)
 
     im->img.idx_sz = im->img.gap_4a;
     im->img.idam_sz = FM_GAP_SYNC + 5 + 2 + im->img.gap_2;
-    im->img.dam_sz = FM_GAP_SYNC + 1 + sec_sz(im) + 2 + im->img.gap_3;
+    im->img.dam_sz_pre = FM_GAP_SYNC + 1;
+    im->img.dam_sz_post = 2 + im->img.gap_3;
 
     /* Work out minimum track length (with no pre-index track gap). */
-    tracklen = (im->img.idam_sz + im->img.dam_sz) * im->img.nr_sectors;
+    tracklen = enc_sec_sz(im) * im->img.nr_sectors;
     tracklen += im->img.idx_sz;
     tracklen *= 16;
 
@@ -1396,14 +1491,7 @@ static bool_t fm_read_track(struct image *im)
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     unsigned int i;
 
-    if (rd->prod == rd->cons) {
-        uint8_t sec = im->img.sec_map[im->img.trk_sec] - sec_base(im);
-        F_lseek(&im->fp, im->img.trk_off + sec * sec_sz(im));
-        F_read(&im->fp, buf, sec_sz(im), NULL);
-        rd->prod++;
-        if (++im->img.trk_sec >= im->img.nr_sectors)
-            im->img.trk_sec = 0;
-    }
+    img_fetch_data(im);
 
     /* Generate some FM if there is space in the raw-bitcell ring buffer. */
     bc_p = bc->prod / 16; /* FM words */
@@ -1424,47 +1512,80 @@ static bool_t fm_read_track(struct image *im)
         for (i = 0; i < im->img.gap_4a; i++)
             emit_byte(0xff);
         ASSERT(!im->img.has_iam);
-    } else if (im->img.decode_pos == (im->img.nr_sectors * 2 + 1)) {
+    } else if (im->img.decode_pos == (im->img.nr_sectors * 4 + 1)) {
         /* Pre-index track gap */
-        if (bc_space < im->img.gap_4)
+        uint16_t sz = im->img.gap_4 - im->img.decode_data_pos * 1024;
+        if (bc_space < min_t(unsigned int, sz, 1024))
             return FALSE;
-        for (i = 0; i < im->img.gap_4; i++)
-            emit_byte(0xff);
-        im->img.decode_pos = (im->img.idx_sz != 0) ? -1 : 0;
-    } else if (im->img.decode_pos & 1) {
-        /* IDAM */
-        uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
-        uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 1];
-        uint8_t idam[5] = { 0xfe, cyl, hd, sec, im->img.sec_no };
-        if (bc_space < im->img.idam_sz)
-            return FALSE;
-        for (i = 0; i < FM_GAP_SYNC; i++)
-            emit_byte(0x00);
-        emit_raw(fm_sync(idam[0], FM_SYNC_CLK));
-        for (i = 1; i < 5; i++)
-            emit_byte(idam[i]);
-        crc = crc16_ccitt(idam, sizeof(idam), 0xffff);
-        emit_byte(crc >> 8);
-        emit_byte(crc);
-        for (i = 0; i < im->img.gap_2; i++)
+        if (sz > 1024) {
+            sz = 1024;
+            im->img.decode_data_pos++;
+            im->img.decode_pos--;
+        } else {
+            im->img.decode_data_pos = 0;
+            im->img.decode_pos = (im->img.idx_sz != 0) ? -1 : 0;
+        }
+        for (i = 0; i < sz; i++)
             emit_byte(0xff);
     } else {
-        /* DAM */
-        uint8_t dam[1] = { 0xfb };
-        if (bc_space < im->img.dam_sz)
-            return FALSE;
-        for (i = 0; i < FM_GAP_SYNC; i++)
-            emit_byte(0x00);
-        emit_raw(fm_sync(dam[0], FM_SYNC_CLK));
-        for (i = 0; i < sec_sz(im); i++)
-            emit_byte(buf[i]);
-        crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
-        crc = crc16_ccitt(buf, sec_sz(im), crc);
-        emit_byte(crc >> 8);
-        emit_byte(crc);
-        for (i = 0; i < im->img.gap_3; i++)
-            emit_byte(0xff);
-        rd->cons++;
+        switch ((im->img.decode_pos - 1) & 3) {
+        case 0: /* IDAM */ {
+            uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
+            uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 2];
+            uint8_t idam[5] = { 0xfe, cyl, hd, sec, im->img.sec_no };
+            if (bc_space < im->img.idam_sz)
+                return FALSE;
+            for (i = 0; i < FM_GAP_SYNC; i++)
+                emit_byte(0x00);
+            emit_raw(fm_sync(idam[0], FM_SYNC_CLK));
+            for (i = 1; i < 5; i++)
+                emit_byte(idam[i]);
+            crc = crc16_ccitt(idam, sizeof(idam), 0xffff);
+            emit_byte(crc >> 8);
+            emit_byte(crc);
+            for (i = 0; i < im->img.gap_2; i++)
+                emit_byte(0xff);
+            break;
+        }
+        case 1: /* DAM */ {
+            uint8_t dam[1] = { 0xfb };
+            if (bc_space < im->img.dam_sz_pre)
+                return FALSE;
+            for (i = 0; i < FM_GAP_SYNC; i++)
+                emit_byte(0x00);
+            emit_raw(fm_sync(dam[0], FM_SYNC_CLK));
+            im->img.crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
+            break;
+        }
+        case 2: /* Data */ {
+            uint16_t sec_sz = sec_sz(im);
+            sec_sz -= im->img.decode_data_pos * 1024;
+            if (bc_space < min_t(unsigned int, sec_sz, 1024))
+                return FALSE;
+            if (sec_sz > 1024) {
+                sec_sz = 1024;
+                im->img.decode_data_pos++;
+                im->img.decode_pos--;
+            } else {
+                im->img.decode_data_pos = 0;
+            }
+            for (i = 0; i < sec_sz; i++)
+                emit_byte(buf[i]);
+            im->img.crc = crc16_ccitt(buf, sec_sz, im->img.crc);
+            rd->cons++;
+            break;
+        }
+        case 3: /* Post Data */ {
+            if (bc_space < im->img.dam_sz_post)
+                return FALSE;
+            crc = im->img.crc;
+            emit_byte(crc >> 8);
+            emit_byte(crc);
+            for (i = 0; i < im->img.gap_3; i++)
+                emit_byte(0xff);
+            break;
+        }
+        }
     }
 
 #undef emit_raw
@@ -1500,9 +1621,8 @@ static bool_t fm_write_track(struct image *im)
     if (im->img.write_sector == -1) {
         /* Convert write offset to sector number (in rotational order). */
         im->img.write_sector =
-            (base - im->img.idx_sz - im->img.idam_sz
-             + (im->img.idam_sz + im->img.dam_sz) / 2)
-            / (im->img.idam_sz + im->img.dam_sz);
+            (base - im->img.idx_sz - im->img.idam_sz + enc_sec_sz(im)/2)
+            / enc_sec_sz(im);
         if (im->img.write_sector >= im->img.nr_sectors) {
             printk("IMG Bad Sector Offset: %u -> %u\n",
                    base, im->img.write_sector);

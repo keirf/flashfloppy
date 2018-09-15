@@ -48,9 +48,10 @@ struct hfe_image {
 
 struct img_image {
     uint32_t trk_off, base_off;
-    uint16_t trk_sec;
+    uint16_t trk_sec, rd_sec_pos;
     uint16_t rpm;
     int32_t decode_pos;
+    uint16_t decode_data_pos, crc;
     uint8_t layout; /* LAYOUT_* */
     bool_t has_iam;
     uint8_t gap_2, gap_3, gap_4a;
@@ -61,7 +62,8 @@ struct img_image {
     uint8_t interleave:4, skew:4;
     bool_t skew_cyls_only;
     uint16_t data_rate, gap_4;
-    uint32_t idx_sz, idam_sz, dam_sz;
+    uint32_t idx_sz, idam_sz;
+    uint16_t dam_sz_pre, dam_sz_post;
 };
 
 struct dsk_image {
