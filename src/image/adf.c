@@ -31,7 +31,7 @@ static uint32_t amigados_checksum(void *dat, unsigned int bytes)
 
 static bool_t adf_open(struct image *im)
 {
-    if (f_size(&im->fp) % (11*512))
+    if ((f_size(&im->fp) % (2*11*512)) || (f_size(&im->fp) == 0))
         return FALSE;
 
     im->nr_sides = 2;

@@ -28,6 +28,7 @@ extern const struct image_handler sdu_image_handler;
 extern const struct image_handler jvc_image_handler;
 extern const struct image_handler vdk_image_handler;
 extern const struct image_handler ti99_image_handler;
+extern const struct image_handler dummy_image_handler;
 
 const struct image_type image_type[] = {
     { "adf", &adf_image_handler },
@@ -61,10 +62,14 @@ bool_t image_valid(FILINFO *fp)
     if (fp->fattrib & AM_DIR)
         return FALSE;
 
+    /* Skip empty images. */
+    if (fp->fsize == 0)
+        return FALSE;
+
     /* Check valid extension. */
     filename_extension(fp->fname, ext, sizeof(ext));
     if (!strcmp(ext, "adf")) {
-        return (ff_cfg.host == HOST_acorn) || !(fp->fsize % (11*512));
+        return (ff_cfg.host == HOST_acorn) || !(fp->fsize % (2*11*512));
     } else {
         const struct image_type *type;
         for (type = &image_type[0]; type->handler != NULL; type++)
@@ -104,6 +109,8 @@ static bool_t try_handler(struct image *im, const struct slot *slot,
 void image_open(struct image *im, const struct slot *slot)
 {
     static const struct image_handler * const image_handlers[] = {
+        /* Special handler for dummy slots (empty HxC slot 0). */
+        &dummy_image_handler,
         /* Formats with an identifying header. */
         &dsk_image_handler,
         &hfe_image_handler,

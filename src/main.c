@@ -765,22 +765,20 @@ static void cfg_init(void)
         /* Startup mode: eject. */
         cfg.ejected = TRUE;
     }
-        
+
     F_close(&fs->file);
 
-    /* Indexed mode (DSKAxxxx.HFE) does not need AUTOBOOT.HFE. */
-    if (!strncmp("HXCFECFGV", hxc_cfg.signature, 9) && hxc_cfg.index_mode) {
-        memset(&cfg.autoboot, 0, sizeof(cfg.autoboot));
-        cfg.hxc_mode = TRUE;
-        goto out;
-    }
+    /* Slot 0 is a dummy image unless AUTOBOOT.HFE exists. */
+    memset(&cfg.autoboot, 0, sizeof(cfg.autoboot));
+    snprintf(cfg.autoboot.name, sizeof(cfg.autoboot.name), "(Empty)");
+    cfg.autoboot.firstCluster = ~0u; /* flag to dummy_open() */
 
     fr = F_try_open(&fs->file, "AUTOBOOT.HFE", FA_READ);
-    if (fr)
-        goto native_mode;
-    fatfs_to_short_slot(&cfg.autoboot, &fs->file, "AUTOBOOT.HFE");
-    cfg.autoboot.attributes |= AM_RDO; /* default read-only */
-    F_close(&fs->file);
+    if (!fr) {
+        fatfs_to_short_slot(&cfg.autoboot, &fs->file, "AUTOBOOT.HFE");
+        cfg.autoboot.attributes |= AM_RDO; /* default read-only */
+        F_close(&fs->file);
+    }
 
     cfg.hxc_mode = TRUE;
     goto out;
