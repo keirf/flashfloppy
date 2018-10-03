@@ -935,7 +935,7 @@ static void img_seek_track(
     trk_len = im->img.nr_sectors * sec_sz(im);
     switch (im->img.layout) {
     case LAYOUT_sequential_reverse_side1:
-        im->img.trk_off = (side ? im->nr_cyls - cyl : cyl) * trk_len;
+        im->img.trk_off = (side ? 2*im->nr_cyls - cyl - 1 : cyl) * trk_len;
         break;
     case LAYOUT_interleaved_swap_sides:
         trk ^= im->nr_sides - 1;
