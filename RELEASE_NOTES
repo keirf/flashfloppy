@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.30a - 9 October 2018
+ - TI99: Fix V9T9/DSK double-sided images
+ - HxC Compat: Enter slot-based mode even with no AUTOBOOT.HFE
+ - HFE: Support HFEv2 images
+
 ** v0.9.29a - 17 September 2018
  - New and improved image handlers:
    - ST: Fix 80-cyl single-sided images
