@@ -77,11 +77,13 @@ static bool_t hfe_open(struct image *im)
     struct disk_header dhdr;
 
     F_read(&im->fp, &dhdr, sizeof(dhdr), NULL);
-    if (dhdr.formatrevision != 0)
-        return FALSE;
     if (!strncmp(dhdr.sig, "HXCHFEV3", sizeof(dhdr.sig))) {
+        if (dhdr.formatrevision > 0)
+            return FALSE;
         im->hfe.is_v3 = TRUE;
     } else if (!strncmp(dhdr.sig, "HXCPICFE", sizeof(dhdr.sig))) {
+        if (dhdr.formatrevision > 1)
+            return FALSE;
         im->hfe.is_v3 = FALSE;
     } else {
         return FALSE;
