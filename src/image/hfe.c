@@ -75,6 +75,7 @@ static void hfe_seek_track(struct image *im, uint16_t track);
 static bool_t hfe_open(struct image *im)
 {
     struct disk_header dhdr;
+    uint16_t bitrate;
 
     F_read(&im->fp, &dhdr, sizeof(dhdr), NULL);
     if (!strncmp(dhdr.sig, "HXCHFEV3", sizeof(dhdr.sig))) {
@@ -89,10 +90,18 @@ static bool_t hfe_open(struct image *im)
         return FALSE;
     }
 
+    /* Sanity-check the header fields. */
+    bitrate = le16toh(dhdr.bitrate);
+    if ((dhdr.nr_tracks == 0)
+        || (dhdr.nr_sides < 1) || (dhdr.nr_sides > 2)
+        || (bitrate == 0)) {
+        return FALSE;
+    }
+
     im->hfe.tlut_base = le16toh(dhdr.track_list_offset);
     im->nr_cyls = dhdr.nr_tracks;
     im->nr_sides = dhdr.nr_sides;
-    im->write_bc_ticks = sysclk_us(500) / le16toh(dhdr.bitrate);
+    im->write_bc_ticks = sysclk_us(500) / bitrate;
     im->ticks_per_cell = im->write_bc_ticks * 16;
     im->sync = SYNC_none;
 
