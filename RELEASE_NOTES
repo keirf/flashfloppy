@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.9.31a - 28 October 2018
+ - HFE: Sanity-check critical header fields
+ - FF.CFG: Better docs on pin02/pin34 options
+ - HxC Compat: File selector updates
+
 ** v0.9.30a - 9 October 2018
  - TI99: Fix V9T9/DSK double-sided images
  - HxC Compat: Enter slot-based mode even with no AUTOBOOT.HFE
