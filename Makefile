@@ -1,6 +1,6 @@
 
 PROJ = FlashFloppy
-VER = v0.9.31a
+VER = v0.10
 
 SUBDIRS += src bootloader reloader
 
