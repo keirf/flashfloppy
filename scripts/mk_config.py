@@ -46,9 +46,15 @@ def main(argv):
             elif opt == "image-on-startup":
                 val = "IMGS_" + val
             elif opt == "rotary":
-                val = "ROT_" + val
+                opts = []
+                for x in val.split(","):
+                    opts += ['ROT_' + x]
+                val = '|'.join(opts)
             elif opt == "twobutton-action":
-                val = "TWOBUTTON_" + val.replace("-","_")
+                opts = []
+                for x in val.split(","):
+                    opts += ['TWOBUTTON_' + x.replace("-","_")]
+                val = '|'.join(opts)
             elif opt == "nav-mode":
                 val = "NAVMODE_" + val
             else:

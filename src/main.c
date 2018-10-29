@@ -279,9 +279,15 @@ static void button_timer_fn(void *unused)
         [ROT_half]    = 0x24000018, /* 2 transitions (half cycle) per detent */
         [ROT_quarter] = 0x24428118  /* 1 transition (quarter cyc) per detent */
     };
+    const uint8_t rotary_reverse[] = {
+        [B_LEFT] = B_RIGHT, [B_RIGHT] = B_LEFT
+    };
 
-    static uint16_t bl, br, bs;
-    uint8_t b = 0;
+    static uint16_t _b[3]; /* 0 = left, 1 = right, 2 = select */
+    uint8_t b = 0, rb;
+    bool_t twobutton_rotary =
+        (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_rotary;
+    int i, twobutton_reverse = !!(ff_cfg.twobutton_action & TWOBUTTON_reverse);
 
     /* Check PA5 (USBFLT, active low). */
     if ((board_id == BRDREV_Gotek_enhanced) && !gpio_read_pin(gpioa, 5)) {
@@ -292,26 +298,25 @@ static void button_timer_fn(void *unused)
 
     /* We debounce the switches by waiting for them to be pressed continuously 
      * for 16 consecutive sample periods (16 * 5ms == 80ms) */
+    for (i = 0; i < 3; i++) {
+        _b[i] <<= 1;
+        _b[i] |= gpio_read_pin(gpioc, 8-i);
+    }
 
-    bl <<= 1;
-    bl |= gpio_read_pin(gpioc, 8);
-    if (bl == 0)
-        b |= (ff_cfg.twobutton_action == TWOBUTTON_rotary)
-            ? B_LEFT|B_RIGHT : B_LEFT;
+    if (_b[twobutton_reverse] == 0)
+        b |= twobutton_rotary ? B_LEFT|B_RIGHT : B_LEFT;
 
-    br <<= 1;
-    br |= gpio_read_pin(gpioc, 7);
-    if (br == 0)
-        b |= (ff_cfg.twobutton_action == TWOBUTTON_rotary)
-            ? B_SELECT : B_RIGHT;
+    if (_b[!twobutton_reverse] == 0)
+        b |= twobutton_rotary ? B_SELECT : B_RIGHT;
 
-    bs <<= 1;
-    bs |= gpio_read_pin(gpioc, 6);
-    if (bs == 0)
+    if (_b[2] == 0)
         b |= B_SELECT;
 
     rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
-    b |= (rotary_transitions[ff_cfg.rotary & 3] >> (rotary << 1)) & 3;
+    rb = (rotary_transitions[ff_cfg.rotary & 3] >> (rotary << 1)) & 3;
+    if (ff_cfg.rotary & ROT_reverse)
+        rb = rotary_reverse[rb];
+    b |= rb;
 
     b = lcd_handle_backlight(b);
 
@@ -583,22 +588,50 @@ static void read_ff_cfg(void)
             ff_cfg.nav_loop = !strcmp(opts.arg, "yes");
             break;
 
-        case FFCFG_twobutton_action:
-            ff_cfg.twobutton_action =
-                !strcmp(opts.arg, "rotary") ? TWOBUTTON_rotary
-                : !strcmp(opts.arg, "rotary-fast") ? TWOBUTTON_rotary_fast
-                : !strcmp(opts.arg, "eject") ? TWOBUTTON_eject
-                : TWOBUTTON_zero;
+        case FFCFG_twobutton_action: {
+            char *p, *q;
+            ff_cfg.twobutton_action = TWOBUTTON_zero;
+            for (p = opts.arg; *p != '\0'; p = q) {
+                for (q = p; *q && *q != '-'; q++)
+                    continue;
+                if (*q == '-')
+                    *q++ = '\0';
+                if (!strcmp(p, "reverse")) {
+                    ff_cfg.twobutton_action |= TWOBUTTON_reverse;
+                } else {
+                    ff_cfg.twobutton_action &= TWOBUTTON_reverse;
+                    ff_cfg.twobutton_action |=
+                        !strcmp(p, "rotary") ? TWOBUTTON_rotary
+                        : !strcmp(p, "rotary-fast") ? TWOBUTTON_rotary_fast
+                        : !strcmp(p, "eject") ? TWOBUTTON_eject
+                        : TWOBUTTON_zero;
+                }
+            }
             break;
+        }
 
-        case FFCFG_rotary:
-            ff_cfg.rotary =
-                !strcmp(opts.arg, "gray") ? ROT_quarter /* obsolete name */
-                : !strcmp(opts.arg, "quarter") ? ROT_quarter
-                : !strcmp(opts.arg, "half") ? ROT_half
-                : !strcmp(opts.arg, "none") ? ROT_none
-                : ROT_full;
+        case FFCFG_rotary: {
+            char *p, *q;
+            ff_cfg.rotary = ROT_full;
+            for (p = opts.arg; *p != '\0'; p = q) {
+                for (q = p; *q && *q != '-'; q++)
+                    continue;
+                if (*q == '-')
+                    *q++ = '\0';
+                if (!strcmp(p, "reverse")) {
+                    ff_cfg.rotary |= ROT_reverse;
+                } else {
+                    ff_cfg.rotary &= ROT_reverse;
+                    ff_cfg.rotary |=
+                        !strcmp(p, "gray") ? ROT_quarter /* obsolete name */
+                        : !strcmp(p, "quarter") ? ROT_quarter
+                        : !strcmp(p, "half") ? ROT_half
+                        : !strcmp(p, "none") ? ROT_none
+                        : ROT_full;
+                }
+            }
             break;
+        }
 
             /* DISPLAY */
 
@@ -1219,6 +1252,7 @@ static bool_t choose_new_image(uint8_t init_b)
     uint8_t b, prev_b;
     time_t last_change = 0;
     int old_slot = cfg.slot_nr, i, changes = 0;
+    uint8_t twobutton_action = ff_cfg.twobutton_action & TWOBUTTON_mask;
 
     for (prev_b = 0, b = init_b;
          (b &= (B_LEFT|B_RIGHT)) != 0;
@@ -1229,7 +1263,7 @@ static bool_t choose_new_image(uint8_t init_b)
             time_t delay = time_ms(1000) / (changes + 1);
             if (delay < time_ms(50))
                 delay = time_ms(50);
-            if (ff_cfg.twobutton_action == TWOBUTTON_rotary_fast)
+            if (twobutton_action == TWOBUTTON_rotary_fast)
                 delay = time_ms(40);
             if (time_diff(last_change, time_now()) < delay)
                 continue;
@@ -1243,7 +1277,7 @@ static bool_t choose_new_image(uint8_t init_b)
 
         i = cfg.slot_nr;
         if (!(b ^ (B_LEFT|B_RIGHT))) {
-            if (ff_cfg.twobutton_action == TWOBUTTON_eject) {
+            if (twobutton_action == TWOBUTTON_eject) {
                 cfg.slot_nr = old_slot;
                 cfg.ejected = TRUE;
                 cfg_update(CFG_KEEP_SLOT_NR);
@@ -1251,8 +1285,8 @@ static bool_t choose_new_image(uint8_t init_b)
             }
             i = cfg.slot_nr = 0;
             cfg_update(CFG_KEEP_SLOT_NR);
-            if ((ff_cfg.twobutton_action == TWOBUTTON_rotary)
-                || (ff_cfg.twobutton_action == TWOBUTTON_rotary_fast)) {
+            if ((twobutton_action == TWOBUTTON_rotary)
+                || (twobutton_action == TWOBUTTON_rotary_fast)) {
                 /* Wait for button release, then update display, or
                  * immediately enter parent-dir (if we're in a subfolder). */
                 while (buttons)
@@ -1423,6 +1457,8 @@ static int floppy_main(void *unused)
         if (fres || (b & B_SELECT)) {
             /* ** EJECT STATE ** */
             unsigned int wait;
+            bool_t twobutton_eject =
+                (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject;
             snprintf(msg, sizeof(msg), "EJECTED");
             switch (display_mode) {
             case DM_LED_7SEG:
@@ -1491,7 +1527,7 @@ static int floppy_main(void *unused)
                     break;
                 }
             }
-            if (ff_cfg.twobutton_action == TWOBUTTON_eject) {
+            if (twobutton_eject) {
                 /* Wait 50ms for 2-button press. */
                 for (wait = 0; wait < 50; wait++) {
                     b = buttons;
@@ -1508,7 +1544,7 @@ static int floppy_main(void *unused)
                 wait = 0;
                 while (b & B_SELECT) {
                     b = buttons;
-                    if ((ff_cfg.twobutton_action == TWOBUTTON_eject) && b) {
+                    if (twobutton_eject && b) {
                         /* Wait for 2-button release. */
                         b = B_SELECT;
                     }
