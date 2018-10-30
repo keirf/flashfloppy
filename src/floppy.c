@@ -706,7 +706,7 @@ static void floppy_sync_flux(void)
         /* IDX is suppressed: Wait for heads to settle.
          * When IDX is not suppressed, settle time is already accounted for in
          * dma_rd_handle()'s call to image_setup_track(). */
-        time_t step_settle = drv->step.start + time_ms(DRIVE_SETTLE_MS);
+        time_t step_settle = drv->step.start + time_ms(ff_cfg.head_settle_ms);
         int32_t delta = time_diff(time_now(), step_settle) - time_us(1);
         if (delta > time_ms(5))
             return; /* go do other work for a while */
@@ -757,7 +757,8 @@ static bool_t dma_rd_handle(struct drive *drv)
         int32_t delay = time_ms(10);
         /* Allow extra time if heads are settling. */
         if (drv->step.state & STEP_settling) {
-            time_t step_settle = drv->step.start + time_ms(DRIVE_SETTLE_MS);
+            time_t step_settle = drv->step.start
+                + time_ms(ff_cfg.head_settle_ms);
             int32_t delta = time_diff(time_now(), step_settle);
             delay = max_t(int32_t, delta, delay);
         }
@@ -938,7 +939,7 @@ static void drive_step_timer(void *_drv)
             drv->cyl = 84; /* Fast step back from D-A cyl 255 */
         drv->cyl += drv->step.inward ? 1 : -1;
         timer_set(&drv->step.timer,
-                  drv->step.start + time_ms(DRIVE_SETTLE_MS));
+                  drv->step.start + time_ms(ff_cfg.head_settle_ms));
         if (drv->cyl == 0)
             drive_change_output(drv, outp_trk0, TRUE);
         /* New state last, as that lets hi-pri IRQ start another step. */

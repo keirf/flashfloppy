@@ -551,6 +551,10 @@ static void read_ff_cfg(void)
             ff_cfg.index_suppression = !strcmp(opts.arg, "yes");
             break;
 
+        case FFCFG_head_settle_ms:
+            ff_cfg.head_settle_ms = strtol(opts.arg, NULL, 10);
+            break;
+
             /* STARTUP / INITIALISATION */
 
         case FFCFG_ejected_on_startup:
