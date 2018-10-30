@@ -58,6 +58,23 @@ static const struct exti_irq exti_irqs[] = {
     { 23, FLOPPY_IRQ_WGATE_PRI, 0 } 
 };
 
+bool_t floppy_ribbon_is_reversed(void)
+{
+    time_t t_start = time_now();
+
+    /* If ribbon is reversed then most/all inputs are grounded. 
+     * Check three inputs which are supposed only to pulse. */
+    while (!(gpioa->idr & (m(pin_step) | m(pin_wdata)))
+           && !(gpiob->idr & m(pin_wgate))) {
+        /* If all three inputs are LOW for a full second, conclude that 
+         * the ribbon is reversed. */
+        if (time_since(t_start) > time_ms(1000))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 static void board_floppy_init(void)
 {
     gpio_configure_pin(gpiob, pin_dir,   GPI_bus);

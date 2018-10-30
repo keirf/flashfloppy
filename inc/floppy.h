@@ -203,6 +203,7 @@ uint8_t mfmtobin(uint16_t x);
 
 /* External API. */
 void floppy_init(void);
+bool_t floppy_ribbon_is_reversed(void);
 void floppy_insert(unsigned int unit, struct slot *slot);
 void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
