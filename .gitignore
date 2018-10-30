@@ -10,6 +10,6 @@
 *.rld
 *.upd
 *.dfu
-/flashfloppy_*
+/flashfloppy-*
 /index.html
 /HxC_Compat*

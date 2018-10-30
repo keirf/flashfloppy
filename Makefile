@@ -31,29 +31,29 @@ HXC_FF_URL := $(HXC_FF_URL)/releases/download
 HXC_FF_VER := v1.73-ff
 
 dist:
-	rm -rf flashfloppy_*
-	mkdir -p flashfloppy_$(VER)/reloader
+	rm -rf flashfloppy-*
+	mkdir -p flashfloppy-$(VER)/reloader
 	$(MAKE) clean
 	$(MAKE) gotek
-	cp -a FF_Gotek-$(VER).dfu flashfloppy_$(VER)/
-	cp -a FF_Gotek-$(VER).upd flashfloppy_$(VER)/
-	cp -a FF_Gotek-$(VER).hex flashfloppy_$(VER)/
-	cp -a FF_Gotek-Reloader-$(VER).upd flashfloppy_$(VER)/reloader/
-	cp -a FF_Gotek-Bootloader-$(VER).rld flashfloppy_$(VER)/reloader/
+	cp -a FF_Gotek-$(VER).dfu flashfloppy-$(VER)/
+	cp -a FF_Gotek-$(VER).upd flashfloppy-$(VER)/
+	cp -a FF_Gotek-$(VER).hex flashfloppy-$(VER)/
+	cp -a FF_Gotek-Reloader-$(VER).upd flashfloppy-$(VER)/reloader/
+	cp -a FF_Gotek-Bootloader-$(VER).rld flashfloppy-$(VER)/reloader/
 	$(MAKE) clean
-	cp -a COPYING flashfloppy_$(VER)/
-	cp -a README.md flashfloppy_$(VER)/
-	cp -a RELEASE_NOTES flashfloppy_$(VER)/
-	cp -a examples flashfloppy_$(VER)/
+	cp -a COPYING flashfloppy-$(VER)/
+	cp -a README.md flashfloppy-$(VER)/
+	cp -a RELEASE_NOTES flashfloppy-$(VER)/
+	cp -a examples flashfloppy-$(VER)/
 	[ -e HxC_Compat_Mode-$(HXC_FF_VER).zip ] || \
 	wget -q --show-progress $(HXC_FF_URL)/$(HXC_FF_VER)/HxC_Compat_Mode-$(HXC_FF_VER).zip
 	rm -rf index.html
 	unzip -q HxC_Compat_Mode-$(HXC_FF_VER).zip
-	mv HxC_Compat_Mode flashfloppy_$(VER)
-	zip -r flashfloppy_$(VER).zip flashfloppy_$(VER)
+	mv HxC_Compat_Mode flashfloppy-$(VER)
+	zip -r flashfloppy-$(VER).zip flashfloppy-$(VER)
 
 mrproper: clean
-	rm -rf flashfloppy_*
+	rm -rf flashfloppy-*
 	rm -rf HxC_Compat_Mode-$(HXC_FF_VER).zip
 
 else
