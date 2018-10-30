@@ -678,6 +678,10 @@ static void read_ff_cfg(void)
                 : FONT_8x16;
             break;
 
+        case FFCFG_oled_contrast:
+            ff_cfg.oled_contrast = strtol(opts.arg, NULL, 10);
+            break;
+
         case FFCFG_display_off_secs:
             ff_cfg.display_off_secs = strtol(opts.arg, NULL, 10);
             cfg.ffcfg_has_display_off_secs = TRUE;
@@ -751,6 +755,7 @@ static void process_ff_cfg_opts(const struct ff_cfg *old)
 
     /* oled-font, display-type: Reinitialise the display subsystem. */
     if ((ff_cfg.oled_font != old->oled_font)
+        || (ff_cfg.oled_contrast != old->oled_contrast)
         || (ff_cfg.display_type != old->display_type))
         system_reset(); /* hit it with a hammer */
 }

@@ -118,6 +118,7 @@ struct __packed ff_cfg {
 #define PIN_nchg   (PIN_chg | PIN_invert)
     uint8_t pin02, pin34;
     uint8_t head_settle_ms;
+    uint8_t oled_contrast;
 };
 
 extern struct ff_cfg ff_cfg;

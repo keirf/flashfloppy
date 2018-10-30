@@ -565,24 +565,24 @@ static unsigned int oled_start_i2c(uint8_t *buf)
         0x02, 0x10,   /* column address: 2 */
     };
 
+    uint8_t dynamic_cmds[4], *dc = dynamic_cmds;
     uint8_t *p = buf;
 
     /* Set up the display address range. */
     if (ff_cfg.display_type & DISPLAY_sh1106) {
         p += oled_queue_cmds(p, sh1106_addr_cmds, sizeof(sh1106_addr_cmds));
         /* Page address: according to oled_row. */
-        *p++ = 0x80;
-        *p++ = 0xb0 + oled_row;
+        *dc++ = 0xb0 + oled_row;
     } else {
         p += oled_queue_cmds(p, ssd1306_addr_cmds, sizeof(ssd1306_addr_cmds));
         /* Page address max: depends on display height */
-        *p++ = 0x80;
-        *p++ = (oled_height / 8) - 1;
+        *dc++ = (oled_height / 8) - 1;
     }
 
     /* Display on/off according to backlight setting. */
-    *p++ = 0x80;
-    *p++ = _bl ? 0xaf : 0xae;
+    *dc++ = _bl ? 0xaf : 0xae;
+
+    p += oled_queue_cmds(p, dynamic_cmds, dc - dynamic_cmds);
 
     /* All subsequent bytes are data bytes. */
     *p++ = 0x40;
@@ -686,7 +686,6 @@ static void oled_init(void)
         0x40,       /* display start line = 0 */
         0x8d, 0x14, /* enable charge pump */
         0xda, 0x02, /* com pins configuration */
-        0x81, 0x8f, /* display contrast */
         0xd9, 0xf1, /* pre-charge period */
         0xdb, 0x20, /* vcomh detect (default) */
         0xa4,       /* output follows ram contents */
@@ -700,7 +699,7 @@ static void oled_init(void)
         0xc0,       /* com scan direction (default) */
     };
     const uint8_t *cmds;
-    uint8_t dynamic_cmds[4], *dc;
+    uint8_t dynamic_cmds[6], *dc;
     uint8_t *p = buffer;
 
     /* Disable I2C (currently in Standard Mode). */
@@ -718,6 +717,8 @@ static void oled_init(void)
 
     /* Dynamically-generated initialisation commands. */
     dc = dynamic_cmds;
+    *dc++ = 0x81; /* Display Contrast */
+    *dc++ = ff_cfg.oled_contrast;
     *dc++ = 0xa8; /* Multiplex ratio (lcd height - 1) */
     *dc++ = oled_height - 1;
     *dc++ = 0xda; /* COM pins configuration */
