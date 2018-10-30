@@ -3,10 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
-** v0.10 - TBA
+** v0.10 - 30 October 2018
  - FF.CFG: Allow up/down inputs to be reversed
    - Reverse original two buttons (twobutton-action=reverse)
    - Reverse rotary encoder direction (rotary=reverse)
+ - Modified version numbering scheme and remove alpha status
 
 ** v0.9.31a - 28 October 2018
  - HFE: Sanity-check critical header fields
