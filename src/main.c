@@ -1683,7 +1683,7 @@ static void banner(void)
         lcd_clear();
         lcd_write(0, 0, 0, "FlashFloppy");
         lcd_write(0, 1, 0, "v");
-        lcd_write(1, 1, 0, FW_VER);
+        lcd_write(1, 1, 0, fw_ver);
         lcd_on();
         break;
     }
@@ -1692,7 +1692,8 @@ static void banner(void)
 static void maybe_show_version(void)
 {
     uint8_t b, nb;
-    char *p, *np, msg[3];
+    const char *p, *np;
+    char msg[3];
     int len;
 
     /* LCD/OLED already displays version info in idle state. */
@@ -1708,7 +1709,7 @@ static void maybe_show_version(void)
         return;
 
     /* Iterate through the dotted sections of the version number. */
-    for (p = FW_VER; p != NULL; p = np ? np+1 : NULL) {
+    for (p = fw_ver; p != NULL; p = np ? np+1 : NULL) {
         np = strchr(p, '.');
         memset(msg, ' ', sizeof(msg));
         len = min_t(int, np ? np - p : strnlen(p, sizeof(msg)), sizeof(msg));
@@ -1781,7 +1782,7 @@ int main(void)
     board_init();
     delay_ms(200); /* 5v settle */
 
-    printk("\n** FlashFloppy v%s for Gotek\n", FW_VER);
+    printk("\n** FlashFloppy v%s for Gotek\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
 

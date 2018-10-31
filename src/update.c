@@ -289,7 +289,7 @@ int main(void)
 
     printk("\n** FF %s v%s for Gotek\n",
            is_reloader ? "Reloader" : "Update Bootloader",
-           FW_VER);
+           fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
 
@@ -305,7 +305,7 @@ int main(void)
                  is_reloader ? "Reloader" : "Update Flash");
         lcd_write(0, 0, 0, msg);
         lcd_write(0, 1, 0, "v");
-        lcd_write(1, 1, 0, FW_VER);
+        lcd_write(1, 1, 0, fw_ver);
         lcd_sync();
         break;
     }

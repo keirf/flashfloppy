@@ -9,8 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define FW_VER "0.10"
-
 #ifndef NDEBUG
 #define ASSERT(p) do { if (!(p)) illegal(); } while (0)
 #else
@@ -170,6 +168,9 @@ extern uint8_t board_id;
 /* Gotek board revisions */
 #define BRDREV_Gotek_standard 0xf
 #define BRDREV_Gotek_enhanced 0x0
+
+/* Build info. */
+extern const char fw_ver[];
 
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];

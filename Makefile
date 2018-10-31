@@ -1,6 +1,8 @@
 
-PROJ = FlashFloppy
-VER = v0.10
+export FW_VER := 0.10
+
+PROJ := FlashFloppy
+VER := v$(FW_VER)
 
 SUBDIRS += src bootloader reloader
 

@@ -3,6 +3,7 @@ RPATH = ../src
 OBJS += update.o
 OBJS += fpec.o
 
+OBJS += build_info.o
 OBJS += cancellation.o
 OBJS += crc.o
 OBJS += vectors.o
@@ -21,3 +22,6 @@ SUBDIRS += display
 SUBDIRS += fatfs
 SUBDIRS += gotek
 SUBDIRS += usb
+
+.PHONY: $(RPATH)/build_info.c
+build_info.o: CFLAGS += -DFW_VER="\"$(FW_VER)\""

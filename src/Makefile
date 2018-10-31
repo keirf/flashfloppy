@@ -1,4 +1,5 @@
 OBJS += arena.o
+OBJS += build_info.o
 OBJS += cancellation.o
 OBJS += config.o
 OBJS += crc.o
@@ -22,6 +23,9 @@ SUBDIRS += fatfs
 SUBDIRS += image
 SUBDIRS += gotek
 SUBDIRS += usb
+
+.PHONY: build_info.c
+build_info.o: CFLAGS += -DFW_VER="\"$(FW_VER)\""
 
 flash_cfg.o: ff_cfg_defaults.h
 

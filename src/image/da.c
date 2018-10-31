@@ -11,8 +11,7 @@
 
 #include "../fatfs/diskio.h"
 
-#define DA_SIG    "HxCFEDA"
-#define DA_FW_VER "FF-v"FW_VER
+#define DA_SIG "HxCFEDA"
 
 #define CMD_NOP          0
 #define CMD_SET_LBA      1 /* p[0-3] = LBA (little endian) */
@@ -35,15 +34,16 @@
 static void da_seek_track(struct image *im)
 {
     struct da_status_sector *dass = &im->da.dass;
+    bool_t version_override = (ff_cfg.da_report_version[0] != '\0');
 
     im->cur_track = 255*2;
 
     memset(&im->da, 0, sizeof(im->da));
 
     snprintf(dass->sig, sizeof(dass->sig), "%s", DA_SIG);
-    snprintf(dass->fw_ver, sizeof(dass->fw_ver), "%s",
-             (ff_cfg.da_report_version[0] != '\0')
-             ? ff_cfg.da_report_version : DA_FW_VER);
+    snprintf(dass->fw_ver, sizeof(dass->fw_ver),
+             version_override ? "%s" : "FF-v%s",
+             version_override ? ff_cfg.da_report_version : fw_ver);
     dass->nr_sec = 8;
 
     im->sync = SYNC_mfm;
