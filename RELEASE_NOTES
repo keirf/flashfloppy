@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.11 - 1 November 2018
+ - Detect and report upside-down data ribbon cable
+ - FF.CFG: Configurable OLED brightness/contrast (oled-contrast=)
+ - FF.CFG: Configurable head settle time (head-settle-ms=)
+ - FF.CFG: Fix comma-separated-list parsing (eg. rotary=)
+
 ** v0.10 - 30 October 2018
  - FF.CFG: Allow up/down inputs to be reversed
    - Reverse original two buttons (twobutton-action=reverse)
