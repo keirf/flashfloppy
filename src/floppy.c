@@ -506,7 +506,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
 
 static unsigned int drive_calc_track(struct drive *drv)
 {
-    drv->nr_sides = (drv->cyl == 255) ? 1 : drv->image->nr_sides;
+    drv->nr_sides = (drv->cyl >= DA_FIRST_CYL) ? 1 : drv->image->nr_sides;
     return drv->cyl*2 + (drv->head & (drv->nr_sides - 1));
 }
 
@@ -775,7 +775,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Seek to the new track. */
         track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
-        if ((track >= 510) && (drv->outp & m(outp_wrprot))
+        if ((track >= (DA_FIRST_CYL*2)) && (drv->outp & m(outp_wrprot))
             && !usbh_msc_readonly()) {
             /* Remove write-protect when driven into D-A mode. */
             drive_change_output(drv, outp_wrprot, FALSE);
@@ -936,7 +936,7 @@ static void drive_step_timer(void *_drv)
     case STEP_latched:
         speaker_pulse();
         if ((drv->cyl >= 84) && !drv->step.inward)
-            drv->cyl = 84; /* Fast step back from D-A cyl 255 */
+            drv->cyl = 84; /* Fast step back from D-A cyls */
         drv->cyl += drv->step.inward ? 1 : -1;
         timer_set(&drv->step.timer,
                   drv->step.start + time_ms(ff_cfg.head_settle_ms));

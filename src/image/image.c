@@ -174,7 +174,7 @@ void image_extend(struct image *im)
 bool_t image_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
-    if (track < 510) {
+    if (track < (DA_FIRST_CYL*2)) {
         /* If we are exiting D-A mode then need to re-read the config file. */
         if (im->handler == &da_image_handler)
             return TRUE;

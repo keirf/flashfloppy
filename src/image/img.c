@@ -1427,11 +1427,9 @@ static bool_t mfm_write_track(struct image *im)
  */
 
 /* 8271 mini-diskette values */
-#define FM_GAP_1 26
 #define FM_GAP_2 11
 #define FM_GAP_4A 16
 #define FM_GAP_SYNC 6
-#define FM_SYNC_CLK 0xc7
 
 static bool_t fm_open(struct image *im)
 {
@@ -1483,7 +1481,7 @@ static bool_t fm_open(struct image *im)
     return TRUE;
 }
 
-static uint16_t fm_sync(uint8_t dat, uint8_t clk)
+uint16_t fm_sync(uint8_t dat, uint8_t clk)
 {
     uint16_t _dat = mfmtab[dat] & 0x5555;
     uint16_t _clk = (mfmtab[clk] & 0x5555) << 1;

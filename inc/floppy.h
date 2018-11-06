@@ -82,6 +82,7 @@ struct directaccess {
     struct da_status_sector dass;
     int32_t decode_pos;
     uint16_t trk_sec;
+    uint16_t idx_sz, idam_sz, dam_sz;
 };
 
 struct image_buf {
@@ -200,6 +201,10 @@ uint32_t image_ticks_since_index(struct image *im);
 extern const uint16_t mfmtab[];
 static inline uint16_t bintomfm(uint8_t x) { return mfmtab[x]; }
 uint8_t mfmtobin(uint16_t x);
+
+/* FM conversion. */
+#define FM_SYNC_CLK 0xc7
+uint16_t fm_sync(uint8_t dat, uint8_t clk);
 
 /* External API. */
 void floppy_init(void);
