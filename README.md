@@ -27,6 +27,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - Kaypro
   - Memotech
   - MSX
+  - Nascom (1, 2)
   - NEC PC-98
   - UKNC, DVK (Soviet PDP-11)
   - IBM PC and many others

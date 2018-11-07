@@ -119,6 +119,10 @@ const static struct img_type {
     { 8, _S(1), _IAM, 84, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 320k */
     { 9, _S(1), _IAM, 84, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 360k */
     { 0 } /* all other formats from default list */
+}, nascom_type[] = {
+    { 16, _S(1), _IAM, 57, 3, 1, 1, 0, 8, _C(80), _R(300) }, /* 320k */
+    { 16, _S(2), _IAM, 57, 3, 1, 1, 0, 8, _C(80), _R(300) }, /* 360k */
+    { 0 }
 }, pc98_type[] = {
     { 8, _S(2), _IAM, 116, 1, 3, 1, 0, 0, _C(80), _R(360) }, /* 1232k */
     { 8, _S(2), _IAM, 116, 1, 2, 1, 0, 0, _C(80), _R(360) }, /* 640k */
@@ -224,6 +228,10 @@ static bool_t img_open(struct image *im)
         if (msx_open(im))
             return TRUE;
         goto fallback;
+    case HOST_nascom:
+        type = nascom_type;
+        im->img.skew_cyls_only = TRUE;
+        break;
     case HOST_pc98:
         type = pc98_type;
         break;

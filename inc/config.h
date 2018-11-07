@@ -81,6 +81,7 @@ struct __packed ff_cfg {
 #define HOST_tandy_coco 12
 #define HOST_fluke      13
 #define HOST_kaypro     14
+#define HOST_nascom     15
     uint8_t host;
     /* Bitfields within display_type field. */
 #define DISPLAY_auto   0
