@@ -35,7 +35,8 @@
 #define outp_wrprot 3
 #define outp_rdy    4
 #define outp_hden   5
-#define outp_nr     6
+#define outp_chg1   6
+#define outp_nr     7
 #define outp_unused outp_nr
 
 #define verbose_image_log FALSE
