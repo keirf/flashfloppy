@@ -63,10 +63,10 @@ bool_t floppy_ribbon_is_reversed(void)
     time_t t_start = time_now();
 
     /* If ribbon is reversed then most/all inputs are grounded. 
-     * Check three inputs which are supposed only to pulse. */
-    while (!(gpioa->idr & (m(pin_step) | m(pin_wdata)))
+     * Check SEL plus three inputs which are supposed only to pulse. */
+    while (!(gpioa->idr & (m(pin_sel0) | m(pin_step) | m(pin_wdata)))
            && !(gpiob->idr & m(pin_wgate))) {
-        /* If all three inputs are LOW for a full second, conclude that 
+        /* If all four inputs are LOW for a full second, conclude that 
          * the ribbon is reversed. */
         if (time_since(t_start) > time_ms(1000))
             return TRUE;
