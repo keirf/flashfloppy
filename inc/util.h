@@ -163,6 +163,10 @@ void usbh_msc_process(void);
 bool_t usbh_msc_connected(void);
 bool_t usbh_msc_readonly(void);
 
+/* Navigation/UI frontend */
+uint16_t get_slot_nr(void);
+bool_t set_slot_nr(uint16_t slot_nr);
+
 extern uint8_t board_id;
 
 /* Gotek board revisions */

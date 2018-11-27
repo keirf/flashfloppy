@@ -31,6 +31,7 @@ static struct {
     } stack[20];
     uint8_t depth;
     bool_t usb_power_fault;
+    uint8_t dirty_slot_nr:1;
     uint8_t hxc_mode:1;
     uint8_t ejected:1;
     uint8_t ima_ej_flag:1; /* "\\EJ" flag in IMAGE_A.CFG? */
@@ -61,6 +62,20 @@ static bool_t slot_valid(unsigned int i)
     if (i >= (sizeof(cfg.slot_map)*8))
         return FALSE;
     return !!(cfg.slot_map[i/8] & (0x80>>(i&7)));
+}
+
+uint16_t get_slot_nr(void)
+{
+    return cfg.slot_nr;
+}
+
+bool_t set_slot_nr(uint16_t slot_nr)
+{
+    if (!slot_valid(slot_nr))
+        return FALSE;
+    cfg.slot_nr = slot_nr;
+    cfg.dirty_slot_nr = TRUE;
+    return TRUE;
 }
 
 /* Turn the LCD backlight on, reset the switch-off handler and ticker. */
@@ -770,6 +785,7 @@ static void cfg_init(void)
     BYTE mode;
     FRESULT fr;
 
+    cfg.dirty_slot_nr = FALSE;
     cfg.hxc_mode = FALSE;
     cfg.ima_ej_flag = FALSE;
     cfg.slot_nr = cfg.depth = 0;
@@ -1245,6 +1261,19 @@ indexed_mode:
         cfg.slot.type[i] = tolower(cfg.slot.type[i]);
 }
 
+/* Always updates cfg.slot info for current slot_nr. Additionally:
+ * Native (Direct Navigation):
+ *  READ_SLOT:  Update slot_map/max_slot_nr for current directory.
+ *  WRITE_SLOT: Update IMAGE_A.CFG based on cached fs->fp.fname.
+ * NAVMODE_indexed (FF-native indexed mode):
+ *  READ_SLOT:  Update slot_nr from IMAGE_A.CFG. Update slot_map/max_slot_nr.
+ *  WRITE_SLOT: Update IMAGE_A.CFG from slot_nr.
+ * HxC Indexed Mode:
+ *  READ_SLOT:  Update slot_nr from HXCSDFE.CFG. Update slot_map/max_slot_nr.
+ *  WRITE_SLOT: Update HXCSDFE.CFG from slot_nr.
+ * HxC Selector Mode:
+ *  READ_SLOT:  Update slot_nr/slot_map/max_slot_nr from HXCSDFE.CFG.
+ *  WRITE_SLOT: Update HXCSDFE.CFG from slot_nr. */
 static void cfg_update(uint8_t slot_mode)
 {
     if (cfg.hxc_mode)
@@ -1420,6 +1449,10 @@ static int floppy_main(void *unused)
         }
 
         if (cfg.slot.attributes & AM_DIR) {
+            if (cfg.hxc_mode) {
+                /* No directory support in HxC selector/indexed modes. */
+                F_die(FR_BAD_IMAGE);
+            }
             if (!strcmp(fs->fp.fname, "..")) {
                 if (cfg.depth == 0)
                     F_die(FR_BAD_IMAGECFG);
@@ -1462,6 +1495,13 @@ static int floppy_main(void *unused)
 
         arena_init();
         fs = arena_alloc(sizeof(*fs));
+
+        if (cfg.dirty_slot_nr) {
+            cfg.dirty_slot_nr = FALSE;
+            if (!cfg.hxc_mode)
+                cfg_update(CFG_KEEP_SLOT_NR); /* get correct fs->fp */
+            cfg_update(CFG_WRITE_SLOT_NR);
+        }
 
         /* When an image is loaded, select button means eject. */
         if (fres || (b & B_SELECT)) {
@@ -1567,9 +1607,11 @@ static int floppy_main(void *unused)
             }
         }
 
-        /* No buttons pressed: re-read config and carry on. */
+        /* No buttons pressed: we probably just exited D-A mode. */
         if (b == 0) {
-            cfg_update(CFG_READ_SLOT_NR);
+            /* If using HXCSDFE.CFG then re-read as it may have changed. */
+            if (cfg.hxc_mode && (ff_cfg.nav_mode != NAVMODE_indexed))
+                cfg_update(CFG_READ_SLOT_NR);
             continue;
         }
 

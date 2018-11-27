@@ -55,6 +55,7 @@ static void da_seek_track(struct image *im, uint16_t track)
     snprintf(dass->fw_ver, sizeof(dass->fw_ver),
              version_override ? "%s" : "FF-v%s",
              version_override ? ff_cfg.da_report_version : fw_ver);
+    dass->current_index = get_slot_nr();
 
     switch (im->cur_track>>1) {
     case DA_SD_FM_CYL:
@@ -150,6 +151,7 @@ static bool_t da_read_track(struct image *im)
             struct da_status_sector *da = (struct da_status_sector *)buf;
             memset(da, 0, SEC_SZ);
             memcpy(da, dass, sizeof(*dass));
+            dass->read_cnt++;
         } else {
             if (disk_read(0, buf, dass->lba_base+sec-1, 1) != RES_OK)
                 F_die(FR_DISK_ERR);
@@ -452,6 +454,8 @@ static void process_wdata(struct image *im, unsigned int sect, uint16_t crc)
 
     if (sect == 0) {
         struct da_cmd_sector *dac = (struct da_cmd_sector *)wrbuf;
+        dass->cmd_cnt++;
+        dass->last_cmd_status = 1; /* error */
         if (strcmp(dass->sig, dac->sig)) {
             dac->sig[7] = '\0';
             printk("D-A Bad Sig: '%s'\n", dac->sig);
@@ -459,6 +463,7 @@ static void process_wdata(struct image *im, unsigned int sect, uint16_t crc)
         }
         switch (dac->cmd) {
         case CMD_NOP:
+            dass->last_cmd_status = 0; /* ok */
             break;
         case CMD_SET_LBA:
             for (i = 0; i < 4; i++) {
@@ -467,18 +472,32 @@ static void process_wdata(struct image *im, unsigned int sect, uint16_t crc)
             }
             dass->nr_sec = dac->param[5] ?: (im->sync == SYNC_fm) ? 4 : 8;
             printk("D-A LBA %08x, nr=%u\n", dass->lba_base, dass->nr_sec);
+            dass->last_cmd_status = 0; /* ok */
             break;
         case CMD_SET_CYL:
             printk("D-A Cyl A=%u B=%u\n", dac->param[0], dac->param[1]);
             for (i = 0; i < 2; i++)
                 floppy_set_cyl(i, dac->param[i]);
+            dass->last_cmd_status = 0; /* ok */
             break;
+        case CMD_SELECT_IMAGE: {
+            uint16_t index = dac->param[0] | ((uint16_t)dac->param[1] << 8);
+            bool_t ok = set_slot_nr(index);
+            printk("D-A Img %u -> %u (%s)\n",
+                   dass->current_index, index, ok ? "OK" : "Bad");
+            if (ok) {
+                dass->current_index = index;
+                dass->last_cmd_status = 0;
+            }
+            break;
+        }
         default:
             printk("Unexpected DA Cmd %02x\n", dac->cmd);
             break;
         }
     } else {
         /* All good: write out to mass storage. */
+        dass->write_cnt++;
         printk("Write %08x+%u... ", dass->lba_base, sect-1);
         t = time_now();
         if (disk_write(0, wrbuf, dass->lba_base+sect-1, 1) != RES_OK)

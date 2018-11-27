@@ -238,8 +238,8 @@ void floppy_cancel(void)
     /* Clear soft state. */
     timer_cancel(&index.timer);
     barrier(); /* cancel index.timer /then/ clear soft state */
-    drive.index_suppressed = FALSE;
-    drive.image = NULL;
+    drv->index_suppressed = FALSE;
+    drv->image = NULL;
     max_read_us = 0;
     image = NULL;
     dma_rd = dma_wr = NULL;
@@ -334,7 +334,7 @@ void floppy_init(void)
 
     board_floppy_init();
 
-    timer_init(&drive.step.timer, drive_step_timer, &drive);
+    timer_init(&drv->step.timer, drive_step_timer, drv);
 
     gpio_configure_pin(gpio_out, pin_02, GPO_bus);
     gpio_configure_pin(gpio_out, pin_08, GPO_bus);
