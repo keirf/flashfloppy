@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.12 - 27 November 2018
+ - IMG: Support Nascom 1 & 2 (host=nascom)
+ - Direct Access: Support FM/SD access on cylinder 254
+ - Direct Access: Support CMD_SELECT_IMAGE (cmd #4)
+ - HxC Compat: Fix occasional "LBA Change Test Failed" error
+ - Improvements to ribbon-upside-down checks
+
 ** v0.11 - 1 November 2018
  - Detect and report upside-down data ribbon cable
  - FF.CFG: Configurable OLED brightness/contrast (oled-contrast=)
