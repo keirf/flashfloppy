@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.13 - 2 December 2018
+ - IMG: Support Casio FZ-1 (host=casio)
+ - IMG: Support SC Prophet 3000 (host=akai)
+ - Display D-A/DA/"Host Direct Access" in host file selector
+
 ** v0.12 - 27 November 2018
  - IMG: Support Nascom 1 & 2 (host=nascom)
  - Direct Access: Support FM/SD access on cylinder 254
