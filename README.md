@@ -19,7 +19,8 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - VDK (Dragon)
   - HFE, HFEv3 (Universal)
 - Pre-configured track layouts for Raw Sector Images:
-  - Akai (S01, S20, S950)
+  - Akai (S01, S20, S950), SC (Prophet 3000)
+  - Casio (FZ-1)
   - DEC (RX33, RX50)
   - Ensoniq (ASR, TS, etc)
   - Fluke (9100)

@@ -87,6 +87,9 @@ const static struct img_type {
     /* Akai HD: 10*1kB sectors */
     { 10, _S(2), _IAM, 116, 1, 3, 1, 0, 0, _C(80), _R(300) },
     { 0 }
+}, casio_type[] = {
+    { 8, _S(2), _IAM, 116, 3, 3, 1, 0, 0, _C(80), _R(360) }, /* 1280k */
+    { 0 }
 }, d81_type[] = {
     { 10, _S(2), _IAM, 30, 1, 2, 1, 0, 0, _C(80), _R(300) },
     { 0 }
@@ -208,6 +211,9 @@ static bool_t img_open(struct image *im)
     case HOST_akai:
     case HOST_gem:
         type = akai_type;
+        break;
+    case HOST_casio:
+        type = casio_type;
         break;
     case HOST_dec:
         type = dec_type;
