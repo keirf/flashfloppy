@@ -40,6 +40,11 @@ static bool_t mfm_write_track(struct image *im);
 
 static void process_wdata(struct image *im, unsigned int sect, uint16_t crc);
 
+static unsigned int enc_sec_sz(struct image *im)
+{
+    return im->da.idam_sz + im->da.dam_sz;
+}
+
 static void da_seek_track(struct image *im, uint16_t track)
 {
     struct da_status_sector *dass = &im->da.dass;
@@ -72,6 +77,7 @@ static void da_seek_track(struct image *im, uint16_t track)
     case DA_SD_FM_CYL:
         dass->nr_sec = 4;
         im->sync = SYNC_fm;
+        im->write_bc_ticks = sysclk_us(4);
         break;
     default:
         dass->nr_sec = 8;
@@ -99,17 +105,21 @@ static void da_setup_track(
         im->da.idx_sz = FM_GAP_4A;
         im->da.idam_sz = FM_GAP_SYNC + 5 + 2 + FM_GAP_2;
         im->da.dam_sz = FM_GAP_SYNC + 1 + SEC_SZ + 2 + FM_GAP_3;
+        im->tracklen_bc = FM_GAP_4;
         break;
     default:
         im->da.idx_sz = MFM_GAP_4A + MFM_GAP_SYNC + 4 + MFM_GAP_1;
         im->da.idam_sz = MFM_GAP_SYNC + 8 + 2 + MFM_GAP_2;
         im->da.dam_sz = MFM_GAP_SYNC + 4 + SEC_SZ + 2 + MFM_GAP_3;
+        im->tracklen_bc = MFM_GAP_4;
         break;
     }
 
-    im->tracklen_bc  = (im->da.idam_sz + im->da.dam_sz) * nsec;
+    im->tracklen_bc += enc_sec_sz(im) * nsec;
     im->tracklen_bc += im->da.idx_sz;
     im->tracklen_bc *= 16;
+
+    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
 
     im->da.trk_sec = 0;
 
@@ -125,18 +135,18 @@ static void da_setup_track(
         im->da.decode_pos = 0;
     } else {
         decode_off -= im->da.idx_sz;
-        im->da.decode_pos = decode_off / (im->da.idam_sz + im->da.dam_sz);
+        im->da.decode_pos = decode_off / enc_sec_sz(im);
         if (im->da.decode_pos < nsec) {
             im->da.trk_sec = im->da.decode_pos;
             im->da.decode_pos = im->da.decode_pos * 2 + 1;
-            decode_off %= im->da.idam_sz + im->da.dam_sz;
+            decode_off %= enc_sec_sz(im);
             if (decode_off >= im->da.idam_sz) {
                 decode_off -= im->da.idam_sz;
                 im->da.decode_pos++;
             }
         } else {
             im->da.decode_pos = nsec * 2 + 1;
-            decode_off -= nsec * (im->da.idam_sz + im->da.dam_sz);
+            decode_off -= nsec * enc_sec_sz(im);
        }
     }
 
@@ -368,7 +378,8 @@ static bool_t fm_write_track(struct image *im)
         if (x != 0xfb)
             continue;
 
-        sect = base / (im->da.idam_sz + im->da.dam_sz);
+        sect = (base - im->da.idx_sz - im->da.idam_sz + enc_sec_sz(im)/2)
+            / enc_sec_sz(im);
 
         for (i = 0; i < (SEC_SZ + 2); i++)
             wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
@@ -424,7 +435,8 @@ static bool_t mfm_write_track(struct image *im)
 
         case 0xfb: /* Ordinary Sector */ {
             const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
-            sect = base / (im->da.idam_sz + im->da.dam_sz);
+            sect = (base - im->da.idx_sz - im->da.idam_sz + enc_sec_sz(im)/2)
+                / enc_sec_sz(im);
             crc = crc16_ccitt(header, 4, 0xffff);
             break;
         }
