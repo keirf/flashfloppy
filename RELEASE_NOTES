@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.14 - 7 December 2018
+ - Direct Access: Fix broken sector writes (USB corruption)
+   - Primarily affected the CPC/ST file selectors (not Amiga)
+   - Broken since v0.12
+
 ** v0.13 - 2 December 2018
  - IMG: Support Casio FZ-1 (host=casio)
  - IMG: Support SC Prophet 3000 (host=akai)
