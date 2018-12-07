@@ -14,6 +14,7 @@ OBJS += stm32f10x.o
 OBJS += time.o
 OBJS += timer.o
 OBJS += util.o
+OBJS += volume.o
 OBJS += flash_cfg.o
 
 OBJS-$(debug) += console.o

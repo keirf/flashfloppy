@@ -9,7 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include "../fatfs/diskio.h"
 #include "usbh_msc_core.h"
 
 static DSTATUS dstatus = STA_NOINIT;
@@ -170,12 +169,18 @@ void usbh_msc_process(void)
     USBH_Process(&USB_OTG_Core, &USB_Host);
 }
 
-bool_t usbh_msc_connected(void)
+bool_t usbh_msc_inserted(void)
+{
+    return HCD_IsDeviceConnected(&USB_OTG_Core)
+        || (USB_Host.gState != HOST_IDLE);
+}
+
+static bool_t usbh_msc_connected(void)
 {
     return msc_device_connected && HCD_IsDeviceConnected(&USB_OTG_Core);
 }
 
-bool_t usbh_msc_readonly(void)
+static bool_t usbh_msc_readonly(void)
 {
     return usbh_msc_connected() && USBH_MSC_Param.MSWriteProtect;
 }
@@ -184,7 +189,7 @@ bool_t usbh_msc_readonly(void)
  * FatFS low-level driver callbacks.
  */
 
-DSTATUS disk_initialize(BYTE pdrv)
+static DSTATUS usb_disk_initialize(BYTE pdrv)
 {
     if (pdrv)
         return RES_PARERR;
@@ -196,7 +201,7 @@ DSTATUS disk_initialize(BYTE pdrv)
     return dstatus;
 }
 
-DSTATUS disk_status(BYTE pdrv)
+static DSTATUS usb_disk_status(BYTE pdrv)
 {
     return pdrv ? STA_NOINIT : dstatus;
 }
@@ -215,7 +220,7 @@ static DRESULT handle_usb_status(BYTE status)
     return RES_OK;
 }
 
-DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
+static DRESULT usb_disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
 {
     BYTE status;
 
@@ -234,7 +239,8 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
     return handle_usb_status(status);
 }
 
-DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
+static DRESULT usb_disk_write(
+    BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
 {
     BYTE status;
 
@@ -256,7 +262,7 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
     return handle_usb_status(status);
 }
 
-DRESULT disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)
+static DRESULT usb_disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)
 {
     DRESULT res = RES_ERROR;
 
@@ -276,6 +282,16 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)
 
     return res;
 }
+
+struct volume_ops usb_ops = {
+    .initialize = usb_disk_initialize,
+    .status = usb_disk_status,
+    .read = usb_disk_read,
+    .write = usb_disk_write,
+    .ioctl = usb_disk_ioctl,
+    .connected = usbh_msc_connected,
+    .readonly = usbh_msc_readonly
+};
 
 /*
  * Local variables:

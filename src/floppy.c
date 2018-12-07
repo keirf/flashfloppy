@@ -413,7 +413,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     /* Mount the image file. */
     image_open(image, slot);
     drv->image = image;
-    if (!image->handler->write_track || usbh_msc_readonly())
+    if (!image->handler->write_track || volume_readonly())
         slot->attributes |= AM_RDO;
     if (slot->attributes & AM_RDO) {
         printk("Image is R/O\n");
@@ -776,7 +776,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
         if ((track >= (DA_FIRST_CYL*2)) && (drv->outp & m(outp_wrprot))
-            && !usbh_msc_readonly()) {
+            && !volume_readonly()) {
             /* Remove write-protect when driven into D-A mode. */
             drive_change_output(drv, outp_wrprot, FALSE);
         }

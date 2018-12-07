@@ -82,7 +82,7 @@ static void board_floppy_init(void)
     gpio_configure_pin(gpioa, pin_sel0,  GPI_bus);
     gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
     gpio_configure_pin(gpiob, pin_side,  GPI_bus);
-    if (board_id == BRDREV_Gotek_enhanced) {
+    if (gotek_enhanced()) {
         gpio_configure_pin(gpioa, pin_sel1,  GPI_bus);
         gpio_configure_pin(gpioa, pin_motor, GPI_bus);
     }

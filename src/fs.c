@@ -43,7 +43,7 @@ void F_die(FRESULT fr)
 
 static BYTE mask_mode(BYTE mode)
 {
-    if (usbh_msc_readonly())
+    if (volume_readonly())
         mode &= FA_READ;
     return mode;
 }
@@ -92,7 +92,7 @@ void F_write(FIL *fp, const void *buff, UINT btw, UINT *bw)
 {
     UINT _bw;
     FRESULT fr;
-    if (usbh_msc_readonly()) {
+    if (volume_readonly()) {
         /* Read-only: silently drop. */
         if (bw) *bw = btw;
         return;
@@ -118,7 +118,7 @@ void F_sync(FIL *fp)
 
 void F_truncate(FIL *fp)
 {
-    FRESULT fr = usbh_msc_readonly() ? FR_OK : f_truncate(fp);
+    FRESULT fr = volume_readonly() ? FR_OK : f_truncate(fp);
     handle_fr(fr);
 }
 

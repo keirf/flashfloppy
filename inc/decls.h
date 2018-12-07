@@ -28,6 +28,7 @@
 #include "timer.h"
 #include "fs.h"
 #include "floppy.h"
+#include "volume.h"
 #include "config.h"
 
 /*

@@ -160,8 +160,7 @@ extern uint8_t lcd_columns, lcd_rows;
 void usbh_msc_init(void);
 void usbh_msc_buffer_set(uint8_t *buf);
 void usbh_msc_process(void);
-bool_t usbh_msc_connected(void);
-bool_t usbh_msc_readonly(void);
+bool_t usbh_msc_inserted(void);
 
 /* Navigation/UI frontend */
 uint16_t get_slot_nr(void);
@@ -172,6 +171,8 @@ extern uint8_t board_id;
 /* Gotek board revisions */
 #define BRDREV_Gotek_standard 0xf
 #define BRDREV_Gotek_enhanced 0x0
+#define BRDREV_Gotek_sd_card  0x1
+#define gotek_enhanced() (board_id != BRDREV_Gotek_standard)
 
 /* Build info. */
 extern const char fw_ver[];

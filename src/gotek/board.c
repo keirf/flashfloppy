@@ -47,6 +47,7 @@ void board_init(void)
     case BRDREV_Gotek_standard:
         break;
     case BRDREV_Gotek_enhanced:
+    case BRDREV_Gotek_sd_card:
         /* PA3,15 (floppy inputs), PA4 (USBENA). */
         pa_skip |= 0x8018;
         /* PA4: /USBENA */
