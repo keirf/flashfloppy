@@ -17,7 +17,7 @@
 #define pin_dir     0 /* PB0 */
 #define pin_step    1 /* PA1 */
 #define pin_sel0    0 /* PA0 */
-#define pin_sel1    3 /* PA3 */
+#define pin_sel1    3 /* PA3 (or PA2) */
 #define pin_wgate   9 /* PB9 */
 #define pin_side    4 /* PB4 */
 #define pin_motor  15 /* PA15 */
@@ -49,14 +49,31 @@ void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
 /* EXTI IRQs. */
 /*void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed")));*/ /* EXTI0 */
 void IRQ_7(void) __attribute__((alias("IRQ_STEP_changed"))); /* EXTI1 */
+/*void IRQ_8(void) __attribute__((alias("IRQ_SELB_changed")));*/ /* EXTI2 */
+/*void IRQ_9(void) __attribute__((alias("IRQ_SELB_changed")));*/ /* EXTI3 */
 void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
 void IRQ_23(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI9_5 */
 static const struct exti_irq exti_irqs[] = {
     {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
     {  7, FLOPPY_IRQ_STEP_PRI, m(pin_step) },
+    {  8, FLOPPY_IRQ_SEL_PRI, 0 },
+    {  9, FLOPPY_IRQ_SEL_PRI, 0 },
     { 10, FLOPPY_IRQ_SIDE_PRI, 0 }, 
     { 23, FLOPPY_IRQ_WGATE_PRI, 0 } 
 };
+
+extern struct sel {
+    uint32_t _unused;
+    uint16_t b_op, nop;
+    /* Subset of output pins which are active (O_TRUE). */
+    uint32_t gpio_active;
+    /* GPIO register to either assert or deassert active output pins. */
+    uint32_t gpio_setreset;
+    struct drive *drive;
+    uint32_t pin_mask;
+    uint32_t active;
+    struct sel *sel_other;
+} sel_A, sel_B;
 
 bool_t floppy_ribbon_is_reversed(void)
 {
@@ -77,6 +94,11 @@ bool_t floppy_ribbon_is_reversed(void)
 
 static void board_floppy_init(void)
 {
+    uint32_t trigger_mask;
+
+    sel_A.pin_mask = m(pin_sel0);
+    sel_B.pin_mask = m(pin_sel1);
+
     gpio_configure_pin(gpiob, pin_dir,   GPI_bus);
     gpio_configure_pin(gpioa, pin_step,  GPI_bus);
     gpio_configure_pin(gpioa, pin_sel0,  GPI_bus);
@@ -87,103 +109,114 @@ static void board_floppy_init(void)
         gpio_configure_pin(gpioa, pin_motor, GPI_bus);
     }
 
-    /* PB[15:2] -> EXT[15:2], PA[1:0] -> EXT[1:0] */
+    /* PB[15:4] -> EXT[15:4], PA[3:0] -> EXT[3:0] */
     afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x1111;
-    afio->exticr1 = 0x1100;
+    afio->exticr1 = 0x0000;
 
-    exti->imr = exti->rtsr = exti->ftsr =
-        m(pin_wgate) | m(pin_side) | m(pin_step) | m(pin_sel0);
+    trigger_mask = m(pin_wgate) | m(pin_side) | m(pin_step) | m(pin_sel0);
+    if (nr_drive == 2)
+        trigger_mask |= m(pin_sel1);
+    exti->imr = exti->rtsr = exti->ftsr = trigger_mask;
 }
 
-/* Fast speculative entry point for SELA-changed IRQ. We assume SELA has 
+/* Fast speculative entry point for SEL-changed IRQ. We assume SEL has 
  * changed to the opposite of what we observed on the previous interrupt. This
  * is always the case unless we missed an edge (fast transitions). 
- * Note that the entirety of the SELA handler is in SRAM (.data) -- not only 
- * is this faster to execute, but allows us to co-locate gpio_out_active for 
+ * Note that the entirety of the SEL handler is in SRAM (.data) -- not only 
+ * is this faster to execute, but allows us to co-locate sel_{A,B} for 
  * even faster access in the time-critical speculative entry point. */
 void IRQ_SELA_changed(void);
+void IRQ_SELB_changed(void);
+#define BUILD_IRQ_SEL(x)                                                \
+"    .align 4\n"                                                        \
+"    .thumb_func\n"                                                     \
+"    .type IRQ_SEL"#x"_changed,%function\n"                             \
+"IRQ_SEL"#x"_changed:\n"                                                \
+"    mov  r0, pc\n"                                                     \
+"    ldr  r2, [r0, #12]\n" /* r1 = &gpio_out->b[s]rr */                 \
+"sel_"#x":\n"                                                           \
+"    ldr  r1, [r0, #8]\n"  /* r0 = sel.gpio_active   */                 \
+"    str  r1, [r2, #0]\n"  /* gpio_out->b[s]rr = sel.gpio_active */     \
+"    b.n  _IRQ_SEL_changed\n" /* branch to the main ISR entry point */  \
+"    nop\n"                                                             \
+"   .word 0\n"          /* sel.gpio_active */                           \
+"   .word 0x40010c10\n" /* sel.gpio_setreset (=&gpio_out->b[s]rr) */    \
+"   .word 0\n"          /* sel.drive */                                 \
+"   .word 0\n"          /* sel.pin_mask */                              \
+"   .word 0\n"          /* sel.active */                                \
+"   .word 0\n"          /* sel.other */
 asm (
 "    .data\n"
-"    .align 4\n"
-"    .thumb_func\n"
-"    .type IRQ_SELA_changed,%function\n"
-"IRQ_SELA_changed:\n"
-"    ldr  r0, [pc, #4]\n" /* r0 = gpio_out_active */
-"    ldr  r1, [pc, #8]\n" /* r1 = &gpio_out->b[s]rr */
-"    str  r0, [r1, #0]\n" /* gpio_out->b[s]rr = gpio_out_active */
-"    b.n  _IRQ_SELA_changed\n" /* branch to the main ISR entry point */
-"gpio_out_active:   .word 0\n"
-"gpio_out_setreset: .word 0x40010c10\n" /* gpio_out->b[s]rr */
-"    .global IRQ_6\n"
-"    .thumb_set IRQ_6,IRQ_SELA_changed\n"
+BUILD_IRQ_SEL(A)
+BUILD_IRQ_SEL(B)
+"    .global IRQ_6 ; .thumb_set IRQ_6,IRQ_SELA_changed\n"
+"    .global IRQ_8\n"
+"    .thumb_set IRQ_8,IRQ_SELB_changed\n"
+"    .global IRQ_9\n"
+"    .thumb_set IRQ_9,IRQ_SELB_changed\n"
 "    .previous\n"
 );
 
-/* Subset of output pins which are active (O_TRUE). */
-extern uint32_t gpio_out_active;
-
-/* GPIO register to either assert or deassert active output pins. */
-extern uint32_t gpio_out_setreset;
-
-static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpio_out_setreset)
+static void Amiga_HD_ID(struct sel *sel)
     __attribute__((used)) __attribute__((section(".data@")));
-static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
+static void _IRQ_SEL_changed(struct sel *sel)
     __attribute__((used)) __attribute__((section(".data@")));
 
-/* Intermediate SELA-changed handler for generating the Amiga HD RDY signal. */
-static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpio_out_setreset)
+/* Intermediate SEL-changed handler for generating the Amiga HD RDY signal. */
+static void Amiga_HD_ID(struct sel *sel)
 {
     /* If deasserting the bus, toggle pin 34 for next time we take the bus. */
-    if (!(_gpio_out_setreset & 4))
-        gpio_out_active ^= m(pin_34);
+    if (!(sel->gpio_setreset & 4))
+        sel->gpio_active ^= m(pin_34);
 
-    /* Continue to the main SELA-changed IRQ entry point. */
-    _IRQ_SELA_changed(_gpio_out_active);
+    /* Continue to the main SEL-changed IRQ entry point. */
+    _IRQ_SEL_changed(sel);
 }
 
-/* Main entry point for SELA-changed IRQ. This fixes up GPIO pins if we 
+/* Main entry point for SEL-changed IRQ. This fixes up GPIO pins if we 
  * mis-speculated, also handles the timer-driver RDATA pin, and sets up the 
  * speculative entry point for the next interrupt. */
-static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
+static void _IRQ_SEL_changed(struct sel *sel)
 {
-    /* Clear SELA-changed flag. */
-    exti->pr = m(pin_sel0);
+    /* Clear SEL-changed flag. */
+    exti->pr = sel->pin_mask;
 
-    if (!(gpioa->idr & m(pin_sel0))) {
-        /* SELA is asserted (this drive is selected). 
+    if (!(gpioa->idr & sel->pin_mask)) {
+        /* SEL is asserted (this drive is selected). 
          * Immediately re-enable all our asserted outputs. */
-        gpio_out->brr = _gpio_out_active;
+        gpio_out->brr = sel->gpio_active;
         /* Set pin_rdata as timer output (AFO_bus). */
         if (dma_rd && (dma_rd->state == DMA_active))
             gpio_data->crl = (gpio_data->crl & ~(0xfu<<(pin_rdata<<2)))
                 | ((AFO_bus&0xfu)<<(pin_rdata<<2));
         /* Let main code know it can drive the bus until further notice. */
-        drive.sel = 1;
+        sel->active = 1;
+        sel->gpio_setreset &= ~4; /* gpio_out->bsrr */
     } else {
-        /* SELA is deasserted (this drive is not selected).
+        /* SEL is deasserted (this drive is not selected).
          * Relinquish the bus by disabling all our asserted outputs. */
-        gpio_out->bsrr = _gpio_out_active;
+        gpio_out->bsrr = sel->gpio_active;
         /* Set pin_rdata as quiescent (GPO_bus). */
         if (dma_rd && (dma_rd->state == DMA_active))
             gpio_data->crl = (gpio_data->crl & ~(0xfu<<(pin_rdata<<2)))
                 | ((GPO_bus&0xfu)<<(pin_rdata<<2));
         /* Tell main code to leave the bus alone. */
-        drive.sel = 0;
+        sel->active = 0;
+        sel->gpio_setreset |= 4; /* gpio_out->brr */
+        /* If other emulated drive is active, assert it on the bus. */
+        if (unlikely(sel->sel_other->active))
+            return _IRQ_SEL_changed(sel->sel_other);
     }
 
-    /* Set up the speculative fast path for the next interrupt. */
-    if (drive.sel)
-        gpio_out_setreset &= ~4; /* gpio_out->bsrr */
-    else
-        gpio_out_setreset |= 4; /* gpio_out->brr */
+    IRQx_set_pending(FLOPPY_SOFTIRQ);
 }
 
-/* Update the SELA handler. Used for switching in the Amiga HD-ID "magic". 
+/* Update the SEL handler. Used for switching in the Amiga HD-ID "magic". 
  * Must be called with interrupts disabled. */
-static void update_SELA_irq(bool_t amiga_hd_id)
+static void update_SELA_irq(bool_t amiga_hd_id) /* XXX */
 {
     uint32_t handler = amiga_hd_id ? (uint32_t)Amiga_HD_ID
-        : (uint32_t)_IRQ_SELA_changed;
+        : (uint32_t)_IRQ_SEL_changed;
     uint32_t entry = (uint32_t)IRQ_SELA_changed;
     uint16_t opcode;
 
@@ -192,17 +225,17 @@ static void update_SELA_irq(bool_t amiga_hd_id)
     entry &= ~1;
 
     /* Create a new tail-call instruction for the entry stub. */
-    opcode = handler - (entry + 6 + 4);
+    opcode = handler - (entry + 8 + 4);
     opcode = 0xe000 | (opcode >> 1);
 
     /* If the tail-call instruction has changed, modify the entry stub. */
-    if (unlikely(((uint16_t *)entry)[3] != opcode)) {
-        ((uint16_t *)entry)[3] = opcode;
+    if (unlikely(((uint16_t *)entry)[4] != opcode)) {
+        ((uint16_t *)entry)[4] = opcode;
         cpu_sync(); /* synchronise self-modifying code */
     }
 }
 
-static bool_t drive_is_writing(void)
+static bool_t drive_is_writing(void) /* XXX */
 {
     if (!dma_wr)
         return FALSE;
@@ -216,8 +249,9 @@ static bool_t drive_is_writing(void)
 
 static void IRQ_STEP_changed(void)
 {
-    struct drive *drv = &drive;
+    struct drive *drv;
     uint8_t idr_a, idr_b;
+    unsigned int i;
 
     /* Clear STEP-changed flag. */
     exti->pr = m(pin_step);
@@ -226,45 +260,47 @@ static void IRQ_STEP_changed(void)
     idr_a = gpioa->idr;
     idr_b = gpiob->idr;
 
-    /* Bail if drive not selected. */
-    if (idr_a & m(pin_sel0))
-        return;
+    for (i = 0, drv = drive; i < nr_drive; i++, drv++) {
+        /* Bail if drive not selected. */
+        if (idr_a & drv->sel->pin_mask)
+            continue;
 
-    /* DSKCHG asserts on any falling edge of STEP. We deassert on any edge. */
-    if ((drv->outp & m(outp_dskchg)) && (dma_rd != NULL))
-        drive_change_output(drv, outp_dskchg, FALSE);
+        /* DSKCHG asserts on any falling edge of STEP. Deassert on any edge. */
+        if ((drv->outp & m(outp_dskchg)) && (dma_rd != NULL)) /* XXX */
+            drive_change_output(drv, outp_dskchg, FALSE);
 
-    if (!(idr_a & m(pin_step))   /* Not rising edge on STEP? */
-        || (drv->step.state & STEP_active) /* Already mid-step? */
-        || drive_is_writing())   /* Write in progress? */
-        return;
+        if (!(idr_a & m(pin_step))   /* Not rising edge on STEP? */
+            || (drv->step.state & STEP_active) /* Already mid-step? */
+            || drive_is_writing())   /* Write in progress? */ /* XXX */
+            return;
 
-    /* Latch the step direction and check bounds (0 <= cyl <= 255). */
-    drv->step.inward = !(idr_b & m(pin_dir));
-    if (drv->cyl == (drv->step.inward ? 255 : 0))
-        return;
+        /* Latch the step direction and check bounds (0 <= cyl <= 255). */
+        drv->step.inward = !(idr_b & m(pin_dir));
+        if (drv->cyl == (drv->step.inward ? 255 : 0))
+            return;
 
-    /* Valid step request for this drive: start the step operation. */
-    drv->step.start = time_now();
-    drv->step.state = STEP_started;
-    if (drv->outp & m(outp_trk0))
-        drive_change_output(drv, outp_trk0, FALSE);
-    if (dma_rd != NULL) {
-        rdata_stop();
-        if (!ff_cfg.index_suppression) {
-            /* Opportunistically insert an INDEX pulse ahead of seek op. */
-            drive_change_output(drv, outp_index, TRUE);
-            index.fake_fired = TRUE;
+        /* Valid step request for this drive: start the step operation. */
+        drv->step.start = time_now();
+        drv->step.state = STEP_started;
+        if (drv->outp & m(outp_trk0))
+            drive_change_output(drv, outp_trk0, FALSE);
+        if (dma_rd != NULL) { /* XXX */
+            rdata_stop();
+            if (!ff_cfg.index_suppression) {
+                /* Opportunistically insert an INDEX pulse ahead of seek op. */
+                drive_change_output(drv, outp_index, TRUE);
+                index.fake_fired = TRUE;
+            }
         }
+        IRQx_set_pending(FLOPPY_SOFTIRQ);
     }
-    IRQx_set_pending(FLOPPY_SOFTIRQ);
 }
 
 static void IRQ_SIDE_changed(void)
 {
     stk_time_t t = stk_now();
     unsigned int filter = stk_us(ff_cfg.side_select_glitch_filter);
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
     uint8_t hd;
 
     do {
@@ -279,16 +315,17 @@ static void IRQ_SIDE_changed(void)
         /* If configured to do so, wait a few microseconds to ensure this isn't
          * a glitch (eg. signal is mistaken for the archaic Fault-Reset line by
          * old CP/M loaders, and pulsed LOW when starting a read). */
-    } while (stk_diff(t, stk_now()) < filter);
+    } while (stk_timesince(t) < filter);
 
-    drv->head = hd;
+    drv->head = drive[1].head = hd;
+    /* XXX Check _active_ drive (assign to drv) */
     if ((dma_rd != NULL) && (drv->nr_sides == 2))
         rdata_stop();
 }
 
 static void IRQ_WGATE_changed(void)
 {
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0]; /* XXX Check _active_ drive */
 
     /* Clear WGATE-changed flag. */
     exti->pr = m(pin_wgate);
@@ -297,8 +334,8 @@ static void IRQ_WGATE_changed(void)
     if (drv->outp & m(outp_wrprot))
         return;
 
-    if ((gpiob->idr & m(pin_wgate))      /* WGATE off? */
-        || (gpioa->idr & m(pin_sel0))) { /* Not selected? */
+    if ((gpiob->idr & m(pin_wgate)) /* WGATE off? */
+        || (gpioa->idr & drv->sel->pin_mask)) { /* Not selected? */
         wdata_stop();
     } else {
         rdata_stop();

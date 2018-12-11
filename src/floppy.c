@@ -59,7 +59,6 @@ static struct dma_ring *dma_wr; /* WDATA DMA buffer */
 static struct drive {
     uint8_t cyl, head, nr_sides;
     bool_t writing;
-    bool_t sel;
     bool_t index_suppressed; /* disable IDX while writing to USB stick */
     uint8_t outp;
     struct {
@@ -74,7 +73,9 @@ static struct drive {
     } step;
     uint32_t restart_pos;
     struct image *image;
-} drive;
+    struct sel *sel;
+} drive[2];
+static unsigned int nr_drive = 1;
 
 static struct image *image;
 static time_t sync_time, sync_pos;
@@ -134,9 +135,9 @@ static always_inline void drive_change_pin(
 
     /* Logically assert or deassert the pin. */
     if (assert)
-        gpio_out_active |= pin_mask;
+        sel_A.gpio_active |= pin_mask;
     else
-        gpio_out_active &= ~pin_mask;
+        sel_A.gpio_active &= ~pin_mask;
 
     /* Update the physical output pin, if the drive is selected. */
     if (drv->sel)
@@ -205,8 +206,8 @@ static void update_amiga_id(bool_t amiga_hd_id)
      * the HD-ID sequence 101010... with the host poll loop. It turns out that
      * starting with pin 34 asserted when the HD image is mounted seems to
      * generally work! */
-    gpio_out_active |= m(pin_34);
-    if (drive.sel)
+    sel_A.gpio_active |= m(pin_34);
+    if (drive[0].sel->active)
         gpio_write_pins(gpio_out, m(pin_34), O_TRUE);
 
     IRQ_global_enable();
@@ -214,7 +215,7 @@ static void update_amiga_id(bool_t amiga_hd_id)
 
 void floppy_cancel(void)
 {
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
 
     /* Initialised? Bail if not. */
     if (!dma_rd)
@@ -275,7 +276,7 @@ void floppy_set_fintf_mode(void)
         [outp_hden] = "dens",
         [outp_unused] = "high"
     };
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
     uint32_t old_active;
     uint8_t mode = ff_cfg.interface;
 
@@ -298,19 +299,19 @@ void floppy_set_fintf_mode(void)
     pin02 &= ~PIN_invert;
     pin34 &= ~PIN_invert;
 
-    old_active = gpio_out_active;
-    gpio_out_active &= ~(m(pin_02) | m(pin_34));
+    old_active = sel_A.gpio_active;
+    sel_A.gpio_active &= ~(m(pin_02) | m(pin_34));
     if (((drv->outp >> pin02) ^ pin02_inverted) & 1)
-        gpio_out_active |= m(pin_02);
+        sel_A.gpio_active |= m(pin_02);
     if (((drv->outp >> pin34) ^ pin34_inverted) & 1)
-        gpio_out_active |= m(pin_34);
+        sel_A.gpio_active |= m(pin_34);
 
     /* Default handler for IRQ_SELA_changed */
     update_SELA_irq(FALSE);
 
     if (drv->sel) {
-        gpio_write_pins(gpio_out, old_active & ~gpio_out_active, O_FALSE);
-        gpio_write_pins(gpio_out, ~old_active & gpio_out_active, O_TRUE);
+        gpio_write_pins(gpio_out, old_active & ~sel_A.gpio_active, O_FALSE);
+        gpio_write_pins(gpio_out, ~old_active & sel_A.gpio_active, O_TRUE);
     }
 
     IRQ_global_enable();
@@ -326,9 +327,16 @@ void floppy_set_fintf_mode(void)
 
 void floppy_init(void)
 {
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
     const struct exti_irq *e;
     unsigned int i;
+
+    drive[0].sel = &sel_A;
+    sel_A.drive = &drive[0];
+    sel_A.sel_other = &sel_B;
+    drive[1].sel = &sel_B;
+    sel_B.drive = &drive[1];
+    sel_B.sel_other = &sel_A;
 
     floppy_set_fintf_mode();
 
@@ -379,7 +387,7 @@ void floppy_init(void)
 
 void floppy_insert(unsigned int unit, struct slot *slot)
 {
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
 
     arena_init();
 
@@ -523,7 +531,7 @@ static void drive_set_restart_pos(struct drive *drv)
 static void wdata_stop(void)
 {
     struct write *write;
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
     uint8_t prev_state = dma_wr->state;
 
     /* Already inactive? Nothing to do. */
@@ -592,17 +600,17 @@ static void wdata_start(void)
 
     /* Find rotational start position of the write, in SYSCLK ticks. */
     start_pos = max_t(int32_t, 0, time_diff(index.prev_time, time_now()));
-    start_pos %= drive.image->stk_per_rev;
+    start_pos %= drive[0].image->stk_per_rev;
     start_pos *= SYSCLK_MHZ / STK_MHZ;
     write = get_write(image, image->wr_prod);
     write->start = start_pos;
-    write->track = drive_calc_track(&drive);
+    write->track = drive_calc_track(&drive[0]);
 
     /* Allow IDX pulses while handling a write. */
-    drive.index_suppressed = FALSE;
+    drive[0].index_suppressed = FALSE;
 
     /* Exit head-settling state. Ungates INDEX signal. */
-    cmpxchg(&drive.step.state, STEP_settling, 0);
+    cmpxchg(&drive[0].step.state, STEP_settling, 0);
 }
 
 /* Called from IRQ context to stop the read stream. */
@@ -629,9 +637,9 @@ static void rdata_stop(void)
 
     /* track-change = instant: Restart read stream where we left off. */
     if ((ff_cfg.track_change == TRKCHG_instant)
-        && !drive.index_suppressed
+        && !drive[0].index_suppressed
         && ff_cfg.index_suppression)
-        drive_set_restart_pos(&drive);
+        drive_set_restart_pos(&drive[0]);
 }
 
 /* Called from user context to start the read stream. */
@@ -651,11 +659,11 @@ static void rdata_start(void)
     tim_rdata->cr1 = TIM_CR1_CEN;
 
     /* Enable output. */
-    if (drive.sel)
+    if (drive[0].sel->active)
         gpio_configure_pin(gpio_data, pin_rdata, AFO_bus);
 
     /* Exit head-settling state. Ungates INDEX signal. */
-    cmpxchg(&drive.step.state, STEP_settling, 0);
+    cmpxchg(&drive[0].step.state, STEP_settling, 0);
 
 out:
     IRQ_global_enable();
@@ -664,7 +672,7 @@ out:
 static void floppy_sync_flux(void)
 {
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
     uint16_t nr_to_wrap, nr_to_cons, nr;
     int32_t ticks;
 
@@ -769,7 +777,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Work out where in new track to start reading data from. */
         index_time = index.prev_time;
         read_start_pos = drv->index_suppressed
-            ? drive.restart_pos /* start read exactly where write ended */
+            ? drive[0].restart_pos /* start read exactly where write ended */
             : time_since(index_time) + delay;
         read_start_pos %= drv->image->stk_per_rev;
         /* Seek to the new track. */
@@ -882,7 +890,7 @@ static bool_t dma_wr_handle(struct drive *drv)
 void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 {
     if (unit == 0) {
-        struct drive *drv = &drive;
+        struct drive *drv = &drive[0];
         drv->cyl = cyl;
         if (cyl == 0)
             drive_change_output(drv, outp_trk0, TRUE);
@@ -892,15 +900,15 @@ void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 void floppy_get_track(uint8_t *p_cyl, uint8_t *p_side, uint8_t *p_sel,
                       uint8_t *p_writing)
 {
-    *p_cyl = drive.cyl;
-    *p_side = drive.head & (drive.nr_sides - 1);
-    *p_sel = drive.sel;
+    *p_cyl = drive[0].cyl;
+    *p_side = drive[0].head & (drive[0].nr_sides - 1);
+    *p_sel = drive[0].sel->active;
     *p_writing = (dma_wr && dma_wr->state != DMA_inactive);
 }
 
 bool_t floppy_handle(void)
 {
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
 
     return ((dma_wr->state == DMA_inactive)
             ? dma_rd_handle : dma_wr_handle)(drv);
@@ -908,7 +916,7 @@ bool_t floppy_handle(void)
 
 static void index_assert(void *dat)
 {
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
     index.prev_time = index.timer.deadline;
     if (!drv->index_suppressed
         && !(drv->step.state && ff_cfg.index_suppression)) {
@@ -921,7 +929,7 @@ static void index_assert(void *dat)
 
 static void index_deassert(void *dat)
 {
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
     drive_change_output(drv, outp_index, FALSE);
 }
 
@@ -955,7 +963,7 @@ static void drive_step_timer(void *_drv)
 
 static void IRQ_soft(void)
 {
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
 
     if (drv->step.state == STEP_started) {
         timer_cancel(&drv->step.timer);
@@ -975,7 +983,7 @@ static void IRQ_rdata_dma(void)
     uint32_t prev_ticks_since_index, ticks, i;
     uint16_t nr_to_wrap, nr_to_cons, nr, dmacons, done;
     time_t now;
-    struct drive *drv = &drive;
+    struct drive *drv = &drive[0];
 
     /* Clear DMA peripheral interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch);
