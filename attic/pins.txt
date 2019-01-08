@@ -32,7 +32,9 @@ GPIn:
  PA4     USB_ENA (active-low push-pull output to power switch)
  PA5     USB_FAULT (active-low open-drain signal from power switch)
  PA15    MOTOR (connect to floppy pin 16, and to 5v via 1K)
- PC15-12 Board ID (connect to VSS/GND)
+ PC15-12 Board ID (connect to VSS/GND selectively)
+         0000 = no SD card connector
+         0001 = includes SD card conenctor
 
 Jumpers & Switches:
 -------------------
@@ -63,9 +65,8 @@ TimerOut:
 SD Card [Enhanced Boards only]:
 -------------------------------
 If unused, pull all high.
-GPIn: [pull high]
- PC9   CARD_DETECT (low when card is ejected, open when card inserted)
- PC12  Board ID bit 0 (do not connect, firmware pulls high)
+GPIn: [pulled high by firmware]
+ PC9   CARD_DETECT (low when card is ejected, open/nc when card inserted)
 GPOut:
  PB12  CS
 SPI2: (Rx:DMA1/4, Tx:DMA1/5)

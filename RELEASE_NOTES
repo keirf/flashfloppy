@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v0.15 - 8 January 2018
+ - Support Enhanced Gotek with SD card connector
+   - Board requirements are in the wiki (Hardware Mods)
+   - USB drive, if inserted, takes priority over SD card
+   - SD card is not supported for firmware update
+
 ** v0.14 - 7 December 2018
  - Direct Access: Fix broken sector writes (USB corruption)
    - Primarily affected the CPC/ST file selectors (not Amiga)
