@@ -74,7 +74,7 @@ static struct drive {
     uint32_t restart_pos;
     struct image *image;
     struct sel *sel;
-} drive[2];
+} drive[2], *master;
 static unsigned int nr_drive = 1;
 
 static struct image *image;
@@ -188,7 +188,7 @@ static void drive_change_output(
     drive_change_pin(drv, pin, assert);
 }
 
-static void update_amiga_id(bool_t amiga_hd_id)
+static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
 {
     /* Only for the Amiga interface, with hacked RDY (pin 34) signal. */
     if (fintf_mode != FINTF_AMIGA)
@@ -198,7 +198,7 @@ static void update_amiga_id(bool_t amiga_hd_id)
 
     /* If mounting an HD image then we signal to the host by toggling pin 34 
      * every time the drive is selected. */
-    update_SELA_irq(amiga_hd_id);
+    update_SEL_irq(drv, amiga_hd_id);
 
     /* DD-ID: !!HACK!! We permanently assert pin 34, even when no disk is
      * inserted. Properly we should only do this when MTR is asserted. */
@@ -206,8 +206,8 @@ static void update_amiga_id(bool_t amiga_hd_id)
      * the HD-ID sequence 101010... with the host poll loop. It turns out that
      * starting with pin 34 asserted when the HD image is mounted seems to
      * generally work! */
-    sel_A.gpio_active |= m(pin_34);
-    if (drive[0].sel->active)
+    drv->sel->gpio_active |= m(pin_34);
+    if (drv->sel->active)
         gpio_write_pins(gpio_out, m(pin_34), O_TRUE);
 
     IRQ_global_enable();
@@ -226,7 +226,7 @@ void floppy_cancel(void)
     drive_change_output(drv, outp_rdy, FALSE);
     drive_change_output(drv, outp_wrprot, TRUE);
     drive_change_output(drv, outp_hden, FALSE);
-    update_amiga_id(FALSE);
+    update_amiga_id(drv, FALSE);
 
     /* Stop DMA + timer work. */
     IRQx_disable(dma_rdata_irq);
@@ -306,8 +306,8 @@ void floppy_set_fintf_mode(void)
     if (((drv->outp >> pin34) ^ pin34_inverted) & 1)
         sel_A.gpio_active |= m(pin_34);
 
-    /* Default handler for IRQ_SELA_changed */
-    update_SELA_irq(FALSE);
+    /* Default handler for IRQ_SEL_changed */
+    update_SEL_irq(&drive[0], FALSE);
 
     if (drv->sel) {
         gpio_write_pins(gpio_out, old_active & ~sel_A.gpio_active, O_FALSE);
@@ -317,7 +317,7 @@ void floppy_set_fintf_mode(void)
     IRQ_global_enable();
 
     /* Default to Amiga-DD identity until HD image is mounted. */
-    update_amiga_id(FALSE);
+    update_amiga_id(drv, FALSE);
 
     printk("Interface: %s (pin2=%s%s, pin34=%s%s)\n",
            fintf_name[mode],
@@ -331,9 +331,11 @@ void floppy_init(void)
     const struct exti_irq *e;
     unsigned int i;
 
+    master = &drive[0];
     drive[0].sel = &sel_A;
     sel_A.drive = &drive[0];
     sel_A.sel_other = &sel_B;
+    sel_A.is_master = 1;
     drive[1].sel = &sel_B;
     sel_B.drive = &drive[1];
     sel_B.sel_other = &sel_A;
@@ -507,7 +509,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
 
     /* Drive is ready. Set output signals appropriately. */
     drive_change_output(drv, outp_rdy, TRUE);
-    update_amiga_id(image->stk_per_rev > stk_ms(300));
+    update_amiga_id(drv, image->stk_per_rev > stk_ms(300));
     if (!(slot->attributes & AM_RDO))
         drive_change_output(drv, outp_wrprot, FALSE);
 }
@@ -916,7 +918,7 @@ bool_t floppy_handle(void)
 
 static void index_assert(void *dat)
 {
-    struct drive *drv = &drive[0];
+    struct drive *drv = master;
     index.prev_time = index.timer.deadline;
     if (!drv->index_suppressed
         && !(drv->step.state && ff_cfg.index_suppression)) {
@@ -963,9 +965,34 @@ static void drive_step_timer(void *_drv)
 
 static void IRQ_soft(void)
 {
-    struct drive *drv = &drive[0];
+    struct drive *drv;
+    unsigned int i;
 
-    if (drv->step.state == STEP_started) {
+    drv = master;
+    if (!drv->sel->active && drv->sel->sel_other->active) {
+
+        bool_t new_master;
+
+        /* Atomically re-check that we should switch master, and swizzle the
+         * flags that are tested by the SEL-changed IRQs. This ensures that 
+         * any relevant concurrent changes to the SEL lines will cause another 
+         * call to this function. */
+        IRQ_global_disable();
+        new_master = !drv->sel->active && drv->sel->sel_other->active;
+        if (new_master) {
+            drv->sel->is_master = 0;
+            drv->sel->sel_other->is_master = 1;
+        }
+        IRQ_global_enable();
+
+        /* Stop read data stream from old master drive. */
+        if (new_master)
+            rdata_stop();
+    }
+
+    for (i = 0, drv = drive; i < nr_drive; i++, drv++) {
+        if (drv->step.state != STEP_started)
+            continue;
         timer_cancel(&drv->step.timer);
         drv->step.state = STEP_latched;
         timer_set(&drv->step.timer, drv->step.start + time_ms(1));

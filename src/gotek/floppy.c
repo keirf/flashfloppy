@@ -73,6 +73,7 @@ extern struct sel {
     uint32_t pin_mask;
     uint32_t active;
     struct sel *sel_other;
+    uint32_t is_master;
 } sel_A, sel_B;
 
 bool_t floppy_ribbon_is_reversed(void)
@@ -144,7 +145,8 @@ void IRQ_SELB_changed(void);
 "   .word 0\n"          /* sel.drive */                                 \
 "   .word 0\n"          /* sel.pin_mask */                              \
 "   .word 0\n"          /* sel.active */                                \
-"   .word 0\n"          /* sel.other */
+"   .word 0\n"          /* sel.sel_other */                             \
+"   .word 0\n"          /* sel.is_master */
 asm (
 "    .data\n"
 BUILD_IRQ_SEL(A)
@@ -178,10 +180,15 @@ static void Amiga_HD_ID(struct sel *sel)
  * speculative entry point for the next interrupt. */
 static void _IRQ_SEL_changed(struct sel *sel)
 {
+    uint32_t idr_a;
+
     /* Clear SEL-changed flag. */
     exti->pr = sel->pin_mask;
 
-    if (!(gpioa->idr & sel->pin_mask)) {
+    idr_a = gpioa->idr;
+
+    if (!(idr_a & sel->pin_mask)) {
+    assert_other:
         /* SEL is asserted (this drive is selected). 
          * Immediately re-enable all our asserted outputs. */
         gpio_out->brr = sel->gpio_active;
@@ -192,6 +199,8 @@ static void _IRQ_SEL_changed(struct sel *sel)
         /* Let main code know it can drive the bus until further notice. */
         sel->active = 1;
         sel->gpio_setreset &= ~4; /* gpio_out->bsrr */
+        if (unlikely(!sel->is_master))
+            IRQx_set_pending(FLOPPY_SOFTIRQ);
     } else {
         /* SEL is deasserted (this drive is not selected).
          * Relinquish the bus by disabling all our asserted outputs. */
@@ -204,20 +213,20 @@ static void _IRQ_SEL_changed(struct sel *sel)
         sel->active = 0;
         sel->gpio_setreset |= 4; /* gpio_out->brr */
         /* If other emulated drive is active, assert it on the bus. */
-        if (unlikely(sel->sel_other->active))
-            return _IRQ_SEL_changed(sel->sel_other);
+        sel = sel->sel_other;
+        if (unlikely(sel->active) && !(idr_a & sel->pin_mask))
+            goto assert_other;
     }
-
-    IRQx_set_pending(FLOPPY_SOFTIRQ);
 }
 
 /* Update the SEL handler. Used for switching in the Amiga HD-ID "magic". 
  * Must be called with interrupts disabled. */
-static void update_SELA_irq(bool_t amiga_hd_id) /* XXX */
+static void update_SEL_irq(struct drive *drv, bool_t amiga_hd_id)
 {
     uint32_t handler = amiga_hd_id ? (uint32_t)Amiga_HD_ID
         : (uint32_t)_IRQ_SEL_changed;
-    uint32_t entry = (uint32_t)IRQ_SELA_changed;
+    uint32_t entry = (drv == &drive[0]) ? (uint32_t)IRQ_SELA_changed
+        : (uint32_t)IRQ_SELB_changed;
     uint16_t opcode;
 
     /* Strip the Thumb LSB from the function addresses. */
@@ -235,7 +244,7 @@ static void update_SELA_irq(bool_t amiga_hd_id) /* XXX */
     }
 }
 
-static bool_t drive_is_writing(void) /* XXX */
+static bool_t drive_is_writing(void)
 {
     if (!dma_wr)
         return FALSE;
@@ -271,7 +280,7 @@ static void IRQ_STEP_changed(void)
 
         if (!(idr_a & m(pin_step))   /* Not rising edge on STEP? */
             || (drv->step.state & STEP_active) /* Already mid-step? */
-            || drive_is_writing())   /* Write in progress? */ /* XXX */
+            || drive_is_writing())   /* Write in progress? */
             return;
 
         /* Latch the step direction and check bounds (0 <= cyl <= 255). */
@@ -284,7 +293,7 @@ static void IRQ_STEP_changed(void)
         drv->step.state = STEP_started;
         if (drv->outp & m(outp_trk0))
             drive_change_output(drv, outp_trk0, FALSE);
-        if (dma_rd != NULL) { /* XXX */
+        if ((drv == master) && (dma_rd != NULL)) {
             rdata_stop();
             if (!ff_cfg.index_suppression) {
                 /* Opportunistically insert an INDEX pulse ahead of seek op. */
@@ -317,15 +326,16 @@ static void IRQ_SIDE_changed(void)
          * old CP/M loaders, and pulsed LOW when starting a read). */
     } while (stk_timesince(t) < filter);
 
+    /* Update head number on both drives. */
     drv->head = drive[1].head = hd;
-    /* XXX Check _active_ drive (assign to drv) */
-    if ((dma_rd != NULL) && (drv->nr_sides == 2))
+
+    if ((dma_rd != NULL) && (master->nr_sides == 2))
         rdata_stop();
 }
 
 static void IRQ_WGATE_changed(void)
 {
-    struct drive *drv = &drive[0]; /* XXX Check _active_ drive */
+    struct drive *drv = master; /* XXX check sel.pin_mask directly */
 
     /* Clear WGATE-changed flag. */
     exti->pr = m(pin_wgate);

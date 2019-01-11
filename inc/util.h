@@ -195,7 +195,6 @@ void EXC_unused(void);
 #define FLOPPY_IRQ_WGATE_PRI  2
 #define FLOPPY_IRQ_STEP_PRI   3
 #define FLOPPY_IRQ_SIDE_PRI   4
-#define FLOPPY_IRQ_HI_PRI     3
 #define TIMER_IRQ_PRI         4
 #define WDATA_IRQ_PRI         7
 #define RDATA_IRQ_PRI         8
