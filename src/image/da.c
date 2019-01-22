@@ -20,6 +20,7 @@
 #define CMD_SET_CYL      2 /* p[0] = drive A cyl, p[1] = drive B cyl */
 #define CMD_SET_RPM      3 /* p[0] = 0x00 -> default, 0xFF -> 300 RPM */
 #define CMD_SELECT_IMAGE 4 /* p[0-1] = slot # (little endian) */
+#define CMD_SELECT_NAME 10 /* p[] = name (c string) */
 
 #define FM_GAP_SYNC   6 /* Pre-Sync */
 #define FM_GAP_2     11 /* Post-IDAM */
@@ -173,6 +174,10 @@ static bool_t da_read_track(struct image *im)
             memset(da, 0, SEC_SZ);
             memcpy(da, dass, sizeof(*dass));
             dass->read_cnt++;
+        } else if (dass->lba_base == ~0u) {
+            memset(buf, 0, SEC_SZ);
+            if (sec == 1)
+                strcpy((char *)buf, im->slot->name);
         } else {
             if (disk_read(0, buf, dass->lba_base+sec-1, 1) != RES_OK)
                 F_die(FR_DISK_ERR);
@@ -514,11 +519,24 @@ static void process_wdata(struct image *im, unsigned int sect, uint16_t crc)
             }
             break;
         }
+        case CMD_SELECT_NAME: {
+            int index;
+            char *name = (char *)dac->param;
+            name[FF_MAX_LFN] = '\0';
+            index = set_slot_by_name(name, wrbuf + 512);
+            printk("D-A Img By Name \"%s\" %u -> %d\n",
+                   name, dass->current_index, index);
+            if (index >= 0) {
+                dass->current_index = index;
+                dass->last_cmd_status = 0;
+            }
+            break;
+        }
         default:
             printk("Unexpected DA Cmd %02x\n", dac->cmd);
             break;
         }
-    } else {
+    } else if (dass->lba_base != ~0u) {
         /* All good: write out to mass storage. */
         dass->write_cnt++;
         printk("Write %08x+%u... ", dass->lba_base, sect-1);

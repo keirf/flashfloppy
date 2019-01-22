@@ -72,6 +72,7 @@ int memcmp(const void *s1, const void *s2, size_t n);
 size_t strnlen(const char *s, size_t maxlen);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
+char *strcpy(char *dest, const char *src);
 char *strchr(const char *s, int c);
 char *strrchr(const char *s, int c);
 int tolower(int c);
@@ -165,6 +166,7 @@ bool_t usbh_msc_inserted(void);
 /* Navigation/UI frontend */
 uint16_t get_slot_nr(void);
 bool_t set_slot_nr(uint16_t slot_nr);
+int set_slot_by_name(const char *name, void *scratch);
 
 extern uint8_t board_id;
 

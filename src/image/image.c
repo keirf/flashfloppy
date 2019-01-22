@@ -90,6 +90,7 @@ static bool_t try_handler(struct image *im, const struct slot *slot,
     memset(im, 0, sizeof(*im));
     im->bufs = bufs;
     im->cur_track = ~0;
+    im->slot = slot;
 
     /* Sensible defaults. */
     im->sync = SYNC_mfm;

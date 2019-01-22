@@ -464,6 +464,71 @@ static bool_t native_dir_next(void)
     return TRUE;
 }
 
+int set_slot_by_name(const char *name, void *scratch)
+{
+    bool_t ok;
+    int nr = -1;
+    int len = strnlen(name, 256);
+
+    fs = scratch; /* XXX not very tasty */
+
+    if (!cfg.hxc_mode) {
+
+        nr = cfg.depth ? 1 : 0;
+        F_opendir(&fs->dp, "");
+        while ((ok = native_dir_next()) && strncmp(fs->fp.fname, name, len))
+            nr++;
+        F_closedir(&fs->dp);
+        if (!ok || !set_slot_nr(nr))
+            nr = -1;
+
+    } else if (ff_cfg.nav_mode != NAVMODE_indexed) {
+
+        struct _hxc{
+            struct hxcsdfe_cfg cfg;
+            struct v1_slot v1_slot;
+            struct v2_slot v2_slot;
+        } *hxc = (struct _hxc *)&fs->dp; /* XXX also not nice */
+        struct slot *slot = (struct slot *)hxc;
+        
+        slot_from_short_slot(slot, &cfg.hxcsdfe);
+        fatfs_from_slot(&fs->file, slot, FA_READ);
+        F_read(&fs->file, &hxc->cfg, sizeof(hxc->cfg), NULL);
+        if (hxc->cfg.index_mode)
+            goto out;
+        for (nr = 1; nr <= cfg.max_slot_nr; nr++) {
+            if (!slot_valid(nr))
+                continue;
+            switch (hxc->cfg.signature[9]-'0') {
+            case 1:
+                F_lseek(&fs->file, 1024 + nr*128);
+                F_read(&fs->file, &hxc->v1_slot, sizeof(hxc->v1_slot), NULL);
+                memcpy(&hxc->v2_slot.type, &hxc->v1_slot.name[8], 3);
+                memcpy(&hxc->v2_slot.attributes, &hxc->v1_slot.attributes,
+                       1+4+4+17);
+                hxc->v2_slot.name[17] = '\0';
+                break;
+            case 2:
+                F_lseek(&fs->file, hxc->cfg.slots_position*512
+                    + nr*64*hxc->cfg.number_of_drive_per_slot);
+                F_read(&fs->file, &hxc->v2_slot, sizeof(hxc->v2_slot), NULL);
+                break;
+            }
+            if (!strncmp(hxc->v2_slot.name, name,
+                         min_t(int, len, sizeof(hxc->v2_slot.name))))
+                break;
+        }
+
+        if ((nr <= 0) || !set_slot_nr(nr))
+            nr = -1;
+
+    }
+
+out:
+    fs = NULL;
+    return nr;
+}
+
 /* Parse pinNN= config value. */
 static uint8_t parse_pin_str(const char *s)
 {

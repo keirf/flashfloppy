@@ -141,6 +141,8 @@ struct image {
         struct dsk_image dsk;
         struct directaccess da;
     };
+
+    const struct slot *slot;
 };
 
 static inline struct write *get_write(struct image *im, uint16_t idx)
