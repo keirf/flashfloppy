@@ -355,8 +355,8 @@ bool_t lcd_init(void)
             goto fail;
         }
 
-        is_oled_display = (ff_cfg.display_type & DISPLAY_lcd) ? FALSE
-            : (ff_cfg.display_type & DISPLAY_oled) ? TRUE
+        is_oled_display = (ff_cfg.display_type & DISPLAY_oled) ? TRUE
+            : (ff_cfg.display_type & DISPLAY_lcd) ? FALSE
             : ((a&~1) == OLED_ADDR);
 
         lcd_rows = 2;
@@ -364,6 +364,7 @@ bool_t lcd_init(void)
         if (is_oled_display) {
             oled_height = (ff_cfg.display_type & DISPLAY_oled_64) ? 64 : 32;
             lcd_columns = (ff_cfg.oled_font == FONT_8x16) ? 16
+                : (ff_cfg.display_type & DISPLAY_narrower) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
         } else {
             lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
