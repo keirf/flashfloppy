@@ -20,6 +20,7 @@ extern const struct image_handler adfs_image_handler;
 extern const struct image_handler mbd_image_handler;
 extern const struct image_handler mgt_image_handler;
 extern const struct image_handler pc98fdi_image_handler;
+extern const struct image_handler pc98hdm_image_handler;
 extern const struct image_handler trd_image_handler;
 extern const struct image_handler opd_image_handler;
 extern const struct image_handler ssd_image_handler;
@@ -34,6 +35,7 @@ const struct image_type image_type[] = {
     { "adf", &adf_image_handler },
     { "d81", &d81_image_handler },
     { "dsk", &dsk_image_handler },
+    { "hdm", &pc98hdm_image_handler },
     { "hfe", &hfe_image_handler },
     { "img", &img_image_handler },
     { "ima", &img_image_handler },
@@ -103,7 +105,7 @@ static bool_t try_handler(struct image *im, const struct slot *slot,
     if (handler->write_track != NULL)
         mode |= FA_WRITE;
     fatfs_from_slot(&im->fp, slot, mode);
-    
+
     return handler->open(im);
 }
 

@@ -344,6 +344,11 @@ static bool_t pc98fdi_open(struct image *im)
     return mfm_open(im);
 }
 
+static bool_t pc98hdm_open(struct image *im)
+{
+    return _img_open(im, pc98_type);
+}
+
 struct bpb {
     uint16_t sig;
     uint16_t bytes_per_sec;
@@ -351,7 +356,7 @@ struct bpb {
     uint16_t num_heads;
     uint16_t tot_sec;
 };
-    
+
 static void bpb_read(struct image *im, struct bpb *bpb)
 {
     uint16_t x;
@@ -836,6 +841,14 @@ const struct image_handler mgt_image_handler = {
 
 const struct image_handler pc98fdi_image_handler = {
     .open = pc98fdi_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler pc98hdm_image_handler = {
+    .open = pc98hdm_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,

@@ -6,7 +6,7 @@ A retro floppy emulator for the ubiquitous Gotek hardware.
   - ADM, ADL, ADF, DSD, SSD (Acorn DFS and ADFS)
   - D81 (Commodore 64 1581)
   - DSK (Amstrad CPC, Spectrum +3, Sam Coupe, Microbee)
-  - FDI (NEC PC-98)
+  - FDI, HDM (NEC PC-98)
   - IMG, IMA, DSK (IBM MFM Raw Sector)
   - JVC, DSK (Tandy Color Computer 'CoCo')
   - MBD (Spectrum MB02)
