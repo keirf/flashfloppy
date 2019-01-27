@@ -1,10 +1,10 @@
 /*
  * img.c
- * 
+ *
  * Sector image files for IBM/ISO track formats.
- * 
+ *
  * Written & released by Keir Fraser <keir.xen@gmail.com>
- * 
+ *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
@@ -344,6 +344,22 @@ static bool_t pc98fdi_open(struct image *im)
     return mfm_open(im);
 }
 
+static bool_t pc98hdm_open(struct image *im) {
+    im->img.rpm = 360;
+    im->img.gap_3 = 116;
+    im->img.sec_no = 3;
+
+    im->nr_cyls = 77;
+    im->nr_sides = 2;
+    im->img.nr_sectors = 8;
+    im->img.interleave = 1;
+    im->img.sec_base[0] = im->img.sec_base[1] = 1;
+    im->img.skew = 0;
+    im->img.has_iam = TRUE;
+    im->img.base_off = 0;
+    return mfm_open(im);
+}
+
 struct bpb {
     uint16_t sig;
     uint16_t bytes_per_sec;
@@ -351,7 +367,7 @@ struct bpb {
     uint16_t num_heads;
     uint16_t tot_sec;
 };
-    
+
 static void bpb_read(struct image *im, struct bpb *bpb)
 {
     uint16_t x;
@@ -836,6 +852,14 @@ const struct image_handler mgt_image_handler = {
 
 const struct image_handler pc98fdi_image_handler = {
     .open = pc98fdi_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
+const struct image_handler pc98hdm_image_handler = {
+    .open = pc98hdm_open,
     .setup_track = img_setup_track,
     .read_track = img_read_track,
     .rdata_flux = bc_rdata_flux,
