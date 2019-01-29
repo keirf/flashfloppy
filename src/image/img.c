@@ -345,19 +345,7 @@ static bool_t pc98fdi_open(struct image *im)
 }
 
 static bool_t pc98hdm_open(struct image *im) {
-    im->img.rpm = 360;
-    im->img.gap_3 = 116;
-    im->img.sec_no = 3;
-
-    im->nr_cyls = 77;
-    im->nr_sides = 2;
-    im->img.nr_sectors = 8;
-    im->img.interleave = 1;
-    im->img.sec_base[0] = im->img.sec_base[1] = 1;
-    im->img.skew = 0;
-    im->img.has_iam = TRUE;
-    im->img.base_off = 0;
-    return mfm_open(im);
+    return _img_open(im, pc98_type);
 }
 
 struct bpb {
