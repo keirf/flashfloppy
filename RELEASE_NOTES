@@ -3,7 +3,20 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
-** v0.15 - 8 January 2018
+** v1.0 - 4 February 2019
+ - Game/demo AutoSwap-disks feature
+   - No manual disk swapping, at all!
+   - Requires patching of host software titles
+   - Amiga titles so far (github:keirf/FF_AutoSwap):
+     - Beneath a Steel Sky
+     - Indiana Jones and the Fate of Atlantis
+     - The Secret of Monkey Island
+     - Monkey Island 2: LeChuck's Revenge
+ - FF.CFG: New OLED display-type sib-option "-narrower"
+   - 16-character-wide display (c.w. "-narrow" 18-char-wide)
+ - PC98: Direct support for HDM image files
+   
+** v0.15 - 8 January 2019
  - Support Enhanced Gotek with SD card connector
    - Board requirements are in the wiki (Hardware Mods)
    - USB drive, if inserted, takes priority over SD card
