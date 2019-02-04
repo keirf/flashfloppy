@@ -15,7 +15,8 @@
  - FF.CFG: New OLED display-type sib-option "-narrower"
    - 16-character-wide display (c.w. "-narrow" 18-char-wide)
  - PC98: Direct support for HDM image files
-   
+ - HxC Compat: Small fixes to Amiga file selector
+
 ** v0.15 - 8 January 2019
  - Support Enhanced Gotek with SD card connector
    - Board requirements are in the wiki (Hardware Mods)
