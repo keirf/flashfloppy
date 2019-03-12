@@ -21,22 +21,28 @@ int get_next_opt(struct opts *opts)
 {
     char *p, c;
     const struct opt *opt;
+    bool_t section;
 
     F_read(opts->file, &c, 1, NULL);
 next_line:
     if (c == '\0')
-        return -1; /* eof */
+        return OPT_eof;
     /* Skip leading whitespace. */
     while (isspace(c))
         F_read(opts->file, &c, 1, NULL);
 
     /* Option name parsing. */
+    section = (c == '['); /* "[section]" */
+    if (section)
+        F_read(opts->file, &c, 1, NULL);
     p = opts->arg;
     while (isvalid(c) && ((p-opts->arg) < (opts->argmax-1))) {
         *p++ = c;
         F_read(opts->file, &c, 1, NULL);
     }
     *p = '\0';
+    if (section)
+        return OPT_section;
     /* Look for a match in the accepted options list. */
     for (opt = opts->opts; opt->name; opt++)
         if (!strcmp(opt->name, opts->arg))

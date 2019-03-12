@@ -21,6 +21,8 @@ struct opts {
 };
 
 int get_next_opt(struct opts *opts);
+#define OPT_eof -1
+#define OPT_section -2
 
 /* FF.CFG options structure. */
 struct __packed ff_cfg {

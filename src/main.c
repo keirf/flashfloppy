@@ -22,7 +22,10 @@ static struct {
 static struct {
     uint16_t slot_nr, max_slot_nr;
     uint8_t slot_map[1000/8];
-    struct short_slot autoboot, hxcsdfe;
+    union {
+        struct { struct short_slot autoboot, hxcsdfe; };
+        struct { struct short_slot imgcfg; };
+    };
     struct slot slot;
     uint32_t cfg_cdir, cur_cdir;
     struct {
@@ -422,6 +425,14 @@ static void fatfs_to_slot(struct slot *slot, FIL *file, const char *name)
     } else {
         memset(slot->type, 0, sizeof(slot->type));
     }
+}
+
+bool_t get_img_cfg(struct slot *slot)
+{
+    if (cfg.hxc_mode || !cfg.imgcfg.size)
+        return FALSE;
+    slot_from_short_slot(slot, &cfg.imgcfg);
+    return TRUE;
 }
 
 static void dump_file(void)
@@ -918,10 +929,18 @@ static void cfg_init(void)
 
 native_mode:
     /* Native mode (direct navigation). */
+    fatfs.cdir = cfg.cfg_cdir;
+
+    memset(&cfg.imgcfg, 0, sizeof(cfg.imgcfg));
+    fr = F_try_open(&fs->file, "IMG.CFG", FA_READ);
+    if (!fr) {
+        fatfs_to_short_slot(&cfg.imgcfg, &fs->file, "IMG.CFG");
+        F_close(&fs->file);
+    }
+
     if (ff_cfg.image_on_startup == IMGS_init)
         goto out;
 
-    fatfs.cdir = cfg.cfg_cdir;
     mode = FA_READ;
     if (ff_cfg.image_on_startup == IMGS_last)
         mode |= FA_WRITE | FA_OPEN_ALWAYS;

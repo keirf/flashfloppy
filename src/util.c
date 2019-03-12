@@ -222,6 +222,9 @@ long int strtol(const char *nptr, char **endptr, int base)
         }
     }
 
+    if (base == 0)
+        base = 10;
+
     /* Digits. */
     for (;;) {
         /* Convert c to a digit [0123456789abcdefghijklmnopqrstuvwxyz]. */

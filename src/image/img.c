@@ -203,9 +203,129 @@ static bool_t adfs_open(struct image *im)
     return _img_open(im, adfs_type);
 }
 
+static bool_t tag_open(struct image *im, char *tag)
+{
+    enum {
+        IMGCFG_cyls,
+        IMGCFG_heads,
+        IMGCFG_secs,
+        IMGCFG_bps,
+        IMGCFG_id,
+        IMGCFG_mode,
+        IMGCFG_interleave,
+        IMGCFG_skew,
+        IMGCFG_rpm,
+        IMGCFG_gap3,
+        IMGCFG_iam,
+        IMGCFG_nr
+    };
+
+    const static struct opt img_cfg_opts[IMGCFG_nr+1] = {
+        [IMGCFG_cyls] = { "cyls" },
+        [IMGCFG_heads] = { "heads" },
+        [IMGCFG_secs] = { "secs" },
+        [IMGCFG_bps]  = { "bps" },
+        [IMGCFG_id]   = { "id" },
+        [IMGCFG_mode] = { "mode" },
+        [IMGCFG_interleave] = { "interleave" },
+        [IMGCFG_skew] = { "skew" },
+        [IMGCFG_rpm]  = { "rpm" },
+        [IMGCFG_gap3] = { "gap3" },
+        [IMGCFG_iam]  = { "iam" },
+    };
+
+    int option;
+    bool_t active, is_fm;
+    struct {
+        FIL file;
+        struct slot slot;
+        char buf[512];
+    } *heap = (void *)im->bufs.read_data.p;
+    struct opts opts = {
+        .file = &heap->file,
+        .opts = img_cfg_opts,
+        .arg = heap->buf,
+        .argmax = sizeof(heap->buf)-1
+    };
+
+    if (!get_img_cfg(&heap->slot))
+        return FALSE;
+    fatfs_from_slot(&heap->file, &heap->slot, FA_READ);
+
+    active = FALSE;
+    is_fm = FALSE;
+    im->img.interleave = 1;
+    im->img.has_iam = TRUE;
+
+    while ((option = get_next_opt(&opts)) != OPT_eof) {
+
+        if (option == OPT_section)
+            active = !strcmp(tag, opts.arg);
+
+        if (!active)
+            continue;
+
+        switch (option) {
+
+        case IMGCFG_cyls:
+            im->nr_cyls = strtol(opts.arg, NULL, 10);
+            break;
+        case IMGCFG_heads:
+            im->nr_sides = strtol(opts.arg, NULL, 10);
+            break;
+        case IMGCFG_secs:
+            im->img.nr_sectors = strtol(opts.arg, NULL, 10);
+            break;
+        case IMGCFG_bps: {
+            int no, sz = strtol(opts.arg, NULL, 10);
+            for (no = 0; no < 8; no++)
+                if ((128u<<no) == sz)
+                    break;
+            im->img.sec_no = no&7;
+            break;
+        }
+        case IMGCFG_id: {
+            char *p = opts.arg;
+            im->img.sec_base[0] = strtol(p, &p, 0);
+            im->img.sec_base[1] = (*p == ':') ? strtol(p+1, NULL, 0) :
+                im->img.sec_base[0];
+            break;
+        }
+        case IMGCFG_mode:
+            is_fm = !strcmp(opts.arg, "fm");
+            break;
+        case IMGCFG_interleave:
+            im->img.interleave = strtol(opts.arg, NULL, 10);
+            break;
+        case IMGCFG_skew:
+            im->img.skew = strtol(opts.arg, NULL, 10);
+            break;
+        case IMGCFG_rpm:
+            im->img.rpm = strtol(opts.arg, NULL, 10);
+            break;
+        case IMGCFG_gap3:
+            im->img.gap_3 = strtol(opts.arg, NULL, 10);
+            break;
+        case IMGCFG_iam:
+            im->img.has_iam = !strcmp(opts.arg, "yes");
+            break;
+
+        }
+    }
+
+    F_close(&heap->file);
+    return is_fm ? fm_open(im) : mfm_open(im);
+}
+
 static bool_t img_open(struct image *im)
 {
     const struct img_type *type;
+    char *dot;
+
+    dot = strrchr(im->slot->name, '.');
+    if (dot && tag_open(im, dot+1))
+        return TRUE;
+    memset(&im->img, 0, sizeof(im->img));
 
     switch (ff_cfg.host) {
     case HOST_akai:
@@ -1081,10 +1201,14 @@ static void img_dump_info(struct image *im)
            im->nr_cyls, im->nr_sides, im->img.nr_sectors);
     printk(" rpm: %u, tracklen: %u, datarate: %u\n",
            im->img.rpm, im->tracklen_bc, im->img.data_rate);
-    printk(" gap2: %u, gap3: %u, gap4a: %u, gap4: %u\n",
-           im->img.gap_2, im->img.gap_3, im->img.gap_4a, im->img.gap_4);
-    printk(" ticks_per_cell: %u, write_bc_ticks: %u has_iam: %u\n",
+    printk(" data: %u, gap2: %u, gap3: %u, gap4a: %u, gap4: %u\n",
+           128u << im->img.sec_no, im->img.gap_2, im->img.gap_3,
+           im->img.gap_4a, im->img.gap_4);
+    printk(" ticks_per_cell: %u, write_bc_ticks: %u, has_iam: %u\n",
            im->ticks_per_cell, im->write_bc_ticks, im->img.has_iam);
+    printk(" interleave: %u, skew %u, base %x:%x\n",
+           im->img.interleave, im->img.skew,
+           im->img.sec_base[0], im->img.sec_base[1]);
 }
 
 static void img_fetch_data(struct image *im)
