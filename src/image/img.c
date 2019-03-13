@@ -142,9 +142,15 @@ static FSIZE_t im_size(struct image *im)
         : (f_size(&im->fp) - im->img.base_off);
 }
 
+static void init_sec_base(struct image *im, uint8_t base)
+{
+    memset(im->img.sec_base, base, sizeof(im->img.sec_base));
+}
+
 static uint8_t sec_base(struct image *im)
 {
-    return im->img.sec_base[im->cur_track & (im->nr_sides - 1)];
+    unsigned int i = ((im->cur_track/2) == 0) ? 0 : 2;
+    return im->img.sec_base[i + (im->cur_track & (im->nr_sides - 1))];
 }
 
 static unsigned int enc_sec_sz(struct image *im)
@@ -195,9 +201,9 @@ found:
     im->img.nr_sectors = type->nr_secs;
     im->img.gap_3 = type->gap3;
     im->img.rpm = (type->rpm + 5) * 60;
-    im->img.sec_base[0] = im->img.sec_base[1] = type->base;
+    init_sec_base(im, type->base);
     if (type->inter_track_numbering == _ITN)
-        im->img.sec_base[1] += im->img.nr_sectors;
+        im->img.sec_base[3] = (im->img.sec_base[1] += im->img.nr_sectors);
     im->img.has_iam = type->has_iam;
 
     return mfm_open(im);
@@ -299,10 +305,19 @@ static bool_t tag_open(struct image *im, char *tag)
             break;
         }
         case IMGCFG_id: {
+            int i;
             char *p = opts.arg;
-            im->img.sec_base[0] = strtol(p, &p, 0);
-            im->img.sec_base[1] = (*p == ':') ? strtol(p+1, NULL, 0) :
-                im->img.sec_base[0];
+            for (i = 0; i < 4; i += 2) {
+                im->img.sec_base[i] = strtol(p, &p, 0);
+                im->img.sec_base[i+1] = (*p == ':') ? strtol(p+1, &p, 0) :
+                    im->img.sec_base[i];
+                if (*p++ != ',')
+                    break;
+            }
+            if (i == 0) {
+                im->img.sec_base[2] = im->img.sec_base[0];
+                im->img.sec_base[3] = im->img.sec_base[1];
+            }
             break;
         }
         case IMGCFG_mode:
@@ -474,7 +489,7 @@ static bool_t pc98fdi_open(struct image *im)
     im->nr_sides = le32toh(header.nr_sides);
     im->img.nr_sectors = le32toh(header.nr_secs);
     im->img.interleave = 1;
-    im->img.sec_base[0] = im->img.sec_base[1] = 1;
+    init_sec_base(im, 1);
     im->img.skew = 0;
     im->img.has_iam = TRUE;
     /* Skip 4096-byte header. */
@@ -539,7 +554,7 @@ static bool_t msx_open(struct image *im)
             im->nr_sides = bpb.num_heads;
             im->nr_cyls = (im->nr_sides == 1) ? 80 : 40;
             im->img.interleave = 1;
-            im->img.sec_base[0] = im->img.sec_base[1] = 1;
+            init_sec_base(im, 1);
             im->img.skew = 0;
             im->img.has_iam = TRUE;
             if (mfm_open(im))
@@ -587,7 +602,7 @@ static bool_t pc_dos_open(struct image *im)
         goto fail;
 
     im->img.interleave = 1;
-    im->img.sec_base[0] = im->img.sec_base[1] = 1;
+    init_sec_base(im, 1);
     im->img.skew = 0;
     im->img.has_iam = TRUE;
     return mfm_open(im);
@@ -637,7 +652,7 @@ static bool_t trd_open(struct image *im)
     im->img.sec_no = 1; /* 256-byte */
     im->img.interleave = 1;
     im->img.skew = 0;
-    im->img.sec_base[0] = im->img.sec_base[1] = 1;
+    init_sec_base(im, 1);
     im->img.nr_sectors = 16;
     im->img.gap_3 = 57;
     im->img.has_iam = TRUE;
@@ -664,7 +679,7 @@ static bool_t opd_open(struct image *im)
     im->img.interleave = 13;
     im->img.skew = 13;
     im->img.skew_cyls_only = TRUE;
-    im->img.sec_base[0] = im->img.sec_base[1] = 0;
+    init_sec_base(im, 0);
     im->img.nr_sectors = 18;
     im->img.gap_3 = 12;
     im->img.has_iam = TRUE;
@@ -679,7 +694,7 @@ static bool_t dfs_open(struct image *im)
     im->img.skew = 3;
     im->img.skew_cyls_only = TRUE;
     im->img.sec_no = 1; /* 256-byte */
-    im->img.sec_base[0] = im->img.sec_base[1] = 0;
+    init_sec_base(im, 0);
     im->img.nr_sectors = 10;
     im->img.gap_3 = 21;
 
@@ -725,7 +740,7 @@ static bool_t sdu_open(struct image *im)
     /* Fill in the rest of the geometry. */
     im->img.sec_no = 2; /* 512-byte sectors */
     im->img.interleave = 1; /* no interleave */
-    im->img.sec_base[0] = im->img.sec_base[1] = 1; /* standard numbering */
+    init_sec_base(im, 1); /* standard numbering */
     im->img.gap_3 = 84; /* standard gap3 */
     im->img.has_iam = TRUE;
 
@@ -772,7 +787,7 @@ static bool_t ti99_open(struct image *im)
     im->img.skew = 3;
     im->img.skew_cyls_only = TRUE;
     im->img.sec_no = 1;
-    im->img.sec_base[0] = im->img.sec_base[1] = 0;
+    init_sec_base(im, 0);
     im->img.layout = LAYOUT_sequential_reverse_side1;
 
     if ((fsize % (40*9)) == 0) {
@@ -870,7 +885,7 @@ static bool_t jvc_open(struct image *im)
     im->nr_sides = jvc.sides;
     im->img.sec_no = jvc.ssize_code & 3;
     im->img.interleave = 3; /* RSDOS likes a 3:1 interleave (ref. xroar) */
-    im->img.sec_base[0] = im->img.sec_base[1] = jvc.sec_id;
+    init_sec_base(im, jvc.sec_id);
     im->img.nr_sectors = jvc.spt;
 
     /* Calculate number of cylinders. */
@@ -918,7 +933,7 @@ static bool_t vdk_open(struct image *im)
     /* Fill in the rest of the geometry. */
     im->img.sec_no = 1; /* 256-byte sectors */
     im->img.interleave = 2; /* DDOS likes a 2:1 interleave (ref. xroar) */
-    im->img.sec_base[0] = im->img.sec_base[1] = 1;
+    init_sec_base(im, 1);
     im->img.nr_sectors = 18;
     im->img.gap_3 = 20;
     im->img.gap_4a = 54;
@@ -1224,9 +1239,10 @@ static void img_dump_info(struct image *im)
            im->img.gap_4a, im->img.gap_4);
     printk(" ticks_per_cell: %u, write_bc_ticks: %u, has_iam: %u\n",
            im->ticks_per_cell, im->write_bc_ticks, im->img.has_iam);
-    printk(" interleave: %u, skew %u, base %x:%x\n",
+    printk(" interleave: %u, skew %u, base %x:%x,%x:%x\n",
            im->img.interleave, im->img.skew,
-           im->img.sec_base[0], im->img.sec_base[1]);
+           im->img.sec_base[0], im->img.sec_base[1],
+           im->img.sec_base[2], im->img.sec_base[3]);
 }
 
 static void img_fetch_data(struct image *im)
@@ -1554,7 +1570,7 @@ static bool_t mfm_write_track(struct image *im)
             if (crc != 0) {
                 printk("IMG Bad CRC %04x, sector %u[%u]\n",
                        crc, im->img.write_sector,
-                       im->img.write_sector + im->img.sec_base);
+                       im->img.write_sector + sec_base(im));
                 break;
             }
 
@@ -1566,7 +1582,7 @@ static bool_t mfm_write_track(struct image *im)
 
             /* All good: write out to mass storage. */
             printk("Write %u[%u]/%u... ", im->img.write_sector,
-                   im->img.write_sector + im->img.sec_base,
+                   im->img.write_sector + sec_base(im),
                    im->img.nr_sectors);
             t = time_now();
             F_lseek(&im->fp,
@@ -1600,7 +1616,8 @@ static bool_t fm_open(struct image *im)
     if ((im->nr_sides < 1) || (im->nr_sides > 2)
         || (im->nr_cyls < 1) || (im->nr_cyls > 254)
         || (im->img.nr_sectors < 1)
-        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map)))
+        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map))
+        || im->img.has_iam /* XXX todo: support IAM */)
         return FALSE;
 
     im->img.rpm = im->img.rpm ?: 300;
@@ -1623,8 +1640,7 @@ static bool_t fm_open(struct image *im)
     /* Data rate is always SD. */
     im->img.data_rate = 250; /* SD */
     im->tracklen_bc = (im->img.data_rate * 200 * 300) / im->img.rpm;
-
-    ASSERT(im->tracklen_bc > tracklen);
+    im->tracklen_bc = max_t(uint32_t, im->tracklen_bc, tracklen);
 
     /* Round the track length up to a multiple of 32 bitcells. */
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
@@ -1838,7 +1854,7 @@ static bool_t fm_write_track(struct image *im)
             if (crc != 0) {
                 printk("IMG Bad CRC %04x, sector %u[%u]\n",
                        crc, im->img.write_sector,
-                       im->img.write_sector + im->img.sec_base);
+                       im->img.write_sector + sec_base(im));
                 break;
             }
 
@@ -1850,7 +1866,7 @@ static bool_t fm_write_track(struct image *im)
 
             /* All good: write out to mass storage. */
             printk("Write %u[%u]/%u... ", im->img.write_sector,
-                   im->img.write_sector + im->img.sec_base,
+                   im->img.write_sector + sec_base(im),
                    im->img.nr_sectors);
             t = time_now();
             F_lseek(&im->fp,
