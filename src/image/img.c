@@ -230,6 +230,7 @@ static enum tag_result tag_open(struct image *im, char *tag)
         IMGCFG_rpm,
         IMGCFG_gap3,
         IMGCFG_iam,
+        IMGCFG_rate,
         IMGCFG_nr
     };
 
@@ -245,6 +246,7 @@ static enum tag_result tag_open(struct image *im, char *tag)
         [IMGCFG_rpm]  = { "rpm" },
         [IMGCFG_gap3] = { "gap3" },
         [IMGCFG_iam]  = { "iam" },
+        [IMGCFG_rate] = { "rate" },
     };
 
     int option;
@@ -340,6 +342,9 @@ static enum tag_result tag_open(struct image *im, char *tag)
             break;
         case IMGCFG_iam:
             im->img.has_iam = !strcmp(opts.arg, "yes");
+            break;
+        case IMGCFG_rate:
+            im->img.data_rate = strtol(opts.arg, NULL, 10);
             break;
 
         }
@@ -1328,14 +1333,18 @@ static bool_t mfm_open(struct image *im)
     tracklen += im->img.idx_sz;
     tracklen *= 16;
 
-    /* Infer the data rate and hence the standard track length. */
-    for (i = 0; i < 3; i++) { /* SD=0, DD=1, HD=2, ED=3 */
-        uint32_t maxlen = (((50000u * 300) / im->img.rpm) << i) + 5000;
-        if (tracklen < maxlen)
-            break;
+    if (im->img.data_rate == 0) {
+        /* Infer the data rate. */
+        for (i = 1; i < 3; i++) { /* DD=1, HD=2, ED=3 */
+            uint32_t maxlen = (((50000u * 300) / im->img.rpm) << i) + 5000;
+            if (tracklen < maxlen)
+                break;
+        }
+        im->img.data_rate = 125u << i; /* DD=250, HD=500, ED=1000 */
     }
-    im->img.data_rate = 250u << i; /* SD=250, DD=500, HD=1000, ED=2000 */
-    im->tracklen_bc = (im->img.data_rate * 200 * 300) / im->img.rpm;
+
+    /* Calculate standard track length from data rate and RPM. */
+    im->tracklen_bc = (im->img.data_rate * 400 * 300) / im->img.rpm;
 
     /* Does the track data fit within standard track length? */
     if (im->tracklen_bc < tracklen) {
@@ -1357,7 +1366,7 @@ static bool_t mfm_open(struct image *im)
                           / im->tracklen_bc);
     im->img.gap_4 = (im->tracklen_bc - tracklen) / 16;
 
-    im->write_bc_ticks = sysclk_ms(1) / im->img.data_rate;
+    im->write_bc_ticks = sysclk_us(500) / im->img.data_rate;
 
     im->sync = SYNC_mfm;
 
@@ -1647,9 +1656,9 @@ static bool_t fm_open(struct image *im)
     tracklen += im->img.idx_sz;
     tracklen *= 16;
 
-    /* Data rate is always SD. */
-    im->img.data_rate = 250; /* SD */
-    im->tracklen_bc = (im->img.data_rate * 200 * 300) / im->img.rpm;
+    /* Calculate data rate and track length. */
+    im->img.data_rate = im->img.data_rate ?: 125; /* SD */
+    im->tracklen_bc = (im->img.data_rate * 400 * 300) / im->img.rpm;
     im->tracklen_bc = max_t(uint32_t, im->tracklen_bc, tracklen);
 
     /* Round the track length up to a multiple of 32 bitcells. */
@@ -1659,7 +1668,7 @@ static bool_t fm_open(struct image *im)
                           / im->tracklen_bc);
     im->img.gap_4 = (im->tracklen_bc - tracklen) / 16;
 
-    im->write_bc_ticks = sysclk_ms(1) / im->img.data_rate;
+    im->write_bc_ticks = sysclk_us(500) / im->img.data_rate;
 
     im->sync = SYNC_fm;
 
