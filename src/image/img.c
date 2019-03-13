@@ -153,6 +153,12 @@ static unsigned int enc_sec_sz(struct image *im)
         + sec_sz(im) + im->img.dam_sz_post;
 }
 
+static void reset_img_params(struct image *im)
+{
+    memset(&im->img, 0, sizeof(im->img));
+    im->nr_cyls = im->nr_sides = 0;
+}
+
 static bool_t _img_open(struct image *im, const struct img_type *type)
 {
     unsigned int nr_cyls, cyl_sz, nr_sides;
@@ -235,7 +241,7 @@ static bool_t tag_open(struct image *im, char *tag)
     };
 
     int option;
-    bool_t active, is_fm;
+    bool_t matched, active, is_fm;
     struct {
         FIL file;
         struct slot slot;
@@ -252,15 +258,23 @@ static bool_t tag_open(struct image *im, char *tag)
         return FALSE;
     fatfs_from_slot(&heap->file, &heap->slot, FA_READ);
 
-    active = FALSE;
-    is_fm = FALSE;
-    im->img.interleave = 1;
-    im->img.has_iam = TRUE;
+    matched = active = is_fm = FALSE;
 
     while ((option = get_next_opt(&opts)) != OPT_eof) {
 
-        if (option == OPT_section)
-            active = !strcmp(tag, opts.arg);
+        if (option == OPT_section) {
+            active = FALSE;
+            if (tag && !strcmp(opts.arg, tag))
+                active = matched = TRUE;
+            if (!strcmp(opts.arg, "default") && !matched)
+                active = TRUE;
+            if (active) {
+                is_fm = FALSE;
+                reset_img_params(im);
+                im->img.interleave = 1;
+                im->img.has_iam = TRUE;
+            }
+        }
 
         if (!active)
             continue;
@@ -314,7 +328,12 @@ static bool_t tag_open(struct image *im, char *tag)
     }
 
     F_close(&heap->file);
-    return is_fm ? fm_open(im) : mfm_open(im);
+
+    if (is_fm ? fm_open(im) : mfm_open(im))
+        return TRUE;
+
+    reset_img_params(im);
+    return FALSE;
 }
 
 static bool_t img_open(struct image *im)
@@ -323,9 +342,8 @@ static bool_t img_open(struct image *im)
     char *dot;
 
     dot = strrchr(im->slot->name, '.');
-    if (dot && tag_open(im, dot+1))
+    if (tag_open(im, dot ? dot+1 : NULL))
         return TRUE;
-    memset(&im->img, 0, sizeof(im->img));
 
     switch (ff_cfg.host) {
     case HOST_akai:
@@ -383,7 +401,7 @@ static bool_t img_open(struct image *im)
 
 fallback:
     /* Fall back to default list. */
-    memset(&im->img, 0, sizeof(im->img));
+    reset_img_params(im);
     return _img_open(im, img_type);
 }
 
@@ -531,7 +549,7 @@ static bool_t msx_open(struct image *im)
     }
 
     /* Use the MSX-specific list. */
-    memset(&im->img, 0, sizeof(im->img));
+    reset_img_params(im);
     if (_img_open(im, msx_type))
         return TRUE;
 
