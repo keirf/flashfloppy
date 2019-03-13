@@ -215,7 +215,8 @@ static bool_t adfs_open(struct image *im)
     return _img_open(im, adfs_type);
 }
 
-static bool_t tag_open(struct image *im, char *tag)
+enum tag_result { TR_success, TR_fail, TR_no_match };
+static enum tag_result tag_open(struct image *im, char *tag)
 {
     enum {
         IMGCFG_cyls,
@@ -261,7 +262,8 @@ static bool_t tag_open(struct image *im, char *tag)
     };
 
     if (!get_img_cfg(&heap->slot))
-        return FALSE;
+        return TR_no_match;
+
     fatfs_from_slot(&heap->file, &heap->slot, FA_READ);
 
     matched = active = is_fm = FALSE;
@@ -269,16 +271,17 @@ static bool_t tag_open(struct image *im, char *tag)
     while ((option = get_next_opt(&opts)) != OPT_eof) {
 
         if (option == OPT_section) {
-            active = FALSE;
-            if (tag && !strcmp(opts.arg, tag))
-                active = matched = TRUE;
-            if (!strcmp(opts.arg, "default") && !matched)
-                active = TRUE;
+            /* We process this section if we get a tag match, or if this 
+             * is the default section and we have no other match so far. */
+            active = (tag && !strcmp(opts.arg, tag))
+                || (!matched && !strcmp(opts.arg, "default"));
             if (active) {
+                matched = TRUE;
                 is_fm = FALSE;
                 reset_img_params(im);
                 im->img.interleave = 1;
                 im->img.has_iam = TRUE;
+                init_sec_base(im, 1);
             }
         }
 
@@ -344,11 +347,10 @@ static bool_t tag_open(struct image *im, char *tag)
 
     F_close(&heap->file);
 
-    if (is_fm ? fm_open(im) : mfm_open(im))
-        return TRUE;
+    if (!matched)
+        return TR_no_match;
 
-    reset_img_params(im);
-    return FALSE;
+    return (is_fm ? fm_open(im) : mfm_open(im)) ? TR_success : TR_fail;
 }
 
 static bool_t img_open(struct image *im)
@@ -357,8 +359,14 @@ static bool_t img_open(struct image *im)
     char *dot;
 
     dot = strrchr(im->slot->name, '.');
-    if (tag_open(im, dot ? dot+1 : NULL))
+    switch (tag_open(im, dot ? dot+1 : NULL)) {
+    case TR_success:
         return TRUE;
+    case TR_fail:
+        return FALSE;
+    default:
+        break;
+    }
 
     switch (ff_cfg.host) {
     case HOST_akai:
