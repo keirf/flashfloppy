@@ -1611,9 +1611,8 @@ static bool_t mfm_write_track(struct image *im)
  * FM-Specific Handlers
  */
 
-/* 8271 mini-diskette values */
-#define FM_GAP_2 11
-#define FM_GAP_4A 16
+#define FM_GAP_1 26 /* Post-IAM */
+#define FM_GAP_2 11 /* Post-IDAM */
 #define FM_GAP_SYNC 6
 
 static bool_t fm_open(struct image *im)
@@ -1624,18 +1623,21 @@ static bool_t fm_open(struct image *im)
     if ((im->nr_sides < 1) || (im->nr_sides > 2)
         || (im->nr_cyls < 1) || (im->nr_cyls > 254)
         || (im->img.nr_sectors < 1)
-        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map))
-        || im->img.has_iam /* XXX todo: support IAM */)
+        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map)))
         return FALSE;
 
     im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: FM_GAP_2;
     im->img.gap_3 = im->img.gap_3 ?: FM_GAP_3[im->img.sec_no];
-    im->img.gap_4a = im->img.gap_4a ?: FM_GAP_4A;
+    /* Default post-index gap size depends on whether the track format includes 
+     * IAM or not (see uPD765A/7265 Datasheet). */
+    im->img.gap_4a = im->img.gap_4a ?: im->img.has_iam ? 40 : 16;
 
     im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
 
     im->img.idx_sz = im->img.gap_4a;
+    if (im->img.has_iam)
+        im->img.idx_sz += FM_GAP_SYNC + 1 + FM_GAP_1;
     im->img.idam_sz = FM_GAP_SYNC + 5 + 2 + im->img.gap_2;
     im->img.dam_sz_pre = FM_GAP_SYNC + 1;
     im->img.dam_sz_post = 2 + im->img.gap_3;
@@ -1702,7 +1704,14 @@ static bool_t fm_read_track(struct image *im)
             return FALSE;
         for (i = 0; i < im->img.gap_4a; i++)
             emit_byte(0xff);
-        ASSERT(!im->img.has_iam);
+        if (im->img.has_iam) {
+            /* IAM */
+            for (i = 0; i < FM_GAP_SYNC; i++)
+                emit_byte(0x00);
+            emit_raw(fm_sync(0xfc, 0xd7));
+            for (i = 0; i < FM_GAP_1; i++)
+                emit_byte(0xff);
+        }
     } else if (im->img.decode_pos == (im->img.nr_sectors * 4 + 1)) {
         /* Pre-index track gap */
         uint16_t sz = im->img.gap_4 - im->img.decode_data_pos * 1024;
