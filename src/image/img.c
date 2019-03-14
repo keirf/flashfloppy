@@ -1304,6 +1304,7 @@ static bool_t mfm_open(struct image *im)
     const uint8_t GAP_3[] = { 32, 54, 84, 116, 255, 255, 255, 255 };
     uint32_t tracklen;
     unsigned int i;
+    uint8_t gap_3 = im->img.gap_3;
 
     if ((im->nr_sides < 1) || (im->nr_sides > 2)
         || (im->nr_cyls < 1) || (im->nr_cyls > 254)
@@ -1313,7 +1314,8 @@ static bool_t mfm_open(struct image *im)
 
     im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: GAP_2;
-    im->img.gap_3 = im->img.gap_3 ?: GAP_3[im->img.sec_no];
+    /* GAP_SYNC is a suitable small initial guess for auto GAP3. */
+    im->img.gap_3 = im->img.gap_3 ?: GAP_SYNC;
     im->img.gap_4a = im->img.gap_4a ?: GAP_4A;
 
     im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
@@ -1345,6 +1347,18 @@ static bool_t mfm_open(struct image *im)
 
     /* Calculate standard track length from data rate and RPM. */
     im->tracklen_bc = (im->img.data_rate * 400 * 300) / im->img.rpm;
+
+    /* Calculate a suitable GAP3 if not specified. */
+    if (gap_3 == 0) {
+        int space;
+        im->img.dam_sz_post -= im->img.gap_3;
+        tracklen -= 16 * im->img.nr_sectors * im->img.gap_3;
+        space = max_t(int, 0, im->tracklen_bc - tracklen);
+        im->img.gap_3 = min_t(int, space/(16*im->img.nr_sectors),
+                              GAP_3[im->img.sec_no]);
+        im->img.dam_sz_post += im->img.gap_3;
+        tracklen += 16 * im->img.nr_sectors * im->img.gap_3;
+    }
 
     /* Does the track data fit within standard track length? */
     if (im->tracklen_bc < tracklen) {
@@ -1637,7 +1651,6 @@ static bool_t fm_open(struct image *im)
 
     im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: FM_GAP_2;
-    im->img.gap_3 = im->img.gap_3 ?: FM_GAP_3[im->img.sec_no];
     /* Default post-index gap size depends on whether the track format includes 
      * IAM or not (see uPD765A/7265 Datasheet). */
     im->img.gap_4a = im->img.gap_4a ?: im->img.has_iam ? 40 : 16;
@@ -1659,9 +1672,18 @@ static bool_t fm_open(struct image *im)
     /* Calculate data rate and track length. */
     im->img.data_rate = im->img.data_rate ?: 125; /* SD */
     im->tracklen_bc = (im->img.data_rate * 400 * 300) / im->img.rpm;
-    im->tracklen_bc = max_t(uint32_t, im->tracklen_bc, tracklen);
 
-    /* Round the track length up to a multiple of 32 bitcells. */
+    /* Calculate a suitable GAP3 if not specified. */
+    if (im->img.gap_3 == 0) {
+        int space = max_t(int, 0, im->tracklen_bc - tracklen);
+        im->img.gap_3 = min_t(int, space/(16*im->img.nr_sectors),
+                              FM_GAP_3[im->img.sec_no]);
+        im->img.dam_sz_post += im->img.gap_3;
+        tracklen += 16 * im->img.nr_sectors * im->img.gap_3;
+    }
+
+    /* Round the track length up to fit the data and be a multiple of 32. */
+    im->tracklen_bc = max_t(uint32_t, im->tracklen_bc, tracklen);
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
 
     im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
