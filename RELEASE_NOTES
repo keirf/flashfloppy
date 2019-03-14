@@ -3,6 +3,17 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.0a - 14 March 2019
+ - IMG: Allow geometry to be manually configured in new file IMG.CFG
+   - See examples/IMG.CFG for documentation
+   - Multiple formats can be defined; distinguished by image name tags
+ - IMG: Support FM mode with Index Address Mark (IAM)
+ - IMG: Support auto-configuration of GAP3 (post data gap) when using IMG.CFG
+ - FF.CFG: Fix parsing of comma-separated values
+ - Indexed Mode: Allow arbitrary image name after "DSKAnnnn" prefix
+   - eg. DSKA0000_myimage.img, DSKA0002_another.adf
+ - Indexed Mode: Allow the "DSKA" prefix to be changed (FF.CFG:indexed-prefix=)
+
 ** v1.0 - 4 February 2019
  - Game/demo AutoSwap-disks feature
    - No manual disk swapping, at all!
