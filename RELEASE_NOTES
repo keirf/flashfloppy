@@ -3,6 +3,9 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.1 - 14 March 2019
+ - FF.CFG: Fix parsing of comma-separated values
+
 ** v1.0 - 4 February 2019
  - Game/demo AutoSwap-disks feature
    - No manual disk swapping, at all!
