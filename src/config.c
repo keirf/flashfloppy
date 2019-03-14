@@ -14,7 +14,7 @@ static int isvalid(char c)
     return (((c >= 'A') && (c <= 'Z'))
             || ((c >= 'a') && (c <= 'z'))
             || ((c >= '0') && (c <= '9'))
-            || ((c == '-')));
+            || (c == '-') || (c == ','));
 }
 
 int get_next_opt(struct opts *opts)
