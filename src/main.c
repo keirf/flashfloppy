@@ -736,6 +736,14 @@ static void read_ff_cfg(void)
             break;
         }
 
+        case FFCFG_indexed_prefix:
+            memset(ff_cfg.indexed_prefix, 0,
+                   sizeof(ff_cfg.indexed_prefix));
+            snprintf(ff_cfg.indexed_prefix,
+                     sizeof(ff_cfg.indexed_prefix),
+                     "%s", opts.arg);
+            break;
+
             /* DISPLAY */
 
         case FFCFG_display_type: {
@@ -1298,10 +1306,12 @@ indexed_mode:
         if (slot_mode == CFG_READ_SLOT_NR) {
             memset(&cfg.slot_map, 0, sizeof(cfg.slot_map));
             cfg.max_slot_nr = 0;
-            for (F_findfirst(&fs->dp, &fs->fp, "", "DSKA*.*");
+            snprintf(name, sizeof(name), "%s*.*", ff_cfg.indexed_prefix);
+            for (F_findfirst(&fs->dp, &fs->fp, "", name);
                  fs->fp.fname[0] != '\0';
                  F_findnext(&fs->dp, &fs->fp)) {
-                const char *p = fs->fp.fname + 4; /* skip "DSKA" */
+                const char *p = fs->fp.fname
+                    + strnlen(ff_cfg.indexed_prefix, 256);
                 unsigned int idx = 0;
                 /* Skip directories. */
                 if (fs->fp.fattrib & AM_DIR)
@@ -1313,13 +1323,8 @@ indexed_mode:
                     idx *= 10;
                     idx += *p++ - '0';
                 }
-                /* Expect a 4-digit number range 0-999 followed by a period. */
-                if ((i != 4) || (*p++ != '.') || (idx > 999))
-                    continue;
-                /* Expect 3-char extension followed by nul. */
-                for (i = 0; (i < 3) && *p; i++, p++)
-                    continue;
-                if ((i != 3) || (*p != '\0'))
+                /* Expect a 4-digit number range 0-999. */
+                if ((i != 4) || (idx > 999))
                     continue;
                 /* A file type we support? */
                 if (!image_valid(&fs->fp))
@@ -1335,7 +1340,8 @@ indexed_mode:
         }
 
         /* Index mode: populate current slot. */
-        snprintf(name, sizeof(name), "DSKA%04u.*", cfg.slot_nr);
+        snprintf(name, sizeof(name), "%s%04u*.*",
+                 ff_cfg.indexed_prefix, cfg.slot_nr);
         printk("[%s]\n", name);
         F_findfirst(&fs->dp, &fs->fp, "", name);
         F_closedir(&fs->dp);
