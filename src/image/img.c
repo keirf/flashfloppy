@@ -33,7 +33,7 @@ static bool_t ti99_open(struct image *im);
 
 #define _IAM 1 /* IAM */
 #define _ITN 1 /* inter-track numbering */
-#define _C(cyls) ((cyls) / 40)
+#define _C(cyls) ((cyls) / 40 - 1)
 #define _R(rpm) ((rpm) / 60 - 5)
 #define _S(sides) ((sides) - 1)
 const static struct img_type {
@@ -45,94 +45,97 @@ const static struct img_type {
     uint8_t no:3;
     uint8_t base:1;
     uint8_t inter_track_numbering:1;
-    uint8_t skew:4;
-    uint8_t cyls:2;
-    uint8_t rpm:2;
+    uint8_t cskew:4;
+    uint8_t sskew:2;
+    uint8_t cyls:1;
+    uint8_t rpm:1;
 } img_type[] = {
-    {  8, _S(1), _IAM, 84, 1, 2, 1, 0, 0, _C(40), _R(300) }, /* 160k */
-    {  9, _S(1), _IAM, 84, 1, 2, 1, 0, 0, _C(40), _R(300) }, /* 180k */
-    { 10, _S(1), _IAM, 30, 1, 2, 1, 0, 0, _C(40), _R(300) }, /* 200k */
-    {  8, _S(2), _IAM, 84, 1, 2, 1, 0, 0, _C(40), _R(300) }, /* 320k */
-    {  9, _S(2), _IAM, 84, 1, 2, 1, 0, 0, _C(40), _R(300) }, /* 360k (#1) */
-    { 10, _S(2), _IAM, 30, 1, 2, 1, 0, 0, _C(40), _R(300) }, /* 400k (#1) */
-    { 15, _S(2), _IAM, 84, 1, 2, 1, 0, 0, _C(80), _R(360) }, /* 1.2MB */
-    {  9, _S(1), _IAM, 84, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 360k (#2) */
-    { 10, _S(1), _IAM, 30, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 400k (#2) */
-    { 11, _S(1), _IAM,  3, 2, 2, 1, 0, 0, _C(80), _R(300) }, /* 440k */
-    {  8, _S(2), _IAM, 84, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 640k */
-    {  9, _S(2), _IAM, 84, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 720k */
-    { 10, _S(2), _IAM, 30, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 800k */
-    { 11, _S(2), _IAM,  3, 2, 2, 1, 0, 0, _C(80), _R(300) }, /* 880k */
-    { 18, _S(2), _IAM, 84, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 1.44M */
-    { 19, _S(2), _IAM, 70, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 1.52M */
-    { 21, _S(2), _IAM, 18, 2, 2, 1, 0, 0, _C(80), _R(300) }, /* 1.68M */
-    { 20, _S(2), _IAM, 40, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 1.6M */
-    { 36, _S(2), _IAM, 84, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 2.88M */
+    {  8, _S(1), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(40), _R(300) }, /* 160k */
+    {  9, _S(1), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(40), _R(300) }, /* 180k */
+    { 10, _S(1), _IAM, 30, 1, 2, 1, 0, 0, 0, _C(40), _R(300) }, /* 200k */
+    {  8, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(40), _R(300) }, /* 320k */
+    {  9, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(40), _R(300) }, /* 360k (#1) */
+    { 10, _S(2), _IAM, 30, 1, 2, 1, 0, 0, 0, _C(40), _R(300) }, /* 400k (#1) */
+    { 15, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(360) }, /* 1.2MB */
+    {  9, _S(1), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 360k (#2) */
+    { 10, _S(1), _IAM, 30, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 400k (#2) */
+    { 11, _S(1), _IAM,  3, 2, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 440k */
+    {  8, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 640k */
+    {  9, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 720k */
+    { 10, _S(2), _IAM, 30, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 800k */
+    { 11, _S(2), _IAM,  3, 2, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 880k */
+    { 18, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.44M */
+    { 19, _S(2), _IAM, 70, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.52M */
+    { 21, _S(2), _IAM, 18, 2, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.68M */
+    { 20, _S(2), _IAM, 40, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.6M */
+    { 36, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 2.88M */
     { 0 }
 }, adfs_type[] = {
     /* ADFS D/E: 5 * 1kB, 800k */
-    {  5, _S(2), _IAM, 116, 1, 3, 0, 0, 1, _C(80), _R(300) },
+    {  5, _S(2), _IAM, 116, 1, 3, 0, 0, 1, 0, _C(80), _R(300) },
     /* ADFS F: 10 * 1kB, 1600k */
-    { 10, _S(2), _IAM, 116, 1, 3, 0, 0, 2, _C(80), _R(300) },
+    { 10, _S(2), _IAM, 116, 1, 3, 0, 0, 2, 0, _C(80), _R(300) },
     /* ADFS L 640k */
-    { 16, _S(2), _IAM,  57, 1, 1, 0, 0, 0, _C(80), _R(300) },
+    { 16, _S(2), _IAM,  57, 1, 1, 0, 0, 0, 0, _C(80), _R(300) },
     /* ADFS M 320k */
-    { 16, _S(1), _IAM,  57, 1, 1, 0, 0, 0, _C(80), _R(300) },
+    { 16, _S(1), _IAM,  57, 1, 1, 0, 0, 0, 0, _C(80), _R(300) },
     /* ADFS S 160k */
-    { 16, _S(1), _IAM,  57, 1, 1, 0, 0, 0, _C(40), _R(300) },
+    { 16, _S(1), _IAM,  57, 1, 1, 0, 0, 0, 0, _C(40), _R(300) },
     { 0 }
 }, akai_type[] = {
     /* Akai DD:  5*1kB sectors */
-    {  5, _S(2), _IAM, 116, 1, 3, 1, 0, 0, _C(80), _R(300) },
+    {  5, _S(2), _IAM, 116, 1, 3, 1, 0, 0, 0, _C(80), _R(300) },
     /* Akai HD: 10*1kB sectors */
-    { 10, _S(2), _IAM, 116, 1, 3, 1, 0, 0, _C(80), _R(300) },
+    { 10, _S(2), _IAM, 116, 1, 3, 1, 0, 0, 0, _C(80), _R(300) },
     { 0 }
 }, casio_type[] = {
-    { 8, _S(2), _IAM, 116, 3, 3, 1, 0, 0, _C(80), _R(360) }, /* 1280k */
+    { 8, _S(2), _IAM, 116, 3, 3, 1, 0, 0, 0, _C(80), _R(360) }, /* 1280k */
     { 0 }
 }, d81_type[] = {
-    { 10, _S(2), _IAM, 30, 1, 2, 1, 0, 0, _C(80), _R(300) },
+    { 10, _S(2), _IAM, 30, 1, 2, 1, 0, 0, 0, _C(80), _R(300) },
     { 0 }
 }, dec_type[] = {
-    { 10, _S(1), _IAM, 30, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* RX50 (400k) */
-    { 0 } /* RX33 (1.2MB) from default list */
+    /* RX50 (400k) */
+    { 10, _S(1), _IAM, 30, 1, 2, 1, 0, 0, 0, _C(80), _R(300) },
+    /* RX33 (1.2MB) from default list */
+    { 0 }
 }, ensoniq_type[] = {
-    { 10, _S(2), _IAM, 30, 1, 2, 0, 0, 0, _C(80), _R(300) }, /* 800kB */
-    { 20, _S(2), _IAM, 40, 1, 2, 0, 0, 0, _C(80), _R(300) }, /* 1.6MB */
+    { 10, _S(2), _IAM, 30, 1, 2, 0, 0, 0, 0, _C(80), _R(300) }, /* 800kB */
+    { 20, _S(2), _IAM, 40, 1, 2, 0, 0, 0, 0, _C(80), _R(300) }, /* 1.6MB */
     { 0 }
 }, fluke_type[] = {
-    { 16, _S(2), _IAM, 57, 2, 1, 0, 0, 0, _C(80), _R(300) },
+    { 16, _S(2), _IAM, 57, 2, 1, 0, 0, 0, 0, _C(80), _R(300) },
     { 0 }
 }, kaypro_type[] = {
-    { 10, _S(1), _IAM, 30, 3, 2, 0, _ITN, 0, _C(40), _R(300) }, /* 200k */
-    { 10, _S(2), _IAM, 30, 3, 2, 0, _ITN, 0, _C(40), _R(300) }, /* 400k */
-    { 10, _S(2), _IAM, 30, 3, 2, 0, _ITN, 0, _C(80), _R(300) }, /* 800k */
+    { 10, _S(1), _IAM, 30, 3, 2, 0, _ITN, 0, 0, _C(40), _R(300) }, /* 200k */
+    { 10, _S(2), _IAM, 30, 3, 2, 0, _ITN, 0, 0, _C(40), _R(300) }, /* 400k */
+    { 10, _S(2), _IAM, 30, 3, 2, 0, _ITN, 0, 0, _C(80), _R(300) }, /* 800k */
     { 0 }
 }, mbd_type[] = {
-    { 11, _S(2), _IAM,  30, 1, 3, 1, 0, 0, _C(80), _R(300) },
-    {  5, _S(2), _IAM, 116, 3, 1, 1, 0, 0, _C(80), _R(300) },
-    { 11, _S(2), _IAM,  30, 1, 3, 1, 0, 0, _C(40), _R(300) },
-    {  5, _S(2), _IAM, 116, 3, 1, 1, 0, 0, _C(40), _R(300) },
+    { 11, _S(2), _IAM,  30, 1, 3, 1, 0, 0, 0, _C(80), _R(300) },
+    {  5, _S(2), _IAM, 116, 3, 1, 1, 0, 0, 0, _C(80), _R(300) },
+    { 11, _S(2), _IAM,  30, 1, 3, 1, 0, 0, 0, _C(40), _R(300) },
+    {  5, _S(2), _IAM, 116, 3, 1, 1, 0, 0, 0, _C(40), _R(300) },
     { 0 }
 }, memotech_type[] = {
-    { 16, _S(2), _IAM, 57, 3, 1, 1, 0, 0, _C(40), _R(300) }, /* Type 03 */
-    { 16, _S(2), _IAM, 57, 3, 1, 1, 0, 0, _C(80), _R(300) }, /* Type 07 */
+    { 16, _S(2), _IAM, 57, 3, 1, 1, 0, 0, 0, _C(40), _R(300) }, /* Type 03 */
+    { 16, _S(2), _IAM, 57, 3, 1, 1, 0, 0, 0, _C(80), _R(300) }, /* Type 07 */
     { 0 }
 }, msx_type[] = {
-    { 8, _S(1), _IAM, 84, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 320k */
-    { 9, _S(1), _IAM, 84, 1, 2, 1, 0, 0, _C(80), _R(300) }, /* 360k */
+    { 8, _S(1), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 320k */
+    { 9, _S(1), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 360k */
     { 0 } /* all other formats from default list */
 }, nascom_type[] = {
-    { 16, _S(1), _IAM, 57, 3, 1, 1, 0, 8, _C(80), _R(300) }, /* 320k */
-    { 16, _S(2), _IAM, 57, 3, 1, 1, 0, 8, _C(80), _R(300) }, /* 360k */
+    { 16, _S(1), _IAM, 57, 3, 1, 1, 0, 8, 0, _C(80), _R(300) }, /* 320k */
+    { 16, _S(2), _IAM, 57, 3, 1, 1, 0, 8, 0, _C(80), _R(300) }, /* 360k */
     { 0 }
 }, pc98_type[] = {
-    { 8, _S(2), _IAM, 116, 1, 3, 1, 0, 0, _C(80), _R(360) }, /* 1232k */
-    { 8, _S(2), _IAM, 116, 1, 2, 1, 0, 0, _C(80), _R(360) }, /* 640k */
-    { 9, _S(2), _IAM, 116, 1, 2, 1, 0, 0, _C(80), _R(360) }, /* 720k */
+    { 8, _S(2), _IAM, 116, 1, 3, 1, 0, 0, 0, _C(80), _R(360) }, /* 1232k */
+    { 8, _S(2), _IAM, 116, 1, 2, 1, 0, 0, 0, _C(80), _R(360) }, /* 640k */
+    { 9, _S(2), _IAM, 116, 1, 2, 1, 0, 0, 0, _C(80), _R(360) }, /* 720k */
     { 0 }
 }, uknc_type[] = {
-    { 10, _S(2), 0, 38, 1, 2, 1, 0, 0, _C(80), _R(300) },
+    { 10, _S(2), 0, 38, 1, 2, 1, 0, 0, 0, _C(80), _R(300) },
     { 0 }
 };
 
@@ -197,7 +200,8 @@ found:
     im->nr_sides = nr_sides;
     im->img.sec_no = type->no;
     im->img.interleave = type->interleave;
-    im->img.skew = type->skew;
+    im->img.sskew = type->sskew;
+    im->img.cskew = type->cskew;
     im->img.nr_sectors = type->nr_secs;
     im->img.gap_3 = type->gap3;
     im->img.rpm = (type->rpm + 5) * 60;
@@ -211,7 +215,6 @@ found:
 
 static bool_t adfs_open(struct image *im)
 {
-    im->img.skew_cyls_only = TRUE;
     return _img_open(im, adfs_type);
 }
 
@@ -226,7 +229,8 @@ static enum tag_result tag_open(struct image *im, char *tag)
         IMGCFG_id,
         IMGCFG_mode,
         IMGCFG_interleave,
-        IMGCFG_skew,
+        IMGCFG_cskew,
+        IMGCFG_sskew,
         IMGCFG_rpm,
         IMGCFG_gap3,
         IMGCFG_iam,
@@ -242,7 +246,8 @@ static enum tag_result tag_open(struct image *im, char *tag)
         [IMGCFG_id]   = { "id" },
         [IMGCFG_mode] = { "mode" },
         [IMGCFG_interleave] = { "interleave" },
-        [IMGCFG_skew] = { "skew" },
+        [IMGCFG_cskew] = { "cskew" },
+        [IMGCFG_sskew] = { "sskew" },
         [IMGCFG_rpm]  = { "rpm" },
         [IMGCFG_gap3] = { "gap3" },
         [IMGCFG_iam]  = { "iam" },
@@ -331,8 +336,11 @@ static enum tag_result tag_open(struct image *im, char *tag)
         case IMGCFG_interleave:
             im->img.interleave = strtol(opts.arg, NULL, 10);
             break;
-        case IMGCFG_skew:
-            im->img.skew = strtol(opts.arg, NULL, 10);
+        case IMGCFG_cskew:
+            im->img.cskew = strtol(opts.arg, NULL, 10);
+            break;
+        case IMGCFG_sskew:
+            im->img.sskew = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_rpm:
             im->img.rpm = strtol(opts.arg, NULL, 10);
@@ -402,7 +410,6 @@ static bool_t img_open(struct image *im)
         goto fallback;
     case HOST_nascom:
         type = nascom_type;
-        im->img.skew_cyls_only = TRUE;
         break;
     case HOST_pc98:
         type = pc98_type;
@@ -453,7 +460,12 @@ static bool_t st_open(struct image *im)
         out->has_iam = FALSE;
         if (out->nr_secs == 9) {
             /* TOS formats 720kB disks with skew. */
-            out->skew = 2;
+            if (out->nr_sides == _S(1)) {
+                out->cskew = 2;
+            } else { /* out->nr_sides == _S(2) */
+                out->cskew = 4;
+                out->sskew = 2;
+            }
         }
         out++;
     }
@@ -503,7 +515,6 @@ static bool_t pc98fdi_open(struct image *im)
     im->img.nr_sectors = le32toh(header.nr_secs);
     im->img.interleave = 1;
     init_sec_base(im, 1);
-    im->img.skew = 0;
     im->img.has_iam = TRUE;
     /* Skip 4096-byte header. */
     im->img.base_off = le32toh(header.header_size);
@@ -568,7 +579,6 @@ static bool_t msx_open(struct image *im)
             im->nr_cyls = (im->nr_sides == 1) ? 80 : 40;
             im->img.interleave = 1;
             init_sec_base(im, 1);
-            im->img.skew = 0;
             im->img.has_iam = TRUE;
             if (mfm_open(im))
                 return TRUE;
@@ -616,7 +626,6 @@ static bool_t pc_dos_open(struct image *im)
 
     im->img.interleave = 1;
     init_sec_base(im, 1);
-    im->img.skew = 0;
     im->img.has_iam = TRUE;
     return mfm_open(im);
 
@@ -664,7 +673,6 @@ static bool_t trd_open(struct image *im)
 
     im->img.sec_no = 1; /* 256-byte */
     im->img.interleave = 1;
-    im->img.skew = 0;
     init_sec_base(im, 1);
     im->img.nr_sectors = 16;
     im->img.gap_3 = 57;
@@ -690,8 +698,7 @@ static bool_t opd_open(struct image *im)
 
     im->img.sec_no = 1; /* 256-byte */
     im->img.interleave = 13;
-    im->img.skew = 13;
-    im->img.skew_cyls_only = TRUE;
+    im->img.cskew = 13;
     init_sec_base(im, 0);
     im->img.nr_sectors = 18;
     im->img.gap_3 = 12;
@@ -704,8 +711,7 @@ static bool_t dfs_open(struct image *im)
 {
     im->nr_cyls = 80;
     im->img.interleave = 1;
-    im->img.skew = 3;
-    im->img.skew_cyls_only = TRUE;
+    im->img.cskew = 3;
     im->img.sec_no = 1; /* 256-byte */
     init_sec_base(im, 0);
     im->img.nr_sectors = 10;
@@ -797,8 +803,7 @@ static bool_t ti99_open(struct image *im)
 
     im->img.has_iam = FALSE;
     im->img.interleave = 4;
-    im->img.skew = 3;
-    im->img.skew_cyls_only = TRUE;
+    im->img.cskew = 3;
     im->img.sec_no = 1;
     init_sec_base(im, 0);
     im->img.layout = LAYOUT_sequential_reverse_side1;
@@ -1115,8 +1120,7 @@ static void img_seek_track(
 
     /* Create logical sector map in rotational order. */
     memset(im->img.sec_map, 0xff, im->img.nr_sectors);
-    pos = ((im->img.skew_cyls_only ? cyl : trk) * im->img.skew)
-        % im->img.nr_sectors;
+    pos = ((cyl*im->img.cskew) + (side*im->img.sskew)) % im->img.nr_sectors;
     base = sec_base(im);
     for (i = 0; i < im->img.nr_sectors; i++) {
         while (im->img.sec_map[pos] != 0xff)
@@ -1252,8 +1256,8 @@ static void img_dump_info(struct image *im)
            im->img.gap_4a, im->img.gap_4);
     printk(" ticks_per_cell: %u, write_bc_ticks: %u, has_iam: %u\n",
            im->ticks_per_cell, im->write_bc_ticks, im->img.has_iam);
-    printk(" interleave: %u, skew %u, base %x:%x,%x:%x\n",
-           im->img.interleave, im->img.skew,
+    printk(" interleave: %u, cskew %u, sskew %u, base %x:%x,%x:%x\n",
+           im->img.interleave, im->img.cskew, im->img.sskew,
            im->img.sec_base[0], im->img.sec_base[1],
            im->img.sec_base[2], im->img.sec_base[3]);
 }
