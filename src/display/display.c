@@ -29,7 +29,7 @@ void display_init(void)
             break; /* positive identification */
         }
 
-        if (ff_cfg.display_type == DISPLAY_auto) {
+        if ((ff_cfg.display_type & 3) == DISPLAY_auto) {
             led_7seg_init();
             display_mode = DM_LED_7SEG;
             snprintf(name, sizeof(name), "%u-Digit 7-Seg LED",

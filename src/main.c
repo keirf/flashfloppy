@@ -219,35 +219,82 @@ static void display_write_slot(bool_t nav_mode)
 /* Write track number to LCD. */
 static void lcd_write_track_info(bool_t force)
 {
-    static uint8_t lcd_cyl, lcd_side, lcd_writing;
-    uint8_t cyl, side, sel, writing;
+    static struct track_info lcd_ti;
+    struct track_info ti;
     char msg[17];
 
     if (display_mode != DM_LCD_1602)
         return;
 
-    floppy_get_track(&cyl, &side, &sel, &writing);
+    floppy_get_track(&ti);
 
-    if (cyl >= DA_FIRST_CYL) {
+    if (ti.cyl >= DA_FIRST_CYL) {
         /* Display controlled by src/image/da.c */
         return;
     }
 
-    cyl = min_t(uint8_t, cyl, 99);
-    side = min_t(uint8_t, side, 1);
+    ti.cyl = min_t(uint8_t, ti.cyl, 99);
+    ti.side = min_t(uint8_t, ti.side, 1);
 
-    if (force || (cyl != lcd_cyl) || ((side != lcd_side) && sel)
-        || (writing != lcd_writing)) {
+    if (force || (ti.cyl != lcd_ti.cyl)
+        || ((ti.side != lcd_ti.side) && ti.sel)
+        || (ti.writing != lcd_ti.writing)) {
         snprintf(msg, sizeof(msg), "%c T:%02u.%u",
-                 (cfg.slot.attributes & AM_RDO) ? '*' : writing ? 'W' : ' ',
-                 cyl, side);
+                 (cfg.slot.attributes & AM_RDO) ? '*' : ti.writing ? 'W' : ' ',
+                 ti.cyl, ti.side);
         lcd_write(wp_column, 1, -1, msg);
         if (ff_cfg.display_on_activity)
             lcd_on();
-        lcd_cyl = cyl;
-        lcd_side = side;
-        lcd_writing = writing;
+        lcd_ti = ti;
     }
+}
+
+/* >0:  Display is locked. Timer counts down at 50Hz. 
+ * ==0: Display is forced to display track # on next invocation.
+ * <0:  Display updates track # as necessary. Timer does not count down. */
+static int8_t led_7seg_track_timer;
+static void led_7seg_update_track(void)
+{
+    static struct track_info led_ti;
+    static uint8_t count;
+    struct track_info ti;
+    unsigned int trk, digits;
+    bool_t force;
+    char msg[4];
+
+    if ((display_mode != DM_LED_7SEG)
+        || !(ff_cfg.display_type & DISPLAY_led_trk))
+        return;
+
+    if (led_7seg_track_timer > 0) {
+        led_7seg_track_timer--;
+        return;
+    }
+    force = (led_7seg_track_timer == 0);
+    led_7seg_track_timer = -1;
+
+    floppy_get_track(&ti);
+
+    if (ti.cyl >= DA_FIRST_CYL) {
+        /* Display controlled by src/image/da.c */
+        return;
+    }
+
+    digits = led_7seg_nr_digits();
+    trk = ti.cyl * ti.nr_sides + ti.side;
+    trk = min_t(unsigned int, trk, (digits == 3) ? 999 : 99);
+    if (force || (ti.cyl != led_ti.cyl)
+        || ((ti.side != led_ti.side) && ti.sel)) {
+        if ((count++ == 0) && !force) {
+            /* Avoid display flicker during sequential track-by-track access.
+             * Eg. when cylinder changes (N->N+1) before side (1->0). */
+            return;
+        }
+        snprintf(msg, sizeof(msg), "%*u", digits, trk);
+        led_7seg_write_string(msg);
+        led_ti = ti;
+    }
+    count = 0;
 }
 
 /* Handle switching the LCD backlight. */
@@ -342,7 +389,29 @@ static void button_timer_fn(void *unused)
         rb = rotary_reverse[rb];
     b |= rb;
 
-    b = lcd_handle_backlight(b);
+    switch (display_mode) {
+    case DM_LCD_1602:
+        b = lcd_handle_backlight(b);
+        break;
+    case DM_LED_7SEG:
+        if (b) {
+            if (led_7seg_track_timer < 0) {
+                /* 7-seg display is showing track number. Force change to 
+                 * image number. */
+                display_write_slot(FALSE);
+            } else if (led_7seg_track_timer < 126) {
+                /* Button must have been released then re-pressed. We let this
+                 * second button press take effect. (While button is
+                 * continuously pressed we continually reset the countdown.) */
+                break;
+            }
+            /* Consume the button press and reset countdown timer for 
+             * re-instating track number on the LED display. */
+            led_7seg_track_timer = 127; /* 127*20ms ~= 2.5sec */
+            b = 0;
+        }
+        break;
+    }
 
     /* Latch final button state and reset the timer. */
     buttons = b;
@@ -758,6 +827,8 @@ static void read_ff_cfg(void)
                     ff_cfg.display_type = DISPLAY_lcd;
                 } else if (!strcmp(p, "oled")) {
                     ff_cfg.display_type = DISPLAY_oled;
+                } else if (!strcmp(p, "trk")) {
+                    ff_cfg.display_type = DISPLAY_led_trk;
                 } else if (!strcmp(p, "rotate")) {
                     ff_cfg.display_type |= DISPLAY_rotate;
                 } else if (!strncmp(p, "narrow", 6)) {
@@ -1476,21 +1547,24 @@ static int run_floppy(void *_b)
 {
     volatile uint8_t *pb = _b;
     time_t t_now, t_prev, t_diff;
-    int32_t lcd_update_ticks;
+    int32_t update_ticks;
 
     floppy_insert(0, &cfg.slot);
 
-    lcd_update_ticks = time_ms(20);
+    led_7seg_track_timer = 0;
+    led_7seg_update_track();
+
+    update_ticks = time_ms(20);
     t_prev = time_now();
     while (((*pb = buttons) == 0) && !floppy_handle()) {
         t_now = time_now();
         t_diff = time_diff(t_prev, t_now);
+        if ((update_ticks -= t_diff) <= 0) {
+            led_7seg_update_track();
+            lcd_write_track_info(FALSE);
+            update_ticks = time_ms(20);
+        }
         if (display_mode == DM_LCD_1602) {
-            lcd_update_ticks -= t_diff;
-            if (lcd_update_ticks <= 0) {
-                lcd_write_track_info(FALSE);
-                lcd_update_ticks = time_ms(20);
-            }
             lcd_scroll.ticks -= t_diff;
             lcd_scroll_name();
         }
@@ -1499,6 +1573,7 @@ static int run_floppy(void *_b)
         t_prev = t_now;
     }
 
+    led_7seg_track_timer = 0;
     return 0;
 }
 
@@ -1751,7 +1826,8 @@ static int floppy_main(void *unused)
             }
 
             /* Flash the LED display to indicate loading the new image. */
-            if (!(b & (B_LEFT|B_RIGHT)) && (display_mode == DM_LED_7SEG)) {
+            if (!(b & (B_LEFT|B_RIGHT)) && (display_mode == DM_LED_7SEG)
+                && (ff_cfg.display_type != DISPLAY_led_trk)) {
                 led_7seg_display_setting(FALSE);
                 delay_ms(200);
                 led_7seg_display_setting(TRUE);
