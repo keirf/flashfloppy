@@ -25,9 +25,9 @@ static bool_t msx_open(struct image *im);
 static bool_t pc_dos_open(struct image *im);
 static bool_t ti99_open(struct image *im);
 
-#define LAYOUT_interleaved              0
-#define LAYOUT_interleaved_swap_sides   1
-#define LAYOUT_sequential_reverse_side1 2
+#define LAYOUT_sequential     (1u<<0)
+#define LAYOUT_sides_swapped  (1u<<1)
+#define LAYOUT_side1_reversed (1u<<2)
 
 #define sec_sz(im) (128u << (im)->img.sec_no)
 
@@ -235,6 +235,7 @@ static enum tag_result tag_open(struct image *im, char *tag)
         IMGCFG_gap3,
         IMGCFG_iam,
         IMGCFG_rate,
+        IMGCFG_file_layout,
         IMGCFG_nr
     };
 
@@ -252,6 +253,7 @@ static enum tag_result tag_open(struct image *im, char *tag)
         [IMGCFG_gap3] = { "gap3" },
         [IMGCFG_iam]  = { "iam" },
         [IMGCFG_rate] = { "rate" },
+        [IMGCFG_file_layout] = { "file-layout" },
     };
 
     int option;
@@ -354,6 +356,23 @@ static enum tag_result tag_open(struct image *im, char *tag)
         case IMGCFG_rate:
             im->img.data_rate = strtol(opts.arg, NULL, 10);
             break;
+        case IMGCFG_file_layout: {
+            char *p, *q;
+            for (p = opts.arg; *p != '\0'; p = q) {
+                for (q = p; *q && *q != ','; q++)
+                    continue;
+                if (*q == ',')
+                    *q++ = '\0';
+                if (!strcmp(p, "side1-reversed")) {
+                    im->img.layout |= LAYOUT_side1_reversed;
+                } else if (!strcmp(p, "sequential")) {
+                    im->img.layout |= LAYOUT_sequential;
+                } else if (!strcmp(p, "sides-swapped")) {
+                    im->img.layout |= LAYOUT_sides_swapped;
+                }
+            }
+            break;
+        }
 
         }
     }
@@ -442,7 +461,7 @@ fallback:
 
 static bool_t d81_open(struct image *im)
 {
-    im->img.layout = LAYOUT_interleaved_swap_sides;
+    im->img.layout = LAYOUT_sides_swapped;
     return _img_open(im, d81_type);
 }
 
@@ -806,7 +825,7 @@ static bool_t ti99_open(struct image *im)
     im->img.cskew = 3;
     im->img.sec_no = 1;
     init_sec_base(im, 0);
-    im->img.layout = LAYOUT_sequential_reverse_side1;
+    im->img.layout = LAYOUT_sequential | LAYOUT_side1_reversed;
 
     if ((fsize % (40*9)) == 0) {
 
@@ -1114,7 +1133,7 @@ static void img_seek_track(
     struct image *im, uint16_t track, unsigned int cyl, unsigned int side)
 {
     uint32_t trk_len;
-    unsigned int base, i, pos, trk = cyl * im->nr_sides + side;
+    unsigned int base, i, pos, _c, _s, idx;
 
     im->cur_track = track;
 
@@ -1130,18 +1149,17 @@ static void img_seek_track(
     }
 
     trk_len = im->img.nr_sectors * sec_sz(im);
-    switch (im->img.layout) {
-    case LAYOUT_sequential_reverse_side1:
-        im->img.trk_off = (side ? 2*im->nr_cyls - cyl - 1 : cyl) * trk_len;
-        break;
-    case LAYOUT_interleaved_swap_sides:
-        trk ^= im->nr_sides - 1;
-        /* fall through */
-    default:
-        im->img.trk_off = trk * trk_len;
-        break;
-    }
-    im->img.trk_off += im->img.base_off;
+    _c = ((im->img.layout & LAYOUT_side1_reversed) && (side == 1))
+        ? im->nr_cyls - cyl - 1
+        : cyl;
+    _s = (im->img.layout & LAYOUT_sides_swapped)
+        ? side ^ (im->nr_sides - 1)
+        : side;
+    idx = (im->img.layout & LAYOUT_sequential)
+        ? (_s * im->nr_cyls) + _c
+        : (_c * im->nr_sides) + _s;
+
+    im->img.trk_off = (idx * trk_len) + im->img.base_off;
 }
 
 static uint32_t calc_start_pos(struct image *im)
@@ -1260,6 +1278,7 @@ static void img_dump_info(struct image *im)
            im->img.interleave, im->img.cskew, im->img.sskew,
            im->img.sec_base[0], im->img.sec_base[1],
            im->img.sec_base[2], im->img.sec_base[3]);
+    printk(" file-layout: %u\n", im->img.layout);
 }
 
 static void img_fetch_data(struct image *im)
