@@ -25,9 +25,9 @@ static bool_t msx_open(struct image *im);
 static bool_t pc_dos_open(struct image *im);
 static bool_t ti99_open(struct image *im);
 
-#define LAYOUT_sequential     (1u<<0)
-#define LAYOUT_sides_swapped  (1u<<1)
-#define LAYOUT_side1_reversed (1u<<2)
+#define LAYOUT_sequential      (1u<<0)
+#define LAYOUT_sides_swapped   (1u<<1)
+#define LAYOUT_reverse_side(x) (1u<<(2+(x)))
 
 #define sec_sz(im) (128u << (im)->img.sec_no)
 
@@ -363,8 +363,9 @@ static enum tag_result tag_open(struct image *im, char *tag)
                     continue;
                 if (*q == ',')
                     *q++ = '\0';
-                if (!strcmp(p, "side1-reversed")) {
-                    im->img.layout |= LAYOUT_side1_reversed;
+                if (!strncmp(p, "reverse-side", 12)) {
+                    uint8_t side = !!strtol(p+12, NULL, 10);
+                    im->img.layout |= LAYOUT_reverse_side(side);
                 } else if (!strcmp(p, "sequential")) {
                     im->img.layout |= LAYOUT_sequential;
                 } else if (!strcmp(p, "sides-swapped")) {
@@ -824,7 +825,7 @@ static bool_t ti99_open(struct image *im)
     im->img.cskew = 3;
     im->img.sec_no = 1;
     init_sec_base(im, 0);
-    im->img.layout = LAYOUT_sequential | LAYOUT_side1_reversed;
+    im->img.layout = LAYOUT_sequential | LAYOUT_reverse_side(1);
 
     if ((fsize % (40*9)) == 0) {
 
@@ -1148,7 +1149,7 @@ static void img_seek_track(
     }
 
     trk_len = im->img.nr_sectors * sec_sz(im);
-    _c = ((im->img.layout & LAYOUT_side1_reversed) && (side == 1))
+    _c = (im->img.layout & LAYOUT_reverse_side(side))
         ? im->nr_cyls - cyl - 1
         : cyl;
     _s = (im->img.layout & LAYOUT_sides_swapped)
@@ -1277,7 +1278,7 @@ static void img_dump_info(struct image *im)
            im->img.interleave, im->img.cskew, im->img.sskew,
            im->img.sec_base[0], im->img.sec_base[1],
            im->img.sec_base[2], im->img.sec_base[3]);
-    printk(" file-layout: %u\n", im->img.layout);
+    printk(" file-layout: %x\n", im->img.layout);
 }
 
 static void img_fetch_data(struct image *im)

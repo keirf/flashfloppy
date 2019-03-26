@@ -8,7 +8,7 @@
  - IMG.CFG: Split skew into per-cylinder and per-side values (cskew/sskew)
  - IMG.CFG: Introduce image-file layout option (file-layout=<csv-list>):
    - sequential,interleaved: Cylinder-first or side-first track ordering
-   - side1-reversed: Second-side cylinders in reverse order (high to low)
+   - reverse-sideN: Side-N cylinders in reverse order (high to low) (N=0,1)
    - sides-swapped: Ordering of disk sides is swapped in the image file
  - 7-Segment LED: Display track number when an image is mounted
    - FF.CFG: "display-type = led-trk"
