@@ -3,7 +3,7 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
-** v2.1a - TBC
+** v2.1a - 26 March 2019
  - IMG.CFG: Allow up to 256 sectors per track
  - IMG.CFG: Split skew into per-cylinder and per-side values (cskew/sskew)
  - IMG.CFG: Introduce image-file layout option (file-layout=<csv-list>):
