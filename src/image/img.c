@@ -629,8 +629,7 @@ static bool_t pc_dos_open(struct image *im)
     if (im->img.sec_no > 6) /* >8kB? */
         goto fail;
 
-    if ((bpb.sec_per_track == 0)
-        || (bpb.sec_per_track > ARRAY_SIZE(im->img.sec_map)))
+    if ((bpb.sec_per_track == 0) || (bpb.sec_per_track > 256))
         goto fail;
     im->img.nr_sectors = bpb.sec_per_track;
 
@@ -1309,6 +1308,21 @@ static void img_fetch_data(struct image *im)
     rd->prod++;
 }
 
+static bool_t img_prep(struct image *im)
+{
+    if ((im->nr_sides < 1) || (im->nr_sides > 2)
+        || (im->nr_cyls < 1) || (im->nr_cyls > 254)
+        || (im->img.nr_sectors < 1) || (im->img.nr_sectors > 256))
+        return FALSE;
+
+    im->img.sec_map = (uint8_t *)im->bufs.read_data.p
+        + im->bufs.read_data.len - 256;
+
+    im->img.rpm = im->img.rpm ?: 300;
+
+    return TRUE;
+}
+
 
 /*
  * MFM-Specific Handlers
@@ -1329,13 +1343,9 @@ static bool_t mfm_open(struct image *im)
     unsigned int i;
     uint8_t gap_3 = im->img.gap_3;
 
-    if ((im->nr_sides < 1) || (im->nr_sides > 2)
-        || (im->nr_cyls < 1) || (im->nr_cyls > 254)
-        || (im->img.nr_sectors < 1)
-        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map)))
+    if (!img_prep(im))
         return FALSE;
 
-    im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: GAP_2;
     /* GAP_SYNC is a suitable small initial guess for auto GAP3. */
     im->img.gap_3 = im->img.gap_3 ?: GAP_SYNC;
@@ -1666,13 +1676,9 @@ static bool_t fm_open(struct image *im)
     const uint8_t FM_GAP_3[] = { 27, 42, 58, 138, 255, 255, 255, 255 };
     uint32_t tracklen;
 
-    if ((im->nr_sides < 1) || (im->nr_sides > 2)
-        || (im->nr_cyls < 1) || (im->nr_cyls > 254)
-        || (im->img.nr_sectors < 1)
-        || (im->img.nr_sectors > ARRAY_SIZE(im->img.sec_map)))
+    if (!img_prep(im))
         return FALSE;
 
-    im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: FM_GAP_2;
     /* Default post-index gap size depends on whether the track format includes 
      * IAM or not (see uPD765A/7265 Datasheet). */
