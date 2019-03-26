@@ -3,6 +3,19 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.1a - TBC
+ - IMG.CFG: Split skew into per-cylinder and per-side values (cskew/sskew)
+ - IMG.CFG: Introduce image-file layout option (file-layout=<csv-list>):
+   - sequential,interleaved: Cylinder-first or side-first track ordering
+   - side1-reversed: Second-side cylinders in reverse order (high to low)
+   - sides-swapped: Ordering of disk sides is swapped in the image file
+ - 7-Segment LED: Display track number when an image is mounted
+   - FF.CFG: "display-type = led-trk"
+   - Displays slot number as usual during image selection/navigation
+   - First button press reverts to slot display; Next press begins navigation
+ - LCD/OLED: Display full cylinder number on displays wider than 16 columns
+   - Previously truncated at cylinder 99
+
 ** v2.0a - 14 March 2019
  - IMG: Allow geometry to be manually configured in new file IMG.CFG
    - See examples/IMG.CFG for documentation
