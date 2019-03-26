@@ -52,6 +52,8 @@ dist:
 	rm -rf index.html
 	unzip -q HxC_Compat_Mode-$(HXC_FF_VER).zip
 	mv HxC_Compat_Mode flashfloppy-$(VER)
+	mkdir -p flashfloppy-$(VER)/scripts
+	cp -a scripts/edsk* flashfloppy-$(VER)/scripts/
 	zip -r flashfloppy-$(VER).zip flashfloppy-$(VER)
 
 mrproper: clean
