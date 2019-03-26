@@ -264,7 +264,7 @@ static void led_7seg_update_track(void)
     char msg[4];
 
     if ((display_mode != DM_LED_7SEG)
-        || !(ff_cfg.display_type & DISPLAY_led_trk))
+        || (ff_cfg.display_type != DISPLAY_led_trk))
         return;
 
     if (led_7seg_track_timer > 0) {
