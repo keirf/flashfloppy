@@ -18,6 +18,13 @@ def main(argv):
     sides = int(x[3])
     tsz = in_dat[52:256]
     populated = 0
+    ext = False
+    if x[0].startswith("EXTENDED CPC DSK File\r\nDisk-Info\r\n"):
+        print("Extended DSK")
+        ext = True
+    else:
+        assert x[0].startswith("MV - CPCEMU")
+        print("Standard DSK")
     while tsz:
         x = struct.unpack("B", tsz[:1])
         if int(x[0]) != 0:
@@ -42,6 +49,8 @@ def main(argv):
         tot_dlen = 0
         while sinfo and nr != 0:
             (c,h,r,n,s1,s2,alen) = struct.unpack("<BBBBBBH", sinfo[:8])
+            if not ext:
+                alen = 128<<n
             sdat = in_dat[:alen]
             in_dat = in_dat[alen:]
             tot_dlen += alen
