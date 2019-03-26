@@ -56,9 +56,9 @@ struct img_image {
     uint8_t post_crc_syncs;
     int8_t write_sector;
     uint8_t sec_base[4], *sec_map;
-    uint8_t nr_sectors, sec_no;
+    uint8_t sec_no;
     uint8_t interleave:4, cskew:4, sskew:4;
-    uint16_t data_rate, gap_4;
+    uint16_t nr_sectors, data_rate, gap_4;
     uint32_t idx_sz, idam_sz;
     uint16_t dam_sz_pre, dam_sz_post;
 };
