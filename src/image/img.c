@@ -16,10 +16,8 @@ static bool_t img_read_track(struct image *im);
 static bool_t img_write_track(struct image *im);
 static bool_t mfm_open(struct image *im);
 static bool_t mfm_read_track(struct image *im);
-static bool_t mfm_write_track(struct image *im);
 static bool_t fm_open(struct image *im);
 static bool_t fm_read_track(struct image *im);
-static bool_t fm_write_track(struct image *im);
 
 static bool_t msx_open(struct image *im);
 static bool_t pc_dos_open(struct image *im);
@@ -29,7 +27,7 @@ static bool_t ti99_open(struct image *im);
 #define LAYOUT_sides_swapped   (1u<<1)
 #define LAYOUT_reverse_side(x) (1u<<(2+(x)))
 
-#define sec_sz(im) (128u << (im)->img.sec_no)
+#define sec_sz(n) (128u << (n))
 
 #define _IAM 1 /* IAM */
 #define _ITN 1 /* inter-track numbering */
@@ -156,10 +154,10 @@ static uint8_t sec_base(struct image *im)
     return im->img.sec_base[i + (im->cur_track & (im->nr_sides - 1))];
 }
 
-static unsigned int enc_sec_sz(struct image *im)
+static unsigned int enc_sec_sz(struct image *im, struct img_sec *sec)
 {
     return im->img.idam_sz + im->img.dam_sz_pre
-        + sec_sz(im) + im->img.dam_sz_post;
+        + sec_sz(sec ? sec->no : im->img.sec_no) + im->img.dam_sz_post;
 }
 
 static void reset_img_params(struct image *im)
@@ -618,17 +616,19 @@ static bool_t msx_open(struct image *im)
 static bool_t pc_dos_open(struct image *im)
 {
     struct bpb bpb;
+    unsigned int no;
 
     bpb_read(im, &bpb);
 
     if (bpb.sig != 0xaa55)
         goto fail;
 
-    for (im->img.sec_no = 0; im->img.sec_no <= 6; im->img.sec_no++)
-        if (sec_sz(im) == bpb.bytes_per_sec)
+    for (no = 0; no <= 6; no++)
+        if (sec_sz(no) == bpb.bytes_per_sec)
             break;
-    if (im->img.sec_no > 6) /* >8kB? */
+    if (no > 6) /* >8kB? */
         goto fail;
+    im->img.sec_no = no;
 
     if ((bpb.sec_per_track == 0) || (bpb.sec_per_track > 256))
         goto fail;
@@ -1119,7 +1119,7 @@ const struct image_handler ti99_image_handler = {
 
 static void img_extend(struct image *im)
 {
-    unsigned int sz = (im->img.nr_sectors * sec_sz(im)
+    unsigned int sz = (im->img.nr_sectors * sec_sz(im->img.sec_no)
                        * im->nr_sides * im->nr_cyls) + im->img.base_off;
     if (f_size(&im->fp) >= sz)
         return;
@@ -1134,6 +1134,7 @@ static void img_seek_track(
 {
     uint32_t trk_len;
     unsigned int base, i, pos, _c, _s, idx;
+    struct img_sec *sec = im->img.sec_info;
 
     im->cur_track = track;
 
@@ -1144,11 +1145,14 @@ static void img_seek_track(
     for (i = 0; i < im->img.nr_sectors; i++) {
         while (im->img.sec_map[pos] != 0xff)
             pos = (pos + 1) % im->img.nr_sectors;
-        im->img.sec_map[pos] = i + base;
+        im->img.sec_map[pos] = i;
+        sec->id = i + base;
+        sec->no = im->img.sec_no;
+        sec++;
         pos = (pos + im->img.interleave) % im->img.nr_sectors;
     }
 
-    trk_len = im->img.nr_sectors * sec_sz(im);
+    trk_len = im->img.nr_sectors * sec_sz(im->img.sec_no);
     _c = (im->img.layout & LAYOUT_reverse_side(side))
         ? im->nr_cyls - cyl - 1
         : cyl;
@@ -1173,14 +1177,21 @@ static uint32_t calc_start_pos(struct image *im)
         /* Post-index track gap */
         im->img.decode_pos = 0;
     } else {
-        unsigned int ess = enc_sec_sz(im);
+        uint8_t *sec_map = im->img.sec_map;
+        unsigned int i, ess;
+        struct img_sec *sec;
         decode_off -= im->img.idx_sz;
-        im->img.decode_pos = decode_off / ess;
-        if (im->img.decode_pos < im->img.nr_sectors) {
+        for (i = 0; i < im->img.nr_sectors; i++) {
+            sec = &im->img.sec_info[*sec_map++];
+            ess = enc_sec_sz(im, sec);
+            if (decode_off < ess)
+                break;
+            decode_off -= ess;
+        }
+        if (i < im->img.nr_sectors) {
             /* IDAM */
-            im->img.trk_sec = im->img.decode_pos;
-            im->img.decode_pos = im->img.decode_pos * 4 + 1;
-            decode_off -= im->img.trk_sec * ess;
+            im->img.trk_sec = i;
+            im->img.decode_pos = i * 4 + 1;
             if (decode_off >= im->img.idam_sz) {
                 /* DAM */
                 decode_off -= im->img.idam_sz;
@@ -1189,24 +1200,22 @@ static uint32_t calc_start_pos(struct image *im)
                     /* Data or Post Data */
                     decode_off -= im->img.dam_sz_pre;
                     im->img.decode_pos++;
-                    if (decode_off < sec_sz(im)) {
+                    if (decode_off < sec_sz(sec->no)) {
                         /* Data */
                         im->img.rd_sec_pos = decode_off / 1024;
                         im->img.decode_data_pos = im->img.rd_sec_pos;
                         decode_off %= 1024;
                     } else {
                         /* Post Data */
-                        decode_off -= sec_sz(im);
+                        decode_off -= sec_sz(sec->no);
                         im->img.decode_pos++;
                         /* Start fetch at next sector. */
-                        im->img.trk_sec = (im->img.trk_sec + 1)
-                            % im->img.nr_sectors;
+                        im->img.trk_sec = (i + 1) % im->img.nr_sectors;
                     }
                 }
             }
         } else {
             /* Pre-index track gap */
-            decode_off -= im->img.nr_sectors * ess;
             im->img.decode_pos = im->img.nr_sectors * 4 + 1;
             im->img.decode_data_pos = decode_off / 1024;
             decode_off %= 1024;
@@ -1260,7 +1269,155 @@ static bool_t img_read_track(struct image *im)
 
 static bool_t img_write_track(struct image *im)
 {
-    return (im->sync == SYNC_fm) ? fm_write_track(im) : mfm_write_track(im);
+    const uint8_t mfm_dam_header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
+
+    bool_t flush;
+    struct write *write = get_write(im, im->wr_cons);
+    struct image_buf *wr = &im->bufs.write_bc;
+    uint16_t *buf = wr->p;
+    unsigned int bufmask = (wr->len / 2) - 1;
+    uint8_t *wrbuf = im->bufs.write_data.p;
+    uint32_t c = wr->cons / 16, p = wr->prod / 16;
+    struct img_sec *sec;
+    unsigned int i, off;
+    time_t t;
+    uint16_t crc, sec_sz;
+    uint8_t id, x, *sec_map;
+    int32_t base;
+
+    /* If we are processing final data then use the end index, rounded up. */
+    barrier();
+    flush = (im->wr_cons != im->wr_bc);
+    if (flush)
+        p = (write->bc_end + 15) / 16;
+
+    if (im->img.write_sector == -1) {
+        base = write->start / im->ticks_per_cell; /* in data bytes */
+        sec_map = im->img.sec_map;
+
+        /* Convert write offset to sector number (in rotational order). */
+        base -= im->img.idx_sz + im->img.idam_sz;
+        for (i = 0; i < im->img.nr_sectors; i++) {
+            /* Within small range of expected data start? */
+            if ((base >= -64) && (base <= 64))
+                break;
+            base -= enc_sec_sz(im, &im->img.sec_info[*sec_map++]);
+        }
+
+        /* Convert rotational order to logical order. */
+        if (i >= im->img.nr_sectors) {
+            printk("IMG Bad Sector Offset: %u -> %u\n", base, i);
+            im->img.write_sector = -2;
+        } else {
+            im->img.write_sector = *sec_map;
+        }
+    }
+
+    for (;;) {
+
+        sec_sz = (im->img.write_sector >= 0)
+            ? sec_sz(im->img.sec_info[im->img.write_sector].no) : 128;
+
+        if (im->sync == SYNC_fm) {
+
+            uint16_t sync;
+            if ((int16_t)(p - c) < (2 + sec_sz + 2))
+                break;
+            if (buf[c++ & bufmask] != 0xaaaa)
+                continue;
+            sync = buf[c & bufmask];
+            if (mfmtobin(sync >> 1) != FM_SYNC_CLK)
+                continue;
+            x = mfmtobin(sync);
+            c++;
+
+        } else { /* MFM */
+
+            if ((int16_t)(p - c) < (3 + sec_sz + 2))
+                break;
+            /* Scan for sync words and IDAM. Because of the way we sync we
+             * expect to see only 2*4489 and thus consume only 3 words for the
+             * header. */
+            if (be16toh(buf[c++ & bufmask]) != 0x4489)
+                continue;
+            for (i = 0; i < 2; i++)
+                if ((x = mfmtobin(buf[c++ & bufmask])) != 0xa1)
+                    break;
+
+        }
+
+        switch (x) {
+
+        case 0xfe: /* IDAM */
+            if (im->sync == SYNC_fm) {
+                wrbuf[0] = x;
+                for (i = 1; i < 7; i++)
+                    wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+                id = wrbuf[3];
+            } else { /* MFM */
+                for (i = 0; i < 3; i++)
+                    wrbuf[i] = 0xa1;
+                wrbuf[i++] = x;
+                for (; i < 10; i++)
+                    wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+                id = wrbuf[6];
+            }
+            crc = crc16_ccitt(wrbuf, i, 0xffff);
+            if (crc != 0) {
+                printk("IMG IDAM Bad CRC %04x, sector %u\n", crc, id);
+                break;
+            }
+            /* Search by sector id for this sector's logical order. */
+            for (i = 0, sec = im->img.sec_info;
+                 (i < im->img.nr_sectors) && (sec->id != id);
+                 i++, sec++)
+                continue;
+            im->img.write_sector = i;
+            if (i >= im->img.nr_sectors) {
+                printk("IMG IDAM Bad Sector: %02x\n", id);
+                im->img.write_sector = -2;
+            }
+            break;
+
+        case 0xfb: /* DAM */
+            for (i = 0; i < (sec_sz + 2); i++)
+                wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+
+            if (im->img.write_sector < 0) {
+                printk("IMG DAM for unknown sector (%d)\n",
+                       im->img.write_sector);
+                break;
+            }
+
+            sec = &im->img.sec_info[im->img.write_sector];
+
+            crc = (im->sync == SYNC_fm)
+                ? crc16_ccitt(&x, 1, 0xffff)
+                : crc16_ccitt(mfm_dam_header, 4, 0xffff);
+            crc = crc16_ccitt(wrbuf, sec_sz + 2, crc);
+            if (crc != 0) {
+                printk("IMG Bad CRC %04x, sector %u[%02x]\n",
+                       crc, im->img.write_sector, sec->id);
+                break;
+            }
+
+            /* All good: write out to mass storage. */
+            printk("Write %u[%02x]/%u... ", im->img.write_sector,
+                   sec->id, im->img.nr_sectors);
+            t = time_now();
+            sec = im->img.sec_info;
+            for (i = off = 0; i < im->img.write_sector; i++)
+                off += sec_sz(sec++->no);
+            F_lseek(&im->fp, im->img.trk_off + off);
+            F_write(&im->fp, wrbuf, sec_sz, NULL);
+            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
+            break;
+        }
+    }
+
+    wr->cons = c * 16;
+
+    return flush;
 }
 
 static void img_dump_info(struct image *im)
@@ -1284,15 +1441,27 @@ static void img_dump_info(struct image *im)
 static void img_fetch_data(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
-    uint8_t sec, *buf = rd->p;
+    uint8_t *buf = rd->p;
+    struct img_sec *sec;
+    uint8_t *sec_map;
     uint16_t off, len;
+    unsigned int i;
 
     if (rd->prod != rd->cons)
         return;
 
-    sec = im->img.sec_map[im->img.trk_sec] - sec_base(im);
-    off = sec * sec_sz(im) + im->img.rd_sec_pos * 1024;
-    len = sec_sz(im) - im->img.rd_sec_pos * 1024;
+    off = 0;
+    sec_map = im->img.sec_map;
+    for (i = 0; i < im->img.trk_sec; i++) {
+        sec = &im->img.sec_info[*sec_map++];
+        off += sec_sz(sec->no);
+    }
+
+    sec = &im->img.sec_info[*sec_map];
+    len = sec_sz(sec->no);
+
+    off += im->img.rd_sec_pos * 1024;
+    len -= im->img.rd_sec_pos * 1024;
 
     if (len > 1024) {
         len = 1024;
@@ -1318,6 +1487,7 @@ static bool_t img_prep(struct image *im)
 
     im->img.sec_map = (uint8_t *)im->bufs.read_data.p
         + im->bufs.read_data.len - 256;
+    im->img.sec_info = (struct img_sec *)im->img.sec_map - 256;
 
     im->img.rpm = im->img.rpm ?: 300;
 
@@ -1341,8 +1511,9 @@ static bool_t mfm_open(struct image *im)
 {
     const uint8_t GAP_3[] = { 32, 54, 84, 116, 255, 255, 255, 255 };
     uint32_t tracklen;
-    unsigned int i;
     uint8_t gap_3 = im->img.gap_3;
+    uint8_t *sec_map;
+    unsigned int i;
 
     if (!img_prep(im))
         return FALSE;
@@ -1365,8 +1536,10 @@ static bool_t mfm_open(struct image *im)
     im->img.dam_sz_post += im->img.post_crc_syncs;
 
     /* Work out minimum track length (with no pre-index track gap). */
-    tracklen = enc_sec_sz(im) * im->img.nr_sectors;
-    tracklen += im->img.idx_sz;
+    sec_map = im->img.sec_map;
+    tracklen = im->img.idx_sz;
+    for (i = 0; i < im->img.nr_sectors; i++)
+        tracklen += enc_sec_sz(im, &im->img.sec_info[*sec_map++]);
     tracklen *= 16;
 
     if (im->img.data_rate == 0) {
@@ -1480,12 +1653,13 @@ static bool_t mfm_read_track(struct image *im)
         for (i = 0; i < sz; i++)
             emit_byte(0x4e);
     } else {
+        struct img_sec *sec = &im->img.sec_info[im->img.sec_map[(
+                    im->img.decode_pos-1)>>2]];
         switch ((im->img.decode_pos - 1) & 3) {
         case 0: /* IDAM */ {
             uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
-            uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 2];
-            uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe, cyl, hd, sec,
-                                im->img.sec_no };
+            uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe, cyl, hd,
+                                sec->id, sec->no };
             if (bc_space < im->img.idam_sz)
                 return FALSE;
             for (i = 0; i < idam_gap_sync(im); i++)
@@ -1516,7 +1690,7 @@ static bool_t mfm_read_track(struct image *im)
             break;
         }
         case 2: /* Data */ {
-            uint16_t sec_sz = sec_sz(im);
+            uint16_t sec_sz = sec_sz(sec->no);
             sec_sz -= im->img.decode_data_pos * 1024;
             if (bc_space < min_t(unsigned int, sec_sz, 1024))
                 return FALSE;
@@ -1557,112 +1731,6 @@ static bool_t mfm_read_track(struct image *im)
     return TRUE;
 }
 
-static bool_t mfm_write_track(struct image *im)
-{
-    const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
-
-    bool_t flush;
-    struct write *write = get_write(im, im->wr_cons);
-    struct image_buf *wr = &im->bufs.write_bc;
-    uint16_t *buf = wr->p;
-    unsigned int bufmask = (wr->len / 2) - 1;
-    uint8_t *wrbuf = im->bufs.write_data.p;
-    uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
-    unsigned int i;
-    time_t t;
-    uint16_t crc;
-    uint8_t x;
-
-    /* If we are processing final data then use the end index, rounded up. */
-    barrier();
-    flush = (im->wr_cons != im->wr_bc);
-    if (flush)
-        p = (write->bc_end + 15) / 16;
-
-    if (im->img.write_sector == -1) {
-        /* Convert write offset to sector number (in rotational order). */
-        im->img.write_sector =
-            (base - im->img.idx_sz - im->img.idam_sz + enc_sec_sz(im)/2)
-            / enc_sec_sz(im);
-        if (im->img.write_sector >= im->img.nr_sectors) {
-            printk("IMG Bad Sector Offset: %u -> %u\n",
-                   base, im->img.write_sector);
-            im->img.write_sector = -2;
-        } else {
-            /* Convert rotational order to logical order. */
-            im->img.write_sector = im->img.sec_map[im->img.write_sector];
-            im->img.write_sector -= sec_base(im);
-        }
-    }
-
-    while ((int16_t)(p - c) >= (3 + sec_sz(im) + 2)) {
-
-        /* Scan for sync words and IDAM. Because of the way we sync we expect
-         * to see only 2*4489 and thus consume only 3 words for the header. */
-        if (be16toh(buf[c++ & bufmask]) != 0x4489)
-            continue;
-        for (i = 0; i < 2; i++)
-            if ((x = mfmtobin(buf[c++ & bufmask])) != 0xa1)
-                break;
-
-        switch (x) {
-
-        case 0xfe: /* IDAM */
-            for (i = 0; i < 3; i++)
-                wrbuf[i] = 0xa1;
-            wrbuf[i++] = x;
-            for (; i < 10; i++)
-                wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
-            crc = crc16_ccitt(wrbuf, i, 0xffff);
-            if (crc != 0) {
-                printk("IMG IDAM Bad CRC %04x, sector %u\n", crc, wrbuf[6]);
-                break;
-            }
-            im->img.write_sector = wrbuf[6] - sec_base(im);
-            if ((uint8_t)im->img.write_sector >= im->img.nr_sectors) {
-                printk("IMG IDAM Bad Sector: %u\n", wrbuf[6]);
-                im->img.write_sector = -2;
-            }
-            break;
-
-        case 0xfb: /* DAM */
-            for (i = 0; i < (sec_sz(im) + 2); i++)
-                wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
-
-            crc = crc16_ccitt(wrbuf, sec_sz(im) + 2,
-                              crc16_ccitt(header, 4, 0xffff));
-            if (crc != 0) {
-                printk("IMG Bad CRC %04x, sector %u[%u]\n",
-                       crc, im->img.write_sector,
-                       im->img.write_sector + sec_base(im));
-                break;
-            }
-
-            if (im->img.write_sector < 0) {
-                printk("IMG DAM for unknown sector (%d)\n",
-                       im->img.write_sector);
-                break;
-            }
-
-            /* All good: write out to mass storage. */
-            printk("Write %u[%u]/%u... ", im->img.write_sector,
-                   im->img.write_sector + sec_base(im),
-                   im->img.nr_sectors);
-            t = time_now();
-            F_lseek(&im->fp,
-                    im->img.trk_off + im->img.write_sector*sec_sz(im));
-            F_write(&im->fp, wrbuf, sec_sz(im), NULL);
-            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
-            break;
-        }
-    }
-
-    wr->cons = c * 16;
-
-    return flush;
-}
-
 
 /*
  * FM-Specific Handlers
@@ -1676,6 +1744,8 @@ static bool_t fm_open(struct image *im)
 {
     const uint8_t FM_GAP_3[] = { 27, 42, 58, 138, 255, 255, 255, 255 };
     uint32_t tracklen;
+    uint8_t *sec_map;
+    unsigned int i;
 
     if (!img_prep(im))
         return FALSE;
@@ -1695,8 +1765,10 @@ static bool_t fm_open(struct image *im)
     im->img.dam_sz_post = 2 + im->img.gap_3;
 
     /* Work out minimum track length (with no pre-index track gap). */
-    tracklen = enc_sec_sz(im) * im->img.nr_sectors;
-    tracklen += im->img.idx_sz;
+    sec_map = im->img.sec_map;
+    tracklen = im->img.idx_sz;
+    for (i = 0; i < im->img.nr_sectors; i++)
+        tracklen += enc_sec_sz(im, &im->img.sec_info[*sec_map++]);
     tracklen *= 16;
 
     /* Calculate data rate and track length. */
@@ -1789,11 +1861,12 @@ static bool_t fm_read_track(struct image *im)
         for (i = 0; i < sz; i++)
             emit_byte(0xff);
     } else {
+        struct img_sec *sec = &im->img.sec_info[im->img.sec_map[(
+                    im->img.decode_pos-1)>>2]];
         switch ((im->img.decode_pos - 1) & 3) {
         case 0: /* IDAM */ {
             uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
-            uint8_t sec = im->img.sec_map[(im->img.decode_pos-1) >> 2];
-            uint8_t idam[5] = { 0xfe, cyl, hd, sec, im->img.sec_no };
+            uint8_t idam[5] = { 0xfe, cyl, hd, sec->id, sec->no };
             if (bc_space < im->img.idam_sz)
                 return FALSE;
             for (i = 0; i < FM_GAP_SYNC; i++)
@@ -1819,7 +1892,7 @@ static bool_t fm_read_track(struct image *im)
             break;
         }
         case 2: /* Data */ {
-            uint16_t sec_sz = sec_sz(im);
+            uint16_t sec_sz = sec_sz(sec->no);
             sec_sz -= im->img.decode_data_pos * 1024;
             if (bc_space < min_t(unsigned int, sec_sz, 1024))
                 return FALSE;
@@ -1856,108 +1929,6 @@ static bool_t fm_read_track(struct image *im)
     bc->prod = bc_p * 16;
 
     return TRUE;
-}
-
-static bool_t fm_write_track(struct image *im)
-{
-    bool_t flush;
-    struct write *write = get_write(im, im->wr_cons);
-    struct image_buf *wr = &im->bufs.write_bc;
-    uint16_t *buf = wr->p;
-    unsigned int bufmask = (wr->len / 2) - 1;
-    uint8_t *wrbuf = im->bufs.write_data.p;
-    uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
-    unsigned int i;
-    time_t t;
-    uint16_t crc, sync;
-    uint8_t x;
-
-    /* If we are processing final data then use the end index, rounded up. */
-    barrier();
-    flush = (im->wr_cons != im->wr_bc);
-    if (flush)
-        p = (write->bc_end + 15) / 16;
-
-    if (im->img.write_sector == -1) {
-        /* Convert write offset to sector number (in rotational order). */
-        im->img.write_sector =
-            (base - im->img.idx_sz - im->img.idam_sz + enc_sec_sz(im)/2)
-            / enc_sec_sz(im);
-        if (im->img.write_sector >= im->img.nr_sectors) {
-            printk("IMG Bad Sector Offset: %u -> %u\n",
-                   base, im->img.write_sector);
-            im->img.write_sector = -2;
-        } else {
-            /* Convert rotational order to logical order. */
-            im->img.write_sector = im->img.sec_map[im->img.write_sector];
-            im->img.write_sector -= sec_base(im);
-        }
-    }
-
-    while ((int16_t)(p - c) >= (2 + sec_sz(im) + 2)) {
-
-        if (buf[c++ & bufmask] != 0xaaaa)
-            continue;
-        sync = buf[c & bufmask];
-        if (mfmtobin(sync >> 1) != FM_SYNC_CLK)
-            continue;
-        x = mfmtobin(sync);
-        c++;
-
-        switch (x) {
-
-        case 0xfe: /* IDAM */
-            wrbuf[0] = x;
-            for (i = 1; i < 7; i++)
-                wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
-            crc = crc16_ccitt(wrbuf, i, 0xffff);
-            if (crc != 0) {
-                printk("IMG IDAM Bad CRC %04x, sector %u\n", crc, wrbuf[3]);
-                break;
-            }
-            im->img.write_sector = wrbuf[3] - sec_base(im);
-            if ((uint8_t)im->img.write_sector >= im->img.nr_sectors) {
-                printk("IMG IDAM Bad Sector: %u\n", wrbuf[3]);
-                im->img.write_sector = -2;
-            }
-            break;
-
-        case 0xfb: /* DAM */
-            for (i = 0; i < (sec_sz(im) + 2); i++)
-                wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
-
-            crc = crc16_ccitt(wrbuf, sec_sz(im) + 2,
-                              crc16_ccitt(&x, 1, 0xffff));
-            if (crc != 0) {
-                printk("IMG Bad CRC %04x, sector %u[%u]\n",
-                       crc, im->img.write_sector,
-                       im->img.write_sector + sec_base(im));
-                break;
-            }
-
-            if (im->img.write_sector < 0) {
-                printk("IMG DAM for unknown sector (%d)\n",
-                       im->img.write_sector);
-                break;
-            }
-
-            /* All good: write out to mass storage. */
-            printk("Write %u[%u]/%u... ", im->img.write_sector,
-                   im->img.write_sector + sec_base(im),
-                   im->img.nr_sectors);
-            t = time_now();
-            F_lseek(&im->fp,
-                    im->img.trk_off + im->img.write_sector*sec_sz(im));
-            F_write(&im->fp, wrbuf, sec_sz(im), NULL);
-            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
-            break;
-        }
-    }
-
-    wr->cons = c * 16;
-
-    return flush;
 }
 
 /*

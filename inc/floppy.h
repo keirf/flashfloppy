@@ -44,6 +44,11 @@ struct hfe_image {
     } write_batch;
 };
 
+struct img_sec {
+    uint8_t id;
+    uint8_t no; /* 3 bits */
+};
+
 struct img_image {
     uint32_t trk_off, base_off;
     uint16_t trk_sec, rd_sec_pos;
@@ -54,8 +59,9 @@ struct img_image {
     bool_t has_iam;
     uint8_t gap_2, gap_3, gap_4a;
     uint8_t post_crc_syncs;
-    int8_t write_sector;
+    int16_t write_sector;
     uint8_t sec_base[4], *sec_map;
+    struct img_sec *sec_info;
     uint8_t sec_no;
     uint8_t interleave, cskew, sskew;
     uint16_t data_rate, gap_4;
