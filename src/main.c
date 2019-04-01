@@ -50,11 +50,11 @@ static struct {
 
 uint8_t board_id;
 
-static uint32_t backlight_ticks;
-static uint8_t backlight_state;
-#define BACKLIGHT_OFF          0
-#define BACKLIGHT_SWITCHING_ON 1
-#define BACKLIGHT_ON           2
+static uint32_t display_ticks;
+static uint8_t display_state;
+enum { BACKLIGHT_OFF, BACKLIGHT_SWITCHING_ON, BACKLIGHT_ON };
+enum { LED_NORMAL, LED_TRACK, LED_TRACK_QUIESCENT,
+       LED_BUTTON_HELD, LED_BUTTON_RELEASED };
 
 static bool_t slot_valid(unsigned int i)
 {
@@ -86,9 +86,9 @@ static void lcd_on(void)
 {
     if (display_mode != DM_LCD_1602)
         return;
-    backlight_ticks = 0;
+    display_ticks = 0;
     barrier();
-    backlight_state = BACKLIGHT_ON;
+    display_state = BACKLIGHT_ON;
     barrier();
     lcd_backlight(ff_cfg.display_off_secs != 0);
 }
@@ -250,86 +250,121 @@ static void lcd_write_track_info(bool_t force)
     }
 }
 
-/* >0:  Display is locked. Timer counts down at 50Hz. 
- * ==0: Display is forced to display track # on next invocation.
- * <0:  Display updates track # as necessary. Timer does not count down. */
-static int8_t led_7seg_track_timer;
-static void led_7seg_update_track(void)
+static void led_7seg_update_track(bool_t force)
 {
     static struct track_info led_ti;
-    static uint8_t count;
+    static bool_t showing_track;
+    static uint8_t active_countdown;
+
+    bool_t changed;
     struct track_info ti;
-    unsigned int trk, digits;
-    bool_t force;
     char msg[4];
 
     if ((display_mode != DM_LED_7SEG)
         || (ff_cfg.display_type != DISPLAY_led_trk))
         return;
 
-    if (led_7seg_track_timer > 0) {
-        led_7seg_track_timer--;
-        return;
-    }
-    force = (led_7seg_track_timer == 0);
-    led_7seg_track_timer = -1;
-
     floppy_get_track(&ti);
+    changed = (ti.cyl != led_ti.cyl) || ((ti.side != led_ti.side) && ti.sel);
+
+    if (force) {
+        /* First call afer mounting new image: forcibly show track nr. */
+        display_state = LED_TRACK;
+        showing_track = FALSE;
+        changed = TRUE;
+    }
 
     if (ti.cyl >= DA_FIRST_CYL) {
         /* Display controlled by src/image/da.c */
+        display_state = LED_NORMAL;
+    }
+
+    if (changed) {
+        /* We will show new track nr unless overridden by a button press. */
+        if (display_state == LED_TRACK_QUIESCENT)
+            display_state = LED_TRACK;
+        active_countdown = 50*4;
+        led_ti = ti;
+    } else if (active_countdown != 0) {
+        /* Count down towards reverting to showing image nr. */
+        active_countdown--;
+    }
+
+    if ((display_state != LED_TRACK) || (active_countdown == 0)) {
+        if (showing_track)
+            display_write_slot(FALSE);
+        showing_track = FALSE;
+        active_countdown = 0;
+        if (display_state == LED_TRACK)
+            display_state = LED_TRACK_QUIESCENT;
         return;
     }
 
-    digits = led_7seg_nr_digits();
-    trk = ti.cyl * ti.nr_sides + ti.side;
-    trk = min_t(unsigned int, trk, (digits == 3) ? 999 : 99);
-    if (force || (ti.cyl != led_ti.cyl)
-        || ((ti.side != led_ti.side) && ti.sel)) {
-        if ((count++ == 0) && !force) {
-            /* Avoid display flicker during sequential track-by-track access.
-             * Eg. when cylinder changes (N->N+1) before side (1->0). */
-            return;
-        }
-        snprintf(msg, sizeof(msg), "%*u", digits, trk);
+    if (!showing_track || changed) {
+        snprintf(msg, sizeof(msg), "%2u%c", ti.cyl, ti.side ? 'k' : 'm');
         led_7seg_write_string(msg);
-        led_ti = ti;
+        showing_track = TRUE;
     }
-    count = 0;
 }
 
 /* Handle switching the LCD backlight. */
 static uint8_t lcd_handle_backlight(uint8_t b)
 {
-    if ((display_mode != DM_LCD_1602)
-        || (ff_cfg.display_off_secs == 0)
+    if ((ff_cfg.display_off_secs == 0)
         || (ff_cfg.display_off_secs == 0xff))
         return b;
 
-    switch (backlight_state) {
+    switch (display_state) {
     case BACKLIGHT_OFF:
         if (!b)
             break;
-        /* First button press is to turn on the backlight. Nothing more. */
+        /* First button press turns on the backlight. Nothing more. */
         b = 0;
-        backlight_state = BACKLIGHT_SWITCHING_ON;
+        display_state = BACKLIGHT_SWITCHING_ON;
         lcd_backlight(TRUE);
         break;
     case BACKLIGHT_SWITCHING_ON:
         /* We sit in this state until the button is released. */
         if (!b)
-            backlight_state = BACKLIGHT_ON;
+            display_state = BACKLIGHT_ON;
         b = 0;
-        backlight_ticks = 0;
+        display_ticks = 0;
         break;
     case BACKLIGHT_ON:
         /* After a period with no button activity we turn the backlight off. */
         if (b)
-            backlight_ticks = 0;
-        if (backlight_ticks++ >= 200*ff_cfg.display_off_secs) {
+            display_ticks = 0;
+        if (display_ticks++ >= 200*ff_cfg.display_off_secs) {
             lcd_backlight(FALSE);
-            backlight_state = BACKLIGHT_OFF;
+            display_state = BACKLIGHT_OFF;
         }
+        break;
+    }
+
+    return b;
+}
+
+static uint8_t led_handle_display(uint8_t b)
+{
+    switch (display_state) {
+    case LED_TRACK:
+        if (!b)
+            break;
+        /* First button press switches to image number. Nothing more. */
+        b = 0;
+        display_state = LED_BUTTON_HELD;
+        break;
+    case LED_BUTTON_HELD:
+        /* We sit in this state until the button is released. */
+        if (!b)
+            display_state = LED_BUTTON_RELEASED;
+        b = 0;
+        display_ticks = 0;
+        break;
+    case LED_BUTTON_RELEASED:
+        /* After a period with no button activity we return to track number. */
+        if (display_ticks++ >= 200*3)
+            display_state = LED_TRACK;
         break;
     }
 
@@ -395,22 +430,7 @@ static void button_timer_fn(void *unused)
         b = lcd_handle_backlight(b);
         break;
     case DM_LED_7SEG:
-        if (b) {
-            if (led_7seg_track_timer < 0) {
-                /* 7-seg display is showing track number. Force change to 
-                 * image number. */
-                display_write_slot(FALSE);
-            } else if (led_7seg_track_timer < 126) {
-                /* Button must have been released then re-pressed. We let this
-                 * second button press take effect. (While button is
-                 * continuously pressed we continually reset the countdown.) */
-                break;
-            }
-            /* Consume the button press and reset countdown timer for 
-             * re-instating track number on the LED display. */
-            led_7seg_track_timer = 127; /* 127*20ms ~= 2.5sec */
-            b = 0;
-        }
+        b = led_handle_display(b);
         break;
     }
 
@@ -1552,8 +1572,7 @@ static int run_floppy(void *_b)
 
     floppy_insert(0, &cfg.slot);
 
-    led_7seg_track_timer = 0;
-    led_7seg_update_track();
+    led_7seg_update_track(TRUE);
 
     update_ticks = time_ms(20);
     t_prev = time_now();
@@ -1561,7 +1580,7 @@ static int run_floppy(void *_b)
         t_now = time_now();
         t_diff = time_diff(t_prev, t_now);
         if ((update_ticks -= t_diff) <= 0) {
-            led_7seg_update_track();
+            led_7seg_update_track(FALSE);
             lcd_write_track_info(FALSE);
             update_ticks = time_ms(20);
         }
@@ -1574,7 +1593,9 @@ static int run_floppy(void *_b)
         t_prev = t_now;
     }
 
-    led_7seg_track_timer = 0;
+    if (display_mode == DM_LED_7SEG)
+        display_state = LED_NORMAL;
+
     return 0;
 }
 
