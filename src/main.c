@@ -265,7 +265,8 @@ static void led_7seg_update_track(bool_t force)
         return;
 
     floppy_get_track(&ti);
-    changed = (ti.cyl != led_ti.cyl) || ((ti.side != led_ti.side) && ti.sel);
+    changed = (ti.cyl != led_ti.cyl) || ((ti.side != led_ti.side) && ti.sel)
+        || (ti.writing != led_ti.writing);
 
     if (force) {
         /* First call afer mounting new image: forcibly show track nr. */
@@ -301,7 +302,9 @@ static void led_7seg_update_track(bool_t force)
     }
 
     if (!showing_track || changed) {
-        snprintf(msg, sizeof(msg), "%2u%c", ti.cyl, ti.side ? 'k' : 'm');
+        const static char status[] = { 'k', 'm', 'v', 'w' };
+        snprintf(msg, sizeof(msg), "%2u%c", ti.cyl,
+                 status[ti.side|(ti.writing<<1)]);
         led_7seg_write_string(msg);
         showing_track = TRUE;
     }

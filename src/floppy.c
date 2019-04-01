@@ -895,7 +895,6 @@ void floppy_get_track(struct track_info *ti)
     ti->side = drive.head & (drive.nr_sides - 1);
     ti->sel = drive.sel;
     ti->writing = (dma_wr && dma_wr->state != DMA_inactive);
-    ti->nr_sides = drive.nr_sides;
 }
 
 bool_t floppy_handle(void)
