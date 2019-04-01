@@ -88,8 +88,6 @@ struct __packed ff_cfg {
     uint8_t host;
     /* Bitfields within display_type field. */
 #define DISPLAY_auto     0
-#define DISPLAY_led      0
-#define DISPLAY_trk      (1<<2) /* only if DISPLAY_led */
 #define DISPLAY_lcd      (1<<0)
 #define DISPLAY_oled     (1<<1)
 #define DISPLAY_narrower (1<<0) /* only if DISPLAY_oled */
@@ -98,7 +96,6 @@ struct __packed ff_cfg {
 #define DISPLAY_sh1106   (1<<4) /* only if DISPLAY_oled */
 #define DISPLAY_oled_64  (1<<5) /* only if DISPLAY_oled */
 #define _DISPLAY_lcd_columns 5 /* only if DISPLAY_lcd */
-#define DISPLAY_led_trk  (DISPLAY_led | DISPLAY_trk)
 #define DISPLAY_lcd_columns(x) ((x)<<_DISPLAY_lcd_columns)
     uint16_t display_type;
 #define ROT_none    0

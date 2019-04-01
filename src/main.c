@@ -260,8 +260,7 @@ static void led_7seg_update_track(bool_t force)
     struct track_info ti;
     char msg[4];
 
-    if ((display_mode != DM_LED_7SEG)
-        || (ff_cfg.display_type != DISPLAY_led_trk))
+    if (display_mode != DM_LED_7SEG)
         return;
 
     floppy_get_track(&ti);
@@ -851,8 +850,6 @@ static void read_ff_cfg(void)
                     ff_cfg.display_type = DISPLAY_lcd;
                 } else if (!strcmp(p, "oled")) {
                     ff_cfg.display_type = DISPLAY_oled;
-                } else if (!strcmp(p, "trk")) {
-                    ff_cfg.display_type = DISPLAY_led_trk;
                 } else if (!strcmp(p, "rotate")) {
                     ff_cfg.display_type |= DISPLAY_rotate;
                 } else if (!strncmp(p, "narrow", 6)) {
@@ -1848,15 +1845,6 @@ static int floppy_main(void *unused)
                 delay_ms(1);
                 lcd_scroll.ticks -= time_ms(1);
                 lcd_scroll_name();
-            }
-
-            /* Flash the LED display to indicate loading the new image. */
-            if (!(b & (B_LEFT|B_RIGHT)) && (display_mode == DM_LED_7SEG)
-                && (ff_cfg.display_type != DISPLAY_led_trk)) {
-                led_7seg_display_setting(FALSE);
-                delay_ms(200);
-                led_7seg_display_setting(TRUE);
-                b = buttons;
             }
 
             /* Wait for select button to be released. */
