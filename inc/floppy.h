@@ -49,22 +49,29 @@ struct img_sec {
     uint8_t no; /* 3 bits */
 };
 
+struct img_trk {
+    uint16_t nr_sectors;
+    uint16_t sec_off;
+    uint16_t data_rate;
+    uint8_t gap_3;
+};
+
 struct img_image {
     uint32_t trk_off, base_off;
     uint16_t trk_sec, rd_sec_pos;
-    uint16_t rpm, nr_sectors;
+    uint16_t rpm;
     int32_t decode_pos;
     uint16_t decode_data_pos, crc;
     uint8_t layout; /* LAYOUT_* */
     bool_t has_iam;
-    uint8_t gap_2, gap_3, gap_4a;
+    uint8_t gap_2, gap_4a;
     uint8_t post_crc_syncs;
     int16_t write_sector;
-    uint8_t sec_base[4], *sec_map;
-    struct img_sec *sec_info;
-    uint8_t sec_no;
+    uint8_t *sec_map, *trk_map;
+    struct img_trk *trk, *trk_info;
+    struct img_sec *sec_info, *sec_info_base;
     uint8_t interleave, cskew, sskew;
-    uint16_t data_rate, gap_4;
+    uint16_t gap_4;
     uint32_t idx_sz, idam_sz;
     uint16_t dam_sz_pre, dam_sz_post;
 };
