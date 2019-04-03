@@ -27,6 +27,11 @@ const static struct simple_layout {
 } dfl_simple_layout = { 0, ~0, 0, { 1, 1 } };
 static void simple_layout(
     struct image *im, const struct simple_layout *layout);
+
+static struct img_trk *add_track_layout(
+    struct image *im, unsigned int nr_sectors, unsigned int trk_idx);
+static uint8_t *add_track_map(struct image *im);
+
 static bool_t msx_open(struct image *im);
 static bool_t pc_dos_open(struct image *im);
 static bool_t ti99_open(struct image *im);
@@ -210,11 +215,6 @@ found:
     simple_layout(im, &layout);
 
     return mfm_open(im);
-}
-
-static bool_t adfs_open(struct image *im)
-{
-    return _img_open(im, adfs_type);
 }
 
 enum tag_result { TR_success, TR_fail, TR_no_match };
@@ -461,6 +461,76 @@ fallback:
     /* Fall back to default list. */
     reset_img_params(im);
     return _img_open(im, img_type);
+}
+
+static bool_t adfs_open(struct image *im)
+{
+    return _img_open(im, adfs_type);
+}
+
+static bool_t atr_open(struct image *im)
+{
+    struct {
+        uint16_t sig, size_lo, size_sec, size_hi;
+        uint8_t flags, unused[7];
+    } header;
+    bool_t is_mfm;
+    unsigned int i, j, sz, no, nr_sectors;
+    struct img_sec *sec;
+    struct img_trk *trk;
+    uint8_t *trk_map;
+
+    F_read(&im->fp, &header, sizeof(header), NULL);
+    if (le16toh(header.sig) != 0x0296)
+        return FALSE;
+    sz = (unsigned int)le16toh(header.size_lo) << 4;
+    no = le16toh(header.size_sec) / 256; /* 128 or 256 -> 0 or 1 */
+
+    /* 40-1-18, 256b/s, MFM */
+    nr_sectors = 18;
+    im->nr_cyls = 40;
+    im->nr_sides = 1;
+    is_mfm = TRUE;
+    if (no == 0) {
+        /* 40-1-18, 128b/s, FM */
+        is_mfm = (sz >= (130*1024));
+        if (is_mfm) {
+            /* 40-1-26, 128b/s, MFM */
+            nr_sectors = 26;
+        }
+    } else if (sz >= (360*1024-3*128)) {
+        /* 40-2-18, 256b/s, MFM */
+        im->nr_sides = 2;
+    }
+    im->img.interleave = 1;
+    im->img.has_iam = TRUE;
+    im->img.base_off = 16;
+
+    /* Create two track layout: 0 -> Track 0; 1 -> All other tracks. */
+    for (i = 0; i < 2; i++) {
+        trk = add_track_layout(im, nr_sectors, i);
+        sec = &im->img.sec_info_base[trk->sec_off];
+        for (j = 0; j < nr_sectors; j++) {
+            sec->id = j + 1;
+            sec->no = no;
+            sec++;
+        }
+    }
+
+    /* Track 0 layout: First three sectors are always 128 bytes. */
+    sec = &im->img.sec_info_base[im->img.trk_info[0].sec_off];
+    for (i = 0; i < 3; i++) {
+        sec->no = 0;
+        sec++;
+    }
+
+    /* Track map: Special layout for first track only. */
+    trk_map = add_track_map(im);
+    *trk_map++ = 0;
+    for (i = 1; i < im->nr_cyls * im->nr_sides; i++)
+        *trk_map++ = 1;
+
+    return is_mfm ? mfm_open(im) : fm_open(im);
 }
 
 static bool_t d81_open(struct image *im)
@@ -1043,6 +1113,14 @@ const struct image_handler adfs_image_handler = {
     .write_track = img_write_track,
 };
 
+const struct image_handler atr_image_handler = {
+    .open = atr_open,
+    .setup_track = img_setup_track,
+    .read_track = img_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = img_write_track,
+};
+
 const struct image_handler mbd_image_handler = {
     .open = mbd_open,
     .setup_track = img_setup_track,
@@ -1556,31 +1634,90 @@ static void img_fetch_data(struct image *im)
     rd->prod++;
 }
 
-static uint8_t *adj_p(uint8_t *p, unsigned int sz)
+static void *align_p(void *p)
 {
-    sz = (sz + 3) & ~3;
-    return p - sz;
+    return (void *)((uint32_t)p&~3);
+}
+
+static void check_p(void *p, struct image *im)
+{
+    uint8_t *a = p, *b = (uint8_t *)im->bufs.read_data.p;
+    if ((int32_t)(a-b) < 8192)
+        F_die(FR_BAD_IMAGE);
+}
+
+static struct img_trk *add_track_layout(
+    struct image *im, unsigned int nr_sectors, unsigned int trk_idx)
+{
+    struct img_sec *sec;
+    struct img_trk *trk;
+    void *p;
+    unsigned int i;
+
+    if ((im->nr_sides < 1) || (im->nr_sides > 2)
+        || (im->nr_cyls < 1) || (im->nr_cyls > 254)
+        || (nr_sectors < 1) || (nr_sectors > 256))
+        F_die(FR_BAD_IMAGE);
+
+    if (!im->img.trk_info) {
+        p = (uint8_t *)im->bufs.read_data.p + im->bufs.read_data.len;
+        p = align_p(p);
+        im->img.sec_info_base = p;
+        im->img.trk_info = p;
+    }
+
+    sec = im->img.sec_info_base - nr_sectors;
+    trk = (struct img_trk *)align_p(sec) - trk_idx - 1;
+    check_p(trk, im);
+
+    memcpy(trk, im->img.trk_info, trk_idx * sizeof(*trk));
+    for (i = 0; i < trk_idx; i++)
+        trk[i].sec_off += nr_sectors;
+    memset(&trk[i], 0, sizeof(*trk));
+    trk[i].nr_sectors = nr_sectors;
+
+    im->img.sec_info_base = sec;
+    im->img.trk_info = trk;
+
+    return &trk[i];
+}
+
+/* Create track map. This maps track# to a track-info structure. */
+static uint8_t *add_track_map(struct image *im)
+{
+    uint8_t *trk_map, *sec_map;
+    struct img_sec *top, *sec;
+
+    top = align_p((uint8_t *)im->bufs.read_data.p + im->bufs.read_data.len);
+    sec = im->img.sec_info_base;
+    while (sec < top) {
+        if (sec->no > 6)
+            F_die(FR_BAD_IMAGE);
+        sec++;
+    }
+
+    trk_map = (uint8_t *)im->img.trk_info - im->nr_cyls * im->nr_sides;
+    sec_map = trk_map - 256;
+    check_p(sec_map, im);
+
+    im->img.trk_map = trk_map;
+    im->img.sec_map = sec_map;
+
+    return trk_map;
 }
 
 static void simple_layout(struct image *im, const struct simple_layout *layout)
 {
     struct img_sec *sec;
     struct img_trk *trk;
-    uint8_t *trk_map, *p;
+    uint8_t *trk_map;
     unsigned int i, j;
 
-    if ((im->nr_sides < 1) || (im->nr_sides > 2)
-        || (im->nr_cyls < 1) || (im->nr_cyls > 254)
-        || (layout->nr_sectors < 1) || (layout->nr_sectors > 256)
-        || (layout->no > 6))
-        F_die(FR_BAD_IMAGE);
-
-    p = (uint8_t *)im->bufs.read_data.p + im->bufs.read_data.len;
-
-    /* Create a sector-info list. There is one per side. */
-    p = adj_p(p, layout->nr_sectors * im->nr_sides * sizeof(*sec));
-    sec = im->img.sec_info_base = (struct img_sec *)p;
+    /* Create a track layout per side. */
     for (i = 0; i < im->nr_sides; i++) {
+        trk = add_track_layout(im, layout->nr_sectors, i);
+        trk->gap_3 = layout->gap3;
+        sec = &im->img.sec_info_base[trk->sec_off];
         for (j = 0; j < layout->nr_sectors; j++) {
             sec->id = j + layout->base[i];
             sec->no = layout->no;
@@ -1588,36 +1725,11 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
         }
     }
 
-    /* Create the track-info list. One per side. */
-    p = adj_p(p, im->nr_sides * sizeof(*trk));
-    trk = im->img.trk_info = (struct img_trk *)p;
-    for (j = 0; j < im->nr_sides; j++) {
-        trk->nr_sectors = layout->nr_sectors;
-        trk->sec_off = j * layout->nr_sectors;
-        trk++;
-    }
-
-    /* Create track map. This maps track# to a track-info structure. */
-    p = adj_p(p, im->nr_cyls * im->nr_sides * sizeof(*trk_map));
-    trk_map = im->img.trk_map = (uint8_t *)p;
+    /* Create track map, mapping each side to its respective layout. */
+    trk_map = add_track_map(im);
     for (i = 0; i < im->nr_cyls; i++)
         for (j = 0; j < im->nr_sides; j++)
             *trk_map++ = j;
-            
-    memset(trk_map, 0, im->nr_cyls * im->nr_sides);
-}
-
-static void img_prep(struct image *im)
-{
-    uint8_t *p;
-
-    /* Allocate space for the sector map. This gets repopulated every time we 
-     * seek to a new track. */
-    ASSERT(im->img.trk_map != NULL);
-    p = adj_p(im->img.trk_map, 256 * sizeof(struct img_sec));
-    im->img.sec_map = (uint8_t *)p;
-
-    im->img.rpm = im->img.rpm ?: 300;
 }
 
 
@@ -1712,8 +1824,7 @@ static void mfm_prep_track(struct image *im)
 
 static bool_t mfm_open(struct image *im)
 {
-    img_prep(im);
-
+    im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: GAP_2;
     im->img.gap_4a = im->img.gap_4a ?: GAP_4A;
     im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
@@ -1914,8 +2025,7 @@ static void fm_prep_track(struct image *im)
 
 static bool_t fm_open(struct image *im)
 {
-    img_prep(im);
-
+    im->img.rpm = im->img.rpm ?: 300;
     im->img.gap_2 = im->img.gap_2 ?: FM_GAP_2;
     /* Default post-index gap size depends on whether the track format includes 
      * IAM or not (see uPD765A/7265 Datasheet). */
