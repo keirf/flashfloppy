@@ -44,17 +44,17 @@ struct hfe_image {
     } write_batch;
 };
 
-struct img_sec {
+struct raw_sec {
     uint8_t id;
     uint8_t no; /* 3 bits */
 };
 
-struct img_trk {
+struct raw_trk {
     uint16_t nr_sectors;
     uint16_t sec_off;
     uint16_t data_rate;
     uint8_t gap_2, gap_3, gap_4a;
-    uint8_t has_iam;
+    uint8_t has_iam, is_fm;
 };
 
 struct img_image {
@@ -67,8 +67,8 @@ struct img_image {
     uint8_t post_crc_syncs;
     int16_t write_sector;
     uint8_t *sec_map, *trk_map;
-    struct img_trk *trk, *trk_info;
-    struct img_sec *sec_info, *sec_info_base;
+    struct raw_trk *trk, *trk_info;
+    struct raw_sec *sec_info, *sec_info_base;
     uint8_t interleave, cskew, sskew;
     uint16_t gap_4;
     uint32_t idx_sz, idam_sz;
