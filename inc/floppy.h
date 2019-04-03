@@ -53,7 +53,8 @@ struct img_trk {
     uint16_t nr_sectors;
     uint16_t sec_off;
     uint16_t data_rate;
-    uint8_t gap_3;
+    uint8_t gap_2, gap_3, gap_4a;
+    uint8_t has_iam;
 };
 
 struct img_image {
@@ -63,8 +64,6 @@ struct img_image {
     int32_t decode_pos;
     uint16_t decode_data_pos, crc;
     uint8_t layout; /* LAYOUT_* */
-    bool_t has_iam;
-    uint8_t gap_2, gap_4a;
     uint8_t post_crc_syncs;
     int16_t write_sector;
     uint8_t *sec_map, *trk_map;

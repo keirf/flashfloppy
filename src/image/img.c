@@ -23,8 +23,8 @@ static bool_t fm_read_track(struct image *im);
 
 const static struct simple_layout {
     uint16_t nr_sectors;
-    uint8_t no, gap3, base[2];
-} dfl_simple_layout = { 0, ~0, 0, { 1, 1 } };
+    uint8_t has_iam, no, gap3, gap4a, base[2];
+} dfl_simple_layout = { 0, TRUE, ~0, 0, 0, { 1, 1 } };
 static void simple_layout(
     struct image *im, const struct simple_layout *layout);
 
@@ -35,6 +35,7 @@ static uint8_t *add_track_map(struct image *im);
 static bool_t msx_open(struct image *im);
 static bool_t pc_dos_open(struct image *im);
 static bool_t ti99_open(struct image *im);
+static bool_t uknc_open(struct image *im);
 
 #define LAYOUT_sequential      (1u<<0)
 #define LAYOUT_sides_swapped   (1u<<1)
@@ -203,11 +204,12 @@ found:
     im->img.sskew = type->sskew;
     im->img.cskew = type->cskew;
     im->img.rpm = (type->rpm + 5) * 60;
-    im->img.has_iam = type->has_iam;
 
+    layout.has_iam = type->has_iam;
     layout.nr_sectors = type->nr_secs;
     layout.no = type->no;
     layout.gap3 = type->gap3;
+    layout.gap4a = 0;
     layout.base[0] = layout.base[1] = type->base;
     if (type->inter_track_numbering == _ITN)
         layout.base[1] += type->nr_secs;
@@ -295,7 +297,6 @@ static enum tag_result tag_open(struct image *im, char *tag)
                 is_fm = FALSE;
                 reset_img_params(im);
                 im->img.interleave = 1;
-                im->img.has_iam = TRUE;
                 data_rate = 0;
                 layout = dfl_simple_layout;
             }
@@ -348,7 +349,7 @@ static enum tag_result tag_open(struct image *im, char *tag)
             layout.gap3 = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_iam:
-            im->img.has_iam = !strcmp(opts.arg, "yes");
+            layout.has_iam = !strcmp(opts.arg, "yes");
             break;
         case IMGCFG_rate:
             data_rate = strtol(opts.arg, NULL, 10);
@@ -444,10 +445,7 @@ static bool_t img_open(struct image *im)
     case HOST_ti99:
         return ti99_open(im);
     case HOST_uknc:
-        im->img.gap_2 = 24;
-        im->img.gap_4a = 27;
-        im->img.post_crc_syncs = 1;
-        return _img_open(im, uknc_type);
+        return uknc_open(im);
     default:
         type = img_type;
         break;
@@ -503,12 +501,12 @@ static bool_t atr_open(struct image *im)
         im->nr_sides = 2;
     }
     im->img.interleave = 1;
-    im->img.has_iam = TRUE;
     im->img.base_off = 16;
 
     /* Create two track layout: 0 -> Track 0; 1 -> All other tracks. */
     for (i = 0; i < 2; i++) {
         trk = add_track_layout(im, nr_sectors, i);
+        trk->has_iam = TRUE;
         sec = &im->img.sec_info_base[trk->sec_off];
         for (j = 0; j < nr_sectors; j++) {
             sec->id = j + 1;
@@ -604,7 +602,6 @@ static bool_t pc98fdi_open(struct image *im)
     im->nr_cyls = le32toh(header.cyls);
     im->nr_sides = le32toh(header.nr_sides);
     im->img.interleave = 1;
-    im->img.has_iam = TRUE;
     /* Skip 4096-byte header. */
     im->img.base_off = le32toh(header.header_size);
     simple_layout(im, &layout);
@@ -669,7 +666,6 @@ static bool_t msx_open(struct image *im)
             im->nr_sides = bpb.num_heads;
             im->nr_cyls = (im->nr_sides == 1) ? 80 : 40;
             im->img.interleave = 1;
-            im->img.has_iam = TRUE;
             simple_layout(im, &layout);
             if (mfm_open(im))
                 return TRUE;
@@ -716,7 +712,6 @@ static bool_t pc_dos_open(struct image *im)
         goto fail;
 
     im->img.interleave = 1;
-    im->img.has_iam = TRUE;
 
     simple_layout(im, &layout);
     return mfm_open(im);
@@ -729,6 +724,7 @@ static bool_t trd_open(struct image *im)
 {
     const struct simple_layout layout = {
         .nr_sectors = 16,
+        .has_iam = TRUE,
         .no = 1, /* 256-byte */
         .gap3 = 57,
         .base = { 1, 1 }
@@ -770,7 +766,6 @@ static bool_t trd_open(struct image *im)
     }
 
     im->img.interleave = 1;
-    im->img.has_iam = TRUE;
 
     simple_layout(im, &layout);
     return mfm_open(im);
@@ -780,6 +775,7 @@ static bool_t opd_open(struct image *im)
 {
     const struct simple_layout layout = {
         .nr_sectors = 18,
+        .has_iam = TRUE,
         .no = 1, /* 256-byte */
         .gap3 = 12,
         .base = { 0, 0 }
@@ -800,7 +796,6 @@ static bool_t opd_open(struct image *im)
 
     im->img.interleave = 13;
     im->img.cskew = 13;
-    im->img.has_iam = TRUE;
 
     simple_layout(im, &layout);
     return mfm_open(im);
@@ -864,7 +859,6 @@ static bool_t sdu_open(struct image *im)
     layout.no = 2; /* 512-byte sectors */
     layout.gap3 = 84; /* standard gap3 */
     im->img.interleave = 1; /* no interleave */
-    im->img.has_iam = TRUE;
 
     /* Skip 46-byte SABDU header. */
     im->img.base_off = 46;
@@ -906,7 +900,6 @@ static bool_t ti99_open(struct image *im)
     F_read(&im->fp, &vib, sizeof(vib), NULL);
     have_vib = !strncmp(vib.id, "DSK", 3);
 
-    im->img.has_iam = FALSE;
     im->img.interleave = 4;
     im->img.cskew = 3;
     layout.no = 1;
@@ -996,6 +989,30 @@ static bool_t ti99_open(struct image *im)
     return FALSE;
 }
 
+static bool_t uknc_open(struct image *im)
+{
+    struct img_trk *trk;
+    unsigned int i;
+    bool_t ok;
+
+    /* All tracks have special extra sync marks. */
+    im->img.post_crc_syncs = 1;
+
+    ok = _img_open(im, uknc_type);
+
+    if (ok) {
+        trk = im->img.trk_info;
+        for (i = 0; i < im->nr_sides; i++) {
+            /* All tracks have custom GAP2 and GAP4A. */
+            trk->gap_2 = 24;
+            trk->gap_4a = 27;
+            trk++;
+        }
+    }
+
+    return ok;
+}
+
 static bool_t jvc_open(struct image *im)
 {
     struct jvc {
@@ -1004,7 +1021,7 @@ static bool_t jvc_open(struct image *im)
         18, 1, 1, 1, 0
     };
     unsigned int bps, bpc;
-    struct simple_layout layout;
+    struct simple_layout layout = dfl_simple_layout;
 
     im->img.base_off = f_size(&im->fp) & 255;
 
@@ -1021,6 +1038,7 @@ static bool_t jvc_open(struct image *im)
     layout.base[0] = layout.base[1] = jvc.sec_id;
     layout.nr_sectors = jvc.spt;
     layout.gap3 = 20;
+    layout.gap4a = 54;
 
     /* Calculate number of cylinders. */
     bps = 128 << layout.no;
@@ -1033,9 +1051,6 @@ static bool_t jvc_open(struct image *im)
     }
     if ((im_size(im) % bpc) >= bps)
         im->nr_cyls++;
-
-    im->img.gap_4a = 54;
-    im->img.has_iam = TRUE;
 
     simple_layout(im, &layout);
     return mfm_open(im);
@@ -1052,8 +1067,10 @@ static bool_t vdk_open(struct image *im)
     } vdk;
     const struct simple_layout layout = {
         .nr_sectors = 18,
+        .has_iam = TRUE,
         .no = 1, /* 256-byte sectors */
         .gap3 = 20,
+        .gap4a = 54,
         .base = { 1, 1 }
     };
 
@@ -1072,8 +1089,6 @@ static bool_t vdk_open(struct image *im)
 
     /* Fill in the rest of the geometry. */
     im->img.interleave = 2; /* DDOS likes a 2:1 interleave (ref. xroar) */
-    im->img.gap_4a = 54;
-    im->img.has_iam = TRUE;
 
     im->img.base_off = le16toh(vdk.hlen);
 
@@ -1581,9 +1596,9 @@ static void img_dump_info(struct image *im)
     printk(" rpm: %u, tracklen: %u, datarate: %u\n",
            im->img.rpm, im->tracklen_bc, trk->data_rate);
     printk(" gap2: %u, gap3: %u, gap4a: %u, gap4: %u\n",
-           im->img.gap_2, trk->gap_3, im->img.gap_4a, im->img.gap_4);
+           trk->gap_2, trk->gap_3, trk->gap_4a, im->img.gap_4);
     printk(" ticks_per_cell: %u, write_bc_ticks: %u, has_iam: %u\n",
-           im->ticks_per_cell, im->write_bc_ticks, im->img.has_iam);
+           im->ticks_per_cell, im->write_bc_ticks, trk->has_iam);
     printk(" interleave: %u, cskew %u, sskew %u\n ",
            im->img.interleave, im->img.cskew, im->img.sskew);
     printk(" file-layout: %x\n", im->img.layout);
@@ -1717,6 +1732,7 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
     for (i = 0; i < im->nr_sides; i++) {
         trk = add_track_layout(im, layout->nr_sectors, i);
         trk->gap_3 = layout->gap3;
+        trk->gap_4a = layout->gap4a;
         sec = &im->img.sec_info_base[trk->sec_off];
         for (j = 0; j < layout->nr_sectors; j++) {
             sec->id = j + layout->base[i];
@@ -1753,13 +1769,15 @@ static void mfm_prep_track(struct image *im)
     uint8_t gap_3 = trk->gap_3;
     unsigned int i;
 
+    trk->gap_2 = trk->gap_2 ?: GAP_2;
     /* GAP_SYNC is a suitable small initial guess for auto GAP3. */
     trk->gap_3 = trk->gap_3 ?: GAP_SYNC;
+    trk->gap_4a = trk->gap_4a ?: GAP_4A;
 
-    im->img.idx_sz = im->img.gap_4a;
-    if (im->img.has_iam)
+    im->img.idx_sz = trk->gap_4a;
+    if (trk->has_iam)
         im->img.idx_sz += GAP_SYNC + 4 + GAP_1;
-    im->img.idam_sz = idam_gap_sync(im) + 8 + 2 + im->img.gap_2;
+    im->img.idam_sz = idam_gap_sync(im) + 8 + 2 + trk->gap_2;
     im->img.dam_sz_pre = GAP_SYNC + 4;
     im->img.dam_sz_post = 2 + trk->gap_3;
 
@@ -1799,11 +1817,11 @@ static void mfm_prep_track(struct image *im)
 
     /* Does the track data fit within standard track length? */
     if (im->tracklen_bc < tracklen) {
-        if ((tracklen - im->img.gap_4a*16) <= im->tracklen_bc) {
+        if ((tracklen - trk->gap_4a*16) <= im->tracklen_bc) {
             /* Eliminate the post-index gap 4a if that suffices. */
-            tracklen -= im->img.gap_4a*16;
-            im->img.idx_sz -= im->img.gap_4a;
-            im->img.gap_4a = 0;
+            tracklen -= trk->gap_4a*16;
+            im->img.idx_sz -= trk->gap_4a;
+            trk->gap_4a = 0;
         } else {
             /* Extend the track length ("long track"). */
             im->tracklen_bc = tracklen + 100;
@@ -1825,8 +1843,6 @@ static void mfm_prep_track(struct image *im)
 static bool_t mfm_open(struct image *im)
 {
     im->img.rpm = im->img.rpm ?: 300;
-    im->img.gap_2 = im->img.gap_2 ?: GAP_2;
-    im->img.gap_4a = im->img.gap_4a ?: GAP_4A;
     im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
     im->sync = SYNC_mfm;
 
@@ -1837,6 +1853,7 @@ static bool_t mfm_read_track(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
+    struct img_trk *trk = im->img.trk;
     uint8_t *buf = rd->p;
     uint16_t *bc_b = bc->p;
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
@@ -1862,9 +1879,9 @@ static bool_t mfm_read_track(struct image *im)
         /* Post-index track gap */
         if (bc_space < im->img.idx_sz)
             return FALSE;
-        for (i = 0; i < im->img.gap_4a; i++)
+        for (i = 0; i < trk->gap_4a; i++)
             emit_byte(0x4e);
-        if (im->img.has_iam) {
+        if (trk->has_iam) {
             /* IAM */
             for (i = 0; i < GAP_SYNC; i++)
                 emit_byte(0x00);
@@ -1874,7 +1891,7 @@ static bool_t mfm_read_track(struct image *im)
             for (i = 0; i < GAP_1; i++)
                 emit_byte(0x4e);
         }
-    } else if (im->img.decode_pos == (im->img.trk->nr_sectors * 4 + 1)) {
+    } else if (im->img.decode_pos == (trk->nr_sectors * 4 + 1)) {
         /* Pre-index track gap */
         uint16_t sz = im->img.gap_4 - im->img.decode_data_pos * 1024;
         if (bc_space < min_t(unsigned int, sz, 1024))
@@ -1910,7 +1927,7 @@ static bool_t mfm_read_track(struct image *im)
             emit_byte(crc);
             for (i = 0; i < im->img.post_crc_syncs; i++)
                 emit_raw(0x4489);
-            for (i = 0; i < im->img.gap_2; i++)
+            for (i = 0; i < trk->gap_2; i++)
                 emit_byte(0x4e);
             break;
         }
@@ -1952,7 +1969,7 @@ static bool_t mfm_read_track(struct image *im)
             emit_byte(crc);
             for (i = 0; i < im->img.post_crc_syncs; i++)
                 emit_raw(0x4489);
-            for (i = 0; i < im->img.trk->gap_3; i++)
+            for (i = 0; i < trk->gap_3; i++)
                 emit_byte(0x4e);
             break;
         }
@@ -1984,10 +2001,15 @@ static void fm_prep_track(struct image *im)
     uint32_t tracklen;
     unsigned int i;
 
-    im->img.idx_sz = im->img.gap_4a;
-    if (im->img.has_iam)
+    trk->gap_2 = trk->gap_2 ?: FM_GAP_2;
+    /* Default post-index gap size depends on whether the track format includes 
+     * IAM or not (see uPD765A/7265 Datasheet). */
+    trk->gap_4a = trk->gap_4a ?: trk->has_iam ? 40 : 16;
+
+    im->img.idx_sz = trk->gap_4a;
+    if (trk->has_iam)
         im->img.idx_sz += FM_GAP_SYNC + 1 + FM_GAP_1;
-    im->img.idam_sz = FM_GAP_SYNC + 5 + 2 + im->img.gap_2;
+    im->img.idam_sz = FM_GAP_SYNC + 5 + 2 + trk->gap_2;
     im->img.dam_sz_pre = FM_GAP_SYNC + 1;
     im->img.dam_sz_post = 2 + trk->gap_3;
 
@@ -2026,10 +2048,6 @@ static void fm_prep_track(struct image *im)
 static bool_t fm_open(struct image *im)
 {
     im->img.rpm = im->img.rpm ?: 300;
-    im->img.gap_2 = im->img.gap_2 ?: FM_GAP_2;
-    /* Default post-index gap size depends on whether the track format includes 
-     * IAM or not (see uPD765A/7265 Datasheet). */
-    im->img.gap_4a = im->img.gap_4a ?: im->img.has_iam ? 40 : 16;
     im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
     im->sync = SYNC_fm;
 
@@ -2047,6 +2065,7 @@ static bool_t fm_read_track(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
+    struct img_trk *trk = im->img.trk;
     uint8_t *buf = rd->p;
     uint16_t crc, *bc_b = bc->p;
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
@@ -2070,9 +2089,9 @@ static bool_t fm_read_track(struct image *im)
         /* Post-index track gap */
         if (bc_space < im->img.idx_sz)
             return FALSE;
-        for (i = 0; i < im->img.gap_4a; i++)
+        for (i = 0; i < trk->gap_4a; i++)
             emit_byte(0xff);
-        if (im->img.has_iam) {
+        if (trk->has_iam) {
             /* IAM */
             for (i = 0; i < FM_GAP_SYNC; i++)
                 emit_byte(0x00);
@@ -2080,7 +2099,7 @@ static bool_t fm_read_track(struct image *im)
             for (i = 0; i < FM_GAP_1; i++)
                 emit_byte(0xff);
         }
-    } else if (im->img.decode_pos == (im->img.trk->nr_sectors * 4 + 1)) {
+    } else if (im->img.decode_pos == (trk->nr_sectors * 4 + 1)) {
         /* Pre-index track gap */
         uint16_t sz = im->img.gap_4 - im->img.decode_data_pos * 1024;
         if (bc_space < min_t(unsigned int, sz, 1024))
@@ -2112,7 +2131,7 @@ static bool_t fm_read_track(struct image *im)
             crc = crc16_ccitt(idam, sizeof(idam), 0xffff);
             emit_byte(crc >> 8);
             emit_byte(crc);
-            for (i = 0; i < im->img.gap_2; i++)
+            for (i = 0; i < trk->gap_2; i++)
                 emit_byte(0xff);
             break;
         }
@@ -2150,7 +2169,7 @@ static bool_t fm_read_track(struct image *im)
             crc = im->img.crc;
             emit_byte(crc >> 8);
             emit_byte(crc);
-            for (i = 0; i < im->img.trk->gap_3; i++)
+            for (i = 0; i < trk->gap_3; i++)
                 emit_byte(0xff);
             break;
         }
