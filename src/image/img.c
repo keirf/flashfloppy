@@ -19,6 +19,8 @@ static void mfm_prep_track(struct image *im);
 static bool_t mfm_read_track(struct image *im);
 static void fm_prep_track(struct image *im);
 static bool_t fm_read_track(struct image *im);
+static void *align_p(void *p);
+static void check_p(void *p, struct image *im);
 
 const static struct simple_layout {
     uint16_t nr_sectors;
@@ -1088,6 +1090,116 @@ static bool_t vdk_open(struct image *im)
     return raw_open(im);
 }
 
+static bool_t xdf_open(struct image *im)
+{
+    /* Cyl 0, side 0: 
+     * 1,138,129,139,130,2,131,3,132,4,133,5,134,6,135,7,136,8,137 
+     * Sectors 1-8 (Aux FAT): Offsets 0x1800-0x2600 
+     * Sectors 129-139 (Main FAT, Pt.1): Offsets 0x0000-0x1400 */
+    /* Cyl 0, side 1: sskew=8, interleave=2
+     * 129-147 (sskew=8, interleave=2)
+     * Sector 129 (Main FAT, Pt.2): Offset 0x1600
+     * Sectors 130-143 (RootDir): Offsets 0x2e00-0x4800 
+     * Sectors 144-147 (Data): Offsets 0x5400-0x5a00 */
+    /* Cyl N, side 0: 
+     * 131(1k), 130(.5k), 132(2k), 134(8k)
+     * Cyl N, side 1: Track slip of ~10k bitcells relative to side 0
+     * 132(2k), 130(.5k), 131(1k), 134(8k)
+     * Ordering of sectors in image (ID-Side):
+     * 131-0, 132-0, 134-1, 130-0, 130-1, 134-0, 132-1, 131-1 */
+    unsigned int i, j;
+    struct raw_sec *sec;
+    struct raw_trk *trk;
+    uint8_t *trk_map;
+
+    im->nr_cyls = 80;
+    im->nr_sides = 2;
+
+    /* Create four track layouts: C0S0 C0S1 CnS0, CnS1. */
+    for (i = 0; i < 2; i++) {
+        const static uint8_t trk0sec[] = {
+            1,138,129,139,130,2,131,3,132,4,133,5,134,6,135,7,136,8,137 };
+        trk = add_track_layout(im, 19, i);
+        sec = &im->img.sec_info_base[trk->sec_off];
+        for (j = 0; j < 19; j++) {
+            sec->id = (i == 0) ? trk0sec[j] : j + 129;
+            sec->no = 2;
+            sec++;
+        }
+    }
+    for (; i < 4; i++) {
+        const static uint8_t xdfsec[2][4] = {
+            { 1, 0, 2, 4 }, { 2, 0, 1, 4 } };
+        trk = add_track_layout(im, 4, i);
+        sec = &im->img.sec_info_base[trk->sec_off];
+        for (j = 0; j < 4; j++) {
+            uint8_t n = xdfsec[i-2][j];
+            sec->id = n + 130;
+            sec->no = n + 2;
+            sec++;
+        }
+    }
+
+    /* Track map. */
+    trk_map = add_track_map(im);
+    *trk_map++ = 0;
+    *trk_map++ = 1;
+    for (i = 2; i < im->nr_cyls * im->nr_sides; i++)
+        *trk_map++ = 2+(i&1);
+
+    /* File sector offsets. */
+    im->img.file_sec_offsets = (uint32_t *)align_p(im->img.sec_map) - 19;
+    check_p(im->img.file_sec_offsets, im);
+
+    return raw_open(im);
+}
+
+/* Sets up track delay and file sector-offsets table before calling 
+ * generic routine. */
+static void xdf_setup_track(
+    struct image *im, uint16_t track, uint32_t *start_pos)
+{
+    const static uint8_t trk0offs[] = {
+        0x18, 0x12, 0x00, 0x14, 0x02, 0x1a, 0x04, 0x1c,
+        0x06, 0x1e, 0x08, 0x20, 0x0a, 0x22, 0x0c, 0x24,
+        0x0e, 0x26, 0x10 };
+    const static uint8_t trk1offs[] = {
+        0x2c, 0x2e, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3a,
+        0x3c, 0x3e, 0x40, 0x42, 0x44, 0x46, 0x48,
+        0x54, 0x56, 0x58, 0x5a };
+    const static uint8_t trkNoffs[] = {
+        0x00, 0x2c, 0x04, 0x30,
+        0x50, 0x2e, 0x58, 0x0c };
+
+    uint32_t *offs = im->img.file_sec_offsets;
+    unsigned int i;
+
+    im->img.track_delay_bc = 0;
+
+    if (track == 1) {
+        im->img.interleave = 2;
+        im->img.sskew = 8;
+        for (i = 0; i < 19; i++)
+            *offs++ = (uint32_t)trk1offs[i] << 8;
+    } else {
+        im->img.interleave = 1;
+        im->img.sskew = 0;
+        if (track == 0) {
+            for (i = 0; i < 19; i++)
+                *offs++ = (uint32_t)trk0offs[i] << 8;
+        } else {
+            const uint8_t *o = &trkNoffs[(track & 1) * 4];
+            uint32_t base = (uint32_t)(track>>1) * 0x5c00;
+            for (i = 0; i < 4; i++)
+                *offs++ = base + ((uint32_t)*o++ << 8);
+            if (track & 1)
+                im->img.track_delay_bc = 10000;
+        }
+    }
+
+    raw_setup_track(im, track, start_pos);
+}
+
 const struct image_handler img_image_handler = {
     .open = img_open,
     .setup_track = raw_setup_track,
@@ -1227,6 +1339,14 @@ const struct image_handler ti99_image_handler = {
     .write_track = raw_write_track,
 };
 
+const struct image_handler xdf_image_handler = {
+    .open = xdf_open,
+    .setup_track = xdf_setup_track,
+    .read_track = raw_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = raw_write_track,
+};
+
 
 /*
  * Generic Handlers
@@ -1310,31 +1430,38 @@ static void raw_seek_track(
         mfm_prep_track(im);
     }
 
-    /* Find offset of track data in the image file. */
-    idx = file_idx(im, cyl, side);
-    off = im->img.base_off;
-    for (i = 0; i < im->nr_cyls; i++) {
-        for (j = 0; j < im->nr_sides; j++) {
-            if (file_idx(im, i, j) >= idx)
-                continue;
-            trk = &im->img.trk_info[im->img.trk_map[i*im->nr_sides + j]];
-            sec = &im->img.sec_info_base[trk->sec_off];
-            for (k = 0; k < trk->nr_sectors; k++) {
-                off += sec_sz(sec->no);
-                sec++;
+    if (im->img.file_sec_offsets == NULL) {
+        /* Find offset of track data in the image file. */
+        idx = file_idx(im, cyl, side);
+        off = im->img.base_off;
+        for (i = 0; i < im->nr_cyls; i++) {
+            for (j = 0; j < im->nr_sides; j++) {
+                if (file_idx(im, i, j) >= idx)
+                    continue;
+                trk = &im->img.trk_info[im->img.trk_map[i*im->nr_sides + j]];
+                sec = &im->img.sec_info_base[trk->sec_off];
+                for (k = 0; k < trk->nr_sectors; k++) {
+                    off += sec_sz(sec->no);
+                    sec++;
+                }
             }
         }
+        im->img.trk_off = off;
     }
-    im->img.trk_off = off;
 }
 
 static uint32_t calc_start_pos(struct image *im)
 {
     uint32_t decode_off;
+    int32_t bc;
+
+    bc = im->cur_bc - im->img.track_delay_bc;
+    if (bc < 0)
+        bc += im->tracklen_bc;
 
     im->img.crc = 0xffff;
     im->img.trk_sec = im->img.rd_sec_pos = im->img.decode_data_pos = 0;
-    decode_off = im->cur_bc / 16;
+    decode_off = bc / 16;
     if (decode_off < im->img.idx_sz) {
         /* Post-index track gap */
         im->img.decode_pos = 0;
@@ -1459,6 +1586,10 @@ static bool_t raw_write_track(struct image *im)
         base = write->start / im->ticks_per_cell; /* in data bytes */
         sec_map = im->img.sec_map;
 
+        base -= im->img.track_delay_bc;
+        if (base < 0)
+            base += im->tracklen_bc;
+
         /* Convert write offset to sector number (in rotational order). */
         base -= im->img.idx_sz + im->img.idam_sz;
         for (i = 0; i < trk->nr_sectors; i++) {
@@ -1570,8 +1701,12 @@ static bool_t raw_write_track(struct image *im)
                    sec->id, trk->nr_sectors);
             t = time_now();
             sec = im->img.sec_info;
-            for (i = off = 0; i < im->img.write_sector; i++)
-                off += sec_sz(sec++->no);
+            if (im->img.file_sec_offsets) {
+                off = im->img.file_sec_offsets[im->img.write_sector];
+            } else {
+                for (i = off = 0; i < im->img.write_sector; i++)
+                    off += sec_sz(sec++->no);
+            }
             F_lseek(&im->fp, im->img.trk_off + off);
             F_write(&im->fp, wrbuf, sec_sz, NULL);
             printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
@@ -1620,11 +1755,16 @@ static void img_fetch_data(struct image *im)
     if (rd->prod != rd->cons)
         return;
 
-    off = 0;
-    sec_map = im->img.sec_map;
-    for (i = 0; i < im->img.trk_sec; i++) {
-        sec = &im->img.sec_info[*sec_map++];
-        off += sec_sz(sec->no);
+    if (im->img.file_sec_offsets) {
+        sec_map = &im->img.sec_map[im->img.trk_sec];
+        off = im->img.file_sec_offsets[*sec_map];
+    } else {
+        off = 0;
+        sec_map = im->img.sec_map;
+        for (i = 0; i < im->img.trk_sec; i++) {
+            sec = &im->img.sec_info[*sec_map++];
+            off += sec_sz(sec->no);
+        }
     }
 
     sec = &im->img.sec_info[*sec_map];

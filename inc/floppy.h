@@ -69,6 +69,11 @@ struct img_image {
     uint8_t *sec_map, *trk_map;
     struct raw_trk *trk, *trk_info;
     struct raw_sec *sec_info, *sec_info_base;
+    /* If not NULL, replaces the default method for finding sector data. 
+     * Sector data is at trk_off + file_sec_offsets[i]. */
+    uint32_t *file_sec_offsets;
+    /* Delay start of track this many bitcells past index. */
+    uint32_t track_delay_bc;
     uint8_t interleave, cskew, sskew;
     uint16_t gap_4;
     uint32_t idx_sz, idam_sz;

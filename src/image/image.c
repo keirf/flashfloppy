@@ -30,6 +30,7 @@ extern const struct image_handler sdu_image_handler;
 extern const struct image_handler jvc_image_handler;
 extern const struct image_handler vdk_image_handler;
 extern const struct image_handler ti99_image_handler;
+extern const struct image_handler xdf_image_handler;
 extern const struct image_handler dummy_image_handler;
 
 const struct image_type image_type[] = {
@@ -55,6 +56,7 @@ const struct image_type image_type[] = {
     { "jvc", &jvc_image_handler },
     { "vdk", &vdk_image_handler },
     { "v9t9", &ti99_image_handler },
+    { "xdf", &xdf_image_handler },
     { "", NULL }
 };
 
