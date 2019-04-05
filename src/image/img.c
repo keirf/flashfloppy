@@ -62,7 +62,7 @@ const static struct raw_type {
     uint8_t base:1;
     uint8_t inter_track_numbering:1;
     uint8_t cskew:4;
-    uint8_t sskew:2;
+    uint8_t hskew:2;
     uint8_t cyls:1;
     uint8_t rpm:1;
 } img_type[] = {
@@ -205,7 +205,7 @@ found:
     im->nr_cyls = nr_cyls;
     im->nr_sides = nr_sides;
     im->img.interleave = type->interleave;
-    im->img.sskew = type->sskew;
+    im->img.hskew = type->hskew;
     im->img.cskew = type->cskew;
     im->img.rpm = (type->rpm + 5) * 60;
 
@@ -235,7 +235,7 @@ static bool_t tag_open(struct image *im, char *tag)
         IMGCFG_mode,
         IMGCFG_interleave,
         IMGCFG_cskew,
-        IMGCFG_sskew,
+        IMGCFG_hskew,
         IMGCFG_rpm,
         IMGCFG_gap3,
         IMGCFG_iam,
@@ -253,7 +253,7 @@ static bool_t tag_open(struct image *im, char *tag)
         [IMGCFG_mode] = { "mode" },
         [IMGCFG_interleave] = { "interleave" },
         [IMGCFG_cskew] = { "cskew" },
-        [IMGCFG_sskew] = { "sskew" },
+        [IMGCFG_hskew] = { "hskew" },
         [IMGCFG_rpm]  = { "rpm" },
         [IMGCFG_gap3] = { "gap3" },
         [IMGCFG_iam]  = { "iam" },
@@ -342,8 +342,8 @@ static bool_t tag_open(struct image *im, char *tag)
         case IMGCFG_cskew:
             im->img.cskew = strtol(opts.arg, NULL, 10);
             break;
-        case IMGCFG_sskew:
-            im->img.sskew = strtol(opts.arg, NULL, 10);
+        case IMGCFG_hskew:
+            im->img.hskew = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_rpm:
             im->img.rpm = strtol(opts.arg, NULL, 10);
@@ -550,7 +550,7 @@ static bool_t st_open(struct image *im)
                 out->cskew = 2;
             } else { /* out->nr_sides == _S(2) */
                 out->cskew = 4;
-                out->sskew = 2;
+                out->hskew = 2;
             }
         }
         out++;
@@ -1508,7 +1508,7 @@ static void raw_seek_track(
 
     /* Create logical sector map in rotational order. */
     memset(im->img.sec_map, 0xff, trk->nr_sectors);
-    pos = ((cyl*im->img.cskew) + (side*im->img.sskew)) % trk->nr_sectors;
+    pos = ((cyl*im->img.cskew) + (side*im->img.hskew)) % trk->nr_sectors;
     for (i = 0; i < trk->nr_sectors; i++) {
         while (im->img.sec_map[pos] != 0xff)
             pos = (pos + 1) % trk->nr_sectors;
@@ -1826,8 +1826,8 @@ static void raw_dump_info(struct image *im)
            trk->gap_2, trk->gap_3, trk->gap_4a, im->img.gap_4);
     printk(" ticks_per_cell: %u, write_bc_ticks: %u, has_iam: %u\n",
            im->ticks_per_cell, im->write_bc_ticks, trk->has_iam);
-    printk(" interleave: %u, cskew %u, sskew %u\n ",
-           im->img.interleave, im->img.cskew, im->img.sskew);
+    printk(" interleave: %u, cskew %u, hskew %u\n ",
+           im->img.interleave, im->img.cskew, im->img.hskew);
     printk(" file-layout: %x\n", im->img.layout);
     for (i = 0; i < trk->nr_sectors; i++) {
         struct raw_sec *sec = &im->img.sec_info[im->img.sec_map[i]];

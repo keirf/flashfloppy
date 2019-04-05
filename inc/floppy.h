@@ -74,7 +74,7 @@ struct img_image {
     uint32_t *file_sec_offsets;
     /* Delay start of track this many bitcells past index. */
     uint32_t track_delay_bc;
-    uint8_t interleave, cskew, sskew;
+    uint8_t interleave, cskew, hskew;
     uint16_t gap_4;
     uint32_t idx_sz, idam_sz;
     uint16_t dam_sz_pre, dam_sz_post;
