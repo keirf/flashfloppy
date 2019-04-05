@@ -561,9 +561,9 @@ static unsigned int oled_start_i2c(uint8_t *buf)
     static const uint8_t ssd1306_addr_cmds[] = {
         0x20, 0,      /* horizontal addressing mode */
         0x21, 0, 127, /* column address range: 0-127 */
-        0x22, 0, /*3*//* page address range: 0-3 */
+        0x22, 0, /*?*//* page address range: 0-? */
     }, sh1106_addr_cmds[] = {
-        0x02, 0x10,   /* column address: 2 */
+        0x10          /* column address high nibble is zero */
     };
 
     uint8_t dynamic_cmds[4], *dc = dynamic_cmds;
@@ -572,6 +572,8 @@ static unsigned int oled_start_i2c(uint8_t *buf)
     /* Set up the display address range. */
     if (ff_cfg.display_type & DISPLAY_sh1106) {
         p += oled_queue_cmds(p, sh1106_addr_cmds, sizeof(sh1106_addr_cmds));
+        /* Column address: 0 or 2 (seems 128x64 displays are shifted by 2). */
+        *dc++ = (oled_height == 64) ? 0x02 : 0x00;
         /* Page address: according to oled_row. */
         *dc++ = 0xb0 + oled_row;
     } else {
