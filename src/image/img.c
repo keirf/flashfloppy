@@ -502,6 +502,7 @@ static bool_t atr_open(struct image *im)
         trk = add_track_layout(im, nr_sectors, i);
         trk->has_iam = TRUE;
         trk->is_fm = is_fm;
+        trk->invert_data = TRUE;
         sec = &im->img.sec_info_base[trk->sec_off];
         for (j = 0; j < nr_sectors; j++) {
             sec->id = j + 1;
@@ -1645,6 +1646,20 @@ static void raw_setup_track(
     }
 }
 
+void process_data(struct image *im, void *p, unsigned int len)
+{
+    /* Pointer and size should be 4-byte aligned. */
+    ASSERT(!((len|(uint32_t)p)&3));
+
+    if (im->img.trk->invert_data) {
+        uint32_t *_p = p, *_q = _p + len/4;
+        while (_p != _q) {
+            *_p = ~*_p;
+            _p++;
+        }
+    }
+}
+
 static bool_t raw_read_track(struct image *im)
 {
     return (im->sync == SYNC_fm) ? fm_read_track(im) : mfm_read_track(im);
@@ -1801,6 +1816,7 @@ static bool_t raw_write_track(struct image *im)
                     off += sec_sz(sec++->no);
             }
             F_lseek(&im->fp, im->img.trk_off + off);
+            process_data(im, wrbuf, sec_sz);
             F_write(&im->fp, wrbuf, sec_sz, NULL);
             printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
             break;
@@ -1877,6 +1893,7 @@ static void img_fetch_data(struct image *im)
 
     F_lseek(&im->fp, im->img.trk_off + off);
     F_read(&im->fp, buf, len, NULL);
+    process_data(im, buf, len);
 
     rd->prod++;
 }

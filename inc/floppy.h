@@ -54,7 +54,7 @@ struct raw_trk {
     uint16_t sec_off;
     uint16_t data_rate;
     uint8_t gap_2, gap_3, gap_4a;
-    uint8_t has_iam, is_fm;
+    uint8_t has_iam:1, is_fm:1, invert_data:1;
 };
 
 struct img_image {
