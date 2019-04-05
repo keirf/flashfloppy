@@ -611,31 +611,23 @@ struct bpb {
     uint16_t sec_per_track;
     uint16_t num_heads;
     uint16_t tot_sec;
+    uint16_t rootdir_ents;
+    uint16_t fat_secs;
 };
 
 static void bpb_read(struct image *im, struct bpb *bpb)
 {
-    uint16_t x;
+    unsigned int i;
+    uint16_t *x = (uint16_t *)bpb;
+    const static uint16_t offs[] = {
+        510, 11, 24, 26, 19, 17, 22 };
 
-    F_lseek(&im->fp, 510); /* BS_55AA */
-    F_read(&im->fp, &x, 2, NULL);
-    bpb->sig = le16toh(x);
-
-    F_lseek(&im->fp, 11); /* BPB_BytsPerSec */
-    F_read(&im->fp, &x, 2, NULL);
-    bpb->bytes_per_sec = le16toh(x);
-
-    F_lseek(&im->fp, 24); /* BPB_SecPerTrk */
-    F_read(&im->fp, &x, 2, NULL);
-    bpb->sec_per_track = le16toh(x);
-
-    F_lseek(&im->fp, 26); /* BPB_NumHeads */
-    F_read(&im->fp, &x, 2, NULL);
-    bpb->num_heads = le16toh(x);
-
-    F_lseek(&im->fp, 19); /* BPB_TotSec */
-    F_read(&im->fp, &x, 2, NULL);
-    bpb->tot_sec = le16toh(x);
+    for (i = 0; i < ARRAY_SIZE(offs); i++) {
+        F_lseek(&im->fp, offs[i]);
+        F_read(&im->fp, x, 2, NULL);
+        *x = le16toh(*x);
+        x++;
+    }
 }
 
 static bool_t msx_open(struct image *im)
@@ -1090,52 +1082,103 @@ static bool_t vdk_open(struct image *im)
     return raw_open(im);
 }
 
+/*
+ * XDF:
+ * The handling here is informed by xdfcopy.c in the fdutils distribution.
+ */
+struct xdf_format {
+    unsigned int logical_sec_per_track; /* as reported by the Fat */
+    unsigned int sec_per_track0, sec_per_trackN; /* physical sectors */
+    unsigned int head1_shift_bc; /* effectively a head skew */
+    struct {
+        uint8_t no;   /* sector size code */
+        uint8_t offs; /* offset (in 512-byte blocks) into image cyl data */
+    } cylN_sec[2][4]; /* per-head, per-sector */
+};
+
+struct xdf_info {
+    uint32_t *file_sec_offsets[4]; /* C0H0 C0H1 CnH0 CnH1 */
+    const struct xdf_format *fmt;
+    uint32_t cyl_bytes;
+};
+
 static bool_t xdf_open(struct image *im)
 {
-    /* Cyl 0, side 0: 
-     * 1,138,129,139,130,2,131,3,132,4,133,5,134,6,135,7,136,8,137 
-     * Sectors 1-8 (Aux FAT): Offsets 0x1800-0x2600 
-     * Sectors 129-139 (Main FAT, Pt.1): Offsets 0x0000-0x1400 */
-    /* Cyl 0, side 1: sskew=8, interleave=2
-     * 129-147 (sskew=8, interleave=2)
-     * Sector 129 (Main FAT, Pt.2): Offset 0x1600
-     * Sectors 130-143 (RootDir): Offsets 0x2e00-0x4800 
-     * Sectors 144-147 (Data): Offsets 0x5400-0x5a00 */
-    /* Cyl N, side 0: 
-     * 131(1k), 130(.5k), 132(2k), 134(8k)
-     * Cyl N, side 1: Track slip of ~10k bitcells relative to side 0
-     * 132(2k), 130(.5k), 131(1k), 134(8k)
-     * Ordering of sectors in image (ID-Side):
-     * 131-0, 132-0, 134-1, 130-0, 130-1, 134-0, 132-1, 131-1 */
-    unsigned int i, j;
+    const static struct xdf_format formats[] = {
+        { /* 3.5 HD */
+            /* Cyl 0, head 0:
+             * 1-8,129-139 (secs=19, interleave=2)
+             * Sectors 1-8 (Aux FAT): Offsets 0x1800-0x2600 
+             * Sectors 129-139 (Main FAT, Pt.1): Offsets 0x0000-0x1400 */
+            /* Cyl 0, head 1:
+             * 129-147 (secs=19, interleave=2)
+             * Sector 129 (Main FAT, Pt.2): Offset 0x1600
+             * Sectors 130-143 (RootDir): Offsets 0x2e00-0x4800 
+             * Sectors 144-147 (Data): Offsets 0x5400-0x5a00 */
+            /* Cyl N, head 0: 
+             * 131(1k), 130(.5k), 132(2k), 134(8k)
+             * Cyl N, head 1: Track slip of ~10k bitcells relative to head 0
+             * 132(2k), 130(.5k), 131(1k), 134(8k)
+             * Ordering of sectors in image (ID-Head):
+             * 131-0, 132-0, 134-1, 130-0, 130-1, 134-0, 132-1, 131-1 */
+            .logical_sec_per_track = 23,
+            .sec_per_track0 = 19,
+            .sec_per_trackN = 4,
+            .head1_shift_bc = 10000,
+            .cylN_sec = { 
+                { {3, 0x00}, {2, 0x2c}, {4, 0x04}, {6, 0x30} }, /* Head 0 */
+                { {4, 0x50}, {2, 0x2e}, {3, 0x58}, {6, 0x0c} }  /* Head 1 */
+            }
+        }
+    };
+
+    unsigned int i, j, rootdir_secs, fat_secs, img_curs, remain;
+    struct xdf_info *xdf_info;
+    const struct xdf_format *fmt;
     struct raw_sec *sec;
     struct raw_trk *trk;
     uint8_t *trk_map;
+    struct bpb bpb;
+    uint32_t *offs, *off;
 
-    im->nr_cyls = 80;
+    bpb_read(im, &bpb);
+
+    fmt = formats;
+    for (i = 0; i < ARRAY_SIZE(formats); i++)
+        if (bpb.sec_per_track == fmt->logical_sec_per_track)
+            goto found;
+    return FALSE;
+
+found:
+    rootdir_secs = bpb.rootdir_ents/16;
+    fat_secs = bpb.fat_secs;
+    if (/* Rootdir must fill whole number of logical sectors */
+        ((bpb.rootdir_ents & 15) != 0)
+        /* Fat and Rootdir must fit in cylinder 0. */
+        || (8 + 1 + fat_secs + rootdir_secs) > (2 * fmt->sec_per_track0))
+        return FALSE;
+
     im->nr_sides = 2;
+    im->nr_cyls = 80;
 
-    /* Create four track layouts: C0S0 C0S1 CnS0, CnS1. */
+    /* Create four track layouts: C0H0 C0H1 CnH0 CnH1. */
     for (i = 0; i < 2; i++) {
-        const static uint8_t trk0sec[] = {
-            1,138,129,139,130,2,131,3,132,4,133,5,134,6,135,7,136,8,137 };
-        trk = add_track_layout(im, 19, i);
+        unsigned int aux_id = 1, main_id = 129;
+        trk = add_track_layout(im, fmt->sec_per_track0, i);
         sec = &im->img.sec_info_base[trk->sec_off];
-        for (j = 0; j < 19; j++) {
-            sec->id = (i == 0) ? trk0sec[j] : j + 129;
+        for (j = 0; j < fmt->sec_per_track0; j++) {
+            sec->id = (i == 0) && (j < 8) ? aux_id++ : main_id++;
             sec->no = 2;
             sec++;
         }
     }
     for (; i < 4; i++) {
-        const static uint8_t xdfsec[2][4] = {
-            { 1, 0, 2, 4 }, { 2, 0, 1, 4 } };
-        trk = add_track_layout(im, 4, i);
+        trk = add_track_layout(im, fmt->sec_per_trackN, i);
         sec = &im->img.sec_info_base[trk->sec_off];
-        for (j = 0; j < 4; j++) {
-            uint8_t n = xdfsec[i-2][j];
-            sec->id = n + 130;
-            sec->no = n + 2;
+        for (j = 0; j < fmt->sec_per_trackN; j++) {
+            uint8_t n = fmt->cylN_sec[i-2][j].no;
+            sec->id = n + 128;
+            sec->no = n;
             sec++;
         }
     }
@@ -1148,8 +1191,56 @@ static bool_t xdf_open(struct image *im)
         *trk_map++ = 2+(i&1);
 
     /* File sector offsets. */
-    im->img.file_sec_offsets = (uint32_t *)align_p(im->img.sec_map) - 19;
-    check_p(im->img.file_sec_offsets, im);
+    im->img.file_sec_offsets = (uint32_t *)align_p(im->img.sec_map)
+        - 2*im->img.trk_info[0].nr_sectors;
+
+    xdf_info = (struct xdf_info *)align_p(im->img.sec_map) - 1;
+    trk = &im->img.trk_info[0];
+    offs = off = (uint32_t *)xdf_info
+        - 2*fmt->sec_per_track0 - 2*fmt->sec_per_trackN;
+    check_p(offs, im);
+
+    xdf_info->fmt = fmt;
+    xdf_info->cyl_bytes = fmt->logical_sec_per_track * 2 * 512;
+
+    /* Cyl 0 Image Layout (Thanks to fdutils/xdfcopy!):
+     *   FS   Desc.    #secs-in-image  #secs-on-disk
+     *   MAIN Boot     1               1
+     *   MAIN Fat      fat_secs        fat_secs
+     *   AUX  Fat      fat_secs        8
+     *   MAIN RootDir  rootdir_secs    rootdir_secs
+     *   AUX  Fat      5               0
+     *   MAIN Data     *               * Notes:
+     *  1. MAIN means sectors 129+ on head 0, followed by head 1.
+     *  2. AUX means the dummy FAT on sectors 1-8 of head 0.
+     *  3. Order on disk is AUX then MAIN. */
+    xdf_info->file_sec_offsets[0] = off;
+    xdf_info->file_sec_offsets[1] = off + fmt->sec_per_track0;
+    /* 1. AUX Fat (limited to 8 sectors on disk). */
+    img_curs = 1 + fat_secs; /* skip MAIN Boot+Fat */
+    for (i = 0; i < 8; i++)
+        *off++ = (img_curs + i) << 9;
+    /* 2. MAIN Boot+Fat. */
+    for (i = 0; i < (1 + fat_secs); i++)
+        *off++ = i << 9;
+    /* 3. MAIN RootDir. */
+    img_curs += fat_secs; /* skip Aux FAT */
+    for (i = 0; i < rootdir_secs; i++)
+        *off++ = img_curs++ << 9;
+    /* 4. MAIN Data. */
+    img_curs += 5; /* skip AUX Fat duplicate */
+    remain = 2*trk->nr_sectors - (off - offs);
+    while (remain--)
+        *off++ = img_curs++ << 9;
+
+    /* Cyl N Image Layout: 
+     *   Sectors are Interleaved on disk and in the image file. 
+     *   This is described in a per-format offsets array. */
+    xdf_info->file_sec_offsets[2] = off;
+    xdf_info->file_sec_offsets[3] = off + fmt->sec_per_trackN;
+    for (i = 0; i < 2; i++)
+        for (j = 0; j < fmt->sec_per_trackN; j++)
+        *off++ = (uint32_t)fmt->cylN_sec[i][j].offs << 8;
 
     return raw_open(im);
 }
@@ -1159,43 +1250,27 @@ static bool_t xdf_open(struct image *im)
 static void xdf_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
-    const static uint8_t trk0offs[] = {
-        0x18, 0x12, 0x00, 0x14, 0x02, 0x1a, 0x04, 0x1c,
-        0x06, 0x1e, 0x08, 0x20, 0x0a, 0x22, 0x0c, 0x24,
-        0x0e, 0x26, 0x10 };
-    const static uint8_t trk1offs[] = {
-        0x2c, 0x2e, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3a,
-        0x3c, 0x3e, 0x40, 0x42, 0x44, 0x46, 0x48,
-        0x54, 0x56, 0x58, 0x5a };
-    const static uint8_t trkNoffs[] = {
-        0x00, 0x2c, 0x04, 0x30,
-        0x50, 0x2e, 0x58, 0x0c };
+    struct xdf_info *xdf_info;
+    unsigned int offs_sel;
 
-    uint32_t *offs = im->img.file_sec_offsets;
-    unsigned int i;
+    xdf_info = (struct xdf_info *)align_p(im->img.sec_map) - 1;
 
     im->img.track_delay_bc = 0;
+    offs_sel = track & 1;
 
-    if (track == 1) {
+    if ((track>>1) == 0) {
+        /* Cyl 0. */
         im->img.interleave = 2;
-        im->img.sskew = 8;
-        for (i = 0; i < 19; i++)
-            *offs++ = (uint32_t)trk1offs[i] << 8;
     } else {
+        /* Cyl N. */
         im->img.interleave = 1;
-        im->img.sskew = 0;
-        if (track == 0) {
-            for (i = 0; i < 19; i++)
-                *offs++ = (uint32_t)trk0offs[i] << 8;
-        } else {
-            const uint8_t *o = &trkNoffs[(track & 1) * 4];
-            uint32_t base = (uint32_t)(track>>1) * 0x5c00;
-            for (i = 0; i < 4; i++)
-                *offs++ = base + ((uint32_t)*o++ << 8);
-            if (track & 1)
-                im->img.track_delay_bc = 10000;
-        }
+        offs_sel += 2;
+        if (track & 1)
+            im->img.track_delay_bc = xdf_info->fmt->head1_shift_bc;
     }
+
+    im->img.trk_off = (track>>1) * xdf_info->cyl_bytes;
+    im->img.file_sec_offsets = xdf_info->file_sec_offsets[offs_sel];
 
     raw_setup_track(im, track, start_pos);
 }
