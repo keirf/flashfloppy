@@ -38,6 +38,9 @@ static bool_t pc_dos_open(struct image *im);
 static bool_t ti99_open(struct image *im);
 static bool_t uknc_open(struct image *im);
 
+struct bpb;
+static bool_t xdf_check(const struct bpb *bpb);
+
 #define LAYOUT_sequential      (1u<<0)
 #define LAYOUT_sides_swapped   (1u<<1)
 #define LAYOUT_reverse_side(x) (1u<<(2+(x)))
@@ -686,6 +689,11 @@ static bool_t pc_dos_open(struct image *im)
         goto fail;
     layout.nr_sectors = bpb.sec_per_track;
 
+    /* Yuk! A simple check for 3.5-inch HD XDF. Bail if we get a match:
+     * Our caller will fall back to the XDF handler. */
+    if ((bpb.sec_per_track == 23) && xdf_check(&bpb))
+        goto fail;
+
     if ((bpb.num_heads != 1) && (bpb.num_heads != 2))
         goto fail;
     im->nr_sides = bpb.num_heads;
@@ -1102,6 +1110,14 @@ struct xdf_info {
     uint32_t cyl_bytes;
 };
 
+static bool_t xdf_check(const struct bpb *bpb)
+{
+    return (bpb->sig == 0xaa55)
+        && (bpb->bytes_per_sec == 512)
+        && (bpb->num_heads == 2)
+        && (bpb->tot_sec == (2*80*bpb->sec_per_track));
+}
+
 static bool_t xdf_open(struct image *im)
 {
     const static struct xdf_format formats[] = {
@@ -1142,6 +1158,8 @@ static bool_t xdf_open(struct image *im)
     uint32_t *offs, *off;
 
     bpb_read(im, &bpb);
+    if (!xdf_check(&bpb))
+        return FALSE;
 
     fmt = formats;
     for (i = 0; i < ARRAY_SIZE(formats); i++)
