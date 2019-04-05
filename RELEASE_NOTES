@@ -3,6 +3,15 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.2a - 5 April 2019
+ - New image types supported:
+   - XDF: 3.5" HD eXtended Disk Format (1840kB)
+   - ATR: Atari 8-bit
+ - 7-Seg LED: Improved track display.
+   - Remove option 'led-trk' from FF.CFG. Track display mode is always on.
+ - OLED: Fix horizontal offset on SH1106 128x32 displays
+ - IMG.CFG: 'id' parameter simplified; 'sskew' renamed 'hskew' (head skew)
+ 
 ** v2.1a - 26 March 2019
  - IMG.CFG: Allow up to 256 sectors per track
  - IMG.CFG: Split skew into per-cylinder and per-side values (cskew/sskew)
