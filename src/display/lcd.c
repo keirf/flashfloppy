@@ -53,6 +53,8 @@ static bool_t is_oled_display;
 static uint8_t oled_height;
 
 #define OLED_ADDR 0x3c
+enum { OLED_unknown, OLED_ssd1306, OLED_sh1106 };
+static uint8_t oled_model;
 static void oled_init(void);
 static unsigned int oled_prep_buffer(void);
 
@@ -197,42 +199,65 @@ static bool_t i2c_wait(uint8_t s)
     return TRUE;
 }
 
-/* Synchronously transmit the I2C START sequence. */
-static bool_t i2c_start(uint8_t a)
+/* Synchronously transmit the I2C START sequence. 
+ * Caller must already have asserted I2C_CR1_START. */
+#define I2C_RD TRUE
+#define I2C_WR FALSE
+static bool_t i2c_start(uint8_t a, bool_t rd)
 {
-    i2c->cr1 |= I2C_CR1_START;
     if (!i2c_wait(I2C_SR1_SB))
         return FALSE;
-    i2c->dr = a << 1;
+    i2c->dr = (a << 1) | rd;
     if (!i2c_wait(I2C_SR1_ADDR))
         return FALSE;
     (void)i2c->sr2;
     return TRUE;
 }
 
-/* Synchronously transmit an I2C command. */
-static bool_t i2c_cmd(uint8_t cmd)
+/* Synchronously transmit the I2C STOP sequence. */
+static void i2c_stop(void)
 {
-    i2c->dr = cmd;
+    i2c->cr1 |= I2C_CR1_STOP;
+    while (i2c->cr1 & I2C_CR1_STOP)
+        continue;
+}
+
+/* Synchronously transmit an I2C byte. */
+static bool_t i2c_sync_write(uint8_t b)
+{
+    i2c->dr = b;
     return i2c_wait(I2C_SR1_BTF);
+}
+
+static bool_t i2c_sync_write_txn(uint8_t *cmds, unsigned int nr)
+{
+    unsigned int i;
+
+    if (!i2c_start(i2c_addr, I2C_WR))
+        return FALSE;
+
+    for (i = 0; i < nr; i++)
+        if (!i2c_sync_write(*cmds++))
+            return FALSE;
+
+    return TRUE;
 }
 
 /* Write a 4-bit nibble over D7-D4 (4-bit bus). */
 static void write4(uint8_t val)
 {
-    i2c_cmd(val);
-    i2c_cmd(val | _EN);
-    i2c_cmd(val);
+    i2c_sync_write(val);
+    i2c_sync_write(val | _EN);
+    i2c_sync_write(val);
 }
 
 /* Check whether an I2C device is responding at given address. */
 static bool_t i2c_probe(uint8_t a)
 {
-    if (!i2c_start(a) || !i2c_cmd(0))
+    i2c->cr1 |= I2C_CR1_START;
+    if (!i2c_start(a, I2C_WR) || !i2c_sync_write(0))
         return FALSE;
-    i2c->cr1 |= I2C_CR1_STOP;
-    while (i2c->cr1 & I2C_CR1_STOP)
-        continue;
+    i2c_stop();
     return TRUE;
 }
 
@@ -406,7 +431,8 @@ bool_t lcd_init(void)
         return TRUE;
     }
 
-    if (!i2c_start(i2c_addr))
+    i2c->cr1 |= I2C_CR1_START;
+    if (!i2c_start(i2c_addr, I2C_WR))
         goto fail;
 
     /* Initialise 4-bit interface, as in the datasheet. Do this synchronously
@@ -570,7 +596,7 @@ static unsigned int oled_start_i2c(uint8_t *buf)
     uint8_t *p = buf;
 
     /* Set up the display address range. */
-    if (ff_cfg.display_type & DISPLAY_sh1106) {
+    if (oled_model == OLED_sh1106) {
         p += oled_queue_cmds(p, sh1106_addr_cmds, sizeof(sh1106_addr_cmds));
         /* Column address: 0 or 2 (seems 128x64 displays are shifted by 2). */
         *dc++ = (oled_height == 64) ? 0x02 : 0x00;
@@ -610,9 +636,7 @@ static unsigned int ssd1306_prep_buffer(void)
                 return 0;
         }
         /* Send STOP. Clears SR1_TXE and SR1_BTF. */
-        i2c->cr1 |= I2C_CR1_STOP;
-        while (i2c->cr1 & I2C_CR1_STOP)
-            continue;
+        i2c_stop();
         /* Kick off new I2C transaction. */
         oled_row = 0;
         refresh_count++;
@@ -654,9 +678,7 @@ static unsigned int sh1106_prep_buffer(void)
             return 0;
     }
     /* Send STOP. Clears SR1_TXE and SR1_BTF. */
-    i2c->cr1 |= I2C_CR1_STOP;
-    while (i2c->cr1 & I2C_CR1_STOP)
-        continue;
+    i2c_stop();
 
     /* Every 8 rows needs a new page address and hence new I2C transaction. */
     p += oled_start_i2c(p);
@@ -676,9 +698,55 @@ static unsigned int sh1106_prep_buffer(void)
 /* Snapshot text buffer into the bitmap buffer. */
 static unsigned int oled_prep_buffer(void)
 {
-    return (ff_cfg.display_type & DISPLAY_sh1106)
+    return (oled_model == OLED_sh1106)
         ? sh1106_prep_buffer()
         : ssd1306_prep_buffer();
+}
+
+static bool_t oled_probe_model(void)
+{
+    uint8_t cmd1[] = { 0x80, 0x00, /* Column 0 */
+                       0xc0 };     /* Read one data */
+    uint8_t cmd2[] = { 0x80, 0x00, /* Column 0 */
+                       0xc0, 0x00 }; /* Write one data */
+
+    int i;
+    uint8_t x, px = 0;
+    uint8_t *rand = (uint8_t *)emit8;
+
+    for (i = 0; i < 3; i++) {
+        /* 1st Write stage. */
+        i2c->cr1 |= I2C_CR1_START;
+        if (!i2c_sync_write_txn(cmd1, sizeof(cmd1)))
+            goto fail;
+        /* Read stage. */
+        i2c->cr1 |= I2C_CR1_START | I2C_CR1_ACK;
+        if (!i2c_start(i2c_addr, I2C_RD) || !i2c_wait(I2C_SR1_RXNE))
+            goto fail;
+        i2c->cr1 &= ~I2C_CR1_ACK;  /* NACK and Restart after next byte */
+        i2c->cr1 |= I2C_CR1_START;
+        (void)i2c->dr; /* 1st read: Dummy */
+        if (!i2c_wait(I2C_SR1_RXNE))
+            goto fail;
+        x = i2c->dr; /* 2nd read: Data */
+        /* 2nd Write stage. */
+        cmd2[3] = x ^ rand[i]; /* XOR the write with "randomness" */
+        if (!i2c_sync_write_txn(cmd2, sizeof(cmd2)))
+            goto fail;
+        /* Check we read what we wrote on previous iteration. */
+        if (i && (x != px))
+            break;
+        /* Remember what we wrote, for next iteration. */
+        px = cmd2[3];
+    }
+    i2c_stop();
+
+    oled_model = (i == 3) ? OLED_sh1106 : OLED_ssd1306;
+    printk("OLED: %s\n", (oled_model == OLED_sh1106) ? "SH1106" : "SSD1306");
+    return TRUE;
+
+fail:
+    return FALSE;
 }
 
 static void oled_init(void)
@@ -715,6 +783,9 @@ static void oled_init(void)
     i2c->cr1 = I2C_CR1_PE;
     i2c->cr2 |= I2C_CR2_ITERREN;
 
+    if ((oled_model == OLED_unknown) && !oled_probe_model())
+        goto fail;
+
     /* Initialisation sequence for SSD1306/SH1106. */
     p += oled_queue_cmds(p, init_cmds, sizeof(init_cmds));
 
@@ -739,6 +810,10 @@ static void oled_init(void)
     /* Send the initialisation command sequence by DMA. */
     i2c->cr2 |= I2C_CR2_DMAEN;
     dma_start(p - buffer);
+    return;
+
+fail:
+    IRQx_set_pending(I2C_ERROR_IRQ);
 }
 
 /*

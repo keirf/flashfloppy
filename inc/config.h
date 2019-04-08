@@ -90,12 +90,14 @@ struct __packed ff_cfg {
 #define DISPLAY_auto     0
 #define DISPLAY_lcd      (1<<0)
 #define DISPLAY_oled     (1<<1)
-#define DISPLAY_narrower (1<<0) /* only if DISPLAY_oled */
-#define DISPLAY_rotate   (1<<2) /* only if DISPLAY_oled */
-#define DISPLAY_narrow   (1<<3) /* only if DISPLAY_oled */
-#define DISPLAY_sh1106   (1<<4) /* only if DISPLAY_oled */
-#define DISPLAY_oled_64  (1<<5) /* only if DISPLAY_oled */
-#define _DISPLAY_lcd_columns 5 /* only if DISPLAY_lcd */
+/* Only if DISPLAY_oled: */
+#define DISPLAY_narrower (1<<0)
+#define DISPLAY_rotate   (1<<2)
+#define DISPLAY_narrow   (1<<3)
+ /*#define DISPLAY_sh1106   (1<<4) legacy unused */
+#define DISPLAY_oled_64  (1<<5)
+/* Only if DISPLAY_lcd: */
+#define _DISPLAY_lcd_columns 5
 #define DISPLAY_lcd_columns(x) ((x)<<_DISPLAY_lcd_columns)
     uint16_t display_type;
 #define ROT_none    0

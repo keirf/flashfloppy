@@ -855,8 +855,6 @@ static void read_ff_cfg(void)
                 } else if (!strncmp(p, "narrow", 6)) {
                     ff_cfg.display_type |=
                         (p[6] == 'e') ? DISPLAY_narrower : DISPLAY_narrow;
-                } else if (!strcmp(p, "sh1106")) {
-                    ff_cfg.display_type |= DISPLAY_sh1106;
                 } else if ((r = strchr(p, 'x')) != NULL) {
                     unsigned int w, h;
                     *r++ = '\0';
