@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.3a - 8 April 2019
+ - OLED: Auto-detect SSD1306 vs SH1106 display controller
+   - FF.CFG: 'display-type = ...-sh1106' is now redundant and ignored
+ - ATR: Fix readability of downloaded ATR images
+   - Invert data as it is read/written, mirroring the standard XF551 interface
+   - Thanks to Piotr for this report (using his XF551 clone)
+
 ** v2.2a - 5 April 2019
  - New image types supported:
    - XDF: 3.5" HD eXtended Disk Format (1840kB)
