@@ -100,10 +100,12 @@ struct __packed ff_cfg {
 #define _DISPLAY_lcd_columns 5
 #define DISPLAY_lcd_columns(x) ((x)<<_DISPLAY_lcd_columns)
     uint16_t display_type;
-#define ROT_none    0
-#define ROT_full    1
-#define ROT_half    3
-#define ROT_quarter 2
+#define ROT_none      0
+#define ROT_full      1
+#define ROT_half      3
+#define ROT_quarter   2
+#define ROT_trackball 4
+#define ROT_buttons   5
 #define ROT_reverse (1u<<7)
     uint8_t rotary;
     bool_t write_protect;

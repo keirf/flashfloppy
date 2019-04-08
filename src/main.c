@@ -388,7 +388,7 @@ static void button_timer_fn(void *unused)
         [ROT_half]    = 0x24000018, /* 2 transitions (half cycle) per detent */
         [ROT_quarter] = 0x24428118  /* 1 transition (quarter cyc) per detent */
     };
-    const uint8_t rotary_reverse[] = {
+    const uint8_t rotary_reverse[4] = {
         [B_LEFT] = B_RIGHT, [B_RIGHT] = B_LEFT
     };
 
@@ -422,7 +422,17 @@ static void button_timer_fn(void *unused)
         b |= B_SELECT;
 
     rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
-    rb = (rotary_transitions[ff_cfg.rotary & 3] >> (rotary << 1)) & 3;
+    switch (ff_cfg.rotary & ~ROT_reverse) {
+    case ROT_trackball:
+        rb = rotary_reverse[(rotary ^ (rotary >> 2)) & 3];
+        break;
+    case ROT_buttons:
+        rb = rotary_reverse[rotary & 3];
+        break;
+    default: /* rotary encoder */
+        rb = (rotary_transitions[ff_cfg.rotary & 3] >> (rotary << 1)) & 3;
+        break;
+    }
     if (ff_cfg.rotary & ROT_reverse)
         rb = rotary_reverse[rb];
     b |= rb;
@@ -821,6 +831,8 @@ static void read_ff_cfg(void)
                         !strcmp(p, "gray") ? ROT_quarter /* obsolete name */
                         : !strcmp(p, "quarter") ? ROT_quarter
                         : !strcmp(p, "half") ? ROT_half
+                        : !strcmp(p, "trackball") ? ROT_trackball
+                        : !strcmp(p, "buttons") ? ROT_buttons
                         : !strcmp(p, "none") ? ROT_none
                         : ROT_full;
                 }
