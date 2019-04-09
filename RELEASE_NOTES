@@ -3,6 +3,14 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.4a - 9 April 2019
+ - This release fixes many raw track formats (SSD, DSD, OPD, VDK, ...)
+   - Thanks to John Gray for bug report, and testing!
+ - RAW: Fix FM track generation
+   - FM and IAM flags not plumbed through from front-end image handlers
+ - RAW: Fix interleaved/skewed track generation
+   - Data fetch not loading sectors from image file in the right order
+
 ** v2.3a - 8 April 2019
  - OLED: Auto-detect SSD1306 vs SH1106 display controller
    - FF.CFG: 'display-type = ...-sh1106' is now redundant and ignored
