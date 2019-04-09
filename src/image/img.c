@@ -1856,27 +1856,24 @@ static void img_fetch_data(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
     uint8_t *buf = rd->p;
-    struct raw_sec *sec;
-    uint8_t *sec_map;
+    struct raw_sec *sec, *s;
+    uint8_t sec_i;
     uint16_t off, len;
-    unsigned int i;
 
     if (rd->prod != rd->cons)
         return;
 
+    sec_i = im->img.sec_map[im->img.trk_sec];
+    sec = &im->img.sec_info[sec_i];
+
     if (im->img.file_sec_offsets) {
-        sec_map = &im->img.sec_map[im->img.trk_sec];
-        off = im->img.file_sec_offsets[*sec_map];
+        off = im->img.file_sec_offsets[sec_i];
     } else {
         off = 0;
-        sec_map = im->img.sec_map;
-        for (i = 0; i < im->img.trk_sec; i++) {
-            sec = &im->img.sec_info[*sec_map++];
-            off += sec_sz(sec->no);
-        }
+        for (s = im->img.sec_info; s != sec; s++)
+            off += sec_sz(s->no);
     }
 
-    sec = &im->img.sec_info[*sec_map];
     len = sec_sz(sec->no);
 
     off += im->img.rd_sec_pos * 1024;
@@ -1980,6 +1977,8 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
     /* Create a track layout per side. */
     for (i = 0; i < im->nr_sides; i++) {
         trk = add_track_layout(im, layout->nr_sectors, i);
+        trk->is_fm = layout->is_fm;
+        trk->has_iam = layout->has_iam;
         trk->gap_3 = layout->gap3;
         trk->gap_4a = layout->gap4a;
         sec = &im->img.sec_info_base[trk->sec_off];
