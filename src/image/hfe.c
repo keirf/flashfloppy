@@ -105,6 +105,10 @@ static bool_t hfe_open(struct image *im)
     im->ticks_per_cell = im->write_bc_ticks * 16;
     im->sync = SYNC_none;
 
+    ASSERT(RDATA_BUFLEN + 8*512 <= im->bufs.read_data.len);
+    volume_cache_init(im->bufs.read_data.p + RDATA_BUFLEN + 8*512,
+                      im->bufs.read_data.p + im->bufs.read_data.len);
+
     /* Get an initial value for ticks per revolution. */
     hfe_seek_track(im, 0);
 

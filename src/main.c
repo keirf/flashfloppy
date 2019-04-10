@@ -1597,6 +1597,26 @@ static int run_floppy(void *_b)
     return 0;
 }
 
+static void floppy_arena_setup(void)
+{
+    unsigned int cache_len;
+    uint8_t *cache_start;
+
+    arena_init();
+
+    fs = arena_alloc(sizeof(*fs));
+
+    cache_len = arena_avail();
+    cache_start = arena_alloc(cache_len);
+    volume_cache_init(cache_start, cache_start + cache_len);
+}
+
+static void floppy_arena_teardown(void)
+{
+    fs = NULL;
+    volume_cache_destroy();
+}
+
 static int floppy_main(void *unused)
 {
     FRESULT fres;
@@ -1609,8 +1629,7 @@ static int floppy_main(void *unused)
     if (buttons)
         cfg.ejected = TRUE;
 
-    arena_init();
-    fs = arena_alloc(sizeof(*fs));
+    floppy_arena_setup();
     
     cfg_init();
     cfg_update(CFG_READ_SLOT_NR);
@@ -1682,13 +1701,12 @@ static int floppy_main(void *unused)
             cfg.ejected = FALSE;
             b = B_SELECT;
         } else {
+            floppy_arena_teardown();
             fres = F_call_cancellable(run_floppy, &b);
             floppy_cancel();
             assert_volume_connected();
+            floppy_arena_setup();
         }
-
-        arena_init();
-        fs = arena_alloc(sizeof(*fs));
 
         if (cfg.dirty_slot_nr) {
             cfg.dirty_slot_nr = FALSE;
@@ -2064,9 +2082,9 @@ int main(void)
         }
         usbh_msc_buffer_set((void *)0xdeadbeef);
 
-        arena_init();
         fres = F_call_cancellable(floppy_main, NULL);
         floppy_cancel();
+        floppy_arena_teardown();
 
         handle_errors(fres);
     }

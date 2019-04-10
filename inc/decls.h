@@ -20,9 +20,11 @@
 
 #include "time.h"
 #include "../src/fatfs/ff.h"
+#include "util.h"
+#include "list.h"
+#include "cache.h"
 #include "da.h"
 #include "hxc.h"
-#include "util.h"
 #include "cancellation.h"
 #include "spi.h"
 #include "timer.h"

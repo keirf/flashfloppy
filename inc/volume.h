@@ -24,6 +24,9 @@ struct volume_ops {
 bool_t volume_connected(void);
 bool_t volume_readonly(void);
 
+void volume_cache_init(void *start, void *end);
+void volume_cache_destroy(void);
+
 /*
  * Local variables:
  * mode: C

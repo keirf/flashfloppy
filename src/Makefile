@@ -1,5 +1,6 @@
 OBJS += arena.o
 OBJS += build_info.o
+OBJS += cache.o
 OBJS += cancellation.o
 OBJS += config.o
 OBJS += crc.o

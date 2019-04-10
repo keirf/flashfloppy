@@ -1450,6 +1450,8 @@ static bool_t raw_open(struct image *im)
 {
     im->img.rpm = im->img.rpm ?: 300;
     im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
+    volume_cache_init(im->bufs.write_data.p + 8192 + 2,
+                      im->img.heap_bottom);
     return TRUE;
 }
 
@@ -1903,8 +1905,9 @@ static void *align_p(void *p)
 static void check_p(void *p, struct image *im)
 {
     uint8_t *a = p, *b = (uint8_t *)im->bufs.read_data.p;
-    if ((int32_t)(a-b) < 8192)
+    if ((int32_t)(a-b) < (8192+2))
         F_die(FR_BAD_IMAGE);
+    im->img.heap_bottom = p;
 }
 
 static struct raw_trk *add_track_layout(

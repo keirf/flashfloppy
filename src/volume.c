@@ -18,6 +18,21 @@ extern struct volume_ops usb_ops;
 
 static struct volume_ops *vol_ops = &usb_ops;
 
+static struct cache *cache;
+#define SECSZ 512
+
+#if !defined(BOOTLOADER) && !defined(RELOADER)
+void volume_cache_init(void *start, void *end)
+{
+    cache = cache_init(start, end, SECSZ);
+}
+
+void volume_cache_destroy(void)
+{
+    cache = NULL;
+}
+#endif
+
 DSTATUS disk_initialize(BYTE pdrv)
 {
     /* Default to USB if inserted. */
@@ -46,12 +61,37 @@ DSTATUS disk_status(BYTE pdrv)
 
 DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
 {
-    return vol_ops->read(pdrv, buff, sector, count);
+    DRESULT res;
+    const void *p;
+    struct cache *c;
+
+    if ((c = cache) == NULL)
+        return vol_ops->read(pdrv, buff, sector, count);
+
+    while (count) {
+        if ((p = cache_lookup(c, sector)) == NULL)
+            goto read_tail;
+        memcpy(buff, p, SECSZ);
+        sector++;
+        count--;
+        buff += SECSZ;
+    }
+    return RES_OK;
+
+read_tail:
+    res = vol_ops->read(pdrv, buff, sector, count);
+    if (res == RES_OK)
+        cache_update_N(c, sector, buff, count);
+    return res;
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
 {
-    return vol_ops->write(pdrv, buff, sector, count);
+    DRESULT res = vol_ops->write(pdrv, buff, sector, count);
+    struct cache *c;
+    if ((res == RES_OK) && ((c = cache) != NULL))
+        cache_update_N(c, sector, buff, count);
+    return res;
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)

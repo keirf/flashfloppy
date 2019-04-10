@@ -101,6 +101,9 @@ static bool_t dsk_open(struct image *im)
      * length and thus the period between index pulses. */
     im->ticks_per_cell = im->write_bc_ticks * 16;
 
+    volume_cache_init(im->bufs.write_data.p + 512 + 8192 + 2,
+                      im->bufs.write_data.p + im->bufs.write_data.len);
+
     return TRUE;
 }
 
@@ -147,10 +150,14 @@ static void dsk_seek_track(
         tib->nr_secs = 29;
 
     /* Compute per-sector actual length. */
-    for (i = 0; i < tib->nr_secs; i++)
+    for (i = 0; i < tib->nr_secs; i++) {
         tib->sib[i].actual_length = im->dsk.extended
             ? le16toh(tib->sib[i].actual_length)
             : 128 << min_t(unsigned, tib->sec_sz, 8);
+        if ((tib->sib[i].actual_length > 8192)
+            || (tib->sib[i].n > 6))
+            F_die(FR_BAD_IMAGE);
+    }
 
 out:
     im->dsk.idx_sz = GAP_4A;

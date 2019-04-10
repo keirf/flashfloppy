@@ -14,6 +14,8 @@
 #define DD_TRACKLEN_BC 101376 /* multiple of 32 */
 #define POST_IDX_GAP_BC 1024
 
+#define MAX_WR_BATCH 11
+
 /* Shift even/odd bits into MFM data-bit positions */
 #define even(x) ((x)>>1)
 #define odd(x) (x)
@@ -52,6 +54,9 @@ static bool_t adf_open(struct image *im)
     im->adf.pre_idx_gap_bc = (im->tracklen_bc
                               - im->adf.nr_secs * 544 * 16
                               - POST_IDX_GAP_BC);
+
+    volume_cache_init(im->bufs.write_data.p + MAX_WR_BATCH * 512,
+                      im->bufs.write_data.p + im->bufs.write_data.len);
 
     return TRUE;
 }
@@ -239,7 +244,9 @@ static bool_t adf_write_track(struct image *im)
         p = (write->bc_end + 31) / 32;
 
     batch = batch_sect = 0;
-    max_batch = im->bufs.write_data.len / 512;
+    max_batch = min_t(unsigned int,
+                      im->bufs.write_data.len / 512,
+                      MAX_WR_BATCH);
     w = wrbuf;
 
     while ((int16_t)(p - c) >= (542/2)) {

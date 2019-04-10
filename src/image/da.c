@@ -55,6 +55,9 @@ static void da_seek_track(struct image *im, uint16_t track)
         return;
     im->cur_track = track;
 
+    volume_cache_init(im->bufs.write_data.p + SEC_SZ + 2,
+                      im->bufs.write_data.p + im->bufs.write_data.len);
+
     switch (display_mode) {
     case DM_LED_7SEG:
         led_7seg_write_string((led_7seg_nr_digits() == 3) ? "D-A" : "DA");
