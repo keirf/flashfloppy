@@ -13,58 +13,46 @@ struct cache_ent {
     uint32_t id;
     struct list_head lru;
     struct list_head hash;
+    uint8_t dat[0];
 };
 
 struct cache {
-    uint8_t *dat;
-    unsigned int item_sz;
+    uint32_t item_sz;
     struct list_head lru;
     struct list_head hash[32];
-    struct cache_ent block[0];
+    struct cache_ent ents[0];
 };
 
 static struct cache *cache;
 #define CACHE_HASH(_id) ((_id)&31)
 
-static void *cache_dat(struct cache *c, struct cache_ent *cent)
-{
-    return c->dat + (cent - c->block) * c->item_sz;
-}
-
 struct cache *cache_init(void *start, void *end, unsigned int item_sz)
 {
     uint8_t *s, *e;
-    int i, space, nitm, req;
+    int i, nitm;
     struct cache *c;
+    struct cache_ent *cent;
 
     s = (uint8_t *)(((uint32_t)start + 3) & ~3);
     e = (uint8_t *)((uint32_t)end & ~3);
 
-    space = e - s;
-    nitm = space / item_sz;
-    space -= nitm * item_sz;
-
+    nitm = ((e - s) - sizeof(*c)) / (item_sz + sizeof(*cent));
     if (nitm < 8) {
         printk("No cache: too small (%d)\n", e - s);
         return NULL;
     }
 
-    req = sizeof(struct cache) + nitm * sizeof(struct cache_ent);
-    while (space < req) {
-        nitm--;
-        space += item_sz;
-        req -= sizeof(struct cache_ent);
-    }
-
     cache = c = (struct cache *)s;
-    c->dat = s + req;
     c->item_sz = item_sz;
     list_init(&c->lru);
     for (i = 0; i < ARRAY_SIZE(c->hash); i++)
         list_init(&c->hash[i]);
+
+    cent = c->ents;
     for (i = 0; i < nitm; i++) {
-        list_insert_tail(&c->lru, &c->block[i].lru);
-        list_init(&c->block[i].hash);
+        list_insert_tail(&c->lru, &cent->lru);
+        list_init(&cent->hash);
+        cent = (struct cache_ent *)((uint32_t)cent + sizeof(*cent) + item_sz);
     }
 
     printk("Cache %u items\n", nitm);
@@ -90,7 +78,7 @@ found:
     /* Item is cached. Move it to head of LRU and return the data. */
     list_remove(&cent->lru);
     list_insert_head(&c->lru, &cent->lru);
-    return cache_dat(c, cent);
+    return cent->dat;
 }
 
 void cache_update(struct cache *c, uint32_t id, const void *dat)
@@ -109,7 +97,7 @@ void cache_update(struct cache *c, uint32_t id, const void *dat)
     /* Steal the oldest cache entry from the LRU. */
     ent = c->lru.prev;
     cent = container_of(ent, struct cache_ent, lru);
-    p = cache_dat(c, cent);
+    p = cent->dat;
 
     /* Remove the selected cache entry from the cache. */
     list_remove(&cent->lru);
