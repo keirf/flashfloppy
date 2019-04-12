@@ -33,21 +33,25 @@ struct cache *cache_init(void *start, void *end, unsigned int item_sz)
     struct cache *c;
     struct cache_ent *cent;
 
+    /* Cache boundaries are four-byte aligned. */
     s = (uint8_t *)(((uint32_t)start + 3) & ~3);
     e = (uint8_t *)((uint32_t)end & ~3);
 
-    nitm = ((e - s) - sizeof(*c)) / (item_sz + sizeof(*cent));
+    nitm = ((e - s) - sizeof(*c)) / (sizeof(*cent) + item_sz);
     if (nitm < 8) {
         printk("No cache: too small (%d)\n", e - s);
         return NULL;
     }
 
+    /* Initialise the empty cache structure. */
     cache = c = (struct cache *)s;
     c->item_sz = item_sz;
     list_init(&c->lru);
     for (i = 0; i < ARRAY_SIZE(c->hash); i++)
         list_init(&c->hash[i]);
 
+    /* Insert all the cache entries into the LRU list. They are not present 
+     * in any hash chain as none of the cache entries are yet in use. */
     cent = c->ents;
     for (i = 0; i < nitm; i++) {
         list_insert_tail(&c->lru, &cent->lru);
@@ -83,7 +87,6 @@ found:
 
 void cache_update(struct cache *c, uint32_t id, const void *dat)
 {
-    struct list_head *hash, *ent;
     struct cache_ent *cent;
     void *p;
 
@@ -91,12 +94,8 @@ void cache_update(struct cache *c, uint32_t id, const void *dat)
     if ((p = (void *)cache_lookup(c, id)) != NULL)
         goto found;
 
-    /* Find the hash chain. */
-    hash = &c->hash[CACHE_HASH(id)];
-
     /* Steal the oldest cache entry from the LRU. */
-    ent = c->lru.prev;
-    cent = container_of(ent, struct cache_ent, lru);
+    cent = container_of(c->lru.prev, struct cache_ent, lru);
     p = cent->dat;
 
     /* Remove the selected cache entry from the cache. */
@@ -107,7 +106,7 @@ void cache_update(struct cache *c, uint32_t id, const void *dat)
     /* Reinsert the cache entry in the correct hash chain, and head of LRU. */
     cent->id = id;
     list_insert_head(&c->lru, &cent->lru);
-    list_insert_head(hash, &cent->hash);
+    list_insert_head(&c->hash[CACHE_HASH(id)], &cent->hash);
 
 found:
     /* Finally, store away the actual item data. */
