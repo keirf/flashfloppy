@@ -3,6 +3,16 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.5a - 12 April 2019
+ - Fragment-offsets cache implemented at the FAT filesystem layer
+ - Block cache implemented at the mass-storage volume layer
+   - Faster image selection/navigation in large folders
+   - Improved reliability in image handling (reduced access latencies)
+   - USB stick will usually stop flashing when drive is not being accessed!
+ - FF.CFG: New rotary input options
+   - 'trackball': Blackberry-style trackball
+   - 'buttons': Push-to-ground Prev/Next buttons
+
 ** v2.4a - 9 April 2019
  - This release fixes many raw track formats (SSD, DSD, OPD, VDK, ...)
    - Thanks to John Gray for bug report, and testing!
