@@ -187,7 +187,7 @@ extern const struct image_type {
 bool_t image_valid(FILINFO *fp);
 
 /* Open specified image file on mass storage device. */
-void image_open(struct image *im, const struct slot *slot);
+void image_open(struct image *im, const struct slot *slot, DWORD *cltbl);
 
 /* Extend a trunated image file. */
 void image_extend(struct image *im);

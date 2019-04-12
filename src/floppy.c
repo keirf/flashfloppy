@@ -380,6 +380,8 @@ void floppy_init(void)
 void floppy_insert(unsigned int unit, struct slot *slot)
 {
     struct drive *drv = &drive;
+    DWORD *cltbl;
+    FRESULT fr;
 
     arena_init();
 
@@ -388,6 +390,24 @@ void floppy_insert(unsigned int unit, struct slot *slot)
 
     image = arena_alloc(sizeof(*image));
     memset(image, 0, sizeof(*image));
+
+    /* Create a fast-seek cluster table for the image. */
+#define MAX_FILE_FRAGS 511 /* up to a 4kB cluster table */
+    cltbl = arena_alloc(0);
+    *cltbl = (MAX_FILE_FRAGS + 1) * 2;
+    fatfs_from_slot(&image->fp, slot, FA_READ);
+    image->fp.cltbl = cltbl;
+    fr = f_lseek(&image->fp, CREATE_LINKMAP);
+    printk("Fast Seek: %u frags\n", (*cltbl / 2) - 1);
+    if (fr == FR_OK) {
+        DWORD *_cltbl = arena_alloc(*cltbl * 4);
+        ASSERT(_cltbl == cltbl);
+    } else if (fr == FR_NOT_ENOUGH_CORE) {
+        printk("Fast Seek: FAILED\n");
+        cltbl = NULL;
+    } else {
+        F_die(fr);
+    }
 
     /* Large buffer to absorb long write latencies at mass-storage layer. */
     image->bufs.write_bc.len = 16*1024; /* 16kB, power of two. */
@@ -411,7 +431,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     ASSERT(image->bufs.read_data.len >= 20*1024);
 
     /* Mount the image file. */
-    image_open(image, slot);
+    image_open(image, slot, cltbl);
     drv->image = image;
     if (!image->handler->write_track || volume_readonly())
         slot->attributes |= AM_RDO;

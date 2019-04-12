@@ -50,7 +50,11 @@
 /* This option switches f_mkfs() function. (0:Disable or 1:Enable) */
 
 
+#if defined(BOOTLOADER) || defined(RELOADER)
 #define FF_USE_FASTSEEK	0
+#else
+#define FF_USE_FASTSEEK	1
+#endif
 /* This option switches fast seek function. (0:Disable or 1:Enable) */
 
 
