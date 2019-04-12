@@ -26,6 +26,7 @@ bool_t volume_readonly(void);
 
 void volume_cache_init(void *start, void *end);
 void volume_cache_destroy(void);
+void volume_cache_metadata_only(FIL *fp);
 
 /*
  * Local variables:

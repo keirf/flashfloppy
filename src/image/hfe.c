@@ -108,6 +108,7 @@ static bool_t hfe_open(struct image *im)
     ASSERT(RDATA_BUFLEN + 8*512 <= im->bufs.read_data.len);
     volume_cache_init(im->bufs.read_data.p + RDATA_BUFLEN + 8*512,
                       im->bufs.read_data.p + im->bufs.read_data.len);
+    volume_cache_metadata_only(&im->fp);
 
     /* Get an initial value for ticks per revolution. */
     hfe_seek_track(im, 0);
