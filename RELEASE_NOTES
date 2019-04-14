@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.2 - 14 April 2019
+ - OLED: Fix horizontal offset on SH1106 128x32 displays
+ - Update HxC Compat to v5-FF
+
 ** v1.1 - 14 March 2019
  - FF.CFG: Fix parsing of comma-separated values
 
