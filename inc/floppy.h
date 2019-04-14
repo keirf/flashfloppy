@@ -159,7 +159,7 @@ struct image {
         struct directaccess da;
     };
 
-    const struct slot *slot;
+    struct slot *slot;
 };
 
 static inline struct write *get_write(struct image *im, uint16_t idx)
@@ -169,7 +169,7 @@ static inline struct write *get_write(struct image *im, uint16_t idx)
 
 struct image_handler {
     bool_t (*open)(struct image *im);
-    void (*extend)(struct image *im);
+    FSIZE_t (*extend)(struct image *im);
     void (*setup_track)(
         struct image *im, uint16_t track, uint32_t *start_pos);
     bool_t (*read_track)(struct image *im);
@@ -187,7 +187,7 @@ extern const struct image_type {
 bool_t image_valid(FILINFO *fp);
 
 /* Open specified image file on mass storage device. */
-void image_open(struct image *im, const struct slot *slot, DWORD *cltbl);
+void image_open(struct image *im, struct slot *slot, DWORD *cltbl);
 
 /* Extend a trunated image file. */
 void image_extend(struct image *im);

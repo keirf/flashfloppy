@@ -86,7 +86,7 @@ bool_t image_valid(FILINFO *fp)
     return FALSE;
 }
 
-static bool_t try_handler(struct image *im, const struct slot *slot,
+static bool_t try_handler(struct image *im, struct slot *slot,
                           DWORD *cltbl,
                           const struct image_handler *handler)
 {
@@ -115,7 +115,7 @@ static bool_t try_handler(struct image *im, const struct slot *slot,
     return handler->open(im);
 }
 
-void image_open(struct image *im, const struct slot *slot, DWORD *cltbl)
+void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
     static const struct image_handler * const image_handlers[] = {
         /* Special handler for dummy slots (empty HxC slot 0). */
@@ -179,8 +179,26 @@ void image_open(struct image *im, const struct slot *slot, DWORD *cltbl)
 
 void image_extend(struct image *im)
 {
-    if (im->handler->extend && im->fp.dir_ptr && ff_cfg.extend_image)
-        im->handler->extend(im);
+    FSIZE_t new_sz;
+
+    if (!(im->handler->extend && im->fp.dir_ptr && ff_cfg.extend_image))
+        return;
+
+    new_sz = im->handler->extend(im);
+    if (f_size(&im->fp) >= new_sz)
+        return;
+
+    /* Disable fast-seek mode, as it disallows extending the file. */
+    im->fp.cltbl = NULL;
+
+    /* Attempt to extend the file. */
+    F_lseek(&im->fp, new_sz);
+    F_sync(&im->fp);
+    if (f_tell(&im->fp) != new_sz)
+        F_die(FR_DISK_FULL);
+
+    /* Update the slot for the new file size. */
+    im->slot->size = new_sz;
 }
 
 bool_t image_setup_track(

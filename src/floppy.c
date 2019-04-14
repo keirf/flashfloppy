@@ -379,76 +379,88 @@ void floppy_init(void)
 
 void floppy_insert(unsigned int unit, struct slot *slot)
 {
+    struct image *im;
+    struct dma_ring *_dma_rd, *_dma_wr;
     struct drive *drv = &drive;
+    FSIZE_t fastseek_sz;
     DWORD *cltbl;
     FRESULT fr;
 
-    arena_init();
+    do {
 
-    dma_rd = dma_ring_alloc();
-    dma_wr = dma_ring_alloc();
+        arena_init();
 
-    image = arena_alloc(sizeof(*image));
-    memset(image, 0, sizeof(*image));
+        _dma_rd = dma_ring_alloc();
+        _dma_wr = dma_ring_alloc();
 
-    /* Create a fast-seek cluster table for the image. */
+        im = arena_alloc(sizeof(*im));
+        memset(im, 0, sizeof(*im));
+
+        /* Create a fast-seek cluster table for the image. */
 #define MAX_FILE_FRAGS 511 /* up to a 4kB cluster table */
-    cltbl = arena_alloc(0);
-    *cltbl = (MAX_FILE_FRAGS + 1) * 2;
-    fatfs_from_slot(&image->fp, slot, FA_READ);
-    image->fp.cltbl = cltbl;
-    fr = f_lseek(&image->fp, CREATE_LINKMAP);
-    printk("Fast Seek: %u frags\n", (*cltbl / 2) - 1);
-    if (fr == FR_OK) {
-        DWORD *_cltbl = arena_alloc(*cltbl * 4);
-        ASSERT(_cltbl == cltbl);
-    } else if (fr == FR_NOT_ENOUGH_CORE) {
-        printk("Fast Seek: FAILED\n");
-        cltbl = NULL;
-    } else {
-        F_die(fr);
-    }
+        cltbl = arena_alloc(0);
+        *cltbl = (MAX_FILE_FRAGS + 1) * 2;
+        fatfs_from_slot(&im->fp, slot, FA_READ);
+        fastseek_sz = f_size(&im->fp);
+        im->fp.cltbl = cltbl;
+        fr = f_lseek(&im->fp, CREATE_LINKMAP);
+        printk("Fast Seek: %u frags\n", (*cltbl / 2) - 1);
+        if (fr == FR_OK) {
+            DWORD *_cltbl = arena_alloc(*cltbl * 4);
+            ASSERT(_cltbl == cltbl);
+        } else if (fr == FR_NOT_ENOUGH_CORE) {
+            printk("Fast Seek: FAILED\n");
+            cltbl = NULL;
+        } else {
+            F_die(fr);
+        }
 
-    /* Large buffer to absorb long write latencies at mass-storage layer. */
-    image->bufs.write_bc.len = 16*1024; /* 16kB, power of two. */
-    image->bufs.write_bc.p = arena_alloc(image->bufs.write_bc.len);
+        /* ~0 avoids sync match within fewer than 32 bits of scan start. */
+        im->write_bc_window = ~0;
 
-    /* ~0 avoids sync match within fewer than 32 bits of scan start. */
-    image->write_bc_window = ~0;
+        /* Large buffer to absorb write latencies at mass-storage layer. */
+        im->bufs.write_bc.len = 16*1024; /* 16kB, power of two. */
+        im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
 
-    /* Smaller buffer for absorbing read latencies at mass-storage layer. */
-    image->bufs.read_bc.len = 8*1024; /* 8kB, power of two. */
-    image->bufs.read_bc.p = arena_alloc(image->bufs.read_bc.len);
+        /* Smaller buffer to absorb read latencies at mass-storage layer. */
+        im->bufs.read_bc.len = 8*1024; /* 8kB, power of two. */
+        im->bufs.read_bc.p = arena_alloc(im->bufs.read_bc.len);
 
-    /* Any remaining space is used for staging I/O to mass storage, shared
-     * between read and write paths (Change of use of this memory space is
-     * fully serialised). */
-    image->bufs.write_data.len = arena_avail();
-    image->bufs.write_data.p = arena_alloc(image->bufs.write_data.len);
-    image->bufs.read_data = image->bufs.write_data;
+        /* Any remaining space is used for staging I/O to mass storage, shared
+         * between read and write paths (Change of use of this memory space is
+         * fully serialised). */
+        im->bufs.write_data.len = arena_avail();
+        im->bufs.write_data.p = arena_alloc(im->bufs.write_data.len);
+        im->bufs.read_data = im->bufs.write_data;
 
-    /* Minimum allowable buffer space (assumed by hfe image handler). */
-    ASSERT(image->bufs.read_data.len >= 20*1024);
+        /* Minimum allowable buffer space (assumed by hfe image handler). */
+        ASSERT(im->bufs.read_data.len >= 20*1024);
 
-    /* Mount the image file. */
-    image_open(image, slot, cltbl);
-    drv->image = image;
-    if (!image->handler->write_track || volume_readonly())
-        slot->attributes |= AM_RDO;
-    if (slot->attributes & AM_RDO) {
-        printk("Image is R/O\n");
-    } else {
-        image_extend(image);
-    }
+        /* Mount the image file. */
+        image_open(im, slot, cltbl);
+        if (!im->handler->write_track || volume_readonly())
+            slot->attributes |= AM_RDO;
+        if (slot->attributes & AM_RDO) {
+            printk("Image is R/O\n");
+        } else {
+            image_extend(im);
+        }
+
+    } while (f_size(&im->fp) != fastseek_sz);
 
     /* After image is extended at mount time, we permit no further changes 
      * to the file metadata. Clear the dirent info to ensure this. */
-    image->fp.dir_ptr = NULL;
-    image->fp.dir_sect = 0;
+    im->fp.dir_ptr = NULL;
+    im->fp.dir_sect = 0;
 
-    dma_rd->state = DMA_stopping;
+    _dma_rd->state = DMA_stopping;
 
-    if (image->write_bc_ticks < sysclk_ns(1500))
+    /* Make allocated state globally visible now. */
+    drv->image = image = im;
+    dma_rd = _dma_rd;
+    dma_wr = _dma_wr;
+
+    if (im->write_bc_ticks < sysclk_ns(1500))
         drive_change_output(drv, outp_hden, TRUE);
 
     drv->index_suppressed = FALSE;
@@ -519,7 +531,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
 
     /* Drive is ready. Set output signals appropriately. */
     drive_change_output(drv, outp_rdy, TRUE);
-    update_amiga_id(image->stk_per_rev > stk_ms(300));
+    update_amiga_id(im->stk_per_rev > stk_ms(300));
     if (!(slot->attributes & AM_RDO))
         drive_change_output(drv, outp_wrprot, FALSE);
 }

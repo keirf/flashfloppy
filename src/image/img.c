@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-static void raw_extend(struct image *im);
+static FSIZE_t raw_extend(struct image *im);
 static void raw_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos);
 static bool_t raw_read_track(struct image *im);
@@ -1455,7 +1455,7 @@ static bool_t raw_open(struct image *im)
     return TRUE;
 }
 
-static void raw_extend(struct image *im)
+static FSIZE_t raw_extend(struct image *im)
 {
     unsigned int i, j, sz = im->img.base_off;
     struct raw_trk *trk;
@@ -1470,13 +1470,7 @@ static void raw_extend(struct image *im)
         }
     }
 
-    if (f_size(&im->fp) >= sz)
-        return;
-
-    F_lseek(&im->fp, sz);
-    F_sync(&im->fp);
-    if (f_tell(&im->fp) != sz)
-        F_die(FR_DISK_FULL);
+    return sz;
 }
 
 static unsigned int file_idx(
