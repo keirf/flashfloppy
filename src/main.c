@@ -1698,8 +1698,6 @@ static int floppy_main(void *unused)
             goto select;
         }
 
-        fs = NULL;
-
         display_write_slot(FALSE);
         if (display_mode == DM_LCD_1602)
             lcd_write_track_info(TRUE);
