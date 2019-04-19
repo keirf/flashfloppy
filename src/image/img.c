@@ -462,12 +462,27 @@ static bool_t adfs_open(struct image *im)
 
 static bool_t atr_open(struct image *im)
 {
+
+/* Original Atari drives (eg 1050) spin slightly slow (288rpm, -4%). 
+ * Later interfaces use normal-speed drives (300rpm) with a faster-than-usual
+ * bit rate (eg XF551 drives controller at 8.333MHz rather than 8MHz (+4%)). 
+ * We emulate that faster bitrate here. 
+ * Source: Atarimania FAQ, "How can I read/write Atari diskettes with
+ * my other computer?" */
+#define ATR_RATE(_r) ((_r) + (_r)/25)
+
+/* Atari machines transfer floppy data via the slow SIO interface. This is 
+ * capable of transferring only approx 2 sectors per disk revolution. Hence 
+ * a significant sector interleave is required. 
+ * Source: atariage.com/forums/topic/269694-improved-sector-layout-cx8111 */
+#define ATR_INTERLEAVE(_secs) ((_secs)/2)
+
     struct {
         uint16_t sig, size_lo, size_sec, size_hi;
         uint8_t flags, unused[7];
     } header;
     bool_t is_fm;
-    unsigned int i, j, sz, no, nr_sectors;
+    unsigned int i, j, sz, no, nr_sectors, rate;
     struct raw_sec *sec;
     struct raw_trk *trk;
     uint8_t *trk_map;
@@ -483,10 +498,13 @@ static bool_t atr_open(struct image *im)
     im->nr_cyls = 40;
     im->nr_sides = 1;
     is_fm = FALSE;
+    rate = ATR_RATE(250);
     if (no == 0) {
-        /* 40-1-18, 128b/s, FM */
         is_fm = (sz < (130*1024));
-        if (!is_fm) {
+        if (is_fm) {
+            /* 40-1-18, 128b/s, FM */
+            rate = ATR_RATE(125);
+        } else {
             /* 40-1-26, 128b/s, MFM */
             nr_sectors = 26;
         }
@@ -494,7 +512,7 @@ static bool_t atr_open(struct image *im)
         /* 40-2-18, 256b/s, MFM */
         im->nr_sides = 2;
     }
-    im->img.interleave = 1;
+    im->img.interleave = ATR_INTERLEAVE(nr_sectors);
     im->img.base_off = 16;
 
     /* Create two track layout: 0 -> Track 0; 1 -> All other tracks. */
@@ -503,6 +521,7 @@ static bool_t atr_open(struct image *im)
         trk->has_iam = TRUE;
         trk->is_fm = is_fm;
         trk->invert_data = TRUE;
+        trk->data_rate = rate;
         sec = &im->img.sec_info_base[trk->sec_off];
         for (j = 0; j < nr_sectors; j++) {
             sec->id = j + 1;
