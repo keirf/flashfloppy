@@ -37,7 +37,7 @@ struct cache *cache_init(void *start, void *end, unsigned int item_sz)
     s = (uint8_t *)(((uint32_t)start + 3) & ~3);
     e = (uint8_t *)((uint32_t)end & ~3);
 
-    nitm = ((e - s) - sizeof(*c)) / (sizeof(*cent) + item_sz);
+    nitm = ((e - s) - (int)sizeof(*c)) / (int)(sizeof(*cent) + item_sz);
     if (nitm < 8) {
         printk("No cache: too small (%d)\n", e - s);
         return NULL;
