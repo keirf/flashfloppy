@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.7a - 23 April 2019
+ - Sort folders into alphabetical order during direct navigation
+   - FF.CFG: folder-mode= to modify this new default behaviour
+ - Fix memory corruption issues (stack overflow)
+ - ATR: Interleave sectors for best performance over slow SIO interface
+
 ** v2.6a - 14 April 2019
  - Fix feature breakages in v2.5a
    - SSD/DSD/TRD auto-extend feature
