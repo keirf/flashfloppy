@@ -949,7 +949,7 @@ static void read_ff_cfg(void)
 
     F_close(&fs->file);
 
-    flash_ff_cfg_update();
+    flash_ff_cfg_update(fs->buf);
 }
 
 static void process_ff_cfg_opts(const struct ff_cfg *old)
@@ -974,7 +974,7 @@ static void process_ff_cfg_opts(const struct ff_cfg *old)
 static void cfg_init(void)
 {
     struct ff_cfg old_ff_cfg = ff_cfg;
-    struct hxcsdfe_cfg hxc_cfg;
+    struct hxcsdfe_cfg *hxc_cfg;
     unsigned int sofar;
     char *p;
     BYTE mode;
@@ -1008,18 +1008,19 @@ static void cfg_init(void)
     if (fr)
         goto native_mode;
     fatfs_to_short_slot(&cfg.hxcsdfe, &fs->file, "HXCSDFE.CFG");
-    F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
-    if (hxc_cfg.startup_mode & HXCSTARTUP_slot0) {
+    hxc_cfg = (struct hxcsdfe_cfg *)fs->buf;
+    F_read(&fs->file, hxc_cfg, sizeof(*hxc_cfg), NULL);
+    if (hxc_cfg->startup_mode & HXCSTARTUP_slot0) {
         /* Startup mode: slot 0. */
-        hxc_cfg.slot_index = hxc_cfg.cur_slot_number = 0;
+        hxc_cfg->slot_index = hxc_cfg->cur_slot_number = 0;
         F_lseek(&fs->file, 0);
-        F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+        F_write(&fs->file, hxc_cfg, sizeof(*hxc_cfg), NULL);
     }
-    if (hxc_cfg.startup_mode & HXCSTARTUP_ejected) {
+    if (hxc_cfg->startup_mode & HXCSTARTUP_ejected) {
         /* Startup mode: eject. */
         cfg.ejected = TRUE;
     }
-
+    hxc_cfg = NULL;
     F_close(&fs->file);
 
     /* Slot 0 is a dummy image unless AUTOBOOT.HFE exists. */
@@ -1265,9 +1266,11 @@ static void ima_mark_ejected(bool_t ej)
 
 static void hxc_cfg_update(uint8_t slot_mode)
 {
-    struct hxcsdfe_cfg hxc_cfg;
-    struct v1_slot v1_slot;
-    struct v2_slot v2_slot;
+    struct _hxc {
+        struct hxcsdfe_cfg cfg;
+        struct v1_slot v1_slot;
+        struct v2_slot v2_slot;
+    } *hxc = (struct _hxc *)fs->buf;
     BYTE mode = FA_READ;
     int i;
 
@@ -1277,7 +1280,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
     if (ff_cfg.nav_mode == NAVMODE_indexed) {
         FRESULT fr;
         char slot[10];
-        hxc_cfg.index_mode = TRUE;
+        hxc->cfg.index_mode = TRUE;
         fatfs.cdir = cfg.cfg_cdir;
         switch (slot_mode) {
         case CFG_READ_SLOT_NR:
@@ -1307,40 +1310,40 @@ static void hxc_cfg_update(uint8_t slot_mode)
 
     slot_from_short_slot(&cfg.slot, &cfg.hxcsdfe);
     fatfs_from_slot(&fs->file, &cfg.slot, mode);
-    F_read(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
-    if (strncmp("HXCFECFGV", hxc_cfg.signature, 9))
+    F_read(&fs->file, &hxc->cfg, sizeof(hxc->cfg), NULL);
+    if (strncmp("HXCFECFGV", hxc->cfg.signature, 9))
         goto bad_signature;
 
     if (slot_mode == CFG_READ_SLOT_NR) {
         /* buzzer_step_duration seems to range 0xFF-0xD8. */
         if (!cfg.ffcfg_has_step_volume)
-            ff_cfg.step_volume = hxc_cfg.step_sound
-                ? (0x100 - hxc_cfg.buzzer_step_duration) / 2 : 0;
+            ff_cfg.step_volume = hxc->cfg.step_sound
+                ? (0x100 - hxc->cfg.buzzer_step_duration) / 2 : 0;
         if (!cfg.ffcfg_has_display_off_secs)
-            ff_cfg.display_off_secs = hxc_cfg.back_light_tmr;
+            ff_cfg.display_off_secs = hxc->cfg.back_light_tmr;
         /* Interpret HxC scroll speed as updates per minute. */
-        if (!cfg.ffcfg_has_display_scroll_rate && hxc_cfg.lcd_scroll_speed)
-            ff_cfg.display_scroll_rate = 60000u / hxc_cfg.lcd_scroll_speed;
+        if (!cfg.ffcfg_has_display_scroll_rate && hxc->cfg.lcd_scroll_speed)
+            ff_cfg.display_scroll_rate = 60000u / hxc->cfg.lcd_scroll_speed;
     }
 
-    switch (hxc_cfg.signature[9]-'0') {
+    switch (hxc->cfg.signature[9]-'0') {
 
     case 1: {
         if (slot_mode != CFG_READ_SLOT_NR) {
             /* Keep the already-configured slot number. */
-            hxc_cfg.slot_index = cfg.slot_nr;
+            hxc->cfg.slot_index = cfg.slot_nr;
             if (slot_mode == CFG_WRITE_SLOT_NR) {
                 /* Update the config file with new slot number. */
                 F_lseek(&fs->file, 0);
-                F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+                F_write(&fs->file, &hxc->cfg, sizeof(hxc->cfg), NULL);
             }
         }
-        cfg.slot_nr = hxc_cfg.slot_index;
-        if (hxc_cfg.index_mode)
+        cfg.slot_nr = hxc->cfg.slot_index;
+        if (hxc->cfg.index_mode)
             break;
         /* Slot mode: initialise slot map and current slot. */
         if (slot_mode == CFG_READ_SLOT_NR) {
-            cfg.max_slot_nr = hxc_cfg.number_of_slot - 1;
+            cfg.max_slot_nr = hxc->cfg.number_of_slot - 1;
             memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
         }
         /* Slot mode: read current slot file info. */
@@ -1348,30 +1351,31 @@ static void hxc_cfg_update(uint8_t slot_mode)
             slot_from_short_slot(&cfg.slot, &cfg.autoboot);
         } else {
             F_lseek(&fs->file, 1024 + cfg.slot_nr*128);
-            F_read(&fs->file, &v1_slot, sizeof(v1_slot), NULL);
-            memcpy(&v2_slot.type, &v1_slot.name[8], 3);
-            memcpy(&v2_slot.attributes, &v1_slot.attributes, 1+4+4+17);
-            v2_slot.name[17] = '\0';
-            slot_from_short_slot(&cfg.slot, &v2_slot);
+            F_read(&fs->file, &hxc->v1_slot, sizeof(hxc->v1_slot), NULL);
+            memcpy(&hxc->v2_slot.type, &hxc->v1_slot.name[8], 3);
+            memcpy(&hxc->v2_slot.attributes, &hxc->v1_slot.attributes,
+                   1+4+4+17);
+            hxc->v2_slot.name[17] = '\0';
+            slot_from_short_slot(&cfg.slot, &hxc->v2_slot);
         }
         break;
     }
 
     case 2:
         if (slot_mode != CFG_READ_SLOT_NR) {
-            hxc_cfg.cur_slot_number = cfg.slot_nr;
+            hxc->cfg.cur_slot_number = cfg.slot_nr;
             if (slot_mode == CFG_WRITE_SLOT_NR) {
                 F_lseek(&fs->file, 0);
-                F_write(&fs->file, &hxc_cfg, sizeof(hxc_cfg), NULL);
+                F_write(&fs->file, &hxc->cfg, sizeof(hxc->cfg), NULL);
             }
         }
-        cfg.slot_nr = hxc_cfg.cur_slot_number;
-        if (hxc_cfg.index_mode)
+        cfg.slot_nr = hxc->cfg.cur_slot_number;
+        if (hxc->cfg.index_mode)
             break;
         /* Slot mode: initialise slot map and current slot. */
         if (slot_mode == CFG_READ_SLOT_NR) {
-            cfg.max_slot_nr = hxc_cfg.max_slot_number - 1;
-            F_lseek(&fs->file, hxc_cfg.slots_map_position*512);
+            cfg.max_slot_nr = hxc->cfg.max_slot_number - 1;
+            F_lseek(&fs->file, hxc->cfg.slots_map_position*512);
             F_read(&fs->file, &cfg.slot_map, sizeof(cfg.slot_map), NULL);
             cfg.slot_map[0] |= 0x80; /* slot 0 always available */
             /* Find true max_slot_nr: */
@@ -1382,17 +1386,17 @@ static void hxc_cfg_update(uint8_t slot_mode)
         if (cfg.slot_nr == 0) {
             slot_from_short_slot(&cfg.slot, &cfg.autoboot);
         } else {
-            F_lseek(&fs->file, hxc_cfg.slots_position*512
-                    + cfg.slot_nr*64*hxc_cfg.number_of_drive_per_slot);
-            F_read(&fs->file, &v2_slot, sizeof(v2_slot), NULL);
-            slot_from_short_slot(&cfg.slot, &v2_slot);
+            F_lseek(&fs->file, hxc->cfg.slots_position*512
+                    + cfg.slot_nr*64*hxc->cfg.number_of_drive_per_slot);
+            F_read(&fs->file, &hxc->v2_slot, sizeof(hxc->v2_slot), NULL);
+            slot_from_short_slot(&cfg.slot, &hxc->v2_slot);
         }
         break;
 
     default:
     bad_signature:
-        hxc_cfg.signature[15] = '\0';
-        printk("Bad signature '%s'\n", hxc_cfg.signature);
+        hxc->cfg.signature[15] = '\0';
+        printk("Bad signature '%s'\n", hxc->cfg.signature);
         F_die(FR_BAD_HXCSDFE);
 
     }
@@ -1400,7 +1404,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
     F_close(&fs->file);
 
 indexed_mode:
-    if (hxc_cfg.index_mode) {
+    if (hxc->cfg.index_mode) {
 
         char name[16];
 
@@ -1642,7 +1646,7 @@ static int floppy_main(void *unused)
         cfg.ejected = TRUE;
 
     floppy_arena_setup();
-    
+
     cfg_init();
     cfg_update(CFG_READ_SLOT_NR);
 

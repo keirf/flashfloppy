@@ -66,9 +66,9 @@ static union cfg_slot *cfg_slot_find(void)
     return NULL;
 }
 
-void flash_ff_cfg_update(void)
+void flash_ff_cfg_update(void *scratch)
 {
-    union cfg_slot new_slot, *slot = cfg_slot_find();
+    union cfg_slot *new_slot = scratch, *slot = cfg_slot_find();
     uint16_t crc;
 
     /* Nothing to do if Flashed configuration is valid and up to date. */
@@ -91,12 +91,12 @@ void flash_ff_cfg_update(void)
         printk("Config: Erased Whole Page\n");
     }
 
-    memset(&new_slot, 0, sizeof(new_slot));
-    memcpy(&new_slot.ff_cfg, &ff_cfg, sizeof(ff_cfg));
-    new_slot.words[SLOTW_DEAD] = 0xffff;
-    crc = htobe16(crc16_ccitt(&new_slot, sizeof(new_slot)-2, 0xffff));
+    memset(new_slot, 0, sizeof(*new_slot));
+    memcpy(&new_slot->ff_cfg, &ff_cfg, sizeof(ff_cfg));
+    new_slot->words[SLOTW_DEAD] = 0xffff;
+    crc = htobe16(crc16_ccitt(new_slot, sizeof(*new_slot)-2, 0xffff));
     /* Write up to but excluding SLOTW_DEAD. */
-    fpec_write(&new_slot, sizeof(new_slot)-4, (uint32_t)slot);
+    fpec_write(new_slot, sizeof(*new_slot)-4, (uint32_t)slot);
     /* Write SLOTW_CRC. */
     fpec_write(&crc, 2, (uint32_t)&slot->words[SLOTW_CRC]);
     printk("Config: Written to Flash Slot %u\n", slot - SLOT_BASE);

@@ -135,7 +135,7 @@ struct __packed ff_cfg {
 extern struct ff_cfg ff_cfg;
 extern const struct ff_cfg dfl_ff_cfg;
 
-void flash_ff_cfg_update(void);
+void flash_ff_cfg_update(void *scratch);
 void flash_ff_cfg_erase(void);
 void flash_ff_cfg_read(void);
 
