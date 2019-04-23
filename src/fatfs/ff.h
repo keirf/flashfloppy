@@ -198,6 +198,8 @@ typedef struct {
 	FSIZE_t	fsize;			/* File size */
 	WORD	fdate;			/* Modified date */
 	WORD	ftime;			/* Modified time */
+	DWORD	dir_sect;		/* Sector number containing the directory entry (not used at exFAT) */
+	BYTE*	dir_ptr;		/* Pointer to the directory entry in the win[] (not used at exFAT) */
 	BYTE	fattrib;		/* File attribute */
 #if FF_USE_LFN
 	TCHAR	altname[13];			/* Altenative file name */

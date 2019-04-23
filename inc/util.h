@@ -69,6 +69,7 @@ void *memcpy(void *dest, const void *src, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
 int memcmp(const void *s1, const void *s2, size_t n);
 
+size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
@@ -80,6 +81,9 @@ int toupper(int c);
 int isspace(int c);
 
 long int strtol(const char *nptr, char **endptr, int base);
+
+void qsort_p(void *base, unsigned int nr,
+             int (*compar)(const void *, const void *));
 
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));
@@ -166,7 +170,7 @@ bool_t usbh_msc_inserted(void);
 /* Navigation/UI frontend */
 uint16_t get_slot_nr(void);
 bool_t set_slot_nr(uint16_t slot_nr);
-int set_slot_by_name(const char *name, void *scratch);
+void set_slot_name(const char *name);
 bool_t get_img_cfg(struct slot *slot);
 
 extern uint8_t board_id;

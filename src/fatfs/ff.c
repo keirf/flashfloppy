@@ -2473,6 +2473,21 @@ FRESULT dir_remove (	/* FR_OK:Succeeded, FR_DISK_ERR:A disk error */
 /* Get file information from directory entry                             */
 /*-----------------------------------------------------------------------*/
 
+#if !FF_FS_READONLY
+void flashfloppy_fill_fileinfo(FIL *fp)
+{
+    FATFS *fs = fp->obj.fs;
+    BYTE *dir = fp->dir_ptr;
+
+    if (move_window(fs, fp->dir_sect) != FR_OK)
+        F_die(FR_DISK_ERR);
+
+    fp->obj.attr = dir[DIR_Attr] & AM_MASK;
+    fp->obj.sclust = ld_clust(fs, dir);
+    fp->obj.objsize = ld_dword(dir + DIR_FileSize);
+}
+#endif
+
 static
 void get_fileinfo (		/* No return code */
 	DIR* dp,			/* Pointer to the directory object */
@@ -2490,6 +2505,10 @@ void get_fileinfo (		/* No return code */
 
 	fno->fname[0] = 0;			/* Invaidate file info */
 	if (dp->sect == 0) return;	/* Exit if read pointer has reached end of directory */
+
+	/* FlashFloppy: We need to know the dirent for size/attr. */
+	fno->dir_sect = fs->winsect;
+	fno->dir_ptr = dp->dir;
 
 #if FF_USE_LFN		/* LFN configuration */
 #if FF_FS_EXFAT

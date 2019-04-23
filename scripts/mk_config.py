@@ -57,6 +57,8 @@ def main(argv):
                 val = '|'.join(opts)
             elif opt == "nav-mode":
                 val = "NAVMODE_" + val
+            elif opt == "folder-sort":
+                val = "SORT_" + val
             else:
                 val = {
                     'no': 'FALSE',

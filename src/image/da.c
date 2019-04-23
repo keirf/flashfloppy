@@ -523,16 +523,11 @@ static void process_wdata(struct image *im, unsigned int sect, uint16_t crc)
             break;
         }
         case CMD_SELECT_NAME: {
-            int index;
             char *name = (char *)dac->param;
             name[FF_MAX_LFN] = '\0';
-            index = set_slot_by_name(name, wrbuf + 512);
-            printk("D-A Img By Name \"%s\" %u -> %d\n",
-                   name, dass->current_index, index);
-            if (index >= 0) {
-                dass->current_index = index;
-                dass->last_cmd_status = 0;
-            }
+            set_slot_name(name);
+            printk("D-A Img By Name \"%s\"\n", name);
+            dass->last_cmd_status = 0;
             break;
         }
         default:

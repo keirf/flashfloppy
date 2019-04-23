@@ -116,6 +116,14 @@ int memcmp(const void *s1, const void *s2, size_t n)
     return 0;
 }
 
+size_t strlen(const char *s)
+{
+    size_t len = 0;
+    while (*s++)
+        len++;
+    return len;
+}
+
 size_t strnlen(const char *s, size_t maxlen)
 {
     size_t len = 0;
@@ -244,6 +252,54 @@ out:
     if (endptr)
         *endptr = (char *)p;
     return is_neg ? -val : val;
+}
+
+static void __qsort_p(void **a, int l, int r,
+                    int (*compar)(const void *, const void *))
+{
+    int i, j, m;
+    void *pivot;
+
+    while (l < r) {
+
+        i = l-1;
+        j = r;
+        m = (l+r)/2;
+
+        pivot = a[m];
+        a[m] = a[r];
+        a[r] = pivot;
+
+        while (i < j) {
+            while (compar(a[++i], pivot) < 0)
+                continue;
+            while ((compar(a[--j], pivot) >= 0) && (i < j))
+                continue;
+            if (i < j) {
+                void *t = a[i];
+                a[i] = a[j];
+                a[j] = t;
+            }
+        }
+
+        a[r] = a[i];
+        a[i] = pivot;
+
+        if ((i-l) < (r-i)) {
+            __qsort_p(a, l, i-1, compar);
+            l = i+1;
+        } else {
+            __qsort_p(a, i+1, r, compar);
+            r = i-1;
+        }
+
+    }
+}
+
+void qsort_p(void *base, unsigned int nr,
+             int (*compar)(const void *, const void *))
+{
+    __qsort_p((void **)base, 0, nr-1, compar);
 }
 
 /*
