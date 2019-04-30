@@ -1799,8 +1799,7 @@ static int floppy_main(void *unused)
 
     /* If any buttons are pressed when USB drive is mounted then we start 
      * in ejected state. */
-    if (buttons)
-        cfg.ejected = TRUE;
+    cfg.ejected = (buttons != 0);
 
     cfg.sorted = NULL;
     floppy_arena_setup();
