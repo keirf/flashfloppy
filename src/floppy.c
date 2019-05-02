@@ -433,8 +433,8 @@ void floppy_insert(unsigned int unit, struct slot *slot)
         im->bufs.write_data.p = arena_alloc(im->bufs.write_data.len);
         im->bufs.read_data = im->bufs.write_data;
 
-        /* Minimum allowable buffer space (assumed by hfe image handler). */
-        ASSERT(im->bufs.read_data.len >= 20*1024);
+        /* Minimum allowable buffer space. */
+        ASSERT(im->bufs.read_data.len >= 10*1024);
 
         /* Mount the image file. */
         image_open(im, slot, cltbl);
