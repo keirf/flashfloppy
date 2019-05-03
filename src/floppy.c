@@ -419,12 +419,23 @@ void floppy_insert(unsigned int unit, struct slot *slot)
         im->write_bc_window = ~0;
 
         /* Large buffer to absorb write latencies at mass-storage layer. */
-        im->bufs.write_bc.len = 16*1024; /* 16kB, power of two. */
+        im->bufs.write_bc.len = 32*1024; /* 32kB, power of two. */
         im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
 
-        /* Smaller buffer to absorb read latencies at mass-storage layer. */
-        im->bufs.read_bc.len = 8*1024; /* 8kB, power of two. */
-        im->bufs.read_bc.p = arena_alloc(im->bufs.read_bc.len);
+        /* Read BC buffer overlaps the second half of the write BC buffer. This 
+         * is because:
+         *  (a) The read BC buffer does not need to absorb such large latencies
+         *      (reads are much more predictable than writes to mass storage).
+         *  (b) By dedicating the first half of the write buffer to writes, we
+         *      can safely start processing write flux while read-data is still
+         *      processing (eg. in-flight mass storage io). At say 10kB of
+         *      dedicated write buffer, this is good for >80ms before colliding
+         *      with read buffers, even at HD data rate (1us/bitcell).
+         *      This is more than enough time for read
+         *      processing to complete. */
+        im->bufs.read_bc.len = im->bufs.write_bc.len / 2;
+        im->bufs.read_bc.p = (char *)im->bufs.write_bc.p
+            + im->bufs.read_bc.len;
 
         /* Any remaining space is used for staging I/O to mass storage, shared
          * between read and write paths (Change of use of this memory space is
@@ -897,11 +908,15 @@ static bool_t dma_wr_handle(struct drive *drv)
         /* Sync back to mass storage. */
         F_sync(&im->fp);
 
-        /* Consume the write from the pipeline buffer. If the buffer is 
-         * empty then return to read operation. */
         IRQ_global_disable();
-        if ((++im->wr_cons == im->wr_prod) && (dma_wr->state != DMA_starting))
+        /* Consume the write from the pipeline buffer. */
+        im->wr_cons++;
+        /* If the buffer is empty then reset the write-bitcell ring and return 
+         * to read operation. */
+        if ((im->wr_cons == im->wr_prod) && (dma_wr->state != DMA_starting)) {
+            im->bufs.write_bc.cons = im->bufs.write_bc.prod = 0;
             dma_wr->state = DMA_inactive;
+        }
         IRQ_global_enable();
 
         /* This particular write is completed. */
