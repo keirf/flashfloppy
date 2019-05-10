@@ -1847,6 +1847,7 @@ static void raw_dump_info(struct image *im)
 {
     struct raw_trk *trk = im->img.trk;
     unsigned int i;
+    if (1) return;
     printk("C%u S%u:: %s %u-%u-%u:\n",
            im->cur_track/2, im->cur_track&1,
            (im->sync == SYNC_fm) ? "FM" : "MFM",
