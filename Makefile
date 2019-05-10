@@ -1,5 +1,5 @@
 
-export FW_VER := 2.7a
+export FW_VER := 2.8a
 
 PROJ := FlashFloppy
 VER := v$(FW_VER)
@@ -79,12 +79,13 @@ all:
 endif
 
 BAUD=115200
+DEV=/dev/ttyUSB0
 
 flash:
-	sudo stm32flash -b $(BAUD) -w FF_Gotek-$(VER).hex /dev/ttyUSB0
+	sudo stm32flash -b $(BAUD) -w FF_Gotek-$(VER).hex $(DEV)
 
 start:
-	sudo stm32flash -b $(BAUD) -g 0 /dev/ttyUSB0
+	sudo stm32flash -b $(BAUD) -g 0 $(DEV)
 
 serial:
-	sudo miniterm.py /dev/ttyUSB0 3000000
+	sudo miniterm.py $(DEV) 3000000

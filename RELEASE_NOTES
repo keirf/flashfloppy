@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.8a - 10 May 2019
+ - DSK, IMG: Fix small error in generated MFM data
+ - Increase write buffer to 32kB, enough for a full high-density track
+   - More reliable whole-track writes, especially to HFE images
+ 
 ** v2.7a - 23 April 2019
  - Sort folders into alphabetical order during direct navigation
    - FF.CFG: folder-sort= to modify this new default behaviour
