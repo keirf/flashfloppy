@@ -39,6 +39,10 @@ struct hfe_image {
     bool_t is_v3;
     uint8_t batch_secs;
     struct {
+        uint16_t start;
+        bool_t wrapped;
+    } write;
+    struct {
         uint16_t off, len;
         bool_t dirty;
     } write_batch;

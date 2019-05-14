@@ -170,6 +170,8 @@ static void hfe_setup_track(
     } else {
         /* Write mode. */
         im->hfe.trk_pos = im->cur_bc / 8;
+        im->hfe.write.start = im->hfe.trk_pos;
+        im->hfe.write.wrapped = FALSE;
         im->hfe.write_batch.len = 0;
         im->hfe.write_batch.dirty = FALSE;
     }
@@ -366,6 +368,7 @@ static bool_t hfe_write_track(struct image *im)
         if (im->hfe.trk_pos >= im->hfe.trk_len) {
             ASSERT(im->hfe.trk_pos == im->hfe.trk_len);
             im->hfe.trk_pos = 0;
+            im->hfe.write.wrapped = TRUE;
         }
     }
 
@@ -388,6 +391,10 @@ static bool_t hfe_write_track(struct image *im)
         im->hfe.write_batch.len = 0;
         im->hfe.write_batch.dirty = FALSE;
     }
+
+    if (flush && im->hfe.write.wrapped
+        && (im->hfe.trk_pos > im->hfe.write.start))
+        printk("Wrapped (%u > %u)\n", im->hfe.trk_pos, im->hfe.write.start);
 
     wr->cons = c * 8;
 
