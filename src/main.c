@@ -1869,6 +1869,8 @@ static int floppy_main(void *unused)
         printk("Attr: %02x Clus: %08x Size: %u\n",
                cfg.slot.attributes, cfg.slot.firstCluster, cfg.slot.size);
 
+        logfile_flush(&fs->file);
+
         if (cfg.ejected) {
             cfg.ejected = FALSE;
             b = B_SELECT;
@@ -1883,6 +1885,7 @@ static int floppy_main(void *unused)
                 lcd_on();
             }
             floppy_arena_setup();
+            logfile_flush(&fs->file);
         }
 
         if (cfg.dirty_slot_name) {
@@ -2106,13 +2109,22 @@ static void banner(void)
 {
     switch (display_mode) {
     case DM_LED_7SEG:
-        led_7seg_write_string((led_7seg_nr_digits() == 3) ? "F-F" : "FF");
+        led_7seg_write_string(
+#ifdef LOGFILE
+            "LOG"
+#else
+            (led_7seg_nr_digits() == 3) ? "F-F" : "FF"
+#endif
+            );
         break;
     case DM_LCD_1602:
         lcd_clear();
         lcd_write(0, 0, 0, "FlashFloppy");
         lcd_write(0, 1, 0, "v");
         lcd_write(1, 1, 0, fw_ver);
+#ifdef LOGFILE
+        lcd_write(10, 1, 0, "[Log]");
+#endif
         lcd_on();
         break;
     }

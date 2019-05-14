@@ -20,12 +20,13 @@ ifneq ($(debug),y)
 FLAGS += -DNDEBUG
 endif
 
+# Following options are mutually exclusive
 ifeq ($(reloader),y)
 FLAGS += -DRELOADER=1
-endif
-
-ifeq ($(bootloader),y)
+else ifeq ($(bootloader),y)
 FLAGS += -DBOOTLOADER=1
+else ifeq ($(logfile),y)
+FLAGS += -DLOGFILE=1
 endif
 
 FLAGS += -MMD -MF .$(@F).d

@@ -6,7 +6,7 @@ VER := v$(FW_VER)
 
 SUBDIRS += src bootloader reloader
 
-.PHONY: all clean flash start serial gotek
+.PHONY: all upd clean flash start serial gotek
 
 ifneq ($(RULES_MK),y)
 
@@ -20,7 +20,6 @@ clean:
 	rm -f *.hex *.upd *.rld *.dfu *.html
 	$(MAKE) -f $(ROOT)/Rules.mk $@
 
-gotek: export gotek=y
 gotek: all
 	mv FF.dfu FF_Gotek-$(VER).dfu
 	mv FF.upd FF_Gotek-$(VER).upd
@@ -34,14 +33,18 @@ HXC_FF_VER := v5-FF
 
 dist:
 	rm -rf flashfloppy-*
-	mkdir -p flashfloppy-$(VER)/reloader
+	mkdir -p flashfloppy-$(VER)/alt/reloader
+	mkdir -p flashfloppy-$(VER)/alt/logfile
 	$(MAKE) clean
 	$(MAKE) gotek
 	cp -a FF_Gotek-$(VER).dfu flashfloppy-$(VER)/
 	cp -a FF_Gotek-$(VER).upd flashfloppy-$(VER)/
 	cp -a FF_Gotek-$(VER).hex flashfloppy-$(VER)/
-	cp -a FF_Gotek-Reloader-$(VER).upd flashfloppy-$(VER)/reloader/
-	cp -a FF_Gotek-Bootloader-$(VER).rld flashfloppy-$(VER)/reloader/
+	cp -a FF_Gotek-Reloader-$(VER).upd flashfloppy-$(VER)/alt/reloader/
+	cp -a FF_Gotek-Bootloader-$(VER).rld flashfloppy-$(VER)/alt/reloader/
+	$(MAKE) clean
+	debug=n logfile=y $(MAKE) -f $(ROOT)/Rules.mk upd
+	mv FF.upd flashfloppy-$(VER)/alt/logfile/FF_Gotek-Logfile-$(VER).upd
 	$(MAKE) clean
 	cp -a COPYING flashfloppy-$(VER)/
 	cp -a README.md flashfloppy-$(VER)/
@@ -62,6 +65,10 @@ mrproper: clean
 	rm -rf HxC_Compat_Mode-$(HXC_FF_VER).zip
 
 else
+
+upd:
+	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
+	$(PYTHON) ./scripts/mk_update.py src/$(PROJ).bin FF.upd
 
 all:
 	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex

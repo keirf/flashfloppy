@@ -20,6 +20,7 @@ OBJS += util.o
 OBJS += volume.o
 
 OBJS-$(debug) += console.o
+OBJS-$(logfile) += logfile.o
 
 SUBDIRS += display
 SUBDIRS += fatfs
