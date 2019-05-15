@@ -119,7 +119,8 @@ static void dsk_seek_track(
 
     if (cyl >= im->nr_cyls) {
     unformatted:
-        printk("T%u.%u: Empty\n", cyl, side);
+        if (verbose_image_log)
+            printk("T%u.%u: Empty\n", cyl, side);
         memset(tib, 0, sizeof(*tib));
         goto out;
     }
@@ -142,8 +143,9 @@ static void dsk_seek_track(
     if (strncmp(tib->sig, "Track-Info", 10) || !tib->nr_secs)
         goto unformatted;
 
-    printk("T%u.%u -> %u.%u: %u sectors\n", cyl, side, tib->track,
-           tib->side, tib->nr_secs);
+    if (verbose_image_log)
+        printk("T%u.%u -> %u.%u: %u sectors\n", cyl, side, tib->track,
+               tib->side, tib->nr_secs);
 
     /* Clamp number of sectors. */
     if (tib->nr_secs > 29)

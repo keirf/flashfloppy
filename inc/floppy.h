@@ -24,6 +24,8 @@
 #define outp_nr     6
 #define outp_unused outp_nr
 
+#define verbose_image_log FALSE
+
 struct adf_image {
     uint32_t trk_off;
     uint16_t trk_pos, trk_len;
