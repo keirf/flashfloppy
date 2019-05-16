@@ -44,18 +44,40 @@ const uint16_t mfmtab[] = {
     0x554a, 0x5549, 0x5544, 0x5545, 0x5552, 0x5551, 0x5554, 0x5555
 };
 
-uint8_t mfmtobin(uint16_t x)
+uint8_t always_inline mfmtobin(uint16_t x)
 {
-    unsigned int i;
-    uint8_t y = 0;
-    x  = be16toh(x) << 1;
-    for (i = 0; i < 8; i++) {
-        y <<= 1;
-        if ((int16_t)x < 0)
-            y |= 1;
-        x <<= 2;
-    }
+    uint8_t y;
+    x = be16toh(x) << 1;
+    asm volatile (
+        "lsrs %1,%1,#2 ; rrx %0,%0\n"
+        "lsrs %1,%1,#2 ; rrx %0,%0\n"
+        "lsrs %1,%1,#2 ; rrx %0,%0\n"
+        "lsrs %1,%1,#2 ; rrx %0,%0\n"
+        "lsrs %1,%1,#2 ; rrx %0,%0\n"
+        "lsrs %1,%1,#2 ; rrx %0,%0\n"
+        "lsrs %1,%1,#2 ; rrx %0,%0\n"
+        "lsrs %1,%1,#2 ; rrx %0,%0\n"
+        "rev %0,%0\n"
+        : "=&r" (y) : "r" (x) );
     return y;
+}
+
+void mfm_to_bin(const void *in, void *out, unsigned int nr)
+{
+    const uint16_t *_in = in;
+    uint8_t *_out = out;
+    while (nr--)
+        *_out++ = mfmtobin(*_in++);
+}
+
+void mfm_ring_to_bin(const uint16_t *ring, unsigned int mask,
+                     unsigned int idx, void *out, unsigned int nr)
+{
+    unsigned int head;
+    head = min_t(unsigned int, nr, mask+1-idx);
+    mfm_to_bin(&ring[idx], out, head);
+    if (head != nr) 
+        mfm_to_bin(ring, (uint8_t *)out + head, nr - head);
 }
 
 /*

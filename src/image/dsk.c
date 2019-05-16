@@ -531,8 +531,8 @@ static bool_t dsk_write_track(struct image *im)
             break;
 
         case 0xfb: /* DAM */
-            for (i = 0; i < (sec_sz + 2); i++)
-                wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+            mfm_ring_to_bin(buf, bufmask, c, wrbuf, sec_sz + 2);
+            c += sec_sz + 2;
 
             crc = crc16_ccitt(wrbuf, sec_sz + 2,
                               crc16_ccitt(header, 4, 0xffff));

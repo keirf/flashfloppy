@@ -364,7 +364,7 @@ static bool_t fm_write_track(struct image *im)
     uint8_t *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
-    unsigned int sect, i;
+    unsigned int sect;
     uint16_t sync;
     uint8_t x;
 
@@ -390,8 +390,8 @@ static bool_t fm_write_track(struct image *im)
         sect = (base - im->da.idx_sz - im->da.idam_sz + enc_sec_sz(im)/2)
             / enc_sec_sz(im);
 
-        for (i = 0; i < (SEC_SZ + 2); i++)
-            wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+        mfm_ring_to_bin(buf, bufmask, c, wrbuf, SEC_SZ + 2);
+        c += SEC_SZ + 2;
 
         process_wdata(im, sect, crc16_ccitt(&x, 1, 0xffff));
     }
@@ -460,8 +460,8 @@ static bool_t mfm_write_track(struct image *im)
             break;
         }
 
-        for (i = 0; i < (SEC_SZ + 2); i++)
-            wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+        mfm_ring_to_bin(buf, bufmask, c, wrbuf, SEC_SZ + 2);
+        c += SEC_SZ + 2;
 
         process_wdata(im, sect, crc);
     }

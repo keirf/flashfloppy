@@ -1798,8 +1798,8 @@ static bool_t raw_write_track(struct image *im)
             break;
 
         case 0xfb: /* DAM */
-            for (i = 0; i < (sec_sz + 2); i++)
-                wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+            mfm_ring_to_bin(buf, bufmask, c, wrbuf, sec_sz + 2);
+            c += sec_sz + 2;
 
             if (im->img.write_sector < 0) {
                 printk("IMG DAM for unknown sector (%d)\n",
