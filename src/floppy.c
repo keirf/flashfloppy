@@ -758,9 +758,34 @@ static void floppy_sync_flux(void)
     }
 
     if (drv->index_suppressed) {
-        /* Re-enable index timing, snapped to the new read stream. */
+
+        /* Re-enable index timing, snapped to the new read stream. 
+         * Disable low-priority IRQs to keep timings tight. */
+        uint32_t oldpri = IRQ_save(TIMER_IRQ_PRI);
+
         timer_cancel(&index.timer);
+
+        /* If we crossed the index mark while filling the DMA buffer then we
+         * need to set up the index pulse (usually done by IRQ_rdata_dma). */
+        if (image_ticks_since_index(drv->image)
+            < (sync_pos*(SYSCLK_MHZ/STK_MHZ))) {
+
+            /* Sum all flux timings in the DMA buffer. */
+            const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
+            uint32_t i, ticks = 0;
+            for (i = dma_rd->cons; i != dma_rd->prod; i = (i+1) & buf_mask)
+                ticks += dma_rd->buf[i] + 1;
+
+            /* Subtract current flux offset beyond the index. */
+            ticks -= image_ticks_since_index(drv->image);
+
+            /* Calculate deadline for index timer. */
+            ticks /= SYSCLK_MHZ/TIME_MHZ;
+            timer_set(&index.timer, time_now() + ticks);
+        }
+
         IRQ_global_disable();
+        IRQ_restore(oldpri);
         index.prev_time = time_now() - sync_pos;
         drv->index_suppressed = FALSE;
     }
