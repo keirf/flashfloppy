@@ -101,7 +101,7 @@ static bool_t dsk_open(struct image *im)
      * length and thus the period between index pulses. */
     im->ticks_per_cell = im->write_bc_ticks * 16;
 
-    volume_cache_init(im->bufs.write_data.p + 512 + 8192 + 2,
+    volume_cache_init(im->bufs.write_data.p + 512 + 1024,
                       im->bufs.write_data.p + im->bufs.write_data.len);
 
     return TRUE;
@@ -152,14 +152,10 @@ static void dsk_seek_track(
         tib->nr_secs = 29;
 
     /* Compute per-sector actual length. */
-    for (i = 0; i < tib->nr_secs; i++) {
+    for (i = 0; i < tib->nr_secs; i++)
         tib->sib[i].actual_length = im->dsk.extended
             ? le16toh(tib->sib[i].actual_length)
             : 128 << min_t(unsigned, tib->sec_sz, 8);
-        if ((tib->sib[i].actual_length > 8192)
-            || (tib->sib[i].n > 6))
-            F_die(FR_BAD_IMAGE);
-    }
 
 out:
     im->dsk.idx_sz = GAP_4A;
@@ -530,38 +526,51 @@ static bool_t dsk_write_track(struct image *im)
             }
             break;
 
-        case 0xfb: /* DAM */
-            mfm_ring_to_bin(buf, bufmask, c, wrbuf, sec_sz + 2);
-            c += sec_sz + 2;
-
-            crc = crc16_ccitt(wrbuf, sec_sz + 2,
-                              crc16_ccitt(header, 4, 0xffff));
-            if (crc != 0) {
-                printk("DSK Bad CRC %04x, sector %d[%02x]\n",
-                       crc, im->dsk.write_sector,
-                       (im->dsk.write_sector >= 0)
-                       ? tib->sib[im->dsk.write_sector].r : 0xff);
-                break;
-            }
+        case 0xfb: /* DAM */ {
+            unsigned int nr, todo;
 
             if (im->dsk.write_sector < 0) {
                 printk("DSK DAM for unknown sector (%d)\n",
                        im->dsk.write_sector);
+                c += sec_sz + 2;
                 break;
             }
 
-            /* All good: write out to mass storage. */
+            crc = crc16_ccitt(header, 4, 0xffff);
+
             printk("Write %d[%02x]/%u... ", im->dsk.write_sector,
                    (im->dsk.write_sector >= 0)
                    ? tib->sib[im->dsk.write_sector].r : 0xff,
                    tib->nr_secs);
             t = time_now();
+
             for (i = off = 0; i < im->dsk.write_sector; i++)
                 off += tib->sib[i].actual_length;
             F_lseek(&im->fp, im->dsk.trk_off + off);
-            F_write(&im->fp, wrbuf, sec_sz, NULL);
+
+            for (todo = sec_sz; todo != 0; todo -= nr) {
+                nr = min_t(unsigned int, todo, 1024);
+                mfm_ring_to_bin(buf, bufmask, c, wrbuf, nr);
+                c += nr;
+                crc = crc16_ccitt(wrbuf, nr, crc);
+                F_write(&im->fp, wrbuf, nr, NULL);
+            }
+
             printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
+
+            mfm_ring_to_bin(buf, bufmask, c, wrbuf, 2);
+            c += 2;
+            crc = crc16_ccitt(wrbuf, 2, crc);
+            if (crc != 0) {
+                printk("DSK Bad CRC %04x, sector %d[%02x]\n",
+                       crc, im->dsk.write_sector,
+                       (im->dsk.write_sector >= 0)
+                       ? tib->sib[im->dsk.write_sector].r : 0xff);
+            }
+
             break;
+        }
+
         }
     }
 

@@ -1469,7 +1469,7 @@ static bool_t raw_open(struct image *im)
 {
     im->img.rpm = im->img.rpm ?: 300;
     im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
-    volume_cache_init(im->bufs.write_data.p + 8192 + 2,
+    volume_cache_init(im->bufs.write_data.p + 1024,
                       im->img.heap_bottom);
     return TRUE;
 }
@@ -1797,32 +1797,25 @@ static bool_t raw_write_track(struct image *im)
             }
             break;
 
-        case 0xfb: /* DAM */
-            mfm_ring_to_bin(buf, bufmask, c, wrbuf, sec_sz + 2);
-            c += sec_sz + 2;
+        case 0xfb: /* DAM */ {
+            unsigned int nr, todo;
 
             if (im->img.write_sector < 0) {
                 printk("IMG DAM for unknown sector (%d)\n",
                        im->img.write_sector);
+                c += sec_sz + 2;
                 break;
             }
-
-            sec = &im->img.sec_info[im->img.write_sector];
 
             crc = (im->sync == SYNC_fm)
                 ? crc16_ccitt(&x, 1, 0xffff)
                 : crc16_ccitt(mfm_dam_header, 4, 0xffff);
-            crc = crc16_ccitt(wrbuf, sec_sz + 2, crc);
-            if (crc != 0) {
-                printk("IMG Bad CRC %04x, sector %u[%02x]\n",
-                       crc, im->img.write_sector, sec->id);
-                break;
-            }
 
-            /* All good: write out to mass storage. */
+            sec = &im->img.sec_info[im->img.write_sector];
             printk("Write %u[%02x]/%u... ", im->img.write_sector,
                    sec->id, trk->nr_sectors);
             t = time_now();
+
             sec = im->img.sec_info;
             if (im->img.file_sec_offsets) {
                 off = im->img.file_sec_offsets[im->img.write_sector];
@@ -1831,10 +1824,29 @@ static bool_t raw_write_track(struct image *im)
                     off += sec_sz(sec++->no);
             }
             F_lseek(&im->fp, im->img.trk_off + off);
-            process_data(im, wrbuf, sec_sz);
-            F_write(&im->fp, wrbuf, sec_sz, NULL);
+
+            for (todo = sec_sz; todo != 0; todo -= nr) {
+                nr = min_t(unsigned int, todo, 1024);
+                mfm_ring_to_bin(buf, bufmask, c, wrbuf, nr);
+                c += nr;
+                crc = crc16_ccitt(wrbuf, nr, crc);
+                process_data(im, wrbuf, nr);
+                F_write(&im->fp, wrbuf, nr, NULL);
+            }
+
             printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
+
+            mfm_ring_to_bin(buf, bufmask, c, wrbuf, 2);
+            c += 2;
+            crc = crc16_ccitt(wrbuf, 2, crc);
+            if (crc != 0) {
+                printk("IMG Bad CRC %04x, sector %u[%02x]\n",
+                       crc, im->img.write_sector, sec->id);
+            }
+
             break;
+        }
+
         }
     }
 
@@ -1922,7 +1934,7 @@ static void *align_p(void *p)
 static void check_p(void *p, struct image *im)
 {
     uint8_t *a = p, *b = (uint8_t *)im->bufs.read_data.p;
-    if ((int32_t)(a-b) < (8192+2))
+    if ((int32_t)(a-b) < 1024)
         F_die(FR_BAD_IMAGE);
     im->img.heap_bottom = p;
 }
