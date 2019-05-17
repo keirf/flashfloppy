@@ -3,6 +3,17 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.9a - 17 May 2019
+ - FF.CFG: New option motor-delay= to provide emulation of motor behaviour
+   - Requires modification of a standard Gotek PCB (see Wiki: Hardware Mods)
+ - Debug logging: An alternative firmware is provided to log to FFLOG.TXT
+   - Find the alternative update file in alt/logfile/
+   - Use this for personal interest or as directed by me for debugging
+   - Not for general use!
+ - IMG/DSK: Better RAM handling (more space for mass-storage block cache)
+ - Code optimisation (MFM decode speeded up 4x)
+ - Small fix to generate INDEX signal when starting read near end of track
+
 ** v2.8a - 10 May 2019
  - DSK, IMG: Fix small error in generated MFM data
  - Increase write buffer to 32kB, enough for a full high-density track
