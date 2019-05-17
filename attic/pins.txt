@@ -8,6 +8,7 @@ GPIn: (all must be 5v tolerant, *=not)
  PB9   WGATE
  PB4   SIDE
  PA15  MOTOR [Enhanced Boards only]
+ PB15  MOTOR [Standard board mod: pin 5 of SPI Flash footprint]
 GPOut:
  PB7   CHNG
  PB8   INDEX

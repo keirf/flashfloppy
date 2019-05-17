@@ -17,6 +17,7 @@
 
 /* A soft IRQ for handling lower priority work items. */
 static void drive_step_timer(void *_drv);
+static void motor_spinup_timer(void *_drv);
 void IRQ_43(void) __attribute__((alias("IRQ_soft")));
 #define FLOPPY_SOFTIRQ 43
 
@@ -62,6 +63,14 @@ static struct drive {
     bool_t sel;
     bool_t index_suppressed; /* disable IDX while writing to USB stick */
     uint8_t outp;
+    volatile bool_t inserted;
+    struct {
+        struct timer timer;
+#define MOTOR_off     0
+#define MOTOR_on      1
+#define MOTOR_spun_up 2
+        volatile uint8_t state;
+    } motor;
     struct {
 #define STEP_started  1 /* started by hi-pri IRQ */
 #define STEP_latched  2 /* latched by lo-pri IRQ */
@@ -222,7 +231,6 @@ void floppy_cancel(void)
 
     /* Immediately change outputs that we control entirely from the main loop. 
      * Asserting WRPROT prevents any further calls to wdata_start(). */
-    drive_change_output(drv, outp_rdy, FALSE);
     drive_change_output(drv, outp_wrprot, TRUE);
     drive_change_output(drv, outp_hden, FALSE);
     update_amiga_id(FALSE);
@@ -240,12 +248,14 @@ void floppy_cancel(void)
     barrier(); /* cancel index.timer /then/ clear soft state */
     drv->index_suppressed = FALSE;
     drv->image = NULL;
+    drv->inserted = FALSE;
     max_read_us = 0;
     image = NULL;
     dma_rd = dma_wr = NULL;
     index.fake_fired = FALSE;
     barrier(); /* clear soft state /then/ cancel index.timer_deassert */
     timer_cancel(&index.timer_deassert);
+    IRQx_set_pending(FLOPPY_MOTOR_IRQ); /* update RDY + motor state */
 
     /* Set outputs for empty drive. */
     barrier();
@@ -335,6 +345,7 @@ void floppy_init(void)
     board_floppy_init();
 
     timer_init(&drv->step.timer, drive_step_timer, drv);
+    timer_init(&drv->motor.timer, motor_spinup_timer, drv);
 
     gpio_configure_pin(gpio_out, pin_02, GPO_bus);
     gpio_configure_pin(gpio_out, pin_08, GPO_bus);
@@ -375,6 +386,8 @@ void floppy_init(void)
 
     timer_init(&index.timer, index_assert, NULL);
     timer_init(&index.timer_deassert, index_deassert, NULL);
+
+    floppy_set_motor_delay();
 }
 
 void floppy_insert(unsigned int unit, struct slot *slot)
@@ -541,10 +554,12 @@ void floppy_insert(unsigned int unit, struct slot *slot)
                      DMA_CCR_EN);
 
     /* Drive is ready. Set output signals appropriately. */
-    drive_change_output(drv, outp_rdy, TRUE);
     update_amiga_id(im->stk_per_rev > stk_ms(300));
     if (!(slot->attributes & AM_RDO))
         drive_change_output(drv, outp_wrprot, FALSE);
+    barrier();
+    drv->inserted = TRUE;
+    IRQx_set_pending(FLOPPY_MOTOR_IRQ); /* update RDY + motor state */
 }
 
 static unsigned int drive_calc_track(struct drive *drv)
@@ -982,7 +997,8 @@ static void index_assert(void *dat)
     struct drive *drv = &drive;
     index.prev_time = index.timer.deadline;
     if (!drv->index_suppressed
-        && !(drv->step.state && ff_cfg.index_suppression)) {
+        && !(drv->step.state && ff_cfg.index_suppression)
+        && (drv->motor.state == MOTOR_on)) {
         drive_change_output(drv, outp_index, TRUE);
         timer_set(&index.timer_deassert, index.prev_time + time_ms(2));
     }
@@ -1024,6 +1040,14 @@ static void drive_step_timer(void *_drv)
     }
 }
 
+static void motor_spinup_timer(void *_drv)
+{
+    struct drive *drv = _drv;
+
+    drv->motor.state = MOTOR_spun_up;
+    IRQx_set_pending(FLOPPY_SOFTIRQ);
+}
+
 static void IRQ_soft(void)
 {
     struct drive *drv = &drive;
@@ -1037,6 +1061,11 @@ static void IRQ_soft(void)
     if (index.fake_fired) {
         index.fake_fired = FALSE;
         timer_set(&index.timer_deassert, time_now() + time_us(500));
+    }
+
+    if (drv->motor.state == MOTOR_spun_up) {
+        drv->motor.state = MOTOR_on;
+        drive_change_output(drv, outp_rdy, TRUE);
     }
 }
 

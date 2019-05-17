@@ -86,7 +86,7 @@ all:
 endif
 
 BAUD=115200
-DEV=/dev/ttyUSB0
+DEV=/dev/ttyUSB1
 
 flash:
 	sudo stm32flash -b $(BAUD) -w FF_Gotek-$(VER).hex $(DEV)

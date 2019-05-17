@@ -59,6 +59,11 @@ def main(argv):
                 val = "NAVMODE_" + val
             elif opt == "folder-sort":
                 val = "SORT_" + val
+            elif opt == "motor-delay":
+                if val == 'ignore':
+                    val = "MOTOR_" + val
+                else:
+                    val = (int(val) + 9) // 10
             else:
                 val = {
                     'no': 'FALSE',

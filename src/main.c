@@ -849,6 +849,12 @@ static void read_ff_cfg(void)
             ff_cfg.head_settle_ms = strtol(opts.arg, NULL, 10);
             break;
 
+        case FFCFG_motor_delay:
+            ff_cfg.motor_delay =
+                !strcmp(opts.arg, "ignore") ? MOTOR_ignore
+                : (strtol(opts.arg, NULL, 10) + 9) / 10;
+            break;
+
             /* STARTUP / INITIALISATION */
 
         case FFCFG_ejected_on_startup:
@@ -1059,6 +1065,10 @@ static void process_ff_cfg_opts(const struct ff_cfg *old)
         || (ff_cfg.pin02 != old->pin02)
         || (ff_cfg.pin34 != old->pin34))
         floppy_set_fintf_mode();
+
+    /* motor-delay: Inform the floppy subsystem. */
+    if (ff_cfg.motor_delay != old->motor_delay)
+        floppy_set_motor_delay();
 
     /* ejected-on-startup: Set the ejected state appropriately. */
     if (ff_cfg.ejected_on_startup)

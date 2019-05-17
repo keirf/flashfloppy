@@ -13,14 +13,14 @@
 #define O_TRUE  0
 
 /* Input pins: DIR=PB0, STEP=PA1, SELA=PA0, SELB=PA3, WGATE=PB9, SIDE=PB4, 
- *             MOTOR=PA15 */
+ *             MOTOR=PA15/PB15 */
 #define pin_dir     0 /* PB0 */
 #define pin_step    1 /* PA1 */
 #define pin_sel0    0 /* PA0 */
 #define pin_sel1    3 /* PA3 */
 #define pin_wgate   9 /* PB9 */
 #define pin_side    4 /* PB4 */
-#define pin_motor  15 /* PA15 */
+#define pin_motor  15 /* PA15 or PB15 */
 
 /* Output pins. */
 #define gpio_out gpiob
@@ -51,11 +51,14 @@ void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
 void IRQ_7(void) __attribute__((alias("IRQ_STEP_changed"))); /* EXTI1 */
 void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
 void IRQ_23(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI9_5 */
+void IRQ_40(void) __attribute__((alias("IRQ_MOTOR_changed"))); /* EXTI15_10 */
+#define FLOPPY_MOTOR_IRQ 40
 static const struct exti_irq exti_irqs[] = {
     {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
     {  7, FLOPPY_IRQ_STEP_PRI, m(pin_step) },
     { 10, FLOPPY_IRQ_SIDE_PRI, 0 }, 
-    { 23, FLOPPY_IRQ_WGATE_PRI, 0 } 
+    { 23, FLOPPY_IRQ_WGATE_PRI, 0 },
+    { 40, FLOPPY_SOFTIRQ_PRI, 0 }
 };
 
 bool_t floppy_ribbon_is_reversed(void)
@@ -82,17 +85,25 @@ static void board_floppy_init(void)
     gpio_configure_pin(gpioa, pin_sel0,  GPI_bus);
     gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
     gpio_configure_pin(gpiob, pin_side,  GPI_bus);
-    if (gotek_enhanced()) {
-        gpio_configure_pin(gpioa, pin_sel1,  GPI_bus);
-        gpio_configure_pin(gpioa, pin_motor, GPI_bus);
-    }
 
     /* PB[15:2] -> EXT[15:2], PA[1:0] -> EXT[1:0] */
     afio->exticr2 = afio->exticr3 = afio->exticr4 = 0x1111;
     afio->exticr1 = 0x1100;
 
+    if (gotek_enhanced()) {
+        gpio_configure_pin(gpioa, pin_sel1,  GPI_bus);
+        gpio_configure_pin(gpioa, pin_motor, GPI_bus);
+        afio->exticr4 = 0x0111; /* Motor = PA15 */
+    } else {
+        /* This gives us "motor always on" if the pin is not connected. 
+         * It is safe enough to pull down even if connected direct to 5v, 
+         * will only sink ~0.15mA via the weak internal pulldown. */
+        gpio_configure_pin(gpiob, pin_motor, GPI_pull_down);
+    }
+
     exti->imr = exti->rtsr = exti->ftsr =
-        m(pin_wgate) | m(pin_side) | m(pin_step) | m(pin_sel0);
+        m(pin_wgate) | m(pin_side) | m(pin_step) | m(pin_sel0) | m(pin_motor);
+    exti->imr &= ~m(pin_motor);
 }
 
 /* Fast speculative entry point for SELA-changed IRQ. We assume SELA has 
@@ -231,7 +242,7 @@ static void IRQ_STEP_changed(void)
         return;
 
     /* DSKCHG asserts on any falling edge of STEP. We deassert on any edge. */
-    if ((drv->outp & m(outp_dskchg)) && (dma_rd != NULL))
+    if ((drv->outp & m(outp_dskchg)) && drv->inserted)
         drive_change_output(drv, outp_dskchg, FALSE);
 
     if (!(idr_a & m(pin_step))   /* Not rising edge on STEP? */
@@ -304,6 +315,47 @@ static void IRQ_WGATE_changed(void)
         rdata_stop();
         wdata_start();
     }
+}
+
+static void IRQ_MOTOR_changed(void)
+{
+    struct drive *drv = &drive;
+    GPIO gpio = gotek_enhanced() ? gpioa : gpiob;
+
+    /* Clear MOTOR-changed flag. */
+    exti->pr = m(pin_motor);
+
+    timer_cancel(&drv->motor.timer);
+    drv->motor.state = MOTOR_off;
+
+    if (!drv->inserted) {
+        /* No disk inserted -- MOTOR OFF */
+        drive_change_output(drv, outp_rdy, FALSE);
+    } else if (ff_cfg.motor_delay == MOTOR_ignore) {
+        /* Motor signal ignored -- MOTOR ON */
+        drv->motor.state = MOTOR_on;
+        drive_change_output(drv, outp_rdy, TRUE);
+    } else if (gpio->idr & m(pin_motor)) {
+        /* Motor signal off -- MOTOR OFF */
+        drive_change_output(drv, outp_rdy, FALSE);
+    } else {
+        /* Motor signal on -- MOTOR SPINNING UP */
+        timer_set(&drv->motor.timer,
+                  time_now() + time_ms(ff_cfg.motor_delay * 10));
+    }
+}
+
+void floppy_set_motor_delay(void)
+{
+    if (ff_cfg.motor_delay != MOTOR_ignore) {
+        exti->imr |= m(pin_motor);
+        printk("Motor: Delay %u ms\n", ff_cfg.motor_delay * 10);
+    } else {
+        exti->imr &= ~m(pin_motor);
+        printk("Motor: Ignored\n");
+    }
+
+    IRQx_set_pending(FLOPPY_MOTOR_IRQ);
 }
 
 /*
