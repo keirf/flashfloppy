@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.10a - 20 May 2019
+ - Fix breakages since v2.2a:
+   - host=acorn: *.ADF handling
+   - host=tandy-coco: *.DSK handling
+
 ** v2.9a - 17 May 2019
  - FF.CFG: New option motor-delay= to provide emulation of motor behaviour
    - Requires modification of a standard Gotek PCB (see Wiki: Hardware Mods)
