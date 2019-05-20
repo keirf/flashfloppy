@@ -139,7 +139,6 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
         if (!strcmp(ext, type->ext))
             break;
     hint = type->handler;
-    if (hint == NULL)
 
     /* Apply host-specific overrides to the hint. */
     switch (ff_cfg.host) {
