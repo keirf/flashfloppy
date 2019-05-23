@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.11a - 23 May 2019
+ - Simpler bootloader update process with all-in-one update file
+ - FF.CFG: sort-priority= to prioritise folders vs files during navigation
+   - Default: Folders are listed before files
+
 ** v2.10a - 20 May 2019
  - Fix breakages since v2.2a:
    - host=acorn: *.ADF handling
