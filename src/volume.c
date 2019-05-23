@@ -9,11 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if !defined(BOOTLOADER) && !defined(RELOADER)
-#define USE_SD 1
 extern struct volume_ops sd_ops;
-#endif
-
 extern struct volume_ops usb_ops;
 
 static struct volume_ops *vol_ops = &usb_ops;
@@ -22,7 +18,7 @@ static struct cache *cache;
 static void *metadata_addr;
 #define SECSZ 512
 
-#if !defined(BOOTLOADER) && !defined(RELOADER)
+#if !defined(BOOTLOADER)
 void volume_cache_init(void *start, void *end)
 {
     volume_cache_destroy();
@@ -49,7 +45,6 @@ DSTATUS disk_initialize(BYTE pdrv)
     if (!(usb_ops.initialize(pdrv) & STA_NOINIT))
         goto out;
 
-#ifdef USE_SD
     /* Try SD if the build and the board support it, and no USB drive is 
      * inserted. */
     if ((board_id == BRDREV_Gotek_sd_card)
@@ -57,7 +52,6 @@ DSTATUS disk_initialize(BYTE pdrv)
         && !(sd_ops.initialize(pdrv) & STA_NOINIT)) {
         vol_ops = &sd_ops;
     }
-#endif
 
 out:
     return disk_status(pdrv);
@@ -112,11 +106,9 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)
 
 bool_t volume_connected(void)
 {
-#ifdef USE_SD
     /* Force switch to USB drive if inserted. */
     if ((vol_ops == &sd_ops) && usbh_msc_inserted())
         return FALSE;
-#endif
     return vol_ops->connected();
 }
 

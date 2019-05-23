@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if !defined(BOOTLOADER) && !defined(RELOADER)
+#if !defined(BOOTLOADER)
 
 /* Use memory range (@start,@end) to cache data items of size @item_sz. */
 struct cache *cache_init(void *start, void *end, unsigned int item_sz);

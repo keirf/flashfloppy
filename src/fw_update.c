@@ -1,5 +1,5 @@
 /*
- * update.c
+ * fw_update.c
  * 
  * USB-flash update bootloader for main firmware.
  * 
@@ -32,19 +32,10 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#ifndef RELOADER
 /* Main bootloader: flashes the main firmware (last 96kB of Flash). */
 #define FIRMWARE_START 0x08008000
 #define FIRMWARE_END   (0x08020000 - FLASH_PAGE_SIZE)
 #define FILE_PATTERN   "ff_gotek*.upd"
-#define is_reloader    FALSE
-#else
-/* "Reloader": reflashes the main bootloader (first 32kB). */
-#define FIRMWARE_START 0x08000000
-#define FIRMWARE_END   0x08008000
-#define FILE_PATTERN   "ff_gotek*.rld"
-#define is_reloader    TRUE
-#endif
 
 int EXC_reset(void) __attribute__((alias("main")));
 
@@ -255,7 +246,6 @@ int main(void)
         memcpy(_sdat, _ldat, _edat-_sdat);
     memset(_sbss, 0, _ebss-_sbss);
 
-#ifndef RELOADER
     /* Enable GPIOC, set all pins as input with weak pull-up. */
     rcc->apb2enr = RCC_APB2ENR_IOPCEN;
     gpioc->odr = 0xffffu;
@@ -273,7 +263,6 @@ int main(void)
                 :: "r" (sp), "r" (pc));
         }
     }
-#endif
 
     /*
      * UPDATE MODE
@@ -287,9 +276,7 @@ int main(void)
     board_init();
     delay_ms(200); /* 5v settle */
 
-    printk("\n** FF %s v%s for Gotek\n",
-           is_reloader ? "Reloader" : "Update Bootloader",
-           fw_ver);
+    printk("\n** FF Update Bootloader v%s for Gotek\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
 
@@ -298,11 +285,10 @@ int main(void)
     display_init();
     switch (display_mode) {
     case DM_LED_7SEG:
-        msg_display(is_reloader ? "RLD" : "UPD");
+        msg_display("UPD");
         break;
     case DM_LCD_1602:
-        snprintf(msg, sizeof(msg), "FF %s",
-                 is_reloader ? "Reloader" : "Update Flash");
+        snprintf(msg, sizeof(msg), "FF Update Flash");
         lcd_write(0, 0, 0, msg);
         lcd_write(0, 1, 0, "v");
         lcd_write(1, 1, 0, fw_ver);

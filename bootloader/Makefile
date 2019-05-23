@@ -1,6 +1,6 @@
 RPATH = ../src
 
-OBJS += update.o
+OBJS += fw_update.o
 OBJS += fpec.o
 
 OBJS += build_info.o
@@ -8,6 +8,7 @@ OBJS += cancellation.o
 OBJS += crc.o
 OBJS += vectors.o
 OBJS += fs.o
+OBJS += sd_spi.o
 OBJS += spi.o
 OBJS += string.o
 OBJS += stm32f10x.o

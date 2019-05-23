@@ -4,7 +4,7 @@ export FW_VER := 2.10a
 PROJ := FlashFloppy
 VER := v$(FW_VER)
 
-SUBDIRS += src bootloader reloader
+SUBDIRS += src bootloader bl_update
 
 .PHONY: all upd clean flash start serial gotek
 
@@ -17,15 +17,14 @@ all:
 	$(MAKE) -f $(ROOT)/Rules.mk all
 
 clean:
-	rm -f *.hex *.upd *.rld *.dfu *.html
+	rm -f *.hex *.upd *.dfu *.html
 	$(MAKE) -f $(ROOT)/Rules.mk $@
 
 gotek: all
 	mv FF.dfu FF_Gotek-$(VER).dfu
 	mv FF.upd FF_Gotek-$(VER).upd
 	mv FF.hex FF_Gotek-$(VER).hex
-	mv BL.rld FF_Gotek-Bootloader-$(VER).rld
-	mv RL.upd FF_Gotek-Reloader-$(VER).upd
+	mv BL.upd FF_Gotek-Bootloader-$(VER).upd
 
 HXC_FF_URL := https://www.github.com/keirf/HxC_FF_File_Selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
@@ -33,15 +32,14 @@ HXC_FF_VER := v5-FF
 
 dist:
 	rm -rf flashfloppy-*
-	mkdir -p flashfloppy-$(VER)/alt/reloader
+	mkdir -p flashfloppy-$(VER)/alt/bootloader
 	mkdir -p flashfloppy-$(VER)/alt/logfile
 	$(MAKE) clean
 	$(MAKE) gotek
 	cp -a FF_Gotek-$(VER).dfu flashfloppy-$(VER)/
 	cp -a FF_Gotek-$(VER).upd flashfloppy-$(VER)/
 	cp -a FF_Gotek-$(VER).hex flashfloppy-$(VER)/
-	cp -a FF_Gotek-Reloader-$(VER).upd flashfloppy-$(VER)/alt/reloader/
-	cp -a FF_Gotek-Bootloader-$(VER).rld flashfloppy-$(VER)/alt/reloader/
+	cp -a FF_Gotek-Bootloader-$(VER).upd flashfloppy-$(VER)/alt/bootloader/
 	$(MAKE) clean
 	debug=n logfile=y $(MAKE) -f $(ROOT)/Rules.mk upd
 	mv FF.upd flashfloppy-$(VER)/alt/logfile/FF_Gotek-Logfile-$(VER).upd
@@ -74,19 +72,18 @@ all:
 	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
 	bootloader=y $(MAKE) -C bootloader -f $(ROOT)/Rules.mk \
 		Bootloader.elf Bootloader.bin Bootloader.hex
-	reloader=y $(MAKE) -C reloader -f $(ROOT)/Rules.mk \
-		Reloader.elf Reloader.bin Reloader.hex
+	logfile=n $(MAKE) -C bl_update -f $(ROOT)/Rules.mk \
+		BL_Update.elf BL_Update.bin BL_Update.hex
 	srec_cat bootloader/Bootloader.hex -Intel src/$(PROJ).hex -Intel \
 	-o FF.hex -Intel
 	$(PYTHON) ./scripts/mk_update.py src/$(PROJ).bin FF.upd
-	$(PYTHON) ./scripts/mk_update.py bootloader/Bootloader.bin BL.rld
-	$(PYTHON) ./scripts/mk_update.py reloader/Reloader.bin RL.upd
+	$(PYTHON) ./scripts/mk_update.py bl_update/BL_Update.bin BL.upd
 	$(PYTHON) ./scripts/dfu-convert.py -i FF.hex FF.dfu
 
 endif
 
 BAUD=115200
-DEV=/dev/ttyUSB1
+DEV=/dev/ttyUSB0
 
 flash:
 	sudo stm32flash -b $(BAUD) -w FF_Gotek-$(VER).hex $(DEV)

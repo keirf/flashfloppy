@@ -13,6 +13,9 @@ struct exception_frame {
     uint32_t r0, r1, r2, r3, r12, lr, pc, psr;
 };
 
+#define _STR(x) #x
+#define STR(x) _STR(x)
+
 #define __aligned(x) __attribute__((aligned(x)))
 #define __packed __attribute((packed))
 #define always_inline __inline__ __attribute__((always_inline))

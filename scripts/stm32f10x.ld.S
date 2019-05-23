@@ -13,6 +13,7 @@ SECTIONS
   .text : {
     _stext = .;
     *(.vector_table)
+    *(.vector_table*)
     *(.text)
     *(.text*)
     *(.rodata)
