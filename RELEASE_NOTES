@@ -5,6 +5,7 @@
 
 ** v2.11a - 23 May 2019
  - Simpler bootloader update process with all-in-one update file
+ - Update firmware via SD card (enhanced Goteks with SD card slot)
  - FF.CFG: sort-priority= to prioritise folders vs files during navigation
    - Default: Folders are listed before files
 
