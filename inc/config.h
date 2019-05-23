@@ -136,6 +136,10 @@ struct __packed ff_cfg {
     uint8_t folder_sort;
 #define MOTOR_ignore 0xff
     uint8_t motor_delay; /* / 10ms */
+#define SORTPRI_folders 0
+#define SORTPRI_files   1
+#define SORTPRI_none    2
+    uint8_t sort_priority;
 };
 
 extern struct ff_cfg ff_cfg;

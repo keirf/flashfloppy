@@ -16,6 +16,9 @@ struct exception_frame {
 #define _STR(x) #x
 #define STR(x) _STR(x)
 
+/* Force a compilation error if condition is true */
+#define BUILD_BUG_ON(cond) ({ _Static_assert(!(cond), "!(" #cond ")"); })
+
 #define __aligned(x) __attribute__((aligned(x)))
 #define __packed __attribute((packed))
 #define always_inline __inline__ __attribute__((always_inline))

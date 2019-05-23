@@ -114,6 +114,8 @@ void flash_ff_cfg_read(void)
     union cfg_slot *slot = cfg_slot_find();
     bool_t found = slot_is_valid(slot);
 
+    BUILD_BUG_ON(sizeof(*slot) != sizeof(slot->words));
+
     ff_cfg = dfl_ff_cfg;
     printk("Config: ");
     if (found) {

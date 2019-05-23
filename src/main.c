@@ -20,7 +20,9 @@ static struct {
 } *fs;
 
 struct native_dirent {
-    uint32_t dir_sect, dir_ptr;
+    uint32_t dir_sect;
+    uint16_t dir_off;
+    uint8_t attr;
     char name[0];
 };
 
@@ -617,14 +619,23 @@ static int native_dir_cmp(const void *a, const void *b)
 {
     const struct native_dirent *da = a;
     const struct native_dirent *db = b;
+    if ((da->attr ^ db->attr) & AM_DIR) {
+        switch (ff_cfg.sort_priority) {
+        case SORTPRI_folders:
+            return (da->attr & AM_DIR) ? -1 : 1;
+        case SORTPRI_files:
+            return (da->attr & AM_DIR) ? 1 : -1;
+        }
+    }
     return strcmp_lower(da->name, db->name);
 }
 
 static unsigned int native_read_dir(void)
 {
-    struct native_dirent **p_ent, **p_ents = arena_alloc(0);
-    struct native_dirent *ent = (struct native_dirent *)(p_ents + 1000);
-    char *end = arena_alloc(0) + arena_avail();
+    struct native_dirent **p_ent;
+    struct native_dirent *ent = arena_alloc(0);
+    char *start = arena_alloc(0);
+    char *end = start + arena_avail();
     int nr;
 
     if (ff_cfg.folder_sort == SORT_never)
@@ -633,13 +644,16 @@ static unsigned int native_read_dir(void)
     volume_cache_destroy();
 
     F_opendir(&fs->dp, "");
-    p_ent = p_ents;
-    while ((end - (char *)ent) > (FF_MAX_LFN + 1 + sizeof(*ent))) {
+    p_ent = (struct native_dirent **)end;
+    while (((char *)p_ent - (char *)ent)
+           > (FF_MAX_LFN + 1 + sizeof(*ent) + sizeof(ent))) {
         if (!native_dir_next())
             goto complete;
-        *p_ent++ = ent;
+        *--p_ent = ent;
+        ASSERT((unsigned int)(fs->fp.dir_ptr - fatfs.win) < 512u);
         ent->dir_sect = fs->fp.dir_sect;
-        ent->dir_ptr = (uint32_t)fs->fp.dir_ptr;
+        ent->dir_off = fs->fp.dir_ptr - fatfs.win;
+        ent->attr = fs->fp.fattrib;
         strcpy(ent->name, fs->fp.fname);
         ent = (struct native_dirent *)(
             ((uint32_t)ent + sizeof(*ent) + strlen(ent->name) + 1 + 3) & ~3);
@@ -648,19 +662,19 @@ static unsigned int native_read_dir(void)
     if (ff_cfg.folder_sort == SORT_always)
         goto complete;
 
-    volume_cache_init(p_ents, end);
+    volume_cache_init(start, end);
     cfg.sorted = NULL;
     return 0;
 
 complete:
-    nr = p_ent - p_ents;
+    nr = (struct native_dirent **)end - p_ent;
 
-    qsort_p(p_ents, nr, native_dir_cmp);
+    qsort_p(p_ent, nr, native_dir_cmp);
 
     F_closedir(&fs->dp);
 
-    volume_cache_init(ent, end);
-    cfg.sorted = p_ents;
+    volume_cache_init(ent, p_ent);
+    cfg.sorted = p_ent;
     return nr;
 }
 
@@ -886,6 +900,13 @@ static void read_ff_cfg(void)
                 !strcmp(opts.arg, "never") ? SORT_never
                 : !strcmp(opts.arg, "small") ? SORT_small
                 : SORT_always;
+            break;
+
+        case FFCFG_sort_priority:
+            ff_cfg.sort_priority =
+                !strcmp(opts.arg, "none") ? SORTPRI_none
+                : !strcmp(opts.arg, "files") ? SORTPRI_files
+                : SORTPRI_folders;
             break;
 
         case FFCFG_nav_mode:
@@ -1376,7 +1397,7 @@ static void native_update(uint8_t slot_mode)
         snprintf(fs->fp.fname, sizeof(fs->fp.fname), ent->name);
         fs->file.obj.fs = &fatfs;
         fs->file.dir_sect = ent->dir_sect;
-        fs->file.dir_ptr = (BYTE *)ent->dir_ptr;
+        fs->file.dir_ptr = fatfs.win + ent->dir_off;
         flashfloppy_fill_fileinfo(&fs->file);
         fs->fp.fattrib = fs->file.obj.attr;
         if (fs->file.obj.attr & AM_DIR)
