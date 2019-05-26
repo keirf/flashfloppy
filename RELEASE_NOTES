@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.3 - 26 May 2019
+ - Indexed mode: Fix for *.ST images
+ - MFM generation: Fix small error for DSK and IMG
+
 ** v1.2 - 14 April 2019
  - OLED: Fix horizontal offset on SH1106 128x32 displays
  - Update HxC Compat to v5-FF
