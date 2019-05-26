@@ -1294,13 +1294,8 @@ indexed_mode:
                     idx *= 10;
                     idx += *p++ - '0';
                 }
-                /* Expect a 4-digit number range 0-999 followed by a period. */
-                if ((i != 4) || (*p++ != '.') || (idx > 999))
-                    continue;
-                /* Expect 3-char extension followed by nul. */
-                for (i = 0; (i < 3) && *p; i++, p++)
-                    continue;
-                if ((i != 3) || (*p != '\0'))
+                /* Expect a 4-digit number range 0-999. */
+                if ((i != 4) || (idx > 999))
                     continue;
                 /* A file type we support? */
                 if (!image_valid(&fs->fp))
