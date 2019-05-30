@@ -67,6 +67,10 @@ static uint8_t buffer[256] __aligned(4);
 /* Text buffer, rendered into I2C data and placed into buffer[]. */
 static char text[2][40];
 
+/* Text content */
+uint8_t diskname_row;
+uint8_t trackinfo_row;
+
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
 
@@ -396,6 +400,8 @@ bool_t lcd_init(void)
             lcd_columns = max_t(uint8_t, lcd_columns, 16);
             lcd_columns = min_t(uint8_t, lcd_columns, 40);
         }
+        diskname_row  = ff_cfg.text_rowcontent & 0x03;
+        trackinfo_row = (ff_cfg.text_rowcontent>>2) & 0x03;
 
         printk("I2C: %s found at 0x%02x\n",
                is_oled_display ? "OLED" : "LCD", a);

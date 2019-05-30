@@ -127,7 +127,7 @@ static void display_wp_status(void)
 {
     if (display_mode != DM_LCD_1602)
         return;
-    lcd_write(wp_column, 1, 1, (cfg.slot.attributes & AM_RDO) ? "*" : "");
+    lcd_write(wp_column, trackinfo_row, 1, (cfg.slot.attributes & AM_RDO) ? "*" : "");
 }
 
 /* Scroll long filename. */
@@ -176,7 +176,7 @@ static void lcd_scroll_name(void)
                 lcd_scroll.off = 0;
         }
     }
-    lcd_write(0, 0, -1, msg);
+    lcd_write(0, diskname_row, -1, msg);
 }
 
 /* Write slot info to display. */
@@ -196,7 +196,7 @@ static void display_write_slot(bool_t nav_mode)
         lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
         if (lcd_scroll.end == 0) {
             snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
-            lcd_write(0, 0, -1, msg);
+            lcd_write(0, diskname_row, -1, msg);
         } else {
             lcd_scroll.off--;
             lcd_scroll.ticks = 0;
@@ -204,7 +204,7 @@ static void display_write_slot(bool_t nav_mode)
         }
     } else {
         snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
-        lcd_write(0, 0, -1, msg);
+        lcd_write(0, diskname_row, -1, msg);
     }
 
     if (slot_type("v9t9")) {
@@ -232,7 +232,7 @@ static void display_write_slot(bool_t nav_mode)
             *p = '\0';
     }
 
-    lcd_write(0, 1, -1, msg);
+    lcd_write(0, trackinfo_row, -1, msg);
     lcd_on();
 }
 
@@ -263,7 +263,7 @@ static void lcd_write_track_info(bool_t force)
         snprintf(msg, sizeof(msg), "%c T:%02u.%u",
                  (cfg.slot.attributes & AM_RDO) ? '*' : ti.writing ? 'W' : ' ',
                  ti.cyl, ti.side);
-        lcd_write(wp_column, 1, -1, msg);
+        lcd_write(wp_column, trackinfo_row, -1, msg);
         if (ff_cfg.display_on_activity)
             lcd_on();
         lcd_ti = ti;
@@ -1047,6 +1047,25 @@ static void read_ff_cfg(void)
         case FFCFG_nav_scroll_pause:
             ff_cfg.nav_scroll_pause = strtol(opts.arg, NULL, 10);
             break;
+
+        case FFCFG_text_rowcontent: {
+            char *p, *q;
+            uint8_t i = 0;
+            ff_cfg.text_rowcontent = 0;
+            for (p = opts.arg; *p != '\0'; p = q) {
+                for (q = p; *q && *q != ','; q++)
+                    continue;
+                if (*q == ',')
+                    *q++ = '\0';
+                if (!strcmp(p, "name")) {
+                    ff_cfg.text_rowcontent |= (i&0x3);
+                } else if (!strcmp(p, "track")) {
+                    ff_cfg.text_rowcontent |= (i&0x3)<<2;
+                }
+                i++;
+            }
+            break;
+        }
 
             /* MISCELLANEOUS */
 
@@ -1912,7 +1931,7 @@ static int floppy_main(void *unused)
             assert_volume_connected();
             if ((b != 0) && (display_mode == DM_LCD_1602)) {
                 /* Immediate visual indication of button press. */
-                lcd_write(wp_column, 1, 1, "-");
+                lcd_write(wp_column, trackinfo_row, 1, "-");
                 lcd_on();
             }
             floppy_arena_setup();
@@ -1950,8 +1969,8 @@ static int floppy_main(void *unused)
                     snprintf(msg, sizeof(msg), "*%s*%02u*",
                              (fres >= 30) ? "ERR" : "FAT", fres);
                 display_wp_status();
-                lcd_write(wp_column+1, 1, -1, "");
-                lcd_write((lcd_columns > 16) ? 10 : 8, 1, 0, msg);
+                lcd_write(wp_column+1, trackinfo_row, -1, "");
+                lcd_write((lcd_columns > 16) ? 10 : 8, trackinfo_row, 0, msg);
                 lcd_on();
                 break;
             }

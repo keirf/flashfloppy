@@ -55,6 +55,11 @@ def main(argv):
                 for x in val.split(","):
                     opts += ['TWOBUTTON_' + x.replace("-","_")]
                 val = '|'.join(opts)
+            elif opt == "text-rowcontent":
+                opts = []
+                for x in val.split(","):
+                    opts += ['TEXT_' + x]
+                val = '|'.join(opts)
             elif opt == "nav-mode":
                 val = "NAVMODE_" + val
             elif opt == "folder-sort":

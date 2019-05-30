@@ -152,6 +152,10 @@ extern uint8_t display_mode;
 void speaker_init(void);
 void speaker_pulse(void);
 
+/* Text row contents */
+extern uint8_t diskname_row;
+extern uint8_t trackinfo_row;
+
 /* Display: 3-digit 7-segment display */
 void led_7seg_init(void);
 void led_7seg_write_string(const char *p);
