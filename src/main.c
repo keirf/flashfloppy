@@ -1010,6 +1010,22 @@ static void read_ff_cfg(void)
             break;
         }
 
+        case FFCFG_display_textsize: {
+            char *p, *q;
+            uint8_t i = 0;
+            ff_cfg.display_textsize = (TEXTSIZE_small<<0) | (TEXTSIZE_small<<1);
+            for (p = opts.arg; *p != '\0'; p = q) {
+                for (q = p; *q && *q != ','; q++)
+                    continue;
+                if (*q == ',')
+                    *q++ = '\0';
+                ff_cfg.display_textsize |=
+                    !strcmp(p, "big") ? (TEXTSIZE_big<<i) : (TEXTSIZE_small<<i);
+                ++i;
+            }
+            break;
+        }
+
         case FFCFG_oled_font:
             ff_cfg.oled_font =
                 !strcmp(opts.arg, "6x13") ? FONT_6x13

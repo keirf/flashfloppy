@@ -51,6 +51,7 @@ static uint8_t i2c_addr;
 static uint8_t i2c_dead;
 static bool_t is_oled_display;
 static uint8_t oled_height;
+static bool_t text_double[2];
 
 #define OLED_ADDR 0x3c
 enum { OLED_unknown, OLED_ssd1306, OLED_sh1106 };
@@ -391,6 +392,8 @@ bool_t lcd_init(void)
             lcd_columns = (ff_cfg.oled_font == FONT_8x16) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrower) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
+            text_double[0] = (ff_cfg.display_textsize & (TEXTSIZE_big<<0)) ? TRUE : FALSE;
+            text_double[1] = (ff_cfg.display_textsize & (TEXTSIZE_big<<1)) ? TRUE : FALSE;
         } else {
             lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
             lcd_columns = max_t(uint8_t, lcd_columns, 16);
@@ -625,6 +628,7 @@ static unsigned int oled_start_i2c(uint8_t *buf)
 
 static unsigned int ssd1306_prep_buffer(void)
 {
+    static uint8_t oled_textrow = 0, oled_bigtext = 0;
     /* If we have completed a complete fill of the OLED display, start a new 
      * I2C transaction. The OLED display seems to occasionally silently lose 
      * a byte and then we lose sync with the display address. */
@@ -639,16 +643,31 @@ static unsigned int ssd1306_prep_buffer(void)
         i2c_stop();
         /* Kick off new I2C transaction. */
         oled_row = 0;
+        oled_textrow = 0;
+        oled_bigtext = 0;
         refresh_count++;
         return oled_start_i2c(buffer);
     }
 
-    /* Convert one row of text[] into buffer[] writes. */
-    if (oled_height == 64) {
-        oled_convert_text_row(text[oled_row/2]);
-        oled_double_height(buffer, &buffer[(oled_row & 1) ? 128 : 0], 0x3);
+    if (lcd_rows == oled_textrow)
+    {
+        /* clean up empty space below text-rows */
+        memset(buffer, 0, 256);
     } else {
-        oled_convert_text_row(text[oled_row]);
+        /* Convert one row of text[] into buffer[] writes. */
+        if ( (64 == oled_height) && (text_double[oled_textrow]) )
+        {
+            oled_convert_text_row(text[oled_textrow]);
+            oled_double_height(buffer, &buffer[(oled_bigtext & 1) ? 128 : 0], 0x3);
+            /* alternate between upper and lower font-area to be doubled */
+            oled_bigtext = 1-oled_bigtext;
+            /* only advance to next text-row if both parts of last text have been doubled */
+            oled_textrow += (oled_bigtext & 1) ? 0 : 1;
+        } else {
+            oled_convert_text_row(text[oled_textrow]);
+            oled_bigtext=0;
+            oled_textrow++;
+        }
     }
 
     oled_row++;

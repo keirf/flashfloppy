@@ -100,6 +100,9 @@ struct __packed ff_cfg {
 #define _DISPLAY_lcd_columns 5
 #define DISPLAY_lcd_columns(x) ((x)<<_DISPLAY_lcd_columns)
     uint16_t display_type;
+#define TEXTSIZE_small 0
+#define TEXTSIZE_big   1
+    uint8_t display_textsize;
 #define ROT_none      0
 #define ROT_full      1
 #define ROT_half      3
