@@ -140,6 +140,9 @@ struct __packed ff_cfg {
 #define SORTPRI_files   1
 #define SORTPRI_none    2
     uint8_t sort_priority;
+#define CHGRST_step   0xff
+#define CHGRST_pa14   0x0e
+    uint8_t chgrst;
 };
 
 extern struct ff_cfg ff_cfg;

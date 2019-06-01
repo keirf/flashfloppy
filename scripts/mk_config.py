@@ -66,6 +66,8 @@ def main(argv):
                     val = "MOTOR_" + val
                 else:
                     val = (int(val) + 9) // 10
+            elif opt == "chgrst":
+                val = "CHGRST_" + val
             else:
                 val = {
                     'no': 'FALSE',

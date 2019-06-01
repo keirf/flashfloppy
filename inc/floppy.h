@@ -246,7 +246,6 @@ struct track_info {
 };
 void floppy_get_track(struct track_info *ti);
 void floppy_set_fintf_mode(void);
-void floppy_set_motor_delay(void);
 
 /*
  * Local variables:

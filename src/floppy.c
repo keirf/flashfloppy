@@ -66,10 +66,8 @@ static struct drive {
     volatile bool_t inserted;
     struct {
         struct timer timer;
-#define MOTOR_off     0
-#define MOTOR_on      1
-#define MOTOR_spun_up 2
-        volatile uint8_t state;
+        bool_t on;
+        bool_t changed;
     } motor;
     struct {
 #define STEP_started  1 /* started by hi-pri IRQ */
@@ -255,7 +253,7 @@ void floppy_cancel(void)
     index.fake_fired = FALSE;
     barrier(); /* clear soft state /then/ cancel index.timer_deassert */
     timer_cancel(&index.timer_deassert);
-    IRQx_set_pending(FLOPPY_MOTOR_IRQ); /* update RDY + motor state */
+    motor_chgrst_eject(drv);
 
     /* Set outputs for empty drive. */
     barrier();
@@ -387,7 +385,7 @@ void floppy_init(void)
     timer_init(&index.timer, index_assert, NULL);
     timer_init(&index.timer_deassert, index_deassert, NULL);
 
-    floppy_set_motor_delay();
+    motor_chgrst_eject(drv);
 }
 
 void floppy_insert(unsigned int unit, struct slot *slot)
@@ -562,7 +560,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
         drive_change_output(drv, outp_wrprot, FALSE);
     barrier();
     drv->inserted = TRUE;
-    IRQx_set_pending(FLOPPY_MOTOR_IRQ); /* update RDY + motor state */
+    motor_chgrst_insert(drv); /* update RDY + motor state */
 }
 
 static unsigned int drive_calc_track(struct drive *drv)
@@ -1002,7 +1000,7 @@ static void index_assert(void *dat)
     index.prev_time = index.timer.deadline;
     if (!drv->index_suppressed
         && !(drv->step.state && ff_cfg.index_suppression)
-        && (drv->motor.state == MOTOR_on)) {
+        && drv->motor.on) {
         drive_change_output(drv, outp_index, TRUE);
         timer_set(&index.timer_deassert, index.prev_time + time_ms(2));
     }
@@ -1048,8 +1046,8 @@ static void motor_spinup_timer(void *_drv)
 {
     struct drive *drv = _drv;
 
-    drv->motor.state = MOTOR_spun_up;
-    IRQx_set_pending(FLOPPY_SOFTIRQ);
+    drv->motor.on = TRUE;
+    drive_change_output(drv, outp_rdy, TRUE);
 }
 
 static void IRQ_soft(void)
@@ -1065,11 +1063,6 @@ static void IRQ_soft(void)
     if (index.fake_fired) {
         index.fake_fired = FALSE;
         timer_set(&index.timer_deassert, time_now() + time_us(500));
-    }
-
-    if (drv->motor.state == MOTOR_spun_up) {
-        drv->motor.state = MOTOR_on;
-        drive_change_output(drv, outp_rdy, TRUE);
     }
 }
 
