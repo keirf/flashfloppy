@@ -147,7 +147,7 @@ uint16_t crc16_ccitt(const void *buf, size_t len, uint16_t crc);
 void display_init(void);
 extern uint8_t display_mode;
 #define DM_NONE     0
-#define DM_LCD_1602 1
+#define DM_LCD_OLED 1
 #define DM_LED_7SEG 2
 
 /* Speaker. */

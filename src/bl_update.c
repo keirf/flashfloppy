@@ -61,7 +61,7 @@ static void msg_display(const char *p)
     case DM_LED_7SEG:
         led_7seg_write_string(p);
         break;
-    case DM_LCD_1602:
+    case DM_LCD_OLED:
         lcd_write(6, 1, 0, p);
         lcd_sync();
         break;
@@ -74,7 +74,7 @@ static void display_setting(bool_t on)
     case DM_LED_7SEG:
         led_7seg_display_setting(on);
         break;
-    case DM_LCD_1602:
+    case DM_LCD_OLED:
         lcd_backlight(on);
         lcd_sync();
         break;
@@ -110,7 +110,7 @@ int main(void)
     case DM_LED_7SEG:
         msg_display("BLD");
         break;
-    case DM_LCD_1602:
+    case DM_LCD_OLED:
         lcd_write(0, 0, 0, "New Bootloader..");
         lcd_write(0, 1, 0, "     [   ]");
         lcd_sync();
