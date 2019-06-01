@@ -322,6 +322,8 @@ bool_t lcd_init(void)
     uint8_t a, *p;
     bool_t reinit = (i2c_addr != 0);
 
+    i2c_dead = FALSE;
+
     rcc->apb1enr |= RCC_APB1ENR_I2C2EN;
 
     /* Check we have a clear I2C bus. Both clock and data must be high. If SDA 
