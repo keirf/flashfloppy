@@ -60,12 +60,13 @@ struct track_header {
     uint16_t len;
 };
 
-/* HFEv3 opcodes */
+/* HFEv3 opcodes. The 4-bit codes have their bit ordering reversed. */
 enum {
-    OP_nop = 0,     /* no effect */
-    OP_index = 8,   /* index mark */
-    OP_bitrate = 4, /* +1byte: new bitrate */
-    OP_skip = 12    /* +1byte: skip 0-8 bits in next byte */
+    OP_nop = 0,     /* 0: no effect */
+    OP_index = 8,   /* 1: index mark */
+    OP_bitrate = 4, /* 2: +1byte: new bitrate */
+    OP_skip = 12,   /* 3: +1byte: skip 0-8 bits in next byte */
+    OP_rand = 2     /* 4: flaky byte */
 };
 
 static void hfe_seek_track(struct image *im, uint16_t track);
@@ -251,6 +252,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             switch (x >> 4) {
             case OP_nop:
             case OP_index:
+            default:
                 bc_c += 8;
                 im->cur_bc += 8;
                 y = 8;
@@ -267,11 +269,13 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
                 x = (_rbit32(bc_b[(bc_c/8+1) & bc_mask]) >> 24) & 7;
                 bc_c += 2*8 + x;
                 im->cur_bc += 2*8 + x;
-                y = bc_c % 8;
+                y = x;
                 x = bc_b[(bc_c/8) & bc_mask] >> y;
                 break;
-            default:
-                /* ignore and process as normal data */
+            case OP_rand:
+                bc_c += 8;
+                im->cur_bc += 8;
+                x = rand();
                 break;
             }
         }

@@ -85,6 +85,8 @@ long int strtol(const char *nptr, char **endptr, int base);
 void qsort_p(void *base, unsigned int nr,
              int (*compar)(const void *, const void *));
 
+uint32_t rand(void);
+
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));
 

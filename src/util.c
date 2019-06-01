@@ -302,6 +302,15 @@ void qsort_p(void *base, unsigned int nr,
     __qsort_p((void **)base, 0, nr-1, compar);
 }
 
+uint32_t rand(void)
+{
+    static uint32_t x = 0x87a2263c;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    return x;
+}
+
 /*
  * Local variables:
  * mode: C
