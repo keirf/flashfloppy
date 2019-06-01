@@ -156,6 +156,7 @@ void speaker_pulse(void);
 
 /* Display: 3-digit 7-segment display */
 void led_7seg_init(void);
+void led_7seg_write_raw(const uint8_t *d);
 void led_7seg_write_string(const char *p);
 void led_7seg_write_decimal(unsigned int val);
 void led_7seg_display_setting(bool_t enable);

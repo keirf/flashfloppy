@@ -4,7 +4,7 @@ export FW_VER := 2.11a
 PROJ := FlashFloppy
 VER := v$(FW_VER)
 
-SUBDIRS += src bootloader bl_update
+SUBDIRS += src bootloader bl_update io_test
 
 .PHONY: all upd clean flash start serial gotek
 
@@ -25,6 +25,7 @@ gotek: all
 	mv FF.upd FF_Gotek-$(VER).upd
 	mv FF.hex FF_Gotek-$(VER).hex
 	mv BL.upd FF_Gotek-Bootloader-$(VER).upd
+	mv IOT.upd FF_Gotek-IO-Test-$(VER).upd
 
 HXC_FF_URL := https://www.github.com/keirf/HxC_FF_File_Selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
@@ -34,12 +35,14 @@ dist:
 	rm -rf flashfloppy-*
 	mkdir -p flashfloppy-$(VER)/alt/bootloader
 	mkdir -p flashfloppy-$(VER)/alt/logfile
+	mkdir -p flashfloppy-$(VER)/alt/io-test
 	$(MAKE) clean
 	$(MAKE) gotek
 	cp -a FF_Gotek-$(VER).dfu flashfloppy-$(VER)/
 	cp -a FF_Gotek-$(VER).upd flashfloppy-$(VER)/
 	cp -a FF_Gotek-$(VER).hex flashfloppy-$(VER)/
 	cp -a FF_Gotek-Bootloader-$(VER).upd flashfloppy-$(VER)/alt/bootloader/
+	cp -a FF_Gotek-IO-Test-$(VER).upd flashfloppy-$(VER)/alt/io-test/
 	$(MAKE) clean
 	debug=n logfile=y $(MAKE) -f $(ROOT)/Rules.mk upd
 	mv FF.upd flashfloppy-$(VER)/alt/logfile/FF_Gotek-Logfile-$(VER).upd
@@ -74,10 +77,13 @@ all:
 		Bootloader.elf Bootloader.bin Bootloader.hex
 	logfile=n $(MAKE) -C bl_update -f $(ROOT)/Rules.mk \
 		BL_Update.elf BL_Update.bin BL_Update.hex
+	logfile=n $(MAKE) -C io_test -f $(ROOT)/Rules.mk \
+		IO_Test.elf IO_Test.bin IO_Test.hex
 	srec_cat bootloader/Bootloader.hex -Intel src/$(PROJ).hex -Intel \
 	-o FF.hex -Intel
 	$(PYTHON) ./scripts/mk_update.py src/$(PROJ).bin FF.upd
 	$(PYTHON) ./scripts/mk_update.py bl_update/BL_Update.bin BL.upd
+	$(PYTHON) ./scripts/mk_update.py io_test/IO_Test.bin IOT.upd
 	$(PYTHON) ./scripts/dfu-convert.py -i FF.hex FF.dfu
 
 endif

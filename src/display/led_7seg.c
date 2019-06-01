@@ -130,7 +130,7 @@ static bool_t tm1651_send_cmd(uint8_t cmd)
     return fail;
 }
 
-static void tm1651_update_display(uint8_t *d)
+static void tm1651_update_display(const uint8_t *d)
 {
     bool_t fail = TRUE;
     int retry;
@@ -184,7 +184,7 @@ static void shiftreg_update_display_u16(uint16_t x)
 
 static uint16_t shiftreg_curval;
 
-static void shiftreg_update_display(uint8_t *d)
+static void shiftreg_update_display(const uint8_t *d)
 {
     uint16_t x = ((uint16_t)d[0] << 8) | d[1];
     shiftreg_curval = x;
@@ -220,6 +220,14 @@ void led_7seg_display_setting(bool_t enable)
         shiftreg_display_setting(enable);
 }
 
+void led_7seg_write_raw(const uint8_t *d)
+{
+    if (nr_digits == 3)
+        tm1651_update_display(d);
+    else
+        shiftreg_update_display(d);
+}
+
 void led_7seg_write_string(const char *p)
 {
     uint8_t d[3] = { 0 }, c;
@@ -239,10 +247,7 @@ void led_7seg_write_string(const char *p)
         }
     }
 
-    if (nr_digits == 3)
-        tm1651_update_display(d);
-    else
-        shiftreg_update_display(d);
+    led_7seg_write_raw(d);
 }
 
 void led_7seg_write_decimal(unsigned int val)
