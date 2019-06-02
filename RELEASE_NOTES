@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.12 - 2 June 2019
+ - HFEv3: Support flaky/weak bytes
+ - LCD/OLED: Improve power-on initialisation robustness
+ - Roland: Direct support for *.OUT images
+ - IO-Test: New alternative firmware to test Gotek I/O pins
+   - https://github.com/keirf/FlashFloppy/wiki/Testing-IO-Pins
+
 ** v2.11a - 23 May 2019
  - Simpler bootloader update process with all-in-one update file
  - Update firmware via SD card (enhanced Goteks with SD card slot)
