@@ -42,6 +42,7 @@ const struct image_type image_type[] = {
     { "hfe", &hfe_image_handler },
     { "img", &img_image_handler },
     { "ima", &img_image_handler },
+    { "out", &img_image_handler },
     { "st",  &st_image_handler },
     { "adl", &adfs_image_handler },
     { "adm", &adfs_image_handler },
@@ -157,7 +158,7 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
             return;
         /* Hint failed. Try a secondary hint. */
         if (hint == &img_image_handler)
-            /* IMG,IMA,DSK -> XDF */
+            /* IMG,IMA,DSK,OUT -> XDF */
             hint = &xdf_image_handler;
         else if (!strcmp(ext, "dsk")) 
             /* DSK -> IMG */
