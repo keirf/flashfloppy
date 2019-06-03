@@ -206,7 +206,7 @@ static bool_t hfe_read_track(struct image *im)
     bc_mask = bc_len - 1;
     bc_space = bc_len - (uint16_t)(bc_p - bc_c);
 
-    nr_sec = min_t(unsigned int, rd->prod, bc_space/256);
+    nr_sec = min_t(unsigned int, rd->prod - rd->cons, bc_space/256);
     if (nr_sec == 0)
         return FALSE;
 
