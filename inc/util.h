@@ -195,6 +195,7 @@ extern const char fw_ver[];
 
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];
+extern char _smaintext[], _emaintext[];
 extern char _sdat[], _edat[], _ldat[];
 extern char _sbss[], _ebss[];
 

@@ -13,6 +13,27 @@ struct extra_exception_frame {
     uint32_t r4, r5, r6, r7, r8, r9, r10, r11, lr;
 };
 
+static inline bool_t in_text(uint32_t p)
+{
+    return (p >= (uint32_t)_smaintext) && (p < (uint32_t)_emaintext);
+}
+
+static void show_stack(uint32_t sp, uint32_t top)
+{
+    unsigned int i = 0;
+    sp &= ~3;
+    while (sp < top) {
+        uint32_t v = *(uint32_t *)sp & ~1;
+        sp += 4;
+        if (!in_text(v))
+            continue;
+        if ((i++&7) == 0)
+            printk("\n ", sp);
+        printk("%x ", v);
+    }
+    printk("\n");
+}
+
 void EXC_unexpected(struct extra_exception_frame *extra)
 {
     struct exception_frame *frame;
@@ -43,6 +64,18 @@ void EXC_unexpected(struct extra_exception_frame *extra)
            frame->r12, (extra->lr & 4) ? psp : msp, frame->lr, frame->pc);
     printk(" msp: %08x   psp: %08x   psr: %08x\n",
            msp, psp, frame->psr);
+    
+    if ((msp >= (uint32_t)_irq_stackbottom)
+        && (msp < (uint32_t)_irq_stacktop)) {
+        printk("IRQ Call Trace:");
+        show_stack(msp, (uint32_t)_irq_stacktop);
+    }
+
+    if ((psp >= (uint32_t)_thread_stackbottom)
+        && (psp < (uint32_t)_thread_stacktop)) {
+        printk("Process Call Trace:", psp);
+        show_stack(psp, (uint32_t)_thread_stacktop);
+    }
 
     system_reset();
 }
