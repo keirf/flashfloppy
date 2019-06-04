@@ -96,7 +96,8 @@ static struct {
 static void index_assert(void *);   /* index.timer */
 static void index_deassert(void *); /* index.timer_deassert */
 
-static uint32_t max_read_us;
+static time_t prefetch_start_time;
+static uint32_t max_prefetch_us;
 
 static void rdata_stop(void);
 static void wdata_start(void);
@@ -249,7 +250,6 @@ void floppy_cancel(void)
     drv->index_suppressed = FALSE;
     drv->image = NULL;
     drv->inserted = FALSE;
-    max_read_us = 0;
     image = NULL;
     dma_rd = dma_wr = NULL;
     index.fake_fired = FALSE;
@@ -478,6 +478,9 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     im->fp.dir_sect = 0;
 
     _dma_rd->state = DMA_stopping;
+
+    /* Report only significant prefetch times (> 10ms). */
+    max_prefetch_us = 10000;
 
     /* Make allocated state globally visible now. */
     drv->image = image = im;
@@ -723,8 +726,12 @@ static void floppy_sync_flux(void)
 {
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
     struct drive *drv = &drive;
+    uint32_t prefetch_us;
     uint16_t nr_to_wrap, nr_to_cons, nr;
     int32_t ticks;
+
+    /* No DMA should occur until the timer is enabled. */
+    ASSERT(dma_rd->cons == (ARRAY_SIZE(dma_rd->buf) - dma_rdata.cndtr));
 
     nr_to_wrap = ARRAY_SIZE(dma_rd->buf) - dma_rd->prod;
     nr_to_cons = (dma_rd->cons - dma_rd->prod - 1) & buf_mask;
@@ -738,6 +745,13 @@ static void floppy_sync_flux(void)
     nr = (dma_rd->prod - dma_rd->cons) & buf_mask;
     if (nr < buf_mask)
         return;
+
+    /* Log maximum prefetch times. */
+    prefetch_us = time_diff(prefetch_start_time, time_now()) / TIME_MHZ;
+    if (prefetch_us > max_prefetch_us) {
+        max_prefetch_us = prefetch_us;
+        printk("[%uus]\n", max_prefetch_us);
+    }
 
     if (!drv->index_suppressed) {
         ticks = time_diff(time_now(), sync_time) - time_us(1);
@@ -810,22 +824,11 @@ static void floppy_sync_flux(void)
 
 static void floppy_read_data(struct drive *drv)
 {
-    uint32_t read_us;
-    time_t timestamp;
-
     /* Read some track data if there is buffer space. */
-    timestamp = time_now();
     if (image_read_track(drv->image) && dma_rd->kick_dma_irq) {
         /* We buffered some more data and the DMA handler requested a kick. */
         dma_rd->kick_dma_irq = FALSE;
         IRQx_set_pending(dma_rdata_irq);
-    }
-
-    /* Log maximum time taken to read track data, in microseconds. */
-    read_us = time_diff(timestamp, time_now()) / TIME_MHZ;
-    if (read_us > max_read_us) {
-        max_read_us = max_t(uint32_t, max_read_us, read_us);
-        printk("New max: read_us=%u\n", max_read_us);
     }
 }
 
@@ -865,6 +868,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         }
         if (image_setup_track(drv->image, track, &read_start_pos))
             return TRUE;
+        prefetch_start_time = time_now();
         read_start_pos /= SYSCLK_MHZ/STK_MHZ;
         sync_pos = read_start_pos;
         if (!drv->index_suppressed) {
