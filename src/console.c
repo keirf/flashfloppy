@@ -13,11 +13,46 @@
 
 #define USART1_IRQ 37
 
-static void emit_char(uint8_t c)
+/* Normally flush to serial is asynchronously executed in a low-pri IRQ. */
+void IRQ_44(void) __attribute__((alias("SOFTIRQ_console")));
+#define CONSOLE_SOFTIRQ 44
+
+/* We stage serial output in a ring buffer. */
+static char ring[2048];
+#define MASK(x) ((x)&(sizeof(ring)-1))
+static unsigned int cons, prod;
+
+/* The console can be set into synchronous mode in which case IRQ is disabled 
+ * and the transmit-empty flag is polled manually for each byte. */
+static bool_t sync_console;
+
+static void flush_ring_to_serial(void)
 {
-    while (!(usart1->sr & USART_SR_TXE))
-        cpu_relax();
-    usart1->dr = c;
+    unsigned int c = cons, p = prod;
+    barrier();
+
+    while (c != p) {
+        while (!(usart1->sr & USART_SR_TXE))
+            cpu_relax();
+        usart1->dr = ring[MASK(c++)];
+    }
+
+    barrier();
+    cons = c;
+}
+
+static void SOFTIRQ_console(void)
+{
+    flush_ring_to_serial();
+}
+
+static void kick_tx(void)
+{
+    if (sync_console) {
+        flush_ring_to_serial();
+    } else if (cons != prod) {
+        IRQx_set_pending(CONSOLE_SOFTIRQ);
+    }
 }
 
 int vprintk(const char *format, va_list ap)
@@ -31,20 +66,23 @@ int vprintk(const char *format, va_list ap)
     n = vsnprintf(str, sizeof(str), format, ap);
 
     p = str;
-    while ((c = *p++) != '\0') {
+    while (((c = *p++) != '\0') && ((prod-cons) != (sizeof(ring) - 1))) {
         switch (c) {
         case '\r': /* CR: ignore as we generate our own CR/LF */
             break;
         case '\n': /* LF: convert to CR/LF (usual terminal behaviour) */
-            emit_char('\r');
+            ring[MASK(prod++)] = '\r';
             /* fall through */
         default:
-            emit_char(c);
+            ring[MASK(prod++)] = c;
             break;
         }
     }
 
-    IRQ_global_enable();
+    kick_tx();
+
+    if (!sync_console)
+        IRQ_global_enable();
 
     return n;
 }
@@ -63,7 +101,13 @@ int printk(const char *format, ...)
 
 void console_sync(void)
 {
+    if (sync_console)
+        return;
+
     IRQ_global_disable();
+    sync_console = TRUE;
+    kick_tx();
+
     /* Leave IRQs globally disabled. */
 }
 
@@ -78,8 +122,11 @@ void console_init(void)
 
     /* BAUD, 8n1. */
     usart1->brr = SYSCLK / BAUD;
-    usart1->cr1 = (USART_CR1_UE | USART_CR1_TE | USART_CR1_RE);
+    usart1->cr1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;
     usart1->cr3 = 0;
+
+    IRQx_set_prio(CONSOLE_SOFTIRQ, CONSOLE_IRQ_PRI);
+    IRQx_enable(CONSOLE_SOFTIRQ);
 }
 
 /* Debug helper: if we get stuck somewhere, calling this beforehand will cause 

@@ -219,6 +219,7 @@ void EXC_unused(void);
 #define FLOPPY_SOFTIRQ_PRI    9
 #define I2C_IRQ_PRI          13
 #define USB_IRQ_PRI          14
+#define CONSOLE_IRQ_PRI      15
 
 /*
  * Local variables:
