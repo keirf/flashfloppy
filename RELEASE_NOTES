@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.13 - 7 June 2019
+ - HFE: Fix read buffering error
+ - Update HxC Compat to v6-FF
+   - More robust error checking on writes
+
 ** v2.12 - 2 June 2019
  - HFEv3: Support flaky/weak bytes
  - LCD/OLED: Improve power-on initialisation robustness
