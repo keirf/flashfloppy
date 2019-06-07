@@ -646,9 +646,9 @@ static void wdata_start(void)
     dma_wr->state = DMA_starting;
 
     /* Start timer. */
-    tim_wdata->ccer = TIM_CCER_CC1E | TIM_CCER_CC1P;
     tim_wdata->egr = TIM_EGR_UG;
     tim_wdata->sr = 0; /* dummy write, gives h/w time to process EGR.UG=1 */
+    tim_wdata->ccer = TIM_CCER_CC1E | TIM_CCER_CC1P;
     tim_wdata->cr1 = TIM_CR1_CEN;
 
     /* Find rotational start position of the write, in SYSCLK ticks. */
