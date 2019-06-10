@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.0a - 10 June 2019
+ - Disk Change Reset: Emulate explicit Reset signal of certain vintage drives
+   - Requires a hardware modification and FF.CFG: chgrst=pa14
+ - Support ZHONGJY_TECH 2.23" 128x32 displays based on SSD1305 controller
+   - FF.CFG: display-type=oled-128x32-ztech
+
 ** v2.13 - 7 June 2019
  - HFE: Fix read buffering error
  - Update HxC Compat to v6-FF
