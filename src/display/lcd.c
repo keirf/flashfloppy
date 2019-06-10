@@ -590,6 +590,9 @@ static unsigned int oled_start_i2c(uint8_t *buf)
         0x20, 0,      /* horizontal addressing mode */
         0x21, 0, 127, /* column address range: 0-127 */
         0x22, 0, /*?*//* page address range: 0-? */
+    }, ztech_addr_cmds[] = {
+        0xda, 0x12,   /* alternate com pins config */
+        0x21, 4, 131, /* column address range: 4-131 */
     }, sh1106_addr_cmds[] = {
         0x10          /* column address high nibble is zero */
     };
@@ -614,6 +617,11 @@ static unsigned int oled_start_i2c(uint8_t *buf)
     *dc++ = _bl ? 0xaf : 0xae;
 
     p += oled_queue_cmds(p, dynamic_cmds, dc - dynamic_cmds);
+
+    /* ZHONGJY_TECH 2.23" 128x32 display based on SSD1305 controller. 
+     * It has alternate COM pin mapping and is offset horizontally. */
+    if (ff_cfg.display_type & DISPLAY_ztech)
+        p += oled_queue_cmds(p, ztech_addr_cmds, sizeof(ztech_addr_cmds));
 
     /* All subsequent bytes are data bytes. */
     *p++ = 0x40;
