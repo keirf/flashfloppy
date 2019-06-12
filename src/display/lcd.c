@@ -65,7 +65,7 @@ static volatile uint8_t refresh_count;
 static uint8_t buffer[256] __aligned(4);
 
 /* Text buffer, rendered into I2C data and placed into buffer[]. */
-static char text[2][40];
+static char text[3][40];
 
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
@@ -273,8 +273,7 @@ static uint8_t i2c_probe_range(uint8_t s, uint8_t e)
 
 void lcd_clear(void)
 {
-    lcd_write(0, 0, -1, "");
-    lcd_write(0, 1, -1, "");
+    memset(text, ' ', sizeof(text));
 }
 
 void lcd_write(int col, int row, int min, const char *str)
@@ -282,10 +281,6 @@ void lcd_write(int col, int row, int min, const char *str)
     char c, *p;
     uint32_t oldpri;
 
-    if (row < 0)
-        row += lcd_rows;
-    if (col < 0)
-        col += lcd_columns;
     if (min < 0)
         min = lcd_columns;
 
@@ -386,17 +381,17 @@ bool_t lcd_init(void)
             : (ff_cfg.display_type & DISPLAY_lcd) ? FALSE
             : ((a&~1) == OLED_ADDR);
 
-        lcd_rows = 2;
-
         if (is_oled_display) {
             oled_height = (ff_cfg.display_type & DISPLAY_oled_64) ? 64 : 32;
             lcd_columns = (ff_cfg.oled_font == FONT_8x16) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrower) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
+            lcd_rows = 3;
         } else {
             lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
             lcd_columns = max_t(uint8_t, lcd_columns, 16);
             lcd_columns = min_t(uint8_t, lcd_columns, 40);
+            lcd_rows = 2;
         }
 
         printk("I2C: %s found at 0x%02x\n",
@@ -633,8 +628,38 @@ static unsigned int oled_start_i2c(uint8_t *buf)
     return p - buf;
 }
 
+static int oled_to_lcd_row(int in_row)
+{
+    uint16_t oled_text;
+    int i = 0, row;
+    bool_t large = FALSE;
+
+    oled_text = (ff_cfg.oled_text != OTXT_default) ? ff_cfg.oled_text
+        : (oled_height == 32) ? 0x7710 : 0x7218;
+
+    for (;;) {
+        large = !!(oled_text & OTXT_double);
+        i += large ? 2 : 1;
+        if (i > in_row)
+            break;
+        oled_text >>= OTXT_shift;
+    }
+
+    /* Remap the row */
+    row = oled_text & OTXT_row;
+    if (row < lcd_rows) {
+        oled_convert_text_row(text[row]);
+    } else {
+        memset(buffer, 0, 256);
+    }
+
+    return large ? i - in_row : 0;
+}
+
 static unsigned int ssd1306_prep_buffer(void)
 {
+    int size;
+
     /* If we have completed a complete fill of the OLED display, start a new 
      * I2C transaction. The OLED display seems to occasionally silently lose 
      * a byte and then we lose sync with the display address. */
@@ -654,12 +679,9 @@ static unsigned int ssd1306_prep_buffer(void)
     }
 
     /* Convert one row of text[] into buffer[] writes. */
-    if (oled_height == 64) {
-        oled_convert_text_row(text[oled_row/2]);
-        oled_double_height(buffer, &buffer[(oled_row & 1) ? 128 : 0], 0x3);
-    } else {
-        oled_convert_text_row(text[oled_row]);
-    }
+    size = oled_to_lcd_row(oled_row);
+    if (size != 0)
+        oled_double_height(buffer, &buffer[(size == 1) ? 128 : 0], 0x3);
 
     oled_row++;
 
@@ -668,15 +690,15 @@ static unsigned int ssd1306_prep_buffer(void)
 
 static unsigned int sh1106_prep_buffer(void)
 {
+    int size;
     uint8_t *p = buffer;
 
     /* Convert one row of text[] into buffer[] writes. */
-    if (oled_height == 64) {
-        oled_convert_text_row(text[oled_row/4]);
-        oled_double_height(&buffer[128], &buffer[(oled_row & 2) ? 128 : 0],
+    size = oled_to_lcd_row(oled_row/2);
+    if (size != 0) {
+        oled_double_height(&buffer[128], &buffer[(size == 1) ? 128 : 0],
                            (oled_row & 1) + 1);
     } else {
-        oled_convert_text_row(text[oled_row/2]);
         if (!(oled_row & 1))
             memcpy(&buffer[128], &buffer[0], 128);
     }

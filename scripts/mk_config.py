@@ -43,6 +43,22 @@ def main(argv):
                     else:
                         opts += ['DISPLAY_' + x]
                 val = '|'.join(opts)
+            elif opt == "oled-text":
+                if val == "default":
+                    val = "OTXT_" + val
+                else:
+                    v = 0
+                    sh = 0
+                    for x in val.split(","):
+                        o = re.match("([0-9])([sd])", x)
+                        v |= int(o.group(1)) << sh
+                        if o.group(2) == "d":
+                            v |= 8 << sh
+                        sh += 4
+                    while sh < 16:
+                        v |= 7 << sh
+                        sh += 4
+                    val = str(v)
             elif opt == "image-on-startup":
                 val = "IMGS_" + val
             elif opt == "rotary":

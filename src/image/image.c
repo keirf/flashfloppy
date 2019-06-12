@@ -201,6 +201,26 @@ void image_extend(struct image *im)
     im->slot->size = new_sz;
 }
 
+void print_image_info(struct image *im)
+{
+    char msg[25];
+    const static char *sync_s[] = { "Raw", "FM", "MFM" };
+    const static char dens_c[] = { 'S', 'D', 'H', 'E' };
+    int tlen, i;
+
+    i = 0;
+    for (tlen = 75000; tlen < im->tracklen_bc; tlen *= 2) {
+        if (i == (sizeof(dens_c)-1))
+            break;
+        i++;
+    }
+    snprintf(msg, sizeof(msg), "%s %cS/%cD %uT",
+             sync_s[im->sync],
+             (im->nr_sides == 1) ? 'S' : 'D',
+             dens_c[i], im->nr_cyls);
+    lcd_write(0, 2, -1, msg);
+}
+
 bool_t image_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
@@ -213,6 +233,8 @@ bool_t image_setup_track(
     }
 
     im->handler->setup_track(im, track, start_pos);
+
+    print_image_info(im);
 
     return FALSE;
 }

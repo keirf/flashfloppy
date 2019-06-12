@@ -150,9 +150,18 @@ static void lcd_scroll_init(uint16_t pause, uint16_t rate)
 }
 static void lcd_scroll_name(void)
 {
+    static struct track_info ti;
     char msg[25];
+
     if ((lcd_scroll.ticks > 0) || (lcd_scroll.end == 0))
         return;
+
+    floppy_get_track(&ti);
+    if (ti.cyl >= DA_FIRST_CYL) {
+        /* Display controlled by src/image/da.c */
+        return;
+    }
+
     lcd_scroll.ticks = time_ms(lcd_scroll.rate);
     if (lcd_scroll.pause != 0) {
         if (++lcd_scroll.off > lcd_scroll.end)
@@ -247,11 +256,6 @@ static void lcd_write_track_info(bool_t force)
         return;
 
     floppy_get_track(&ti);
-
-    if (ti.cyl >= DA_FIRST_CYL) {
-        /* Display controlled by src/image/da.c */
-        return;
-    }
 
     if (lcd_columns <= 16)
         ti.cyl = min_t(uint8_t, ti.cyl, 99);
@@ -1027,6 +1031,27 @@ static void read_ff_cfg(void)
         case FFCFG_oled_contrast:
             ff_cfg.oled_contrast = strtol(opts.arg, NULL, 10);
             break;
+
+        case FFCFG_oled_text: {
+            char *p = opts.arg;
+            int sh = 0;
+            ff_cfg.oled_text = OTXT_default;
+            if (!strcmp(p, "default"))
+                break;
+            ff_cfg.oled_text = 0;
+            while (p != NULL) {
+                ff_cfg.oled_text |= ((p[0]-'0')&7) << sh;
+                if (p[1] == 'd')
+                    ff_cfg.oled_text |= OTXT_double << sh;
+                sh += OTXT_shift;
+                if ((p = strchr(p, ',')) == NULL)
+                    break;
+                p++;
+            }
+            if (sh < 16)
+                ff_cfg.oled_text |= 0x7777 << sh;
+            break;
+        }
 
         case FFCFG_display_off_secs:
             ff_cfg.display_off_secs = strtol(opts.arg, NULL, 10);
@@ -1825,6 +1850,23 @@ static void floppy_arena_teardown(void)
     volume_cache_destroy();
 }
 
+static void noinline volume_space(void)
+{
+    char msg[25];
+    unsigned int free = (fatfs.free_clst*fatfs.csize+1953/2)/1953 + 100/2;
+    unsigned int total = (fatfs.n_fatent*fatfs.csize+1953/2)/1953 + 100/2;
+    if (fatfs.free_clst < fatfs.n_fatent-2) {
+        snprintf(msg, sizeof(msg), "Free:%u.%u/%u.%uG",
+                 free/1000, (free%1000)/100,
+                 total/1000, (total%1000)/100);
+    } else {
+        snprintf(msg, sizeof(msg), "Volume: %u.%uG",
+                 total/1000, (total%1000)/100);
+    }
+    lcd_write(0, 2, -1, msg);
+
+}
+
 static int floppy_main(void *unused)
 {
     FRESULT fres;
@@ -1850,6 +1892,8 @@ static int floppy_main(void *unused)
     }
 
     for (;;) {
+
+        volume_space();
 
         lcd_scroll.ticks = time_ms(ff_cfg.display_scroll_pause)
             ?: time_ms(ff_cfg.display_scroll_rate);
@@ -1921,6 +1965,7 @@ static int floppy_main(void *unused)
             }
             floppy_arena_setup();
             logfile_flush(&fs->file);
+            volume_space();
         }
 
         if (cfg.dirty_slot_name) {

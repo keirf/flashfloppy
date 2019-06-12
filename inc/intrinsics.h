@@ -22,6 +22,7 @@ struct exception_frame {
 #define __aligned(x) __attribute__((aligned(x)))
 #define __packed __attribute((packed))
 #define always_inline __inline__ __attribute__((always_inline))
+#define noinline __attribute__((noinline))
 
 #define likely(x)     __builtin_expect(!!(x),1)
 #define unlikely(x)   __builtin_expect(!!(x),0)
