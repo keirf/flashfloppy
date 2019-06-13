@@ -12,6 +12,13 @@
 static volatile time_t time_stamp;
 static struct timer time_stamp_timer;
 
+void delay_from(time_t t, unsigned int ticks)
+{
+    int diff = time_diff(time_now(), t + ticks);
+    if (diff > 0)
+        delay_ticks(diff);
+}
+
 static void time_stamp_update(void *unused)
 {
     time_t now = time_now();

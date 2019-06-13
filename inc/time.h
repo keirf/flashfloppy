@@ -17,6 +17,7 @@ typedef uint32_t time_t;
 #define time_sysclk(x) stk_sysclk(x)
 #define sysclk_time(x) sysclk_stk(x)
 
+void delay_from(time_t t, unsigned int ticks);
 time_t time_now(void);
 
 #define time_diff(x,y) ((int32_t)((y)-(x))) /* d = y - x */

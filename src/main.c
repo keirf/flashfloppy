@@ -1861,10 +1861,8 @@ static void noinline volume_space(void)
 
 }
 
-static uint8_t menu_wait_button(const char *led_msg)
+static uint8_t menu_wait_button(bool_t twobutton_eject, const char *led_msg)
 {
-    bool_t twobutton_eject =
-        (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject;
     unsigned int wait = 0;
     uint8_t b;
 
@@ -1937,7 +1935,7 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
         continue;
 
     /* Wait for any button to be pressed. */
-    b = menu_wait_button(msg);
+    b = menu_wait_button(twobutton_eject, msg);
 
     while (b & B_SELECT) {
         b = buttons;
@@ -1950,12 +1948,119 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
     return b;
 }
 
+static void image_clone(void)
+{
+    time_t t;
+    int i, baselen, todo, idx, max_idx = -1;
+    char *p, *q;
+    FIL *nfil;
+
+    strcpy(fs->buf, cfg.slot.name);
+    if ((p = q = strrchr(fs->buf, '_')) != NULL) {
+        for (i = 0; i < 3; i++) {
+            char c = *++p;
+            if ((c < '0') || (c > '9'))
+                break;
+        }
+        p = ((i == 3) && (p[1] == '\0')) ? q : NULL;
+    }
+
+    if (p == NULL)
+        p = fs->buf + strlen(fs->buf);
+
+    baselen = p - fs->buf;
+    snprintf(p, sizeof(fs->buf) - baselen, "_*.%s", cfg.slot.type);
+
+    for (F_findfirst(&fs->dp, &fs->fp, "", fs->buf);
+         fs->fp.fname[0] != '\0';
+         F_findnext(&fs->dp, &fs->fp)) {
+        p = fs->fp.fname + baselen + 1;
+        /* Parse 3-digit index number. */
+        idx = 0;
+        for (i = 0; i < 3; i++) {
+            if ((*p < '0') || (*p > '9'))
+                break;
+            idx *= 10;
+            idx += *p++ - '0';
+        }
+        /* Expect a 3-digit number. */
+        if ((i != 3) || (*p != '.'))
+            continue;
+        max_idx = max_t(int, max_idx, idx);
+    }
+    F_closedir(&fs->dp);
+
+    t = time_now();
+    if (max_idx >= 999) {
+        lcd_write(0, 1, -1, "No spare slots!");
+        goto out;
+    }
+
+    snprintf(fs->buf, sizeof(fs->buf), "Cloning To %03u", max_idx+1);
+    lcd_write(0, 1, -1, fs->buf);
+
+    volume_cache_destroy();
+    fatfs_from_slot(&fs->file, &cfg.slot, FA_READ);
+    nfil = arena_alloc(sizeof(*nfil));
+    strcpy(fs->buf, cfg.slot.name);
+    snprintf(fs->buf + baselen, sizeof(fs->buf) - baselen, "_%03u.%s",
+             max_idx+1, cfg.slot.type);
+    F_open(nfil, fs->buf, FA_CREATE_NEW|FA_WRITE);
+    todo = f_size(&fs->file); 
+    while (todo != 0) {
+        int nr = min_t(int, todo, arena_avail());
+        void *p = arena_alloc(0);
+        F_read(&fs->file, p, nr, NULL);
+        F_write(nfil, p, nr, NULL);
+        todo -= nr;
+    }
+    F_close(nfil);
+    floppy_arena_setup();
+    if (!cfg.sorted)
+        cfg_update(CFG_READ_SLOT_NR);
+
+out:
+    delay_from(t, time_ms(2000));
+}
+
+static bool_t image_delete(void)
+{
+    FRESULT fres;
+    time_t t = time_now();
+    bool_t ok = FALSE;
+
+    if (cfg.hxc_mode) {
+        lcd_write(0, 1, -1, "Native Mode Only");
+        goto out;
+    }
+
+    lcd_write(0, 1, -1, "Deleting...");
+
+    snprintf(fs->buf, sizeof(fs->buf), "%s.%s",
+             cfg.slot.name, cfg.slot.type);
+    fres = f_unlink(fs->buf);
+    if (fres != FR_OK) {
+        snprintf(fs->buf, sizeof(fs->buf), "Failed (%d)", fres);
+        t = time_now();
+    }
+
+    cfg.slot_nr = min_t(uint16_t, cfg.slot_nr, cfg.max_slot_nr-1);
+    cfg.sorted = NULL;
+    cfg_update(CFG_READ_SLOT_NR);
+    ok = TRUE;
+
+out:
+    delay_from(t, time_ms(2000));
+    return ok;
+}
+
 static uint8_t noinline eject_menu(uint8_t b)
 {
     const static char *menu[] = {
         "**Eject Menu**",
         NULL,
-        "Clone This Image",
+        "Clone Image",
+        "Delete Image",
         "Exit to Selector",
         "Exit & Re-Insert",
     };
@@ -1964,7 +2069,8 @@ static uint8_t noinline eject_menu(uint8_t b)
     unsigned int wait;
     int sel = 0;
     bool_t twobutton_eject =
-        (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject;
+        ((ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject)
+        || (display_mode == DM_LCD_OLED); /* or two buttons can't exit menu */
 
     ima_mark_ejected(TRUE);
 
@@ -2013,7 +2119,7 @@ static uint8_t noinline eject_menu(uint8_t b)
         }
 
         /* Wait for any button to be pressed. */
-        b = menu_wait_button("EJE");
+        b = menu_wait_button(twobutton_eject, "EJE");
 
         if (b & B_LEFT)
             sel--;
@@ -2048,14 +2154,18 @@ static uint8_t noinline eject_menu(uint8_t b)
                 }
                 break;
             case 2: /* Clone Image */
-                lcd_write(0, 1, -1, "To Be Implemented");
-                delay_ms(2000);
+                image_clone();
                 break;
-            case 3: /* Exit & Select */
-                display_write_slot(TRUE);
-                b = 0xff;
+            case 3: /* Delete Image */
+                if (!image_delete())
+                    break;
+                b = 0xff; /* selector */
                 goto out;
-            case 0: case 4: /* Exit & Re-Insert */
+            case 4: /* Exit & Select */
+                display_write_slot(TRUE);
+                b = 0xff; /* selector */
+                goto out;
+            case 0: case 5: /* Exit & Re-Insert */
                 b = 0;
                 goto out;
             }
