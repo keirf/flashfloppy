@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.1a - 13 June 2019
+ - OLED: Text height and content can be configured (FF.CFG:oled-text=)
+   - New default for 128x64 displays presents a new third text row
+ - LCD/OLED: Present an action menu when an image is ejected
+   - Includes Clone and Delete Image operations
+
 ** v3.0a - 10 June 2019
  - Disk Change Reset: Emulate explicit Reset signal of certain vintage drives
    - Requires a hardware modification and FF.CFG: chgrst=pa14
