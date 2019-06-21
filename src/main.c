@@ -1033,6 +1033,7 @@ static void read_ff_cfg(void)
                             ff_cfg.display_type |= DISPLAY_oled_64;
                     } else if (ff_cfg.display_type & DISPLAY_lcd) {
                         ff_cfg.display_type |= DISPLAY_lcd_columns(w);
+                        ff_cfg.display_type |= DISPLAY_lcd_rows(h);
                     }
                 }
             }

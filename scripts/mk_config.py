@@ -38,8 +38,9 @@ def main(argv):
                         h = int(size.group(2))
                         if w == 128 and h == 64:
                             opts += ['DISPLAY_oled_64']
-                        elif h == 2 and w >= 16 and w <= 40:
+                        elif h >= 2 and h <= 4 and w >= 16 and w <= 40:
                             opts += ['DISPLAY_lcd_columns(%d)' % w]
+                            opts += ['DISPLAY_lcd_rows(%d)' % h]
                     else:
                         opts += ['DISPLAY_' + x]
                 val = '|'.join(opts)

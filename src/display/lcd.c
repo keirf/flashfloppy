@@ -153,6 +153,7 @@ static void emit8(uint8_t **p, uint8_t val, uint8_t signals)
 /* Snapshot text buffer into the command buffer. */
 static unsigned int lcd_prep_buffer(void)
 {
+    const static uint8_t row_offs[] = { 0x00, 0x40, 0x14, 0x54 };
     uint8_t *q = buffer;
     unsigned int i, j;
 
@@ -160,7 +161,7 @@ static unsigned int lcd_prep_buffer(void)
     refresh_count++;
 
     for (i = 0; i < lcd_rows; i++) {
-        emit8(&q, CMD_SETDDRADDR | (i*64), 0);
+        emit8(&q, CMD_SETDDRADDR | row_offs[i], 0);
         for (j = 0; j < lcd_columns; j++)
             emit8(&q, text[i][j], _RS);
     }
@@ -391,7 +392,9 @@ bool_t lcd_init(void)
             lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
             lcd_columns = max_t(uint8_t, lcd_columns, 16);
             lcd_columns = min_t(uint8_t, lcd_columns, 40);
-            lcd_rows = 2;
+            lcd_rows = (ff_cfg.display_type >> _DISPLAY_lcd_rows) & 7;
+            lcd_rows = max_t(uint8_t, lcd_rows, 2);
+            lcd_rows = min_t(uint8_t, lcd_rows, 4);
         }
 
         printk("I2C: %s found at 0x%02x\n",
