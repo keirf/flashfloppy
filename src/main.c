@@ -441,9 +441,32 @@ static void button_timer_fn(void *unused)
 
     rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
     switch (ff_cfg.rotary & ~ROT_reverse) {
-    case ROT_trackball:
+    case ROT_trackball: {
+        static uint8_t count, thresh, dir;
         rb = rotary_reverse[(rotary ^ (rotary >> 2)) & 3];
+        if (rb == 0) {
+            /* Idle: Increase threshold, decay the counter. */
+            if (thresh < 72) thresh++;
+            if (count) count--;
+        } else if (rb != dir) {
+            /* Change of direction: Put the brakes on. */
+            dir = rb;
+            count = rb = 0;
+            thresh = 72;
+        } else {
+            /* Step in same direction: Increase count, decay the threshold. */
+            count += 32;
+            thresh = max_t(int, 0, thresh - 8);
+            if (count >= thresh) {
+                /* Count exceeds threshold: register a press. */
+                count = 0;
+            } else {
+                /* Don't register a press yet. */
+                rb = 0;
+            }
+        }
         break;
+    }
     case ROT_buttons:
         rb = rotary_reverse[rotary & 3];
         break;
@@ -1948,12 +1971,29 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
     return b;
 }
 
+static bool_t confirm(const char *op)
+{
+    char msg[17];
+    uint8_t b;
+
+    snprintf(msg, sizeof(msg), "Confirm %s?", op);
+    lcd_write(0, 1, -1, msg);
+
+    while ((b = buttons) == 0)
+        continue;
+
+    return (b == B_SELECT);
+}
+
 static void image_clone(void)
 {
     time_t t;
     int i, baselen, todo, idx, max_idx = -1;
     char *p, *q;
     FIL *nfil;
+
+    if (!confirm("Clone"))
+        return;
 
     strcpy(fs->buf, cfg.slot.name);
     if ((p = q = strrchr(fs->buf, '_')) != NULL) {
@@ -2028,6 +2068,9 @@ static bool_t image_delete(void)
     FRESULT fres;
     time_t t = time_now();
     bool_t ok = FALSE;
+
+    if (!confirm("Delete"))
+        return FALSE;
 
     if (cfg.hxc_mode) {
         lcd_write(0, 1, -1, "Native Mode Only");
@@ -2128,7 +2171,6 @@ static uint8_t noinline eject_menu(uint8_t b)
         if ((sel != 0) && (display_mode != DM_LCD_OLED))
             goto out;
 
-        /* Reload same image immediately if eject pressed again. */
         if (b & B_SELECT) {
             /* Wait for eject button to be released. */
             wait = 0;
@@ -2302,6 +2344,7 @@ static int floppy_main(void *unused)
             if (b == 0)
                 continue;
             if (b == 0xff) {
+                display_write_slot(FALSE);
                 b = 0;
                 goto select;
             }
