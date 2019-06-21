@@ -1240,6 +1240,7 @@ native_mode:
     /* Process IMAGE_A.CFG file. */
     sofar = 0; /* bytes consumed so far */
     fatfs.cdir = cfg.cur_cdir;
+    lcd_write(0, 3, -1, "/");
     for (;;) {
         int nr;
         bool_t ok;
@@ -1254,6 +1255,7 @@ native_mode:
         /* Terminate the name section, push curdir onto stack, then chdir. */
         *p++ = '\0';
         printk("%u:D: '%s'\n", cfg.depth, fs->buf);
+        lcd_write(0, 3, -1, fs->buf);
         if (cfg.depth == ARRAY_SIZE(cfg.stack))
             F_die(FR_PATH_TOO_DEEP);
         /* Find slot nr, and stack it */
@@ -1334,6 +1336,7 @@ clear_image_a:
     printk("IMAGE_A.CFG is bad: %sring it\n",
            (ff_cfg.image_on_startup == IMGS_last) ? "clea" : "igno");
     F_lseek(&fs->file, 0);
+    lcd_write(0, 3, -1, "/");
     if (ff_cfg.image_on_startup == IMGS_last)
         F_truncate(&fs->file);
     F_close(&fs->file);
@@ -1407,15 +1410,18 @@ static void native_update(uint8_t slot_mode)
                 if (!p) F_die(FR_BAD_IMAGECFG); /* must exist */
                 *p = '\0';
                 if ((q = strrchr(fs->buf, '/')) != NULL) {
+                    lcd_write(0, 3, -1, q+1);
                     F_lseek(&fs->file, f_tell(&fs->file) - (p-q));
                 } else {
                     F_lseek(&fs->file, 0);
+                    lcd_write(0, 3, -1, "/");
                 }
             } else {
                 /* Add name plus '/' */
                 F_write(&fs->file, fs->fp.fname,
                         strnlen(fs->fp.fname, sizeof(fs->fp.fname)), NULL);
                 F_write(&fs->file, "/", 1, NULL);
+                lcd_write(0, 3, -1, fs->fp.fname);
             }
         } else {
             /* Add name */

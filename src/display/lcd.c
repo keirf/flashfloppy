@@ -65,7 +65,7 @@ static volatile uint8_t refresh_count;
 static uint8_t buffer[256] __aligned(4);
 
 /* Text buffer, rendered into I2C data and placed into buffer[]. */
-static char text[3][40];
+static char text[4][40];
 
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
@@ -386,7 +386,7 @@ bool_t lcd_init(void)
             lcd_columns = (ff_cfg.oled_font == FONT_8x16) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrower) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
-            lcd_rows = 3;
+            lcd_rows = 4;
         } else {
             lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
             lcd_columns = max_t(uint8_t, lcd_columns, 16);
