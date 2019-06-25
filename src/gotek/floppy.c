@@ -106,10 +106,10 @@ static void board_floppy_init(void)
         afio->exticr4 = 0x1011; /* Motor = PB15 */
     }
 
-    pins = m(pin_wgate) | m(pin_side) | m(pin_step) | m(pin_sel0);
-    exti->rtsr = pins | m(pin_motor);
+    pins = m(pin_wgate) | m(pin_side) | m(pin_sel0);
+    exti->rtsr = pins | m(pin_motor) | m(pin_step);
     exti->ftsr = pins | m(pin_motor) | m(pin_chgrst);
-    exti->imr = pins;
+    exti->imr = pins | m(pin_step);
 }
 
 /* Fast speculative entry point for SELA-changed IRQ. We assume SELA has 
@@ -236,24 +236,24 @@ static void IRQ_STEP_changed(void)
     struct drive *drv = &drive;
     uint8_t idr_a, idr_b;
 
-    /* Clear STEP-changed flag. */
-    exti->pr = m(pin_step);
-
     /* Latch inputs. */
     idr_a = gpioa->idr;
     idr_b = gpiob->idr;
+
+    /* Clear STEP-changed flag. */
+    exti->pr = m(pin_step);
 
     /* Bail if drive not selected. */
     if (idr_a & m(pin_sel0))
         return;
 
-    /* DSKCHG deasserts on falling edge of STEP. We deassert on any edge. */
+    /* Deassert DSKCHG if a disk is inserted. */
     if ((drv->outp & m(outp_dskchg)) && drv->inserted
         && (ff_cfg.chgrst == CHGRST_step))
         drive_change_output(drv, outp_dskchg, FALSE);
 
-    if (!(idr_a & m(pin_step))   /* Not rising edge on STEP? */
-        || (drv->step.state & STEP_active) /* Already mid-step? */
+    /* Do we accept this STEP command? */
+    if ((drv->step.state & STEP_active) /* Already mid-step? */
         || drive_is_writing())   /* Write in progress? */
         return;
 
