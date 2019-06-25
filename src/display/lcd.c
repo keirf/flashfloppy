@@ -71,6 +71,9 @@ static char text[4][40];
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
 
+/* Affects default OLED 128x64 layout. */
+bool_t menu_mode;
+
 /* Occasionally the I2C/DMA engine seems to get stuck. Detect this with 
  * a timeout timer and unwedge it by calling the I2C error handler. */
 #define DMA_TIMEOUT time_ms(200)
@@ -639,7 +642,7 @@ static int oled_to_lcd_row(int in_row)
     bool_t large = FALSE;
 
     oled_text = (ff_cfg.oled_text != OTXT_default) ? ff_cfg.oled_text
-        : (oled_height == 32) ? 0x7710 : 0x7218;
+        : (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
 
     for (;;) {
         large = !!(oled_text & OTXT_double);

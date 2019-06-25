@@ -1945,6 +1945,8 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
         (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject;
     char msg[17];
 
+    menu_mode = TRUE;
+
     switch (display_mode) {
     case DM_LED_7SEG:
         snprintf(msg, sizeof(msg), "%c%02u",
@@ -1975,6 +1977,7 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
         }
     }
 
+    menu_mode = FALSE;
     return b;
 }
 
@@ -2122,6 +2125,8 @@ static uint8_t noinline eject_menu(uint8_t b)
         ((ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject)
         || (display_mode == DM_LCD_OLED); /* or two buttons can't exit menu */
 
+    menu_mode = TRUE;
+
     ima_mark_ejected(TRUE);
 
     for (;;) {
@@ -2224,6 +2229,7 @@ static uint8_t noinline eject_menu(uint8_t b)
 
 out:
     ima_mark_ejected(FALSE);
+    menu_mode = FALSE;
     return b;
 }
 

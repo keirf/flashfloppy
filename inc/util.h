@@ -182,6 +182,7 @@ bool_t set_slot_nr(uint16_t slot_nr);
 void set_slot_name(const char *name);
 bool_t get_img_cfg(struct slot *slot);
 
+extern bool_t menu_mode;
 extern uint8_t board_id;
 
 /* Gotek board revisions */
