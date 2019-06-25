@@ -350,7 +350,7 @@ static void IRQ_MOTOR(struct drive *drv)
 
 static void IRQ_CHGRST(struct drive *drv)
 {
-    if ((ff_cfg.chgrst != CHGRST_step)
+    if ((ff_cfg.chgrst == CHGRST_pa14)
         && (gpio_read_pin(gpioa, pin_chgrst) == O_TRUE)
         && drv->inserted) {
         drive_change_output(drv, outp_dskchg, FALSE);
@@ -387,7 +387,7 @@ static void motor_chgrst_insert(struct drive *drv)
     if (ff_cfg.motor_delay != MOTOR_ignore)
         imr |= m(pin_motor);
 
-    if (ff_cfg.chgrst != CHGRST_step)
+    if (ff_cfg.chgrst == CHGRST_pa14)
         imr |= m(pin_chgrst);
 
     exti->imr = imr;

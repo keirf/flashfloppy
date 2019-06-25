@@ -84,6 +84,9 @@ def main(argv):
                 else:
                     val = (int(val) + 9) // 10
             elif opt == "chgrst":
+                delay = re.match("delay-([0-9]+)", val)
+                if delay:
+                    val = 'delay(%d)' % int(delay.group(1))
                 val = "CHGRST_" + val
             else:
                 val = {

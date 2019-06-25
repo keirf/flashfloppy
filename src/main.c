@@ -892,7 +892,9 @@ static void read_ff_cfg(void)
 
         case FFCFG_chgrst:
             ff_cfg.chgrst =
-                !strcmp(opts.arg, "pa14") ? CHGRST_pa14
+                !strncmp(opts.arg, "delay-", 6)
+                  ? CHGRST_delay(strtol(opts.arg+6, NULL, 10))
+                : !strcmp(opts.arg, "pa14") ? CHGRST_pa14
                 : CHGRST_step;
             break;
 

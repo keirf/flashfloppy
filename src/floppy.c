@@ -16,6 +16,7 @@
 #define m(bitnr) (1u<<(bitnr))
 
 /* A soft IRQ for handling lower priority work items. */
+static void chgrst_timer(void *_drv);
 static void drive_step_timer(void *_drv);
 static void motor_spinup_timer(void *_drv);
 void IRQ_43(void) __attribute__((alias("IRQ_soft")));
@@ -64,6 +65,7 @@ static struct drive {
     bool_t index_suppressed; /* disable IDX while writing to USB stick */
     uint8_t outp;
     volatile bool_t inserted;
+    struct timer chgrst_timer;
     struct {
         struct timer timer;
         bool_t on;
@@ -243,6 +245,7 @@ void floppy_cancel(void)
     dma_wdata.ccr = 0;
 
     /* Clear soft state. */
+    timer_cancel(&drv->chgrst_timer);
     timer_cancel(&index.timer);
     barrier(); /* cancel index.timer /then/ clear soft state */
     drv->index_suppressed = FALSE;
@@ -344,6 +347,7 @@ void floppy_init(void)
 
     timer_init(&drv->step.timer, drive_step_timer, drv);
     timer_init(&drv->motor.timer, motor_spinup_timer, drv);
+    timer_init(&drv->chgrst_timer, chgrst_timer, drv);
 
     gpio_configure_pin(gpio_out, pin_02, GPO_bus);
     gpio_configure_pin(gpio_out, pin_08, GPO_bus);
@@ -561,6 +565,8 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     barrier();
     drv->inserted = TRUE;
     motor_chgrst_insert(drv); /* update RDY + motor state */
+    if (ff_cfg.chgrst <= CHGRST_delay(15))
+        timer_set(&drv->chgrst_timer, time_now() + ff_cfg.chgrst*time_ms(500));
 }
 
 static unsigned int drive_calc_track(struct drive *drv)
@@ -1012,6 +1018,12 @@ static void index_deassert(void *dat)
 {
     struct drive *drv = &drive;
     drive_change_output(drv, outp_index, FALSE);
+}
+
+static void chgrst_timer(void *_drv)
+{
+    struct drive *drv = _drv;
+    drive_change_output(drv, outp_dskchg, FALSE);
 }
 
 static void drive_step_timer(void *_drv)

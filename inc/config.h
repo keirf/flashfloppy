@@ -143,7 +143,8 @@ struct __packed ff_cfg {
 #define SORTPRI_none    2
     uint8_t sort_priority;
 #define CHGRST_step   0xff
-#define CHGRST_pa14   0x0e
+#define CHGRST_pa14   0x8e
+#define CHGRST_delay(x) (x)
     uint8_t chgrst;
 #define DORD_default 0xffff
 #define DORD_shift   4
