@@ -1050,24 +1050,24 @@ static void read_ff_cfg(void)
             ff_cfg.oled_contrast = strtol(opts.arg, NULL, 10);
             break;
 
-        case FFCFG_oled_text: {
+        case FFCFG_display_order: {
             char *p = opts.arg;
             int sh = 0;
-            ff_cfg.oled_text = OTXT_default;
+            ff_cfg.display_order = DORD_default;
             if (!strcmp(p, "default"))
                 break;
-            ff_cfg.oled_text = 0;
+            ff_cfg.display_order = 0;
             while (p != NULL) {
-                ff_cfg.oled_text |= ((p[0]-'0')&7) << sh;
+                ff_cfg.display_order |= ((p[0]-'0')&7) << sh;
                 if (p[1] == 'd')
-                    ff_cfg.oled_text |= OTXT_double << sh;
-                sh += OTXT_shift;
+                    ff_cfg.display_order |= DORD_double << sh;
+                sh += DORD_shift;
                 if ((p = strchr(p, ',')) == NULL)
                     break;
                 p++;
             }
             if (sh < 16)
-                ff_cfg.oled_text |= 0x7777 << sh;
+                ff_cfg.display_order |= 0x7777 << sh;
             break;
         }
 

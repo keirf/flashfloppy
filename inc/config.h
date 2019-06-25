@@ -145,11 +145,11 @@ struct __packed ff_cfg {
 #define CHGRST_step   0xff
 #define CHGRST_pa14   0x0e
     uint8_t chgrst;
-#define OTXT_default 0xffff
-#define OTXT_shift   4
-#define OTXT_row     7
-#define OTXT_double  8
-    uint16_t oled_text;
+#define DORD_default 0xffff
+#define DORD_shift   4
+#define DORD_row     7
+#define DORD_double  8
+    uint16_t display_order;
 };
 
 extern struct ff_cfg ff_cfg;

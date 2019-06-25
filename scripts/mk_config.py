@@ -44,14 +44,14 @@ def main(argv):
                     else:
                         opts += ['DISPLAY_' + x]
                 val = '|'.join(opts)
-            elif opt == "oled-text":
+            elif opt == "display-order":
                 if val == "default":
-                    val = "OTXT_" + val
+                    val = "DORD_" + val
                 else:
                     v = 0
                     sh = 0
                     for x in val.split(","):
-                        o = re.match("([0-9])([sd])", x)
+                        o = re.match("([0-9])(d?)", x)
                         v |= int(o.group(1)) << sh
                         if o.group(2) == "d":
                             v |= 8 << sh

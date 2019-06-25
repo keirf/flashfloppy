@@ -158,13 +158,20 @@ static void emit8(uint8_t **p, uint8_t val, uint8_t signals)
 static unsigned int lcd_prep_buffer(void)
 {
     const static uint8_t row_offs[] = { 0x00, 0x40, 0x14, 0x54 };
-    char *p = text[i2c_row];
+    uint16_t order;
+    char *p;
     uint8_t *q = buffer;
-    unsigned int i;
+    unsigned int i, row;
+
+    order = (ff_cfg.display_order != DORD_default) ? ff_cfg.display_order
+        : (lcd_rows == 2) ? 0x7710 : 0x2103;
+
+    row = (order >> (i2c_row * DORD_shift)) & DORD_row;
+    p = (row < ARRAY_SIZE(text)) ? text[row] : NULL;
 
     emit8(&q, CMD_SETDDRADDR | row_offs[i2c_row], 0);
     for (i = 0; i < lcd_columns; i++)
-        emit8(&q, *p++, _RS);
+        emit8(&q, p ? *p++ : ' ', _RS);
 
     if (++i2c_row >= lcd_rows) {
         i2c_row = 0;
@@ -637,23 +644,23 @@ static unsigned int oled_start_i2c(uint8_t *buf)
 
 static int oled_to_lcd_row(int in_row)
 {
-    uint16_t oled_text;
+    uint16_t order;
     int i = 0, row;
     bool_t large = FALSE;
 
-    oled_text = (ff_cfg.oled_text != OTXT_default) ? ff_cfg.oled_text
+    order = (ff_cfg.display_order != DORD_default) ? ff_cfg.display_order
         : (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
 
     for (;;) {
-        large = !!(oled_text & OTXT_double);
+        large = !!(order & DORD_double);
         i += large ? 2 : 1;
         if (i > in_row)
             break;
-        oled_text >>= OTXT_shift;
+        order >>= DORD_shift;
     }
 
     /* Remap the row */
-    row = oled_text & OTXT_row;
+    row = order & DORD_row;
     if (row < lcd_rows) {
         oled_convert_text_row(text[row]);
     } else {
