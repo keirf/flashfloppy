@@ -3,6 +3,14 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.2a - 25 June 2019
+ - OLED: New default layout for 128x64 displays
+ - LCD: Support 20x4 character displays
+ - LCD: Row ordering is configurable
+   - FF.CFG: Rename oled-text= to display-order= to reflect this
+ - Eject menu: Confirmation required for Delete/Clone operations
+ - Trackball: Reduce jitteriness by adding simple inertia
+
 ** v3.1a - 13 June 2019
  - OLED: Text height and content can be configured (FF.CFG:oled-text=)
    - New default for 128x64 displays presents a new third text row
