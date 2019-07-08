@@ -6,9 +6,10 @@
 ** v3.3a - 8 July 2019
  - FF.CFG: New Disk-Change Reset option: chgrst=delay-N
    - Automatically clears the DSKCHG signal Nx0.5s after disk insertion
-   - chrst=delay-3 fixes Disk Change on Ensoniq EPS synths
+   - chgrst=delay-3 fixes Disk Change on Ensoniq EPS synths
  - Change head-step signal handling to reduce interrupt rate
  - OLED/LCD: Fix current-folder display line for image-on-startup=init|static
+ - image-on-startup=static: The static image is now specified in INIT_A.CFG
 
 ** v3.2a - 25 June 2019
  - OLED: New default layout for 128x64 displays
