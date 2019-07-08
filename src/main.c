@@ -11,6 +11,9 @@
 
 int EXC_reset(void) __attribute__((alias("main")));
 
+static const char image_a[] = "IMAGE_A.CFG";
+static const char init_image_a[] = "INIT_A.CFG";
+
 static FATFS fatfs;
 static struct {
     FIL file;
@@ -1157,7 +1160,6 @@ static void cfg_init(void)
     struct hxcsdfe_cfg *hxc_cfg;
     unsigned int sofar;
     char *p;
-    BYTE mode;
     FRESULT fr;
 
     cfg.dirty_slot_nr = FALSE;
@@ -1230,15 +1232,24 @@ native_mode:
         F_close(&fs->file);
     }
 
-    if (ff_cfg.image_on_startup == IMGS_init)
-        goto out;
+    sofar = 0;
+    if (ff_cfg.image_on_startup == IMGS_static) {
+        fr = F_try_open(&fs->file, init_image_a, FA_READ);
+        if (!fr) {
+            sofar = min_t(unsigned int, f_size(&fs->file), sizeof(fs->buf));
+            F_read(&fs->file, fs->buf, sofar, NULL);
+            F_close(&fs->file);
+        }
+    }
 
-    mode = FA_READ;
-    if (ff_cfg.image_on_startup == IMGS_last)
-        mode |= FA_WRITE | FA_OPEN_ALWAYS;
-    fr = F_try_open(&fs->file, "IMAGE_A.CFG", mode);
-    if (fr)
-        goto out;
+    F_open(&fs->file, image_a, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
+
+    if (ff_cfg.image_on_startup != IMGS_last) {
+        F_lseek(&fs->file, 0);
+        F_truncate(&fs->file);
+        F_write(&fs->file, fs->buf, sofar, NULL);
+        F_lseek(&fs->file, 0);
+    }
 
     /* Process IMAGE_A.CFG file. */
     sofar = 0; /* bytes consumed so far */
@@ -1336,12 +1347,10 @@ out:
 
 clear_image_a:
     /* Error! Clear the IMAGE_A.CFG file. */
-    printk("IMAGE_A.CFG is bad: %sring it\n",
-           (ff_cfg.image_on_startup == IMGS_last) ? "clea" : "igno");
+    printk("IMAGE_A.CFG is bad: clearing it\n");
     F_lseek(&fs->file, 0);
     lcd_write(0, 3, -1, "/");
-    if (ff_cfg.image_on_startup == IMGS_last)
-        F_truncate(&fs->file);
+    F_truncate(&fs->file);
     F_close(&fs->file);
     cfg.slot_nr = cfg.depth = 0;
     cfg.ima_ej_flag = FALSE;
@@ -1387,11 +1396,10 @@ static void native_update(uint8_t slot_mode)
     if ((slot_mode == CFG_READ_SLOT_NR) && !cfg.sorted)
         native_get_slot_map(FALSE);
 
-    if ((ff_cfg.image_on_startup == IMGS_last)
-        && (slot_mode == CFG_WRITE_SLOT_NR)) {
+    if (slot_mode == CFG_WRITE_SLOT_NR) {
         char *p, *q;
         fatfs.cdir = cfg.cfg_cdir;
-        F_open(&fs->file, "IMAGE_A.CFG", FA_READ|FA_WRITE);
+        F_open(&fs->file, image_a, FA_READ|FA_WRITE);
         printk("Before: "); dump_file();
         /* Read final section of the file. */
         if (f_size(&fs->file) > sizeof(fs->buf))
@@ -1486,12 +1494,11 @@ static void native_update(uint8_t slot_mode)
 
 static void ima_mark_ejected(bool_t ej)
 {
-    if (cfg.hxc_mode || (ff_cfg.image_on_startup != IMGS_last)
-        || (cfg.ima_ej_flag == ej))
+    if (cfg.hxc_mode || (cfg.ima_ej_flag == ej))
         return;
 
     fatfs.cdir = cfg.cfg_cdir;
-    F_open(&fs->file, "IMAGE_A.CFG", FA_READ|FA_WRITE);
+    F_open(&fs->file, image_a, FA_READ|FA_WRITE);
     printk("Before: "); dump_file();
     if (ej) {
         F_lseek(&fs->file, f_size(&fs->file));
@@ -1529,7 +1536,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
             cfg.slot_nr = 0;
             if (ff_cfg.image_on_startup == IMGS_init)
                 break;
-            if ((fr = F_try_open(&fs->file, "IMAGE_A.CFG", FA_READ)) != FR_OK)
+            if ((fr = F_try_open(&fs->file, image_a, FA_READ)) != FR_OK)
                 break;
             F_read(&fs->file, slot, sizeof(slot), NULL);
             F_close(&fs->file);
@@ -1540,7 +1547,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
             if (ff_cfg.image_on_startup != IMGS_last)
                 break;
             snprintf(slot, sizeof(slot), "%u", cfg.slot_nr);
-            F_open(&fs->file, "IMAGE_A.CFG", FA_WRITE | FA_OPEN_ALWAYS);
+            F_open(&fs->file, image_a, FA_WRITE | FA_OPEN_ALWAYS);
             F_write(&fs->file, slot, strnlen(slot, sizeof(slot)), NULL);
             F_truncate(&fs->file);
             F_close(&fs->file);
