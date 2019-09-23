@@ -168,11 +168,13 @@ void F_findnext(DIR *dp, FILINFO *fno)
     handle_fr(fr);
 }
 
+#if !defined(BOOTLOADER)
 void F_chdir(const TCHAR *path)
 {
     FRESULT fr = f_chdir(path);
     handle_fr(fr);
 }
+#endif
 
 /*
  * Local variables:

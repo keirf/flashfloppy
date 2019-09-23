@@ -147,7 +147,11 @@
 */
 
 
+#if defined(BOOTLOADER)
+#define FF_FS_RPATH		0
+#else
 #define FF_FS_RPATH		1
+#endif
 /* This option configures support for relative path.
 /
 /   0: Disable relative path and remove related functions.

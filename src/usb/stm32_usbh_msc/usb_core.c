@@ -175,6 +175,7 @@ USB_OTG_STS USB_OTG_SelectCore(USB_OTG_CORE_HANDLE *pdev,
     pdev->cfg.mps              = USB_OTG_FS_MAX_PACKET_SIZE ;
 
     /* initialize device cfg following its address */
+#ifdef USB_OTG_FS_CORE
     if (coreID == USB_OTG_FS_CORE_ID)
     {
         baseAddress                = USB_OTG_FS_BASE_ADDR;
@@ -192,6 +193,8 @@ USB_OTG_STS USB_OTG_SelectCore(USB_OTG_CORE_HANDLE *pdev,
         pdev->cfg.low_power        = 1;
 #endif
     }
+#endif /* USB_OTG_FS_CORE */
+#ifdef USB_OTG_HS_CORE
     else if (coreID == USB_OTG_HS_CORE_ID)
     {
         baseAddress                = USB_OTG_HS_BASE_ADDR;
@@ -221,11 +224,7 @@ USB_OTG_STS USB_OTG_SelectCore(USB_OTG_CORE_HANDLE *pdev,
 #endif
 
     }
-
-    else
-    {
-        /* Do Nothing */
-    }
+#endif /* USB_OTG_HS_CORE */
 
     pdev->regs.GREGS = (USB_OTG_GREGS *)(baseAddress + \
                                          USB_OTG_CORE_GLOBAL_REGS_OFFSET);

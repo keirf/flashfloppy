@@ -73,7 +73,8 @@ upd:
 
 all:
 	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
-	bootloader=y $(MAKE) -C bootloader -f $(ROOT)/Rules.mk \
+	bootloader=y debug=n logfile=n $(MAKE) -C bootloader \
+		-f $(ROOT)/Rules.mk \
 		Bootloader.elf Bootloader.bin Bootloader.hex
 	logfile=n $(MAKE) -C bl_update -f $(ROOT)/Rules.mk \
 		BL_Update.elf BL_Update.bin BL_Update.hex
