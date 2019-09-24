@@ -29,6 +29,13 @@
 #define CMD_SETDDRADDR   0x80
 #define FS_2LINE         0x08
 
+/* FF OSD command set */
+#define OSD_BACKLIGHT    0x00 /* [0] = backlight on */
+#define OSD_DATA         0x02 /* next columns*rows bytes are text data */
+#define OSD_ROWS         0x10 /* [3:0] = #rows */
+#define OSD_HEIGHTS      0x20 /* [3:0] = 1 iff row is 2x height */
+#define OSD_COLUMNS      0x40 /* [6:0] = #columns */
+
 /* STM32 I2C peripheral. */
 #define i2c i2c2
 #define SCL 10
@@ -46,6 +53,9 @@ void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
 #define DMA1_CH4_IRQ 14
 void IRQ_14(void) __attribute__((alias("IRQ_dma1_ch4_tc")));
 
+static bool_t ff_osd, in_osd;
+#define OSD_I2C_ADDR 0x10
+
 static uint8_t _bl;
 static uint8_t i2c_addr;
 static uint8_t i2c_dead;
@@ -58,6 +68,8 @@ enum { OLED_unknown, OLED_ssd1306, OLED_sh1106 };
 static uint8_t oled_model;
 static void oled_init(void);
 static unsigned int oled_prep_buffer(void);
+
+static bool_t i2c_btf_stop(void);
 
 /* Count of display-refresh completions. For synchronisation/flush. */
 static volatile uint8_t refresh_count;
@@ -109,7 +121,8 @@ static void IRQ_i2c_event(void)
 
     if (sr1 & I2C_SR1_SB) {
         /* Send address. Clears SR1_SB. */
-        i2c->dr = i2c_addr << 1;
+        uint8_t a = in_osd ? OSD_I2C_ADDR : i2c_addr;
+        i2c->dr = a << 1;
     }
 
     if (sr1 & I2C_SR1_ADDR) {
@@ -155,6 +168,35 @@ static void emit8(uint8_t **p, uint8_t val, uint8_t signals)
 }
 
 /* Snapshot text buffer into the command buffer. */
+static unsigned int osd_prep_buffer(void)
+{
+    uint16_t order = menu_mode ? 0x7903 : 0x7183;
+    char *p;
+    uint8_t *q = buffer;
+    unsigned int row;
+
+    *q++ = OSD_BACKLIGHT | !!_bl;
+    *q++ = OSD_COLUMNS | lcd_columns;
+    *q++ = OSD_ROWS | 3;
+    *q++ = OSD_HEIGHTS | (menu_mode ? 4 : 2);
+    *q++ = OSD_DATA;
+    for (row = 0; row < 3; row++) {
+        p = text[(order >> (row * DORD_shift)) & DORD_row];
+        memcpy(q, p, lcd_columns);
+        q += lcd_columns;
+    }
+
+    if (i2c_addr == 0)
+        refresh_count++;
+
+    in_osd = TRUE;
+    i2c->cr2 |= I2C_CR2_ITEVTEN;
+    i2c->cr1 |= I2C_CR1_START;
+
+    return q - buffer;
+}
+
+/* Snapshot text buffer into the command buffer. */
 static unsigned int lcd_prep_buffer(void)
 {
     const static uint8_t row_offs[] = { 0x00, 0x40, 0x14, 0x54 };
@@ -162,6 +204,21 @@ static unsigned int lcd_prep_buffer(void)
     char *p;
     uint8_t *q = buffer;
     unsigned int i, row;
+
+    if (i2c_row == lcd_rows) {
+        i2c_row++;
+        if (ff_osd)
+            return i2c_btf_stop() ? osd_prep_buffer() : 0;
+    }
+
+    if (i2c_row > lcd_rows) {
+        i2c_row = 0;
+        refresh_count++;
+        if (!i2c_btf_stop())
+            return 0;
+        i2c->cr2 |= I2C_CR2_ITEVTEN;
+        i2c->cr1 |= I2C_CR1_START;
+    }
 
     order = (ff_cfg.display_order != DORD_default) ? ff_cfg.display_order
         : (lcd_rows == 2) ? 0x7710 : 0x2103;
@@ -173,10 +230,7 @@ static unsigned int lcd_prep_buffer(void)
     for (i = 0; i < lcd_columns; i++)
         emit8(&q, p ? *p++ : ' ', _RS);
 
-    if (++i2c_row >= lcd_rows) {
-        i2c_row = 0;
-        refresh_count++;
-    }
+    i2c_row++;
 
     return q - buffer;
 }
@@ -190,7 +244,12 @@ static void IRQ_dma1_ch4_tc(void)
     dma1->ifcr = DMA_IFCR_CGIF(4);
 
     /* Prepare the DMA buffer and start the next DMA sequence. */
-    dma_sz = is_oled_display ? oled_prep_buffer() : lcd_prep_buffer();
+    if (i2c_addr == 0) {
+        dma_sz = i2c_btf_stop() ? osd_prep_buffer() : 0;
+    } else {
+        in_osd = FALSE;
+        dma_sz = is_oled_display ? oled_prep_buffer() : lcd_prep_buffer();
+    }
     dma_start(dma_sz);
 }
 
@@ -233,6 +292,21 @@ static void i2c_stop(void)
     i2c->cr1 |= I2C_CR1_STOP;
     while (i2c->cr1 & I2C_CR1_STOP)
         continue;
+}
+
+static bool_t i2c_btf_stop(void)
+{
+    /* Wait for BTF. */
+    while (!(i2c->sr1 & I2C_SR1_BTF)) {
+        /* Any errors: bail and leave it to the Error ISR. */
+        if (i2c->sr1 & I2C_SR1_ERRORS)
+            return FALSE;
+    }
+
+    /* Send STOP. Clears SR1_TXE and SR1_BTF. */
+    i2c_stop();
+
+    return TRUE;
 }
 
 /* Synchronously transmit an I2C byte. */
@@ -328,10 +402,11 @@ void lcd_sync(void)
 bool_t lcd_init(void)
 {
     uint8_t a, *p;
-    bool_t reinit = (i2c_addr != 0);
+    bool_t reinit = (i2c_addr != 0) || ff_osd;
 
     i2c_dead = FALSE;
     i2c_row = 0;
+    in_osd = FALSE;
 
     rcc->apb1enr |= RCC_APB1ENR_I2C2EN;
 
@@ -383,9 +458,14 @@ bool_t lcd_init(void)
     i2c->cr1 = I2C_CR1_PE;
 
     if (!reinit) {
+        /* Probe for FF OSD on the I2C bus. */
+        ff_osd = i2c_probe(OSD_I2C_ADDR);
+        if (ff_osd)
+            printk("I2C: FF OSD found\n");
+
         /* Probe the bus for an I2C device. */
         a = i2c_probe_range(0x20, 0x27) ?: i2c_probe_range(0x38, 0x3f);
-        if (a == 0) {
+        if ((a == 0) && (i2c_dead || !ff_osd)) {
             printk("I2C: %s\n",
                    i2c_dead ? "Bus locked up?" : "No device found");
             goto fail;
@@ -410,9 +490,13 @@ bool_t lcd_init(void)
             lcd_rows = min_t(uint8_t, lcd_rows, 4);
         }
 
-        printk("I2C: %s found at 0x%02x\n",
-               is_oled_display ? "OLED" : "LCD", a);
-        i2c_addr = a;
+        if (a != 0) {
+            printk("I2C: %s found at 0x%02x\n",
+                   is_oled_display ? "OLED" : "LCD", a);
+            i2c_addr = a;
+        } else {
+            is_oled_display = FALSE;
+        }
 
         lcd_clear();
     }
@@ -441,6 +525,10 @@ bool_t lcd_init(void)
 
     if (is_oled_display) {
         oled_init();
+        return TRUE;
+    } else if (i2c_addr == 0) {
+        i2c->cr2 |= I2C_CR2_DMAEN;
+        dma_start(osd_prep_buffer());
         return TRUE;
     }
 
@@ -678,17 +766,16 @@ static unsigned int ssd1306_prep_buffer(void)
      * I2C transaction. The OLED display seems to occasionally silently lose 
      * a byte and then we lose sync with the display address. */
     if (i2c_row == (oled_height / 16)) {
-        /* Wait for BTF. */
-        while (!(i2c->sr1 & I2C_SR1_BTF)) {
-            /* Any errors: bail and leave it to the Error ISR. */
-            if (i2c->sr1 & I2C_SR1_ERRORS)
-                return 0;
-        }
-        /* Send STOP. Clears SR1_TXE and SR1_BTF. */
-        i2c_stop();
-        /* Kick off new I2C transaction. */
+        i2c_row++;
+        if (ff_osd)
+            return i2c_btf_stop() ? osd_prep_buffer() : 0;
+    }
+
+    if (i2c_row > (oled_height / 16)) {
         i2c_row = 0;
         refresh_count++;
+        if (!i2c_btf_stop())
+            return 0;
         return oled_start_i2c(buffer);
     }
 
@@ -707,6 +794,17 @@ static unsigned int sh1106_prep_buffer(void)
     int size;
     uint8_t *p = buffer;
 
+    if (i2c_row == (oled_height / 8)) {
+        i2c_row++;
+        if (ff_osd)
+            return i2c_btf_stop() ? osd_prep_buffer() : 0;
+    }
+
+    if (i2c_row > (oled_height / 8)) {
+        i2c_row = 0;
+        refresh_count++;
+    }
+
     /* Convert one row of text[] into buffer[] writes. */
     size = oled_to_lcd_row(i2c_row/2);
     if (size != 0) {
@@ -717,26 +815,16 @@ static unsigned int sh1106_prep_buffer(void)
             memcpy(&buffer[128], &buffer[0], 128);
     }
 
-    /* Wait for BTF. */
-    while (!(i2c->sr1 & I2C_SR1_BTF)) {
-        /* Any errors: bail and leave it to the Error ISR. */
-        if (i2c->sr1 & I2C_SR1_ERRORS)
-            return 0;
-    }
-    /* Send STOP. Clears SR1_TXE and SR1_BTF. */
-    i2c_stop();
-
     /* Every 8 rows needs a new page address and hence new I2C transaction. */
+    if (!i2c_btf_stop())
+        return 0;
     p += oled_start_i2c(p);
 
     /* Patch the data bytes onto the end of the address setup sequence. */
     memcpy(p, &buffer[128], 128);
     p += 128;
 
-    if (++i2c_row == (oled_height / 8)) {
-        i2c_row = 0;
-        refresh_count++;
-    }
+    i2c_row++;
 
     return p - buffer;
 }
