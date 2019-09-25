@@ -1998,7 +1998,7 @@ static bool_t confirm(const char *op)
     snprintf(msg, sizeof(msg), "Confirm %s?", op);
     lcd_write(0, 1, -1, msg);
 
-    while ((b = buttons) == 0)
+    while ((b = menu_wait_button(TRUE, "")) == 0)
         continue;
 
     return (b == B_SELECT);
@@ -2116,6 +2116,38 @@ out:
     return ok;
 }
 
+static void ff_osd_configure(void)
+{
+    if (!ff_osd || !confirm("OSD Cnf"))
+        return;
+
+    lcd_clear();
+    lcd_write(0, 0, -1, "Exit: Power Off");
+    lcd_write(0, 1, -1, "or Eject USB/SD");
+
+    for (;;) {
+        time_t t = time_now();
+        uint8_t b = buttons;
+        if (b == (B_LEFT|B_RIGHT)) {
+            ff_osd_buttons = B_SELECT;
+            /* Wait for two-button release. */
+            while ((time_diff(t, time_now()) < time_ms(1000)) && buttons)
+                continue;
+        } else if (b & (B_LEFT|B_RIGHT)) {
+            /* Wait 50ms for a two-button press. */
+            while ((b == buttons) && (time_diff(t, time_now()) < time_ms(50)))
+                continue;
+            ff_osd_buttons = (buttons == (B_LEFT|B_RIGHT)) ? B_SELECT : b;
+        } else {
+            ff_osd_buttons = b;
+        }
+        /* Hold button-held state for a while to make sure it gets 
+         * transferred to the OSD. */
+        if (ff_osd_buttons)
+            delay_ms(100);
+    }
+}
+
 static uint8_t noinline eject_menu(uint8_t b)
 {
     const static char *menu[] = {
@@ -2125,14 +2157,20 @@ static uint8_t noinline eject_menu(uint8_t b)
         "Delete Image",
         "Exit to Selector",
         "Exit & Re-Insert",
+        "Configure FF OSD",
     };
 
+    int nr_opts = ARRAY_SIZE(menu);
     char msg[17];
     unsigned int wait;
     int sel = 0;
     bool_t twobutton_eject =
         ((ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject)
         || (display_mode == DM_LCD_OLED); /* or two buttons can't exit menu */
+
+    /* Only allow FF OSD configuration if we have OSD attached. */
+    if (!ff_osd)
+        nr_opts--;
 
     menu_mode = TRUE;
 
@@ -2231,6 +2269,9 @@ static uint8_t noinline eject_menu(uint8_t b)
             case 0: case 5: /* Exit & Re-Insert */
                 b = 0;
                 goto out;
+            case 6:
+                ff_osd_configure();
+                break;
             }
         }
  
@@ -2648,6 +2689,7 @@ int main(void)
         usbh_msc_buffer_set((void *)0xdeadbeef);
 
         fres = F_call_cancellable(floppy_main, NULL);
+        ff_osd_buttons = 0;
         floppy_cancel();
         floppy_arena_teardown();
 

@@ -34,6 +34,7 @@
 #define OSD_DATA         0x02 /* next columns*rows bytes are text data */
 #define OSD_ROWS         0x10 /* [3:0] = #rows */
 #define OSD_HEIGHTS      0x20 /* [3:0] = 1 iff row is 2x height */
+#define OSD_BUTTONS      0x30 /* [3:0] = button mask */
 #define OSD_COLUMNS      0x40 /* [6:0] = #columns */
 
 /* STM32 I2C peripheral. */
@@ -53,7 +54,9 @@ void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
 #define DMA1_CH4_IRQ 14
 void IRQ_14(void) __attribute__((alias("IRQ_dma1_ch4_tc")));
 
-static bool_t ff_osd, in_osd;
+bool_t ff_osd;
+uint8_t ff_osd_buttons;
+static bool_t in_osd;
 #define OSD_I2C_ADDR 0x10
 
 static uint8_t _bl;
@@ -179,6 +182,7 @@ static unsigned int osd_prep_buffer(void)
     *q++ = OSD_COLUMNS | lcd_columns;
     *q++ = OSD_ROWS | 3;
     *q++ = OSD_HEIGHTS | (menu_mode ? 4 : 2);
+    *q++ = OSD_BUTTONS | ff_osd_buttons;
     *q++ = OSD_DATA;
     for (row = 0; row < 3; row++) {
         p = text[(order >> (row * DORD_shift)) & DORD_row];
