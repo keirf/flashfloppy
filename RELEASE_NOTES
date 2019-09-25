@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.4a - 25 September 2019
+ - FF OSD support
+   - Bus sharing with existing LCD/OLED display
+   - Gotek buttons can be remoted to FF OSD for OSD configuration
+
 ** v3.3a - 8 July 2019
  - FF.CFG: New Disk-Change Reset option: chgrst=delay-N
    - Automatically clears the DSKCHG signal Nx0.5s after disk insertion
