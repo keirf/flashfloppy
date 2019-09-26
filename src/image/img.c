@@ -22,10 +22,11 @@ static bool_t fm_read_track(struct image *im);
 static void *align_p(void *p);
 static void check_p(void *p, struct image *im);
 
+#define SIMPLE_EMPTY_TRK 2 /* if has_empty */
 const static struct simple_layout {
     uint16_t nr_sectors;
-    uint8_t is_fm, has_iam, no, gap3, gap4a, base[2];
-} dfl_simple_layout = { 0, FALSE, TRUE, ~0, 0, 0, { 1, 1 } };
+    uint8_t is_fm, has_iam, has_empty, no, gap3, gap4a, base[2];
+} dfl_simple_layout = { 0, FALSE, TRUE, FALSE, ~0, 0, 0, { 1, 1 } };
 static void simple_layout(
     struct image *im, const struct simple_layout *layout);
 
@@ -175,7 +176,7 @@ static void reset_all_params(struct image *im)
 
 static bool_t raw_type_open(struct image *im, const struct raw_type *type)
 {
-    struct simple_layout layout;
+    struct simple_layout layout = dfl_simple_layout;
     unsigned int nr_cyls, cyl_sz, nr_sides;
 
     /* Walk the layout/type hints looking for a match on file size. */
@@ -738,49 +739,60 @@ static bool_t trd_open(struct image *im)
         .nr_sectors = 16,
         .is_fm = FALSE,
         .has_iam = TRUE,
+        .has_empty = TRUE, /* see comment below */
         .no = 1, /* 256-byte */
         .gap3 = 57,
         .base = { 1, 1 }
     };
-    uint8_t geometry;
+    struct {
+        uint8_t na, free_sec, free_trk;
+        uint8_t type;
+        uint8_t nr_files;
+        uint8_t free_secs_lo, free_secs_hi;
+        uint8_t id;
+    } geometry;
+    unsigned int tot_secs, tot_trks;
 
-    /* Interrogate TR-DOS geometry identifier. */
-    F_lseek(&im->fp, 0x8e3);
-    F_read(&im->fp, &geometry, 1, NULL);
-    switch (geometry) {
+    /* Interrogate TR-DOS geometry info. */
+    F_lseek(&im->fp, 0x8e0);
+    F_read(&im->fp, &geometry, sizeof(geometry), NULL);
+    if (geometry.id != 0x10)
+        return FALSE;
+
+    /* Only four type identifiers are recognised: We use it to determine 
+     * number of disk sides. */
+    switch (geometry.type) {
     case 0x16:
-        im->nr_cyls = 80;
-        im->nr_sides = 2;
-        break;
     case 0x17:
-        im->nr_cyls = 40;
         im->nr_sides = 2;
         break;
     case 0x18:
-        im->nr_cyls = 80;
-        im->nr_sides = 1;
-        break;
     case 0x19:
-        im->nr_cyls = 40;
         im->nr_sides = 1;
         break;
     default:
-        /* Guess geometry */
-        if (im_size(im) <= 40*16*256) {
-            im->nr_cyls = 40;
-            im->nr_sides = 1;
-        } else if (im_size(im) < 40*2*16*256) {
-            im->nr_cyls = 40;
-            im->nr_sides = 1;
-        } else {
-            im->nr_cyls = 80;
-            im->nr_sides = 2;
-        }
+        return FALSE;
     }
+
+    /* Calculate total sectors on disk: First-free plus number-of-free. */
+    tot_secs = (geometry.free_sec + geometry.free_trk * 16
+                + geometry.free_secs_lo + geometry.free_secs_hi * 256);
+    if ((tot_secs & 15) || (tot_secs > 4096))
+        return FALSE; /* Too large or not a track multiple */
+
+    /* Calculate total tracks and thus number of cylinders. */
+    tot_trks = tot_secs >> 4;
+    im->nr_cyls = (tot_trks + im->nr_sides - 1) / im->nr_sides;
 
     im->img.interleave = 1;
 
     simple_layout(im, &layout);
+
+    /* Some images do not fill the last cylinder (see attached images on 
+     * issue #260). We deal with that by marking the very last track empty. */
+    if (tot_trks & (im->nr_sides-1))
+        im->img.trk_map[tot_trks] = SIMPLE_EMPTY_TRK;
+
     return raw_open(im);
 }
 
@@ -1522,14 +1534,16 @@ static void raw_seek_track(
     im->img.trk = trk;
     im->img.sec_info = &im->img.sec_info_base[trk->sec_off];
 
-    /* Create logical sector map in rotational order. */
-    memset(im->img.sec_map, 0xff, trk->nr_sectors);
-    pos = ((cyl*im->img.cskew) + (side*im->img.hskew)) % trk->nr_sectors;
-    for (i = 0; i < trk->nr_sectors; i++) {
-        while (im->img.sec_map[pos] != 0xff)
-            pos = (pos + 1) % trk->nr_sectors;
-        im->img.sec_map[pos] = i;
-        pos = (pos + im->img.interleave) % trk->nr_sectors;
+    if (trk->nr_sectors != 0) {
+        /* Create logical sector map in rotational order. */
+        memset(im->img.sec_map, 0xff, trk->nr_sectors);
+        pos = ((cyl*im->img.cskew) + (side*im->img.hskew)) % trk->nr_sectors;
+        for (i = 0; i < trk->nr_sectors; i++) {
+            while (im->img.sec_map[pos] != 0xff)
+                pos = (pos + 1) % trk->nr_sectors;
+            im->img.sec_map[pos] = i;
+            pos = (pos + im->img.interleave) % trk->nr_sectors;
+        }
     }
 
     /* Sort out all other logical layout issues. */
@@ -1880,7 +1894,8 @@ static void raw_dump_info(struct image *im)
         struct raw_sec *sec = &im->img.sec_info[im->img.sec_map[i]];
         printk("{%u,%u} ", sec->id, sec->no);
     }
-    printk("\n");
+    if (trk->nr_sectors != 0)
+        printk("\n");
 }
 
 static void img_fetch_data(struct image *im)
@@ -1891,7 +1906,7 @@ static void img_fetch_data(struct image *im)
     uint8_t sec_i;
     uint16_t off, len;
 
-    if (rd->prod != rd->cons)
+    if ((im->img.trk->nr_sectors == 0) || (rd->prod != rd->cons))
         return;
 
     sec_i = im->img.sec_map[im->img.trk_sec];
@@ -1949,7 +1964,7 @@ static struct raw_trk *add_track_layout(
 
     if ((im->nr_sides < 1) || (im->nr_sides > 2)
         || (im->nr_cyls < 1) || (im->nr_cyls > 254)
-        || (nr_sectors < 1) || (nr_sectors > 256))
+        || (nr_sectors > 256))
         F_die(FR_BAD_IMAGE);
 
     if (!im->img.trk_info) {
@@ -2021,6 +2036,11 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
         }
     }
 
+    if (layout->has_empty) {
+        /* Add an empty track layout. */
+        add_track_layout(im, 0, i);
+    }
+
     /* Create track map, mapping each side to its respective layout. */
     trk_map = add_track_map(im);
     for (i = 0; i < im->nr_cyls; i++)
@@ -2084,9 +2104,9 @@ static void mfm_prep_track(struct image *im)
     im->tracklen_bc = (trk->data_rate * 400 * 300) / im->img.rpm;
 
     /* Calculate a suitable GAP3 if not specified. */
-    if (gap_3 == 0) {
+    if ((trk->nr_sectors != 0) && (gap_3 == 0)) {
         int space;
-        uint8_t no = trk->nr_sectors ? im->img.sec_info[0].no : 2;
+        uint8_t no = im->img.sec_info[0].no;
         im->img.dam_sz_post -= trk->gap_3;
         tracklen -= 16 * trk->nr_sectors * trk->gap_3;
         space = max_t(int, 0, im->tracklen_bc - tracklen);
@@ -2298,9 +2318,9 @@ static void fm_prep_track(struct image *im)
     im->tracklen_bc = (trk->data_rate * 400 * 300) / im->img.rpm;
 
     /* Calculate a suitable GAP3 if not specified. */
-    if (trk->gap_3 == 0) {
+    if ((trk->nr_sectors != 0) && (trk->gap_3 == 0)) {
         int space = max_t(int, 0, im->tracklen_bc - tracklen);
-        uint8_t no = trk->nr_sectors ? im->img.sec_info[0].no : 2;
+        uint8_t no = im->img.sec_info[0].no;
         trk->gap_3 = min_t(int, space/(16*trk->nr_sectors), GAP_3[no]);
         im->img.dam_sz_post += trk->gap_3;
         tracklen += 16 * trk->nr_sectors * trk->gap_3;
