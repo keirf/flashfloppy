@@ -500,6 +500,8 @@ bool_t lcd_init(void)
             i2c_addr = a;
         } else {
             is_oled_display = FALSE;
+            if (ff_cfg.display_type == DISPLAY_auto)
+                lcd_columns = 40;
         }
 
         lcd_clear();
