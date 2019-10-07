@@ -36,6 +36,11 @@
 #define OSD_HEIGHTS      0x20 /* [3:0] = 1 iff row is 2x height */
 #define OSD_BUTTONS      0x30 /* [3:0] = button mask */
 #define OSD_COLUMNS      0x40 /* [6:0] = #columns */
+struct __packed i2c_osd_info {
+    uint8_t protocol_ver;
+    uint8_t fw_major, fw_minor;
+    uint8_t buttons;
+};
 
 /* STM32 I2C peripheral. */
 #define i2c i2c2
@@ -52,11 +57,19 @@ void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
 
 /* DMA completion ISR. */
 #define DMA1_CH4_IRQ 14
-void IRQ_14(void) __attribute__((alias("IRQ_dma1_ch4_tc")));
+void IRQ_14(void) __attribute__((alias("IRQ_dma_tx_tc")));
 
-bool_t ff_osd;
-uint8_t ff_osd_buttons;
-static bool_t in_osd;
+/* DMA completion ISR. */
+#define DMA1_CH5_IRQ 15
+void IRQ_15(void) __attribute__((alias("IRQ_dma_rx_tc")));
+
+bool_t has_osd;
+uint8_t osd_buttons_tx;
+uint8_t osd_buttons_rx;
+#define OSD_no    0
+#define OSD_read  1
+#define OSD_write 2
+static uint8_t in_osd, osd_ver;
 #define OSD_I2C_ADDR 0x10
 
 static uint8_t _bl;
@@ -72,6 +85,7 @@ static uint8_t oled_model;
 static void oled_init(void);
 static unsigned int oled_prep_buffer(void);
 
+static void i2c_stop(void);
 static bool_t i2c_btf_stop(void);
 
 /* Count of display-refresh completions. For synchronisation/flush. */
@@ -110,8 +124,8 @@ static void IRQ_i2c_error(void)
     i2c->cr1 = I2C_CR1_SWRST;
 
     /* Clear the DMA controller. */
-    dma1->ch4.ccr = 0;
-    dma1->ifcr = DMA_IFCR_CGIF(4);
+    dma1->ch4.ccr = dma1->ch5.ccr = 0;
+    dma1->ifcr = DMA_IFCR_CGIF(4) | DMA_IFCR_CGIF(5);
 
     timer_cancel(&timeout_timer);
 
@@ -125,7 +139,10 @@ static void IRQ_i2c_event(void)
     if (sr1 & I2C_SR1_SB) {
         /* Send address. Clears SR1_SB. */
         uint8_t a = in_osd ? OSD_I2C_ADDR : i2c_addr;
-        i2c->dr = a << 1;
+        a <<= 1;
+        if (in_osd == OSD_read)
+            a |= 1;
+        i2c->dr = a;
     }
 
     if (sr1 & I2C_SR1_ADDR) {
@@ -141,14 +158,23 @@ static void dma_start(unsigned int sz)
 {
     ASSERT(sz <= sizeof(buffer));
 
-    dma1->ch4.cmar = (uint32_t)(unsigned long)buffer;
-    dma1->ch4.cndtr = sz;
-    dma1->ch4.ccr = (DMA_CCR_MSIZE_8BIT |
-                     DMA_CCR_PSIZE_16BIT |
-                     DMA_CCR_MINC |
-                     DMA_CCR_DIR_M2P |
-                     DMA_CCR_TCIE |
-                     DMA_CCR_EN);
+    if (in_osd == OSD_read) {
+        dma1->ch5.cndtr = sz;
+        dma1->ch5.ccr = (DMA_CCR_MSIZE_8BIT |
+                         DMA_CCR_PSIZE_16BIT |
+                         DMA_CCR_MINC |
+                         DMA_CCR_DIR_P2M |
+                         DMA_CCR_TCIE |
+                         DMA_CCR_EN);
+    } else {
+        dma1->ch4.cndtr = sz;
+        dma1->ch4.ccr = (DMA_CCR_MSIZE_8BIT |
+                         DMA_CCR_PSIZE_16BIT |
+                         DMA_CCR_MINC |
+                         DMA_CCR_DIR_M2P |
+                         DMA_CCR_TCIE |
+                         DMA_CCR_EN);
+    }
 
     /* Set the timeout timer in case the DMA hangs for any reason. */
     timer_set(&timeout_timer, time_now() + DMA_TIMEOUT);
@@ -178,11 +204,17 @@ static unsigned int osd_prep_buffer(void)
     uint8_t *q = buffer;
     unsigned int row;
 
+    if (++in_osd == OSD_read) {
+        i2c->cr2 |= I2C_CR2_LAST | I2C_CR2_ITEVTEN;
+        i2c->cr1 |= I2C_CR1_ACK | I2C_CR1_START;
+        return sizeof(struct i2c_osd_info);
+    }
+
     *q++ = OSD_BACKLIGHT | !!_bl;
     *q++ = OSD_COLUMNS | lcd_columns;
     *q++ = OSD_ROWS | 3;
     *q++ = OSD_HEIGHTS | (menu_mode ? 4 : 2);
-    *q++ = OSD_BUTTONS | ff_osd_buttons;
+    *q++ = OSD_BUTTONS | osd_buttons_tx;
     *q++ = OSD_DATA;
     for (row = 0; row < 3; row++) {
         p = text[(order >> (row * DORD_shift)) & DORD_row];
@@ -193,7 +225,7 @@ static unsigned int osd_prep_buffer(void)
     if (i2c_addr == 0)
         refresh_count++;
 
-    in_osd = TRUE;
+    in_osd = OSD_write;
     i2c->cr2 |= I2C_CR2_ITEVTEN;
     i2c->cr1 |= I2C_CR1_START;
 
@@ -211,7 +243,7 @@ static unsigned int lcd_prep_buffer(void)
 
     if (i2c_row == lcd_rows) {
         i2c_row++;
-        if (ff_osd)
+        if (has_osd)
             return i2c_btf_stop() ? osd_prep_buffer() : 0;
     }
 
@@ -239,7 +271,7 @@ static unsigned int lcd_prep_buffer(void)
     return q - buffer;
 }
 
-static void IRQ_dma1_ch4_tc(void)
+static void IRQ_dma_tx_tc(void)
 {
     unsigned int dma_sz;
 
@@ -248,13 +280,31 @@ static void IRQ_dma1_ch4_tc(void)
     dma1->ifcr = DMA_IFCR_CGIF(4);
 
     /* Prepare the DMA buffer and start the next DMA sequence. */
+    in_osd = OSD_no;
     if (i2c_addr == 0) {
         dma_sz = i2c_btf_stop() ? osd_prep_buffer() : 0;
     } else {
-        in_osd = FALSE;
         dma_sz = is_oled_display ? oled_prep_buffer() : lcd_prep_buffer();
     }
     dma_start(dma_sz);
+}
+
+static void IRQ_dma_rx_tc(void)
+{
+    struct i2c_osd_info *info = (struct i2c_osd_info *)buffer;
+
+    /* Clear the DMA controller. */
+    dma1->ch5.ccr = 0;
+    dma1->ifcr = DMA_IFCR_CGIF(5);
+
+    /* Clean up I2C. */
+    i2c->cr2 &= ~I2C_CR2_LAST;
+    i2c->cr1 &= ~I2C_CR1_ACK;
+
+    osd_buttons_rx = info->buttons;
+
+    /* Now do the OSD write. */
+    dma_start(osd_prep_buffer());
 }
 
 /* Wait for given status condition @s while also checking for errors. */
@@ -320,11 +370,11 @@ static bool_t i2c_sync_write(uint8_t b)
     return i2c_wait(I2C_SR1_BTF);
 }
 
-static bool_t i2c_sync_write_txn(uint8_t *cmds, unsigned int nr)
+static bool_t i2c_sync_write_txn(uint8_t addr, uint8_t *cmds, unsigned int nr)
 {
     unsigned int i;
 
-    if (!i2c_start(i2c_addr, I2C_WR))
+    if (!i2c_start(addr, I2C_WR))
         return FALSE;
 
     for (i = 0; i < nr; i++)
@@ -406,11 +456,12 @@ void lcd_sync(void)
 bool_t lcd_init(void)
 {
     uint8_t a, *p;
-    bool_t reinit = (i2c_addr != 0) || ff_osd;
+    bool_t reinit = (i2c_addr != 0) || has_osd;
 
     i2c_dead = FALSE;
     i2c_row = 0;
-    in_osd = FALSE;
+    in_osd = OSD_no;
+    osd_buttons_rx = 0;
 
     rcc->apb1enr |= RCC_APB1ENR_I2C2EN;
 
@@ -442,11 +493,14 @@ bool_t lcd_init(void)
     /* Check the bus is not floating (or still stuck!). We shouldn't be able to 
      * pull the lines low with our internal weak pull-downs (min. 30kohm). */
     if (!reinit) {
+        bool_t scl, sda;
         gpio_configure_pin(gpiob, SCL, GPI_pull_down);
         gpio_configure_pin(gpiob, SDA, GPI_pull_down);
         delay_us(10);
-        if (!gpio_read_pin(gpiob, SCL) || !gpio_read_pin(gpiob, SDA)) {
-            printk("I2C: Invalid bus\n");
+        scl = gpio_read_pin(gpiob, SCL);
+        sda = gpio_read_pin(gpiob, SDA);
+        if (!scl || !sda) {
+            printk("I2C: Invalid bus SCL=%u SDA=%u\n", scl, sda);
             goto fail;
         }
     }
@@ -463,13 +517,18 @@ bool_t lcd_init(void)
 
     if (!reinit) {
         /* Probe for FF OSD on the I2C bus. */
-        ff_osd = i2c_probe(OSD_I2C_ADDR);
-        if (ff_osd)
-            printk("I2C: FF OSD found\n");
+        has_osd = i2c_probe(OSD_I2C_ADDR);
+        if (has_osd) {
+            /* Read: Retrieve the version number. */
+            i2c->cr1 |= I2C_CR1_START;
+            if (i2c_start(OSD_I2C_ADDR, I2C_RD) && i2c_wait(I2C_SR1_RXNE))
+                osd_ver = i2c->dr;
+            printk("I2C: FF OSD found (ver %x)\n", osd_ver);
+        }
 
         /* Probe the bus for an I2C device. */
         a = i2c_probe_range(0x20, 0x27) ?: i2c_probe_range(0x38, 0x3f);
-        if ((a == 0) && (i2c_dead || !ff_osd)) {
+        if ((a == 0) && (i2c_dead || !has_osd)) {
             printk("I2C: %s\n",
                    i2c_dead ? "Bus locked up?" : "No device found");
             goto fail;
@@ -519,11 +578,20 @@ bool_t lcd_init(void)
     i2c->cr2 |= I2C_CR2_ITERREN;
 
     /* Initialise DMA1 channel 4 and its completion interrupt. */
+    dma1->ch4.cmar = (uint32_t)(unsigned long)buffer;
     dma1->ch4.cpar = (uint32_t)(unsigned long)&i2c->dr;
     dma1->ifcr = DMA_IFCR_CGIF(4);
     IRQx_set_prio(DMA1_CH4_IRQ, I2C_IRQ_PRI);
     IRQx_clear_pending(DMA1_CH4_IRQ);
     IRQx_enable(DMA1_CH4_IRQ);
+
+    /* Initialise DMA1 channel 5 and its completion interrupt. */
+    dma1->ch5.cmar = (uint32_t)(unsigned long)buffer;
+    dma1->ch5.cpar = (uint32_t)(unsigned long)&i2c->dr;
+    dma1->ifcr = DMA_IFCR_CGIF(5);
+    IRQx_set_prio(DMA1_CH5_IRQ, I2C_IRQ_PRI);
+    IRQx_clear_pending(DMA1_CH5_IRQ);
+    IRQx_enable(DMA1_CH5_IRQ);
 
     /* Timeout handler for if I2C transmission borks. */
     timer_init(&timeout_timer, timeout_fn, NULL);
@@ -571,8 +639,10 @@ bool_t lcd_init(void)
 fail:
     if (reinit)
         return FALSE;
+    IRQx_disable(I2C_EVENT_IRQ);
     IRQx_disable(I2C_ERROR_IRQ);
     IRQx_disable(DMA1_CH4_IRQ);
+    IRQx_disable(DMA1_CH5_IRQ);
     i2c->cr1 &= ~I2C_CR1_PE;
     gpio_configure_pin(gpiob, SCL, GPI_pull_up);
     gpio_configure_pin(gpiob, SDA, GPI_pull_up);
@@ -773,7 +843,7 @@ static unsigned int ssd1306_prep_buffer(void)
      * a byte and then we lose sync with the display address. */
     if (i2c_row == (oled_height / 16)) {
         i2c_row++;
-        if (ff_osd)
+        if (has_osd)
             return i2c_btf_stop() ? osd_prep_buffer() : 0;
     }
 
@@ -802,7 +872,7 @@ static unsigned int sh1106_prep_buffer(void)
 
     if (i2c_row == (oled_height / 8)) {
         i2c_row++;
-        if (ff_osd)
+        if (has_osd)
             return i2c_btf_stop() ? osd_prep_buffer() : 0;
     }
 
@@ -857,7 +927,7 @@ static bool_t oled_probe_model(void)
     for (i = 0; i < 3; i++) {
         /* 1st Write stage. */
         i2c->cr1 |= I2C_CR1_START;
-        if (!i2c_sync_write_txn(cmd1, sizeof(cmd1)))
+        if (!i2c_sync_write_txn(i2c_addr, cmd1, sizeof(cmd1)))
             goto fail;
         /* Read stage. */
         i2c->cr1 |= I2C_CR1_START | I2C_CR1_ACK;
@@ -871,7 +941,7 @@ static bool_t oled_probe_model(void)
         x = i2c->dr; /* 2nd read: Data */
         /* 2nd Write stage. */
         cmd2[3] = x ^ rand[i]; /* XOR the write with "randomness" */
-        if (!i2c_sync_write_txn(cmd2, sizeof(cmd2)))
+        if (!i2c_sync_write_txn(i2c_addr, cmd2, sizeof(cmd2)))
             goto fail;
         /* Check we read what we wrote on previous iteration. */
         if (i && (x != px))

@@ -414,7 +414,7 @@ static void button_timer_fn(void *unused)
     };
 
     static uint16_t _b[3]; /* 0 = left, 1 = right, 2 = select */
-    uint8_t b = 0, rb;
+    uint8_t b = osd_buttons_rx, rb;
     bool_t twobutton_rotary =
         (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_rotary;
     int i, twobutton_reverse = !!(ff_cfg.twobutton_action & TWOBUTTON_reverse);
@@ -2118,7 +2118,7 @@ out:
 
 static void ff_osd_configure(void)
 {
-    if (!ff_osd || !confirm("OSD Cnf"))
+    if (!has_osd || !confirm("OSD Cnf"))
         return;
 
     lcd_clear();
@@ -2129,7 +2129,7 @@ static void ff_osd_configure(void)
         time_t t = time_now();
         uint8_t b = buttons;
         if (b == (B_LEFT|B_RIGHT)) {
-            ff_osd_buttons = B_SELECT;
+            osd_buttons_tx = B_SELECT;
             /* Wait for two-button release. */
             while ((time_diff(t, time_now()) < time_ms(1000)) && buttons)
                 continue;
@@ -2137,13 +2137,13 @@ static void ff_osd_configure(void)
             /* Wait 50ms for a two-button press. */
             while ((b == buttons) && (time_diff(t, time_now()) < time_ms(50)))
                 continue;
-            ff_osd_buttons = (buttons == (B_LEFT|B_RIGHT)) ? B_SELECT : b;
+            osd_buttons_tx = (buttons == (B_LEFT|B_RIGHT)) ? B_SELECT : b;
         } else {
-            ff_osd_buttons = b;
+            osd_buttons_tx = b;
         }
         /* Hold button-held state for a while to make sure it gets 
          * transferred to the OSD. */
-        if (ff_osd_buttons)
+        if (osd_buttons_tx)
             delay_ms(100);
     }
 }
@@ -2169,7 +2169,7 @@ static uint8_t noinline eject_menu(uint8_t b)
         || (display_mode == DM_LCD_OLED); /* or two buttons can't exit menu */
 
     /* Only allow FF OSD configuration if we have OSD attached. */
-    if (!ff_osd)
+    if (!has_osd)
         nr_opts--;
 
     menu_mode = TRUE;
@@ -2689,7 +2689,7 @@ int main(void)
         usbh_msc_buffer_set((void *)0xdeadbeef);
 
         fres = F_call_cancellable(floppy_main, NULL);
-        ff_osd_buttons = 0;
+        osd_buttons_tx = 0;
         floppy_cancel();
         floppy_arena_teardown();
 

@@ -169,8 +169,11 @@ void lcd_write(int col, int row, int min, const char *str);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
 extern uint8_t lcd_columns, lcd_rows;
-extern bool_t ff_osd;
-extern uint8_t ff_osd_buttons;
+
+/* FF OSD (On Screen Display) */
+extern bool_t has_osd;
+extern uint8_t osd_buttons_tx; /* Gotek -> FF_OSD */
+extern uint8_t osd_buttons_rx; /* FF_OSD -> Gotek */
 
 /* USB stack processing */
 void usbh_msc_init(void);
