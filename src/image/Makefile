@@ -1,8 +1,12 @@
-OBJS += adf.o
-OBJS += da.o
-OBJS += dsk.o
-OBJS += dummy.o
-OBJS += hfe.o
-OBJS += img.o
+
 OBJS += image.o
-OBJS += mfm.o
+
+OBJS-$(quickdisk) += qd.o
+
+OBJS-$(floppy) += adf.o
+OBJS-$(floppy) += dsk.o
+OBJS-$(floppy) += hfe.o
+OBJS-$(floppy) += img.o
+OBJS-$(floppy) += da.o
+OBJS-$(floppy) += dummy.o
+OBJS-$(floppy) += mfm.o

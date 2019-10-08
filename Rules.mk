@@ -27,6 +27,13 @@ else ifeq ($(logfile),y)
 FLAGS += -DLOGFILE=1
 endif
 
+ifeq ($(quickdisk),y)
+FLAGS += -DQUICKDISK=1
+floppy=n
+else
+floppy=y
+endif
+
 FLAGS += -MMD -MF .$(@F).d
 DEPS = .*.d
 

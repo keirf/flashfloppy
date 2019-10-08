@@ -50,6 +50,21 @@ struct hfe_image {
     } write_batch;
 };
 
+struct qd_image {
+    uint16_t tb;
+    uint32_t trk_off;
+    uint32_t trk_pos, trk_len;
+    uint32_t win_start, win_end;
+    struct {
+        uint32_t start;
+        bool_t wrapped;
+    } write;
+    struct {
+        uint32_t off, len;
+        bool_t dirty;
+    } write_batch;
+};
+
 struct raw_sec {
     uint8_t id;
     uint8_t no; /* 3 bits */
@@ -160,6 +175,7 @@ struct image {
     union {
         struct adf_image adf;
         struct hfe_image hfe;
+        struct qd_image qd;
         struct img_image img;
         struct dsk_image dsk;
         struct directaccess da;

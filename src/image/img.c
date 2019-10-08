@@ -2341,13 +2341,6 @@ static void fm_prep_track(struct image *im)
     raw_dump_info(im);
 }
 
-uint16_t fm_sync(uint8_t dat, uint8_t clk)
-{
-    uint16_t _dat = mfmtab[dat] & 0x5555;
-    uint16_t _clk = (mfmtab[clk] & 0x5555) << 1;
-    return _clk | _dat;
-}
-
 static bool_t fm_read_track(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;

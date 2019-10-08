@@ -6,7 +6,6 @@ OBJS += config.o
 OBJS += crc.o
 OBJS += flash_cfg.o
 OBJS += vectors.o
-OBJS += floppy.o
 OBJS += fpec.o
 OBJS += fs.o
 OBJS += main.o
@@ -19,6 +18,8 @@ OBJS += timer.o
 OBJS += util.o
 OBJS += volume.o
 
+OBJS-$(floppy) += floppy.o
+OBJS-$(quickdisk) += quickdisk.o
 OBJS-$(debug) += console.o
 OBJS-$(logfile) += logfile.o
 
