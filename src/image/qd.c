@@ -10,14 +10,14 @@
  */
 
 struct disk_header {
-    char sig[8];
+    char sig[8];        /* ...QD... */
 };
 
 struct track_header {
-    uint32_t offset;
-    uint32_t len;
-    uint32_t win_start;
-    uint32_t win_end;
+    uint32_t offset;    /* Byte offset to track data */
+    uint32_t len;       /* Byte length of track data */
+    uint32_t win_start; /* Byte offset of read/write window start */
+    uint32_t win_end;   /* Byte offset of read/write window end */
 };
 
 static void qd_seek_track(struct image *im, uint16_t track);
@@ -33,7 +33,7 @@ static bool_t qd_open(struct image *im)
     im->qd.tb = 1;
     im->nr_cyls = 1;
     im->nr_sides = 1;
-    im->write_bc_ticks = sysclk_us(4) + 66;
+    im->write_bc_ticks = sysclk_us(4) + 66; /* 4.917us */
     im->ticks_per_cell = im->write_bc_ticks;
     im->sync = SYNC_none;
 
@@ -55,10 +55,14 @@ static void qd_seek_track(struct image *im, uint16_t track)
     F_lseek(&im->fp, im->qd.tb*512 + (track/2)*16);
     F_read(&im->fp, &thdr, sizeof(thdr), NULL);
 
+    /* Byte offset and length of track data. */
     im->qd.trk_off = le32toh(thdr.offset);
     im->qd.trk_len = le32toh(thdr.len);
+
+    /* Read/write window limits in STK ticks from data start. */
     im->qd.win_start = le32toh(thdr.win_start) * im->write_bc_ticks;
     im->qd.win_end = le32toh(thdr.win_end) * im->write_bc_ticks;
+
     im->tracklen_bc = im->qd.trk_len * 8;
     im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
 

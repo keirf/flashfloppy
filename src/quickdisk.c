@@ -16,17 +16,21 @@
 
 /* READY-window state machine and timer handling. */
 static struct window {
-    struct timer timer;
-#define WIN_rdata_on  1
-#define WIN_ready_on  2
-#define WIN_ready_off 3
-#define WIN_rdata_off 4
-    uint8_t state;
+    struct timer timer; /* Timer callback for state changes */
+/* States describe action to take at *next* timer deadline. */
+#define WIN_rdata_on  1 /* Activate RD */
+#define WIN_ready_on  2 /* Assert /RY */
+#define WIN_ready_off 3 /* Deassert /RY */
+#define WIN_rdata_off 4 /* Mask RD */
+    uint8_t state; /* WIN_* */
 } window;
+
+/* RD-active has a wider window than /RY-asserted. */
+#define rd_before_ry time_ms(10) /* RD-active before /RY-asserted */
+#define rd_after_ry  time_ms(10) /* RD-inactive after /RY-deasserted */
 
 /* MOTOR state. */
 static struct motor {
-    uint8_t off; /* Motor spins up only when .off=0 */
     bool_t on;   /* Is motor fully spun up? */
     struct timer timer; /* Spin-up timer */
 } motor;
@@ -36,8 +40,16 @@ static void motor_timer(void *_drv);
 static void window_timer(void *_drv);
 static void index_assert(void *);
 
-/* Change state of an output pin. */
-#define write_pin(pin, level) gpio_write_pin(gpio_out, pin, level)
+/* Track and modify states of output pins. */
+static volatile struct {
+    bool_t media;
+    bool_t wrprot;
+    bool_t ready;
+} pins;
+#define read_pin(pin) pins.pin
+#define write_pin(pin, level) ({                \
+    gpio_write_pin(gpio_out, pin_##pin, level); \
+    pins.pin = level; })
 
 #include "floppy_generic.c"
 
@@ -51,8 +63,11 @@ void floppy_cancel(void)
 
     /* Immediately change outputs that we control entirely from the main loop. 
      * Asserting WRPROT prevents any further calls to wdata_start(). */
-    write_pin(pin_wrprot, HIGH);
-    write_pin(pin_media, HIGH);
+    write_pin(wrprot, HIGH);
+    write_pin(media, HIGH);
+
+    /* Deasserts /RY and turns off motor. */
+    IRQx_set_pending(motor_irq);
 
     /* Stop DMA + timer work. */
     IRQx_disable(dma_rdata_irq);
@@ -68,14 +83,9 @@ void floppy_cancel(void)
     barrier(); /* cancel index.timer /then/ clear soft state */
     drv->index_suppressed = FALSE;
     drv->image = NULL;
-    drv->inserted = FALSE;
     image = NULL;
     dma_rd = dma_wr = NULL;
     window.state = 0;
-
-    /* Set outputs for empty drive. */
-    barrier();
-    write_pin(pin_ready, HIGH);
 }
 
 void floppy_set_fintf_mode(void)
@@ -103,9 +113,9 @@ void floppy_init(void)
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_data, pin_rdata, GPO_rdata);
 
-    write_pin(pin_media,  HIGH);
-    write_pin(pin_wrprot, HIGH);
-    write_pin(pin_ready,  HIGH);
+    write_pin(media,  HIGH);
+    write_pin(wrprot, HIGH);
+    write_pin(ready,  HIGH);
 
     floppy_init_irqs();
 
@@ -114,19 +124,18 @@ void floppy_init(void)
 
 void floppy_insert(unsigned int unit, struct slot *slot)
 {
-    struct drive *drv = &drive;
-
     floppy_mount(slot);
 
     timer_dma_init();
-    tim_rdata->ccr2 = sysclk_ns(1500);
+    tim_rdata->ccr2 = sysclk_ns(1500); /* RD: 1.5us positive pulses */
 
     /* Drive is ready. Set output signals appropriately. */
-    write_pin(pin_media, LOW);
+    write_pin(media, LOW);
     if (!(slot->attributes & AM_RDO))
-        write_pin(pin_wrprot, LOW);
-    barrier();
-    drv->inserted = TRUE;
+        write_pin(wrprot, LOW);
+
+    /* Motor spins up, if enabled. */
+    IRQx_set_pending(motor_irq);
 }
 
 static void floppy_sync_flux(void)
@@ -163,7 +172,7 @@ static void floppy_sync_flux(void)
     rdata_start();
     window.state = WIN_rdata_on;
     timer_set(&window.timer,
-              time_now() + drv->image->qd.win_start - time_ms(10));
+              time_now() + drv->image->qd.win_start - rd_before_ry);
 }
 
 static bool_t dma_rd_handle(struct drive *drv)
@@ -223,7 +232,7 @@ static void index_assert(void *dat)
 
         /* Reset the window state machine to start over. */
         w->state = WIN_rdata_on;
-        timer_set(&w->timer, now + drv->image->qd.win_start - time_ms(10));
+        timer_set(&w->timer, now + drv->image->qd.win_start - rd_before_ry);
 
     } else {
 
@@ -258,19 +267,19 @@ static void window_timer(void *_drv)
     case WIN_rdata_on:
         if (dma_rd->state == DMA_active)
             gpio_configure_pin(gpio_data, pin_rdata, AFO_rdata);
-        timer_set(&w->timer, now + time_ms(10));
+        timer_set(&w->timer, now + rd_before_ry);
         break;
 
     case WIN_ready_on:
         if (motor.on)
-            gpio_write_pin(gpio_out, pin_ready, LOW);
+            write_pin(ready, LOW);
         timer_set(&w->timer,
                   now + drv->image->qd.win_end - drv->image->qd.win_start);
         break;
 
     case WIN_ready_off:
-        gpio_write_pin(gpio_out, pin_ready, HIGH);
-        timer_set(&w->timer, now + time_ms(10));
+        write_pin(ready, HIGH);
+        timer_set(&w->timer, now + rd_after_ry);
         break;
 
     case WIN_rdata_off:
