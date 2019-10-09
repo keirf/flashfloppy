@@ -3,6 +3,14 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.5a - 9 October 2019
+ - New Main Menu: Press Prev/Next or Select with no Flash drive inserted
+   - Factory Reset, Firmware Update, OSD Config
+ - OSD: Must be updated to latest version: v1.7 or later!
+ - OSD: Receive Gotek button commands via I2C
+ - OSD: Default to 40 columns if no other display is connected
+ - TR-DOS (TRD): Fix geometry detection based on TR-DOS header
+
 ** v3.4a - 25 September 2019
  - FF OSD support
    - Bus sharing with existing LCD/OLED display
