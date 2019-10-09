@@ -1900,6 +1900,22 @@ static void noinline volume_space(void)
 
 }
 
+/* Wait 50ms for 2-button press. */
+static uint8_t wait_twobutton_press(uint8_t b)
+{
+    unsigned int wait;
+
+    for (wait = 0; wait < 50; wait++) {
+        if ((buttons & (B_LEFT|B_RIGHT)) == (B_LEFT|B_RIGHT))
+            b = B_SELECT;
+        if (b & B_SELECT)
+            break;
+        delay_ms(1);
+    }
+
+    return b;
+}
+
 static uint8_t menu_wait_button(bool_t twobutton_eject, const char *led_msg)
 {
     unsigned int wait = 0;
@@ -1934,18 +1950,7 @@ static uint8_t menu_wait_button(bool_t twobutton_eject, const char *led_msg)
         }
     }
 
-    if (twobutton_eject) {
-        /* Wait 50ms for 2-button press. */
-        for (wait = 0; wait < 50; wait++) {
-            if ((buttons & (B_LEFT|B_RIGHT)) == (B_LEFT|B_RIGHT))
-                b = B_SELECT;
-            if (b & B_SELECT)
-                break;
-            delay_ms(1);
-        }
-    }
-
-    return b;
+    return twobutton_eject ? wait_twobutton_press(b) : b;
 }
 
 static uint8_t noinline display_error(FRESULT fres, uint8_t b)
@@ -2116,38 +2121,6 @@ out:
     return ok;
 }
 
-static void ff_osd_configure(void)
-{
-    if (!has_osd || !confirm("OSD Cnf"))
-        return;
-
-    lcd_clear();
-    lcd_write(0, 0, -1, "Exit: Power Off");
-    lcd_write(0, 1, -1, "or Eject USB/SD");
-
-    for (;;) {
-        time_t t = time_now();
-        uint8_t b = buttons;
-        if (b == (B_LEFT|B_RIGHT)) {
-            osd_buttons_tx = B_SELECT;
-            /* Wait for two-button release. */
-            while ((time_diff(t, time_now()) < time_ms(1000)) && buttons)
-                continue;
-        } else if (b & (B_LEFT|B_RIGHT)) {
-            /* Wait 50ms for a two-button press. */
-            while ((b == buttons) && (time_diff(t, time_now()) < time_ms(50)))
-                continue;
-            osd_buttons_tx = (buttons == (B_LEFT|B_RIGHT)) ? B_SELECT : b;
-        } else {
-            osd_buttons_tx = b;
-        }
-        /* Hold button-held state for a while to make sure it gets 
-         * transferred to the OSD. */
-        if (osd_buttons_tx)
-            delay_ms(100);
-    }
-}
-
 static uint8_t noinline eject_menu(uint8_t b)
 {
     const static char *menu[] = {
@@ -2157,20 +2130,14 @@ static uint8_t noinline eject_menu(uint8_t b)
         "Delete Image",
         "Exit to Selector",
         "Exit & Re-Insert",
-        "Configure FF OSD",
     };
 
-    int nr_opts = ARRAY_SIZE(menu);
     char msg[17];
     unsigned int wait;
     int sel = 0;
     bool_t twobutton_eject =
         ((ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject)
         || (display_mode == DM_LCD_OLED); /* or two buttons can't exit menu */
-
-    /* Only allow FF OSD configuration if we have OSD attached. */
-    if (!has_osd)
-        nr_opts--;
 
     menu_mode = TRUE;
 
@@ -2269,9 +2236,6 @@ static uint8_t noinline eject_menu(uint8_t b)
             case 0: case 5: /* Exit & Re-Insert */
                 b = 0;
                 goto out;
-            case 6:
-                ff_osd_configure();
-                break;
             }
         }
  
@@ -2475,21 +2439,22 @@ static int floppy_main(void *unused)
     return 0;
 }
 
-static void cfg_maybe_factory_reset(void)
+static bool_t main_menu_confirm(const char *op)
 {
-    unsigned int i;
-    uint8_t b = buttons;
+    char msg[17];
+    uint8_t b;
 
-    /* Need both LEFT and RIGHT pressed, or SELECT alone. */
-    if ((b != (B_LEFT|B_RIGHT)) && (b != B_SELECT))
-        return;
+    snprintf(msg, sizeof(msg), "Confirm %s?", op);
+    lcd_write(0, 1, -1, msg);
 
-    /* Buttons must be continuously pressed for three seconds. */
-    for (i = 0; (i < 3000) && (buttons == b); i++)
-        delay_ms(1);
-    if (buttons != b)
-        return;
+    while ((b = buttons) == 0)
+        continue;
 
+    return wait_twobutton_press(b) == B_SELECT;
+}
+
+static void factory_reset(void)
+{
     /* Inform user that factory reset is about to occur. */
     switch (display_mode) {
     case DM_LED_7SEG:
@@ -2517,6 +2482,120 @@ static void cfg_maybe_factory_reset(void)
     system_reset();
 }
 
+static void update_firmware(void)
+{
+    /* Power up the backup-register interface and allow writes. */
+    rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
+    pwr->cr |= PWR_CR_DBP;
+
+    /* Indicate to bootloader that we want to perform firmware update. */
+    bkp->dr1[0] = 0xdead;
+    bkp->dr1[1] = 0xbeef;
+
+    /* Reset everything (except backup registers). */
+    system_reset();
+}
+
+static void ff_osd_configure(void)
+{
+    if (!has_osd || !main_menu_confirm("OSD Cnf"))
+        return;
+
+    lcd_write(0, 1, -1, "Exit: Power Off");
+
+    for (;;) {
+        time_t t = time_now();
+        uint8_t b = buttons;
+        if (b == (B_LEFT|B_RIGHT)) {
+            osd_buttons_tx = B_SELECT;
+            /* Wait for two-button release. */
+            while ((time_diff(t, time_now()) < time_ms(1000)) && buttons)
+                continue;
+        } else if (b & (B_LEFT|B_RIGHT)) {
+            /* Wait 50ms for a two-button press. */
+            while ((b == buttons) && (time_diff(t, time_now()) < time_ms(50)))
+                continue;
+            osd_buttons_tx = (buttons == (B_LEFT|B_RIGHT)) ? B_SELECT : b;
+        } else {
+            osd_buttons_tx = b;
+        }
+        /* Hold button-held state for a while to make sure it gets 
+         * transferred to the OSD. */
+        if (osd_buttons_tx)
+            delay_ms(100);
+    }
+}
+
+static void main_menu(void)
+{
+    const static char *menu[] = {
+        "**Main Menu**",
+        "Factory Reset",
+        "Update Firmware",
+        "Configure FF OSD",
+        "Exit",
+    };
+
+    int sel = 0;
+    uint8_t b;
+
+    /* Not available to 7-segment display. */
+    if (display_mode != DM_LCD_OLED)
+        return;
+
+    menu_mode = TRUE;
+
+    for (;;) {
+
+        if (sel < 0)
+            sel += ARRAY_SIZE(menu);
+        if (sel >= ARRAY_SIZE(menu))
+            sel -= ARRAY_SIZE(menu);
+
+        lcd_write(0, 1, -1, menu[sel]);
+        lcd_on();
+
+        /* Wait for buttons to be released. */
+        while (buttons != 0)
+            continue;
+
+        /* Wait for any button to be pressed. */
+        while ((b = buttons) == 0)
+            continue;
+        b = wait_twobutton_press(b);
+
+        if (b & B_LEFT)
+            sel--;
+        if (b & B_RIGHT)
+            sel++;
+
+        if (b & B_SELECT) {
+            /* Wait for buttons to be released. */
+            while (buttons)
+                continue;
+            switch (sel) {
+            case 1: /* Factory Reset */
+                if (main_menu_confirm("Reset"))
+                    factory_reset();
+                break;
+            case 2: /* Update Firmware */
+                if (main_menu_confirm("Update"))
+                    update_firmware();
+                break;
+            case 3: /* Configure FF OSD */
+                ff_osd_configure();
+                break;
+            case 0: case 4: /* Exit */
+                goto out;
+            }
+        }
+ 
+    }
+
+out:
+    menu_mode = FALSE;
+}
+
 static void banner(void)
 {
     switch (display_mode) {
@@ -2540,6 +2619,27 @@ static void banner(void)
         lcd_on();
         break;
     }
+}
+
+static void check_buttons(void)
+{
+    unsigned int i;
+    uint8_t b = buttons;
+
+    /* Need both LEFT and RIGHT pressed, or SELECT alone. */
+    if ((b != (B_LEFT|B_RIGHT)) && (b != B_SELECT))
+        return;
+
+    /* Buttons must be continuously pressed for three seconds. */
+    for (i = 0; (i < 3000) && (buttons == b); i++)
+        delay_ms(1);
+
+    if (buttons == b)
+        factory_reset();
+    else
+        main_menu();
+
+    banner();
 }
 
 static void maybe_show_version(void)
@@ -2683,7 +2783,7 @@ int main(void)
         usbh_msc_buffer_set(arena_alloc(512));
         while ((f_mount(&fatfs, "", 1) != FR_OK) && !cfg.usb_power_fault) {
             maybe_show_version();
-            cfg_maybe_factory_reset();
+            check_buttons();
             usbh_msc_process();
         }
         usbh_msc_buffer_set((void *)0xdeadbeef);

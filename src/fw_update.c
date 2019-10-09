@@ -67,6 +67,24 @@ static void canary_check(void)
     ASSERT(_thread_stackbottom[0] == 0xdeadbeef);
 }
 
+static bool_t fw_update_requested(void)
+{
+    bool_t requested;
+
+    /* Power up the backup-register interface and allow writes. */
+    rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
+    pwr->cr |= PWR_CR_DBP;
+
+    /* Has bootloader been requested via magic numbers in the backup regs? */
+    requested = ((bkp->dr1[0] == 0xdead) && (bkp->dr1[1] == 0xbeef));
+
+    /* Clean up backup registers and peripheral clocks. */
+    bkp->dr1[0] = bkp->dr1[1] = 0;
+    rcc->apb1enr = 0;
+
+    return requested;
+}
+
 static void erase_old_firmware(void)
 {
     uint32_t p;
@@ -207,12 +225,19 @@ static void display_setting(bool_t on)
     }
 }
 
+#define B_LEFT 1
+#define B_RIGHT 2
+#define B_SELECT 4
+
 static bool_t buttons_pressed(void)
 {
-    /* Check for both LEFT and RIGHT buttons pressed. */
-    return ((!gpio_read_pin(gpioc, 8) && !gpio_read_pin(gpioc, 7))
-            /* Also respond to third (SELECT) button on its own. */
-            || !gpio_read_pin(gpioc, 6));
+    return (
+        /* Check for both LEFT and RIGHT buttons pressed. */
+        (!gpio_read_pin(gpioc, 8) && !gpio_read_pin(gpioc, 7))
+        || ((osd_buttons_rx & (B_LEFT|B_RIGHT)) == (B_LEFT|B_RIGHT))
+        /* Also respond to third (SELECT) button on its own. */
+        || !gpio_read_pin(gpioc, 6)
+        || (osd_buttons_rx & B_SELECT));
 }
 
 /* Wait for both buttons to be pressed (LOW) or not pressed (HIGH). Perform 
@@ -229,7 +254,8 @@ static void wait_buttons(uint8_t level)
             /* All buttons must be released. */
             x |= gpio_read_pin(gpioc, 8)
                 && gpio_read_pin(gpioc, 7)
-                && gpio_read_pin(gpioc, 6);
+                && gpio_read_pin(gpioc, 6)
+                && !osd_buttons_rx;
         } else {
             x |= buttons_pressed();
         }
@@ -253,7 +279,7 @@ int main(void)
     gpioc->crl = 0x88888888u;
 
     /* Enter update mode only if buttons are pressed. */
-    if (!buttons_pressed()) {
+    if (!buttons_pressed() && !fw_update_requested()) {
         /* Nope, so jump straight at the main firmware. */
         uint32_t sp = *(uint32_t *)FIRMWARE_START;
         uint32_t pc = *(uint32_t *)(FIRMWARE_START + 4);
@@ -300,9 +326,6 @@ int main(void)
 
     usbh_msc_init();
     usbh_msc_buffer_set(USBH_Cfg_Rx_Buffer);
-
-    /* Wait for buttons to be pressed. */
-    wait_buttons(LOW);
 
     /* Wait for buttons to be released. */
     wait_buttons(HIGH);
