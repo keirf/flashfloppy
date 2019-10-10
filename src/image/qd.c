@@ -228,7 +228,7 @@ static bool_t qd_write_track(struct image *im)
 
     for (;;) {
 
-        uint32_t batch_off, off = im->qd.trk_pos;
+        uint32_t off = im->qd.trk_pos;
         UINT nr;
 
         /* All bytes remaining in the raw-bitcell buffer. */
@@ -243,18 +243,14 @@ static bool_t qd_write_track(struct image *im)
             break;
 
         /* Bail if required data not in the write buffer. */
-        batch_off = off & ~511;
-        if ((batch_off < im->qd.write_batch.off)
-            || (batch_off >= (im->qd.write_batch.off
-                              + im->qd.write_batch.len))) {
+        if ((off < im->qd.write_batch.off)
+            || (off >= (im->qd.write_batch.off + im->qd.write_batch.len))) {
             writeback = TRUE;
             break;
         }
 
         /* Encode into the sector buffer for later write-out. */
-        w = wrbuf
-            + batch_off - im->qd.write_batch.off
-            + (off & 511);
+        w = &wrbuf[off - im->qd.write_batch.off];
         for (i = 0; i < nr; i++)
             *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
         im->qd.write_batch.dirty = TRUE;
