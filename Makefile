@@ -36,7 +36,7 @@ dist:
 	mkdir -p flashfloppy-$(VER)/alt/bootloader
 	mkdir -p flashfloppy-$(VER)/alt/logfile
 	mkdir -p flashfloppy-$(VER)/alt/io-test
-	mkdir -p flashfloppy-$(VER)/alt/quickdisk
+	mkdir -p flashfloppy-$(VER)/alt/quickdisk/logfile
 	$(MAKE) clean
 	$(MAKE) gotek
 	cp -a FF_Gotek-$(VER).dfu flashfloppy-$(VER)/
@@ -50,6 +50,9 @@ dist:
 	$(MAKE) clean
 	quickdisk=y $(MAKE) -f $(ROOT)/Rules.mk upd
 	mv FF.upd flashfloppy-$(VER)/alt/quickdisk/FF_Gotek-QuickDisk-$(VER).upd
+	$(MAKE) clean
+	quickdisk=y debug=n logfile=y $(MAKE) -f $(ROOT)/Rules.mk upd
+	mv FF.upd flashfloppy-$(VER)/alt/quickdisk/logfile/FF_Gotek-QuickDisk-Logfile-$(VER).upd
 	python scripts/mk_qd.py flashfloppy-$(VER)/alt/quickdisk/Blank.qd
 	$(MAKE) clean
 	cp -a COPYING flashfloppy-$(VER)/
