@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.6a - 13 October 2019
+ - Quick Disk Initial Release
+   - New firmware and blank QD image in alt/quickdisk
+   - Documentation in the Wiki
+ - Update HxC Compat to v7-FF
+   - Fix failure when booted on unmodded A1200 ESCOM boards
+
 ** v3.5a - 9 October 2019
  - New Main Menu: Press Prev/Next or Select with no Flash drive inserted
    - Factory Reset, Firmware Update, OSD Config
