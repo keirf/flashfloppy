@@ -9,6 +9,12 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#ifdef QUICKDISK
+#define is_quickdisk TRUE
+#else
+#define is_quickdisk FALSE
+#endif
+
 #define FINTF_SHUGART     0
 #define FINTF_IBMPC       1
 #define FINTF_IBMPC_HDOUT 2

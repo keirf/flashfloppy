@@ -2745,7 +2745,8 @@ int main(void)
     board_init();
     delay_ms(200); /* 5v settle */
 
-    printk("\n** FlashFloppy v%s for Gotek\n", fw_ver);
+    printk("\n** FlashFloppy%s v%s for Gotek\n",
+           is_quickdisk ? " [QuickDisk]" : "", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
 
