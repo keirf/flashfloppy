@@ -143,6 +143,7 @@ static void floppy_sync_flux(void)
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
     struct drive *drv = &drive;
     uint16_t nr_to_wrap, nr_to_cons, nr;
+    uint32_t oldpri;
 
     /* No DMA should occur until the timer is enabled. */
     ASSERT(dma_rd->cons == (ARRAY_SIZE(dma_rd->buf) - dma_rdata.cndtr));
@@ -168,11 +169,12 @@ static void floppy_sync_flux(void)
     if (!motor.on)
         return;
 
+    oldpri = IRQ_save(TIMER_IRQ_PRI);
     timer_cancel(&index.timer);
     rdata_start();
-    window.state = WIN_rdata_on;
-    timer_set(&window.timer,
-              time_now() + drv->image->qd.win_start - rd_before_ry);
+    index.timer.deadline = time_now();
+    index_assert(NULL);
+    IRQ_restore(oldpri);
 }
 
 static bool_t dma_rd_handle(struct drive *drv)
