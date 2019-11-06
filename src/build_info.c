@@ -8,6 +8,8 @@
  */
 
 const char fw_ver[] = FW_VER;
+const char build_date[] = __DATE__;
+const char build_time[] = __TIME__;
 
 /*
  * Local variables:

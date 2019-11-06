@@ -198,6 +198,8 @@ extern uint8_t board_id;
 
 /* Build info. */
 extern const char fw_ver[];
+extern const char build_date[];
+extern const char build_time[];
 
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];
