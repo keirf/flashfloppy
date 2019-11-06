@@ -327,7 +327,7 @@ static bool_t hfe_write_track(struct image *im)
         ASSERT(!im->hfe.write_batch.dirty);
         im->hfe.write_batch.off = (im->hfe.trk_pos & ~255) << 1;
         im->hfe.write_batch.len = min_t(
-            uint16_t, batch_secs * 512,
+            uint32_t, batch_secs * 512,
             (((im->hfe.trk_len * 2) + 511) & ~511) - im->hfe.write_batch.off);
         F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
         F_read(&im->fp, wrbuf, im->hfe.write_batch.len, NULL);

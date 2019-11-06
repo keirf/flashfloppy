@@ -219,7 +219,7 @@ static bool_t qd_write_track(struct image *im)
         ASSERT(!im->qd.write_batch.dirty);
         im->qd.write_batch.off = im->qd.trk_pos & ~511;
         im->qd.write_batch.len = min_t(
-            uint16_t, batch_secs * 512,
+            uint32_t, batch_secs * 512,
             ((im->qd.trk_len + 511) & ~511) - im->qd.write_batch.off);
         F_lseek(&im->fp, im->qd.trk_off + im->qd.write_batch.off);
         F_read(&im->fp, wrbuf, im->qd.write_batch.len, NULL);
