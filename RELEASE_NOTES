@@ -3,6 +3,15 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.7a - 11 November 2019
+ - Quick Disk Bug Fixes
+   - Fix write offsets and lengths within QD track
+   - Filter ADF images from navigator: only QD images supported
+   - Extra logging in FFLOG.TXT for debug purposes
+ - Amiga AutoSwap new title: Gobliiiins
+   - Thanks to Arkadiusz Makarenko!
+   - https://github.com/keirf/FF_AutoSwap/wiki/Downloads
+
 ** v3.6a - 13 October 2019
  - Quick Disk Initial Release
    - New firmware and blank QD image in alt/quickdisk
