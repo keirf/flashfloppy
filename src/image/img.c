@@ -759,30 +759,31 @@ static bool_t trd_open(struct image *im)
     if (geometry.id != 0x10)
         return FALSE;
 
-    /* Only four type identifiers are recognised: We use it to determine 
-     * number of disk sides. */
+    /* Use type identifier as a geometry hint. Default to double sided. */
     switch (geometry.type) {
-    case 0x16:
-    case 0x17:
-        im->nr_sides = 2;
-        break;
     case 0x18:
     case 0x19:
         im->nr_sides = 1;
         break;
     default:
-        return FALSE;
+        im->nr_sides = 2;
+        break;
     }
 
     /* Calculate total sectors on disk: First-free plus number-of-free. */
     tot_secs = (geometry.free_sec + geometry.free_trk * 16
                 + geometry.free_secs_lo + geometry.free_secs_hi * 256);
     if ((tot_secs & 15) || (tot_secs > 4096))
-        return FALSE; /* Too large or not a track multiple */
+        tot_secs = 0; /* Invalid: Too large or not a track multiple */
+
+    /* Consider image size if reported total sectors is small or invalid. */
+    tot_secs = max_t(unsigned int, tot_secs, im_size(im)/256);
 
     /* Calculate total tracks and thus number of cylinders. */
     tot_trks = tot_secs >> 4;
     im->nr_cyls = (tot_trks + im->nr_sides - 1) / im->nr_sides;
+    if (im->nr_cyls == 0)
+        return FALSE;
 
     im->img.interleave = 1;
 
