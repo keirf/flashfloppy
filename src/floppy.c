@@ -300,7 +300,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     floppy_mount(slot);
     im = image;
 
-    if (im->write_bc_ticks < sysclk_ns(1500))
+    if (im->write_bc_ticks < sysclk_ns(1500) || im->adf.nr_secs == 22)
         drive_change_output(drv, outp_hden, TRUE);
 
     timer_dma_init();
