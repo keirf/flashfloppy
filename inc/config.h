@@ -25,7 +25,7 @@ int get_next_opt(struct opts *opts);
 #define OPT_section -2
 
 /* FF.CFG options structure. */
-struct __packed ff_cfg {
+struct packed ff_cfg {
     /* Bump version for every incompatible change to structure layout. 
      * No need to bump for new fields appended to this structure. */
 #define FFCFG_VERSION 2

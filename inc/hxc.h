@@ -10,7 +10,7 @@
  */
 
 /* HXCSDFE.CFG file header. */
-struct __packed hxcsdfe_cfg {
+struct packed hxcsdfe_cfg {
     char     signature[16]; /* "HXCFECFGVx.y" */
     uint8_t  step_sound;
     uint8_t  ihm_sound;
@@ -27,7 +27,7 @@ struct __packed hxcsdfe_cfg {
     uint8_t  startup_mode;
     uint8_t  enable_drive_b;
     uint8_t  index_mode;
-    struct __packed {
+    struct packed {
         uint8_t  cfg_from_cfg;
         uint8_t  interfacemode;
         uint8_t  pin02_cfg;
@@ -47,7 +47,7 @@ struct __packed hxcsdfe_cfg {
 #define HXCSTARTUP_ejected 0x10
 
 /* HXCFECFGV1.x slots start at offset 0x400: */
-struct __packed v1_slot {
+struct packed v1_slot {
     char     name[12];
     uint8_t  attributes;
     uint32_t firstCluster;
@@ -56,7 +56,7 @@ struct __packed v1_slot {
 };
 
 /* HXCFECFGV2.x slots start at sector offset 'slots_position': */
-struct __packed v2_slot {
+struct packed v2_slot {
     char     type[3];
     uint8_t  attributes;
     uint32_t firstCluster;

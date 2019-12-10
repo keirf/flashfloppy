@@ -36,7 +36,7 @@
 #define OSD_HEIGHTS      0x20 /* [3:0] = 1 iff row is 2x height */
 #define OSD_BUTTONS      0x30 /* [3:0] = button mask */
 #define OSD_COLUMNS      0x40 /* [6:0] = #columns */
-struct __packed i2c_osd_info {
+struct packed i2c_osd_info {
     uint8_t protocol_ver;
     uint8_t fw_major, fw_minor;
     uint8_t buttons;
@@ -92,7 +92,7 @@ static bool_t i2c_btf_stop(void);
 static volatile uint8_t refresh_count;
 
 /* I2C data buffer. Data is DMAed to the I2C peripheral. */
-static uint8_t buffer[256] __aligned(4);
+static uint8_t buffer[256] aligned(4);
 
 /* Text buffer, rendered into I2C data and placed into buffer[]. */
 static char text[4][40];
