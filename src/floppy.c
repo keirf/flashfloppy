@@ -122,10 +122,15 @@ static void drive_change_output(
     drive_change_pin(drv, pin, assert);
 }
 
-static void update_amiga_id(bool_t amiga_hd_id)
+static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
 {
     /* Only for the Amiga interface, with hacked RDY (pin 34) signal. */
     if (fintf_mode != FINTF_AMIGA)
+        return;
+
+    drive_change_output(drv, outp_hden, amiga_hd_id);
+
+    if (pin34 != outp_unused)
         return;
 
     IRQ_global_disable();
@@ -159,7 +164,7 @@ void floppy_cancel(void)
      * Asserting WRPROT prevents any further calls to wdata_start(). */
     drive_change_output(drv, outp_wrprot, TRUE);
     drive_change_output(drv, outp_hden, FALSE);
-    update_amiga_id(FALSE);
+    update_amiga_id(drv, FALSE);
 
     /* Stop DMA + timer work. */
     IRQx_disable(dma_rdata_irq);
@@ -245,7 +250,7 @@ void floppy_set_fintf_mode(void)
     IRQ_global_enable();
 
     /* Default to Amiga-DD identity until HD image is mounted. */
-    update_amiga_id(FALSE);
+    update_amiga_id(drv, FALSE);
 
     printk("Interface: %s (pin2=%s%s, pin34=%s%s)\n",
            fintf_name[mode],
@@ -306,7 +311,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     timer_dma_init();
 
     /* Drive is ready. Set output signals appropriately. */
-    update_amiga_id(im->stk_per_rev > stk_ms(300));
+    update_amiga_id(drv, im->stk_per_rev > stk_ms(300));
     if (!(slot->attributes & AM_RDO))
         drive_change_output(drv, outp_wrprot, FALSE);
     barrier();
