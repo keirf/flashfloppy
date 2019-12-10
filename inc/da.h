@@ -14,7 +14,7 @@
 #define DA_DD_MFM_CYL (DA_FIRST_CYL + 1)
 
 /* Direct-Access Mode: Returned in sector 0 of direct-access track. */
-struct __packed da_status_sector {
+struct packed da_status_sector {
     char sig[8];
     char fw_ver[12];
     uint32_t lba_base;
@@ -32,7 +32,7 @@ struct __packed da_status_sector {
 };
 
 /* Direct-Access Mode: Sent to us in sector 0 of direct-access track. */
-struct __packed da_cmd_sector {
+struct packed da_cmd_sector {
     char sig[8];
     uint8_t cmd;
     uint8_t param[8];

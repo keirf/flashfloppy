@@ -29,7 +29,7 @@ def main(argv):
     gap = 16 - height
     tgap = gap // 2
     bgap = gap - tgap
-    out_f.write("const uint8_t %s[] __aligned(4) = {\n" % argv[2])
+    out_f.write("const uint8_t %s[] aligned(4) = {\n" % argv[2])
     for line in in_f:
         # Look for a new character encoding
         match = re.match("^ENCODING ([0-9]+)", line)
