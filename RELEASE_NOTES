@@ -3,6 +3,15 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.8a - 10 December 2019
+ - USB: Fix buffer overflow when parsing string descriptors
+   - Fixes crash with recent SanDisk Ultra Fit drives
+ - HxC Compat, v8-FF: Fixes startup crash on Atari ST
+ - Amiga: Fixes for "interface = amiga" setting
+ - TR-DOS (TRD): Fix geometry when TR-DOS header is incomplete
+ - Quick Disk: Larger read/write window in default blank image
+ - GCC9 build fixes
+
 ** v3.7a - 11 November 2019
  - Quick Disk Bug Fixes
    - Fix write offsets and lengths within QD track
