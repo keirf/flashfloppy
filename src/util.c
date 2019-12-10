@@ -134,7 +134,7 @@ size_t strnlen(const char *s, size_t maxlen)
 
 int strcmp(const char *s1, const char *s2)
 {
-    return strncmp(s1, s2, ~0);
+    return strncmp(s1, s2, INT_MAX);
 }
 
 int strncmp(const char *s1, const char *s2, size_t n)

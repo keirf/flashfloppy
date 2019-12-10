@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <limits.h>
 
 #include "stm32f10x_regs.h"
 #include "stm32f10x.h"
