@@ -531,7 +531,7 @@ static USBH_Status USBH_HandleEnum(USB_OTG_CORE_HANDLE *pdev, USBH_HOST *phost)
                                      phost,
                                      phost->device_prop.Dev_Desc.iManufacturer,
                                      Local_Buffer ,
-                                     0xff) == USBH_OK)
+                                     sizeof(Local_Buffer)) == USBH_OK)
             {
                 /* User callback for Manufacturing string */
                 phost->usr_cb->ManufacturerString(Local_Buffer);
@@ -552,7 +552,7 @@ static USBH_Status USBH_HandleEnum(USB_OTG_CORE_HANDLE *pdev, USBH_HOST *phost)
                                      phost,
                                      phost->device_prop.Dev_Desc.iProduct,
                                      Local_Buffer,
-                                     0xff) == USBH_OK)
+                                     sizeof(Local_Buffer)) == USBH_OK)
             {
                 /* User callback for Product string */
                 phost->usr_cb->ProductString(Local_Buffer);
@@ -573,7 +573,7 @@ static USBH_Status USBH_HandleEnum(USB_OTG_CORE_HANDLE *pdev, USBH_HOST *phost)
                                      phost,
                                      phost->device_prop.Dev_Desc.iSerialNumber,
                                      Local_Buffer,
-                                     0xff) == USBH_OK)
+                                     sizeof(Local_Buffer)) == USBH_OK)
             {
                 /* User callback for Serial number string */
                 phost->usr_cb->SerialNumString(Local_Buffer);
