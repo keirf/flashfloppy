@@ -19,9 +19,6 @@ typedef char bool_t;
 #define TRUE 1
 #define FALSE 0
 
-#define LONG_MAX ((long int)((~0UL)>>1))
-#define LONG_MIN ((long int)~LONG_MAX)
-
 #ifndef offsetof
 #define offsetof(a,b) __builtin_offsetof(a,b)
 #endif
