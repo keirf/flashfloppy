@@ -135,7 +135,7 @@ USBH_Status USBH_Get_StringDesc(USB_OTG_CORE_HANDLE *pdev,
                                     USB_REQ_RECIPIENT_DEVICE | USB_REQ_TYPE_STANDARD,
                                     USB_DESC_STRING | string_index,
                                     Cfg_Rx_Buffer,
-                                    length)) == USBH_OK)
+                                    512)) == USBH_OK)
     {
         /* Commands successfully sent and Response Received  */
         USBH_ParseStringDesc(Cfg_Rx_Buffer, buff, length);
@@ -522,30 +522,23 @@ static void USBH_ParseStringDesc (uint8_t* psrc,
                                   uint8_t* pdest,
                                   uint16_t length)
 {
-    uint16_t strlength;
-    uint16_t idx;
+    /* Make sure the Descriptor is String Type */
+    if (psrc[1] == USB_DESC_TYPE_STRING) {
 
-    /* The UNICODE string descriptor is not NULL-terminated. The string length is
-       computed by subtracting two from the value of the first byte of the descriptor.
-    */
+        /* The UNICODE string descriptor is not NUL-terminated. The string
+         * length is computed from the descriptor length. Divide by two
+         * to account for UTF-16 encoding. */
+        length = min_t(uint16_t, psrc[0]/2 - 1, length - 1);
 
-    /* Check which is lower size, the Size of string or the length of bytes read
-       from the device */
-
-    if ( psrc[1] == USB_DESC_TYPE_STRING)
-    { /* Make sure the Descriptor is String Type */
-
-        /* psrc[0] contains Size of Descriptor, subtract 2 to get the length of string */
-        strlength = ( ( (psrc[0]-2) <= length) ? (psrc[0]-2) :length);
-        psrc += 2; /* Adjust the offset ignoring the String Len and Descriptor type */
-
-        for (idx = 0; idx < strlength; idx+=2 )
-        {/* Copy Only the string and ignore the UNICODE ID, hence add the src */
-            *pdest =  psrc[idx];
-            pdest++;
+        while (length--) {
+            psrc += 2;
+            *pdest++ = *psrc;
         }
-        *pdest = 0; /* mark end of string */
+
     }
+
+    /* Mark end of string. */
+    *pdest = '\0';
 }
 
 /**
