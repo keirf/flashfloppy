@@ -62,6 +62,8 @@ static struct {
 
 uint8_t board_id;
 
+#define BUTTON_SCAN_HZ 500
+#define BUTTON_SCAN_MS (1000/BUTTON_SCAN_HZ)
 static uint32_t display_ticks;
 static uint8_t display_state;
 enum { BACKLIGHT_OFF, BACKLIGHT_SWITCHING_ON, BACKLIGHT_ON };
@@ -357,7 +359,7 @@ static uint8_t lcd_handle_backlight(uint8_t b)
         /* After a period with no button activity we turn the backlight off. */
         if (b)
             display_ticks = 0;
-        if (display_ticks++ >= 200*ff_cfg.display_off_secs) {
+        if (display_ticks++ >= BUTTON_SCAN_HZ*ff_cfg.display_off_secs) {
             lcd_backlight(FALSE);
             display_state = BACKLIGHT_OFF;
         }
@@ -386,7 +388,7 @@ static uint8_t led_handle_display(uint8_t b)
         break;
     case LED_BUTTON_RELEASED:
         /* After a period with no button activity we return to track number. */
-        if (display_ticks++ >= 200*3)
+        if (display_ticks++ >= BUTTON_SCAN_HZ*3)
             display_state = LED_TRACK;
         break;
     }
@@ -409,11 +411,14 @@ static void button_timer_fn(void *unused)
         [ROT_half]    = 0x24000018, /* 2 transitions (half cycle) per detent */
         [ROT_quarter] = 0x24428118  /* 1 transition (quarter cyc) per detent */
     };
+    const uint8_t rotary_states_per_detent[] = {
+        [ROT_full] = 4, [ROT_half] = 3, [ROT_quarter] = 2
+    };
     const uint8_t rotary_reverse[4] = {
         [B_LEFT] = B_RIGHT, [B_RIGHT] = B_LEFT
     };
 
-    static uint16_t _b[3]; /* 0 = left, 1 = right, 2 = select */
+    static uint32_t _b[3]; /* 0 = left, 1 = right, 2 = select */
     uint8_t b = osd_buttons_rx, rb;
     bool_t twobutton_rotary =
         (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_rotary;
@@ -427,7 +432,7 @@ static void button_timer_fn(void *unused)
     }
 
     /* We debounce the switches by waiting for them to be pressed continuously 
-     * for 16 consecutive sample periods (16 * 5ms == 80ms) */
+     * for 32 consecutive sample periods (32 * 2ms == 64ms) */
     for (i = 0; i < 3; i++) {
         _b[i] <<= 1;
         _b[i] |= gpio_read_pin(gpioc, 8-i);
@@ -444,22 +449,23 @@ static void button_timer_fn(void *unused)
 
     rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
     switch (ff_cfg.rotary & ~ROT_reverse) {
+
     case ROT_trackball: {
-        static uint8_t count, thresh, dir;
+        static uint16_t count, thresh, dir;
         rb = rotary_reverse[(rotary ^ (rotary >> 2)) & 3];
         if (rb == 0) {
             /* Idle: Increase threshold, decay the counter. */
-            if (thresh < 72) thresh++;
-            if (count) count--;
+            thresh = min_t(int, thresh + BUTTON_SCAN_MS, 360);
+            count = max_t(int, count - BUTTON_SCAN_MS, 0);
         } else if (rb != dir) {
             /* Change of direction: Put the brakes on. */
             dir = rb;
             count = rb = 0;
-            thresh = 72;
+            thresh = 360;
         } else {
             /* Step in same direction: Increase count, decay the threshold. */
-            count += 32;
-            thresh = max_t(int, 0, thresh - 8);
+            count += 160;
+            thresh = max_t(int, 0, thresh - 40);
             if (count >= thresh) {
                 /* Count exceeds threshold: register a press. */
                 count = 0;
@@ -470,12 +476,33 @@ static void button_timer_fn(void *unused)
         }
         break;
     }
+
     case ROT_buttons:
         rb = rotary_reverse[rotary & 3];
         break;
-    default: /* rotary encoder */
+
+    default: /* rotary encoder */ {
+        static uint8_t count, states;
+        uint8_t mask = 1 << (rotary & 3);
+        if (!(states & mask)) {
+            /* Not seen this state yet: Add it to the count. */
+            states |= mask;
+            count++;
+        }
         rb = (rotary_transitions[ff_cfg.rotary & 3] >> (rotary << 1)) & 3;
+        if (rb) {
+            if (count < rotary_states_per_detent[ff_cfg.rotary & 3]) {
+                /* Not seen the required number of state transitions. 
+                 * Reject this as switch bounce. */
+                rb = 0;
+            } else {
+                /* Valid encoder movement: Reset the states detector. */
+                states = count = 0;
+            }
+        }
         break;
+    }
+
     }
     if (ff_cfg.rotary & ROT_reverse)
         rb = rotary_reverse[rb];
@@ -492,7 +519,7 @@ static void button_timer_fn(void *unused)
 
     /* Latch final button state and reset the timer. */
     buttons = b;
-    timer_set(&button_timer, button_timer.deadline + time_ms(5));
+    timer_set(&button_timer, button_timer.deadline + time_ms(BUTTON_SCAN_MS));
 }
 
 static void canary_init(void)
