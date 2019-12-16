@@ -84,6 +84,8 @@ void qsort_p(void *base, unsigned int nr,
 
 uint32_t rand(void);
 
+unsigned int popcount(uint32_t x);
+
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
     __attribute__ ((format (printf, 3, 0)));
 

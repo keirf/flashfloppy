@@ -311,6 +311,13 @@ uint32_t rand(void)
     return x;
 }
 
+unsigned int popcount(uint32_t x)
+{
+    x = x - ((x >> 1) & 0x55555555);
+    x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+    return (((x + (x >> 4)) & 0x0f0f0f0f) * 0x01010101) >> 24;
+}
+
 /*
  * Local variables:
  * mode: C

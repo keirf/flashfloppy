@@ -396,6 +396,56 @@ static uint8_t led_handle_display(uint8_t b)
     return b;
 }
 
+static uint8_t read_rotary(uint8_t rotary)
+{
+    /* Rotary encoder outputs a Gray code, counting clockwise: 00-01-11-10. */
+    const uint32_t rotary_transitions = 0x24428118;
+
+    /* Number of back-to-back transitions we see per detent on various 
+     * types of rotary encoder. */
+    const uint8_t rotary_transitions_per_detent[] = {
+        [ROT_full] = 4, [ROT_half] = 2, [ROT_quarter] = 1
+    };
+
+    /* p_t(x) returns the previous valid transition in same direction. 
+     * eg. p_t(0b0111) == 0b0001 */
+#define p_t(x) (((x)>>2)|((((x)^3)&3)<<2))
+
+    /* Bitmask of which valid 4-bit transition codes we have seen in each 
+     * direction (CW and CCW). */
+    static uint16_t t_seen[2];
+
+    uint16_t ts;
+    uint8_t rb;
+
+    /* Check if we have seen a valid CW or CCW state transition. */
+    rb = (rotary_transitions >> (rotary << 1)) & 3;
+    if (likely(!rb))
+        return 0; /* Nope */
+
+    /* Have we seen the /previous/ transition in this direction? If not, any 
+     * previously-recorded transitions are not in a contiguous step-wise
+     * sequence, and should be discarded as switch bounce. */
+    ts = t_seen[rb-1];
+    if (!(ts & (1<<p_t(rotary))))
+        ts = 0; /* Clear any existing bounce transitions. */
+
+    /* Record this transition and check if we have seen enough to get 
+     * us from one detent to another. */
+    ts |= (1<<rotary);
+    if (popcount(ts) < rotary_transitions_per_detent[ff_cfg.rotary & 3]) {
+        /* Not enough transitions yet: Remember where we are for next time. */
+        t_seen[rb-1] = ts;
+        return 0;
+    }
+
+    /* This is a valid movement between detents. Clear transition state 
+     * and return the movement to the caller. */
+    t_seen[0] = t_seen[1] = 0;
+    return rb;
+#undef pt
+}
+
 static struct timer button_timer;
 static volatile uint8_t buttons;
 static uint8_t rotary;
@@ -404,16 +454,6 @@ static uint8_t rotary;
 #define B_SELECT 4
 static void button_timer_fn(void *unused)
 {
-    /* Rotary encoder outputs a Gray code, counting clockwise: 00-01-11-10. */
-    const uint32_t rotary_transitions[] = {
-        [ROT_none]    = 0x00000000, /* No encoder */
-        [ROT_full]    = 0x20000100, /* 4 transitions (full cycle) per detent */
-        [ROT_half]    = 0x24000018, /* 2 transitions (half cycle) per detent */
-        [ROT_quarter] = 0x24428118  /* 1 transition (quarter cyc) per detent */
-    };
-    const uint8_t rotary_states_per_detent[] = {
-        [ROT_full] = 4, [ROT_half] = 3, [ROT_quarter] = 2
-    };
     const uint8_t rotary_reverse[4] = {
         [B_LEFT] = B_RIGHT, [B_RIGHT] = B_LEFT
     };
@@ -482,24 +522,7 @@ static void button_timer_fn(void *unused)
         break;
 
     default: /* rotary encoder */ {
-        static uint8_t count, states;
-        uint8_t mask = 1 << (rotary & 3);
-        if (!(states & mask)) {
-            /* Not seen this state yet: Add it to the count. */
-            states |= mask;
-            count++;
-        }
-        rb = (rotary_transitions[ff_cfg.rotary & 3] >> (rotary << 1)) & 3;
-        if (rb) {
-            if (count < rotary_states_per_detent[ff_cfg.rotary & 3]) {
-                /* Not seen the required number of state transitions. 
-                 * Reject this as switch bounce. */
-                rb = 0;
-            } else {
-                /* Valid encoder movement: Reset the states detector. */
-                states = count = 0;
-            }
-        }
+        rb = read_rotary(rotary);
         break;
     }
 
