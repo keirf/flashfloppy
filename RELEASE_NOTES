@@ -3,6 +3,15 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v2.14 - 27 December 2019
+ - IMG: Fix density-select pin output for HD images
+   - Fixes 'pin02=dens' and 'interface=ibmpc-hdout'
+   - Bug has existed since v2.2a
+ - HxC Compat, v8-FF: Fixes startup crash on Atari ST
+ - USB: Fix buffer overflow when parsing string descriptors
+   - Fixes crash with recent SanDisk Ultra Fit drives
+ - GCC9 build fixes
+
 ** v2.13 - 7 June 2019
  - HFE: Fix read buffering error
  - Update HxC Compat to v6-FF
