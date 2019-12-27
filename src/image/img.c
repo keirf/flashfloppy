@@ -1478,15 +1478,6 @@ const struct image_handler xdf_image_handler = {
  * Generic Handlers
  */
 
-static bool_t raw_open(struct image *im)
-{
-    im->img.rpm = im->img.rpm ?: 300;
-    im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
-    volume_cache_init(im->bufs.write_data.p + 1024,
-                      im->img.heap_bottom);
-    return TRUE;
-}
-
 static FSIZE_t raw_extend(struct image *im)
 {
     unsigned int i, j, sz = im->img.base_off;
@@ -1674,6 +1665,20 @@ static void raw_setup_track(
         bc->cons = decode_off * 16;
         *start_pos = sys_ticks;
     }
+}
+
+static bool_t raw_open(struct image *im)
+{
+    im->img.rpm = im->img.rpm ?: 300;
+    im->stk_per_rev = (stk_ms(200) * 300) / im->img.rpm;
+
+    volume_cache_init(im->bufs.write_data.p + 1024,
+                      im->img.heap_bottom);
+
+    /* Initialise write_bc_ticks (used by floppy_insert to set outp_hden). */
+    raw_seek_track(im, 0, 0, 0);
+
+    return TRUE;
 }
 
 void process_data(struct image *im, void *p, unsigned int len)
