@@ -278,9 +278,12 @@ int main(void)
     gpioc->crh = 0x88888888u;
     gpioc->crl = 0x88888888u;
 
-    /* Enter update mode only if buttons are pressed. */
+    /* Enter update mode only if:
+     *  1. Buttons are pressed; or 
+     *  2. It was requested via main firmware; or 
+     *  3. No valid main firmware is found in Flash. */
     if (!buttons_pressed() && !fw_update_requested()) {
-        /* Nope, so jump straight at the main firmware. */
+        /* Check for, and jump to, the main firmware. */
         uint32_t sp = *(uint32_t *)FIRMWARE_START;
         uint32_t pc = *(uint32_t *)(FIRMWARE_START + 4);
         if (sp != ~0u) { /* only if firmware is apparently not erased */
@@ -326,6 +329,9 @@ int main(void)
 
     usbh_msc_init();
     usbh_msc_buffer_set(USBH_Cfg_Rx_Buffer);
+
+    /* Wait for buttons to be pressed. */
+    wait_buttons(LOW);
 
     /* Wait for buttons to be released. */
     wait_buttons(HIGH);
