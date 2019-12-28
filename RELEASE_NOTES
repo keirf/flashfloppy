@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.10a - 28 December 2019
+ - Bootloader: Wait for buttons to be pressed then released...
+   - ...before starting firmware update process
+   - Avoids an infinite loop when reprogramming Bootloader itself
+ 
 ** v3.9a - 27 December 2019
  - IMG: Fix density-select pin output for HD images
    - Fixes 'pin02=dens' and 'interface=ibmpc-hdout'
