@@ -1471,8 +1471,18 @@ static void native_update(uint8_t slot_mode)
                 if (!p) F_die(FR_BAD_IMAGECFG); /* must exist */
                 *p = '\0';
                 if ((q = strrchr(fs->buf, '/')) != NULL) {
-                    lcd_write(0, 3, -1, q+1);
-                    F_lseek(&fs->file, f_tell(&fs->file) - (p-q));
+                    /* We need to find the next preceding '/' so we can update 
+                     * multi-row LCD/OLED display with subfolder info. */
+                    long sz, pos = f_tell(&fs->file) - (p-q);
+                    /* pos-1 = offset of end of subfolder name. */
+                    sz = min_t(long, pos-1, sizeof(fs->buf));
+                    F_lseek(&fs->file, pos-1-sz);
+                    F_read(&fs->file, fs->buf, sz, NULL);
+                    fs->buf[sz] = '\0';
+                    /* q = pointer to '/' preceding the subfolder name. */
+                    q = strrchr(fs->buf, '/');
+                    lcd_write(0, 3, -1, q ? q+1 : fs->buf);
+                    F_lseek(&fs->file, pos);
                 } else {
                     F_lseek(&fs->file, 0);
                     lcd_write(0, 3, -1, "/");
