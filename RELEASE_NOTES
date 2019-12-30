@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.11a - 30 December 2019
+ - LCD/OLED: Fix subfolder name, as shown in 3- & 4-row displays
+   - Subfolder wasn't updated correctly when moving to parent (..) folder
+
 ** v3.10a - 28 December 2019
  - Bootloader: Wait for buttons to be pressed then released...
    - ...before starting firmware update process
