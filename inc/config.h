@@ -85,6 +85,7 @@ struct packed ff_cfg {
 #define HOST_kaypro     14
 #define HOST_nascom     15
 #define HOST_casio      16
+#define HOST_ibm_3174   17
     uint8_t host;
     /* Bitfields within display_type field. */
 #define DISPLAY_auto     0
