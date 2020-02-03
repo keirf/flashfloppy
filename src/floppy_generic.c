@@ -161,17 +161,22 @@ static void floppy_mount(struct slot *slot)
         *cltbl = (MAX_FILE_FRAGS + 1) * 2;
         fatfs_from_slot(&im->fp, slot, FA_READ);
         fastseek_sz = f_size(&im->fp);
-        im->fp.cltbl = cltbl;
-        fr = f_lseek(&im->fp, CREATE_LINKMAP);
-        printk("Fast Seek: %u frags\n", (*cltbl / 2) - 1);
-        if (fr == FR_OK) {
-            DWORD *_cltbl = arena_alloc(*cltbl * 4);
-            ASSERT(_cltbl == cltbl);
-        } else if (fr == FR_NOT_ENOUGH_CORE) {
-            printk("Fast Seek: FAILED\n");
+        if (fastseek_sz == 0) {
+            /* Empty or dummy file. */
             cltbl = NULL;
         } else {
-            F_die(fr);
+            im->fp.cltbl = cltbl;
+            fr = f_lseek(&im->fp, CREATE_LINKMAP);
+            printk("Fast Seek: %u frags\n", (*cltbl / 2) - 1);
+            if (fr == FR_OK) {
+                DWORD *_cltbl = arena_alloc(*cltbl * 4);
+                ASSERT(_cltbl == cltbl);
+            } else if (fr == FR_NOT_ENOUGH_CORE) {
+                printk("Fast Seek: FAILED\n");
+                cltbl = NULL;
+            } else {
+                F_die(fr);
+            }
         }
 
         /* ~0 avoids sync match within fewer than 32 bits of scan start. */
