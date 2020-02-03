@@ -516,22 +516,30 @@ bool_t lcd_init(void)
     i2c->cr1 = I2C_CR1_PE;
 
     if (!reinit) {
-        /* Probe for FF OSD on the I2C bus. */
+
+        /* First probe after I2C re-initialisation seems to fail, and so we 
+         * fail to detect FF OSD. So issue a dummy probe first. */
+        (void)i2c_probe(0);
+
+        /* Probe the bus for I2C devices: We support a single LCD/OLED plus 
+         * an FF OSD device. */
         has_osd = i2c_probe(OSD_I2C_ADDR);
+        a = i2c_probe_range(0x20, 0x27) ?: i2c_probe_range(0x38, 0x3f);
+        if ((a == 0) && (i2c_dead || !has_osd
+                         || ((ff_cfg.display_type & 3) != DISPLAY_auto))) {
+            printk("I2C: %s\n",
+                   i2c_dead ? "Bus locked up?" : "No device found");
+            has_osd = FALSE;
+            goto fail;
+        }
+
+        /* Probe the FF OSD device if we found one. */
         if (has_osd) {
             /* Read: Retrieve the version number. */
             i2c->cr1 |= I2C_CR1_START;
             if (i2c_start(OSD_I2C_ADDR, I2C_RD) && i2c_wait(I2C_SR1_RXNE))
                 osd_ver = i2c->dr;
             printk("I2C: FF OSD found (ver %x)\n", osd_ver);
-        }
-
-        /* Probe the bus for an I2C device. */
-        a = i2c_probe_range(0x20, 0x27) ?: i2c_probe_range(0x38, 0x3f);
-        if ((a == 0) && (i2c_dead || !has_osd)) {
-            printk("I2C: %s\n",
-                   i2c_dead ? "Bus locked up?" : "No device found");
-            goto fail;
         }
 
         is_oled_display = (ff_cfg.display_type & DISPLAY_oled) ? TRUE
@@ -564,6 +572,7 @@ bool_t lcd_init(void)
         }
 
         lcd_clear();
+
     }
 
     /* Enable the Event IRQ. */
