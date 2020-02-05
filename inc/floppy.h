@@ -80,6 +80,7 @@ struct raw_trk {
     uint16_t nr_sectors;
     uint16_t sec_off;
     uint16_t data_rate;
+    uint16_t rpm;
     uint8_t gap_2, gap_3, gap_4a;
     uint8_t has_iam:1, is_fm:1, invert_data:1;
 };
@@ -87,7 +88,6 @@ struct raw_trk {
 struct img_image {
     uint32_t trk_off, base_off;
     uint16_t trk_sec, rd_sec_pos;
-    uint16_t rpm;
     int32_t decode_pos;
     uint16_t decode_data_pos, crc;
     uint8_t layout; /* LAYOUT_* */
