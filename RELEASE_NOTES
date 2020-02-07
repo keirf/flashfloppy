@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.12a - 7 February 2020
+ - IMG: Support IBM 3174 1.2M and 2.4M formats (host=ibm-3174)
+ - HxC: Fix HxC mode with no file selector (AUTOBOOT.HFE)
+ - FF OSD: Fix dual-display operation with slower OLED
+   - Wait for OLED to initialise when display-type=oled...
+
 ** v3.11a - 30 December 2019
  - LCD/OLED: Fix subfolder name, as shown in 3- & 4-row displays
    - Subfolder wasn't updated correctly when moving to parent (..) folder
