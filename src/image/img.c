@@ -555,7 +555,7 @@ static bool_t ibm_3174_open(struct image *im)
     struct raw_sec *sec;
     struct raw_trk *trk;
     uint8_t *trk_map;
-    unsigned int i, j, nr_sectors;
+    unsigned int i, j;
 
     /* Identify image type (1.2MB vs 2.4MB) */
     /* Both are 512 bytes/sector, 500kHZ data rate */
@@ -584,11 +584,11 @@ static bool_t ibm_3174_open(struct image *im)
     /* Create two track layouts. */
     /*   0 = 15 sectors/track, 360 rpm */
     /*   1 = 30 sectors/track, 180 rpm */
-    nr_sectors = 15;
     for (i = 0; i < 2; i++) {
+        unsigned int nr_sectors = (i == 0) ? 15 : 30;
         trk = add_track_layout(im, nr_sectors, i);
         trk->is_fm = FALSE;
-        trk->has_iam = _IAM;
+        trk->has_iam = TRUE;
         trk->gap_3 = 104;
         trk->gap_4a = 0;
         trk->rpm = (i == 0) ? 360 : 180;
@@ -598,18 +598,14 @@ static bool_t ibm_3174_open(struct image *im)
             sec->no = 2;
             sec++;
         }
-        nr_sectors = 30;
     }
 
     /* Create track map, mapping each track to its respective layout. */
     trk_map = add_track_map(im);
     for (i = 0; i < im->nr_cyls; i++) {
         for (j = 0; j < im->nr_sides; j++) {
-            /* Cylinder 0 uses layout 0 */
-            if (i == 0)
-                *trk_map++ = 0;
-            else
-                *trk_map++ = 1;
+            /* Cylinder 0 uses layout 0. */
+            *trk_map++ = (i == 0) ? 0 : 1;
         }
     }
 
