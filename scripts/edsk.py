@@ -19,11 +19,11 @@ def main(argv):
     tsz = in_dat[52:256]
     populated = 0
     ext = False
-    if x[0].startswith("EXTENDED CPC DSK File\r\nDisk-Info\r\n"):
+    if x[0].startswith(b"EXTENDED CPC DSK File\r\nDisk-Info\r\n"):
         print("Extended DSK")
         ext = True
     else:
-        assert x[0].startswith("MV - CPCEMU")
+        assert x[0].startswith(b"MV - CPCEMU")
         print("Standard DSK")
     while tsz:
         x = struct.unpack("B", tsz[:1])
