@@ -78,6 +78,8 @@ def main(argv):
                 val = "SORT_" + val
             elif opt == "sort-priority":
                 val = "SORTPRI_" + val
+            elif opt == "display-on-activity":
+                val = "DISPON_" + val
             elif opt == "motor-delay":
                 if val == 'ignore':
                     val = "MOTOR_" + val

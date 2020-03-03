@@ -41,7 +41,10 @@ struct packed ff_cfg {
     uint8_t autoselect_folder_secs;
     bool_t nav_loop; /* Wrap slot number at 0 and max? */
     uint8_t display_off_secs;
-    bool_t display_on_activity; /* Display on when there is drive activity? */
+#define DISPON_no  0
+#define DISPON_yes 1
+#define DISPON_sel 2
+    uint8_t display_on_activity;
     uint16_t display_scroll_rate;
 #define FONT_6x13 7
 #define FONT_8x16 8
