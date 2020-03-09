@@ -516,13 +516,29 @@ void floppy_get_track(struct track_info *ti)
     ti->writing = (dma_wr && dma_wr->state != DMA_inactive);
 }
 
+static bool_t index_is_suppressed(struct drive *drv)
+{
+    /* Rotation is stalled? */
+    if (drv->index_suppressed)
+        return TRUE;
+
+    if (ff_cfg.index_suppression) {
+        /* Mid-step? */
+        if (drv->step.state)
+            return TRUE;
+        /* Neither read nor write currently active? */
+        if ((dma_rd->state != DMA_active) && (dma_wr->state != DMA_starting))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 static void index_assert(void *dat)
 {
     struct drive *drv = &drive;
     index.prev_time = index.timer.deadline;
-    if (!drv->index_suppressed
-        && !(drv->step.state && ff_cfg.index_suppression)
-        && drv->motor.on) {
+    if (drv->motor.on && !index_is_suppressed(drv)) {
         drive_change_output(drv, outp_index, TRUE);
         timer_set(&index.timer_deassert, index.prev_time + time_ms(2));
     }
