@@ -932,6 +932,13 @@ static void read_ff_cfg(void)
                 : TRKCHG_instant;
             break;
 
+        case FFCFG_write_drain:
+            ff_cfg.write_drain =
+                !strcmp(opts.arg, "realtime") ? WDRAIN_realtime
+                : !strcmp(opts.arg, "eot") ? WDRAIN_eot
+                : WDRAIN_instant;
+            break;
+
         case FFCFG_index_suppression:
             ff_cfg.index_suppression = !strcmp(opts.arg, "yes");
             break;

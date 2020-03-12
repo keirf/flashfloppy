@@ -155,6 +155,10 @@ struct packed ff_cfg {
 #define DORD_row     7
 #define DORD_double  8
     uint16_t display_order;
+#define WDRAIN_instant  0
+#define WDRAIN_realtime 1
+#define WDRAIN_eot      2
+    uint8_t write_drain;
 };
 
 extern struct ff_cfg ff_cfg;

@@ -25,6 +25,8 @@ def main(argv):
                 val = "PIN_" + val
             elif opt == "track-change":
                 val = "TRKCHG_" + val
+            elif opt == "write-drain":
+                val = "WDRAIN_" + val
             elif opt == "host":
                 val = "HOST_" + val
             elif opt == "oled-font":

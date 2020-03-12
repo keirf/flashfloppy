@@ -342,9 +342,21 @@ static void wdata_stop(void)
     /* Drain out the DMA buffer. */
     IRQx_set_pending(dma_wdata_irq);
 
-    /* Restart read exactly where write ended. 
-     * No more IDX pulses until write-out is complete. */
-    drive_set_restart_pos(drv);
+    switch (ff_cfg.write_drain) {
+    case WDRAIN_instant:
+        /* Restart read exactly where write ended. No more IDX pulses until
+         * write-out is complete. */
+        drive_set_restart_pos(drv);
+        break;
+    case WDRAIN_realtime:
+        /* Nothing to do. */
+        break;
+    case WDRAIN_eot:
+        /* Position so that an INDEX pulse is quickly triggered. */
+        drv->restart_pos = drv->image->stk_per_rev - stk_ms(20);
+        drv->index_suppressed = TRUE;
+        break;
+    }
 
     /* Remember where this write's DMA stream ended. */
     write = get_write(image, image->wr_prod);
@@ -359,6 +371,7 @@ static void wdata_stop(void)
         IRQx_set_pending(FLOPPY_SOFTIRQ);
         /* Position read head so it quickly triggers an INDEX pulse. */
         drv->restart_pos = drv->image->stk_per_rev - stk_ms(20);
+        drv->index_suppressed = TRUE;
     }
 #endif
 }
