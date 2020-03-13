@@ -97,6 +97,7 @@ static bool_t hfe_open(struct image *im)
         return FALSE;
     }
 
+    im->hfe.double_step = !dhdr.single_step;
     im->hfe.tlut_base = le16toh(dhdr.track_list_offset);
     im->nr_cyls = dhdr.nr_tracks;
     im->nr_sides = dhdr.nr_sides;
@@ -136,7 +137,8 @@ static void hfe_setup_track(
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
     uint32_t sys_ticks;
-    uint8_t cyl = track/2, side = track&1;
+    uint8_t cyl = track >> (im->hfe.double_step ? 2 : 1);
+    uint8_t side = track & 1;
 
     /* TODO: Fake out unformatted tracks. */
     cyl = min_t(uint8_t, cyl, im->nr_cyls-1);

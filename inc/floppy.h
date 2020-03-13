@@ -44,7 +44,7 @@ struct hfe_image {
     uint16_t tlut_base;
     uint16_t trk_off;
     uint16_t trk_pos, trk_len;
-    bool_t is_v3;
+    bool_t is_v3, double_step;
     uint8_t batch_secs;
     struct {
         uint16_t start;
