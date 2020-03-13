@@ -3,6 +3,14 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.13a - 13 March 2020
+ - FF.CFG: New option 'write-drain=eot'
+   - Fixes writes to Gotek on Amstrad PPC series (#320)
+ - FF.CFG: New option 'display-on-activity=sel'
+   - Turns on display whenever the Gotek drive is selected by host
+ - HFE: Respect double-step header flag
+   - Fixes 180k disk images on Amstrad PCW (#318)
+
 ** v3.12a - 7 February 2020
  - IMG: Support IBM 3174 1.2M and 2.4M formats (host=ibm-3174)
  - HxC: Fix HxC mode with no file selector (AUTOBOOT.HFE)
