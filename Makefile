@@ -29,7 +29,7 @@ gotek: all
 
 HXC_FF_URL := https://www.github.com/keirf/HxC_FF_File_Selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
-HXC_FF_VER := v8-FF
+HXC_FF_VER := v9-FF
 
 dist:
 	rm -rf flashfloppy-*
