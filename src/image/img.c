@@ -1704,13 +1704,9 @@ static void raw_setup_track(
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
     uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
-    uint8_t cyl = track/2, side = track&1;
+    uint8_t cyl = track/2, side = track & (im->nr_sides - 1);
 
-    /* TODO: Fake out unformatted tracks. */
-    cyl = min_t(uint8_t, cyl, im->nr_cyls-1);
-    side = min_t(uint8_t, side, im->nr_sides-1);
     track = cyl*2 + side;
-
     if (track != im->cur_track)
         raw_seek_track(im, track, cyl, side);
 

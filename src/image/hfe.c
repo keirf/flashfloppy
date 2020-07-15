@@ -138,13 +138,9 @@ static void hfe_setup_track(
     struct image_buf *bc = &im->bufs.read_bc;
     uint32_t sys_ticks;
     uint8_t cyl = track >> (im->hfe.double_step ? 2 : 1);
-    uint8_t side = track & 1;
+    uint8_t side = track & (im->nr_sides - 1);
 
-    /* TODO: Fake out unformatted tracks. */
-    cyl = min_t(uint8_t, cyl, im->nr_cyls-1);
-    side = min_t(uint8_t, side, im->nr_sides-1);
     track = cyl*2 + side;
-
     if (track != im->cur_track)
         hfe_seek_track(im, track);
 

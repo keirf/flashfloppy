@@ -450,10 +450,12 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Seek to the new track. */
         track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
-        if ((track >= (DA_FIRST_CYL*2)) && (drv->outp & m(outp_wrprot))
-            && !volume_readonly()) {
-            /* Remove write-protect when driven into D-A mode. */
-            drive_change_output(drv, outp_wrprot, FALSE);
+        if (track >= (DA_FIRST_CYL*2)) {
+            /* Remove write-protect when driven into D-A mode.
+             * D-A mode ignores the HEAD signal. */
+            drv->nr_sides = 1;
+            if ((drv->outp & m(outp_wrprot)) && !volume_readonly())
+                drive_change_output(drv, outp_wrprot, FALSE);
         }
         if (image_setup_track(drv->image, track, &read_start_pos))
             return TRUE;

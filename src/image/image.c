@@ -119,7 +119,7 @@ static bool_t try_handler(struct image *im, struct slot *slot,
     im->write_bc_ticks = sysclk_us(2);
     im->stk_per_rev = stk_ms(200);
 
-    im->handler = handler;
+    im->disk_handler = im->track_handler = handler;
 
     mode = FA_READ | FA_OPEN_EXISTING;
     if (handler->write_track != NULL)
@@ -210,10 +210,10 @@ void image_extend(struct image *im)
 {
     FSIZE_t new_sz;
 
-    if (!(im->handler->extend && im->fp.dir_ptr && ff_cfg.extend_image))
+    if (!(im->disk_handler->extend && im->fp.dir_ptr && ff_cfg.extend_image))
         return;
 
-    new_sz = im->handler->extend(im);
+    new_sz = im->disk_handler->extend(im);
     if (f_size(&im->fp) >= new_sz)
         return;
 
@@ -253,17 +253,22 @@ static void print_image_info(struct image *im)
 bool_t image_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
+    const struct image_handler *h = im->track_handler;
+
 #if !defined(QUICKDISK)
     if (track < (DA_FIRST_CYL*2)) {
         /* If we are exiting D-A mode then need to re-read the config file. */
-        if (im->handler == &da_image_handler)
+        if (h == &da_image_handler)
             return TRUE;
+        h = ((track>>1) >= im->nr_cyls) ? &dummy_image_handler
+            : im->disk_handler;
     } else {
-        im->handler = &da_image_handler;
+        h = &da_image_handler;
     }
 #endif
 
-    im->handler->setup_track(im, track, start_pos);
+    im->track_handler = h;
+    h->setup_track(im, track, start_pos);
 
     print_image_info(im);
 
@@ -272,17 +277,17 @@ bool_t image_setup_track(
 
 bool_t image_read_track(struct image *im)
 {
-    return im->handler->read_track(im);
+    return im->track_handler->read_track(im);
 }
 
 uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 {
-    return im->handler->rdata_flux(im, tbuf, nr);
+    return im->track_handler->rdata_flux(im, tbuf, nr);
 }
 
 bool_t image_write_track(struct image *im)
 {
-    return im->handler->write_track(im);
+    return im->track_handler->write_track(im);
 }
 
 uint32_t image_ticks_since_index(struct image *im)

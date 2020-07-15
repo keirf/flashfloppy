@@ -213,7 +213,7 @@ static void floppy_mount(struct slot *slot)
 
         /* Mount the image file. */
         image_open(im, slot, cltbl);
-        if (!im->handler->write_track || volume_readonly())
+        if (!im->disk_handler->write_track || volume_readonly())
             slot->attributes |= AM_RDO;
         if (slot->attributes & AM_RDO) {
             printk("Image is R/O\n");
@@ -222,6 +222,8 @@ static void floppy_mount(struct slot *slot)
         }
 
     } while (f_size(&im->fp) != fastseek_sz);
+
+    drv->nr_sides = im->nr_sides;
 
     /* After image is extended at mount time, we permit no further changes 
      * to the file metadata. Clear the dirent info to ensure this. */
@@ -308,7 +310,6 @@ static void timer_dma_init(void)
 
 static unsigned int drive_calc_track(struct drive *drv)
 {
-    drv->nr_sides = (drv->cyl >= DA_FIRST_CYL) ? 1 : drv->image->nr_sides;
     return drv->cyl*2 + (drv->head & (drv->nr_sides - 1));
 }
 

@@ -147,7 +147,11 @@ struct image_bufs {
 };
 
 struct image {
-    const struct image_handler *handler;
+    /* Handler for currently-selected type of disk image. */
+    const struct image_handler *disk_handler;
+
+    /* Handler for current track. May differ from the primary disk handler. */
+    const struct image_handler *track_handler;
 
     /* FatFS. */
     FIL fp;
