@@ -1,5 +1,5 @@
 
-export FW_VER := 3.13a
+export FW_VER := 3.14a
 
 PROJ := FlashFloppy
 VER := v$(FW_VER)

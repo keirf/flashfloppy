@@ -3,6 +3,18 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.14a - 15 July 2020
+ - Properly implement non-existent tracks as empty / unformatted
+   - In particular this avoids writing tracks beyond end of disk image
+   - See issue #309: Could corrupt HFE images
+ - Akai IMG: Implement track skew (faster access and fixes Oberheim DPX)
+ - Speaker: Rate-limit step pulses at the speaker
+   - Avoids high-freq chirp in Direct Access mode and Gotek-aware fast loaders
+ - HxC Compat, v9-FF:
+   - Atari ST keymap is now QWERTY
+   - Remove unused settings from drive setup menu
+   - Fix the search/filter box (Esc and Backspace keys)
+
 ** v3.13a - 13 March 2020
  - FF.CFG: New option 'write-drain=eot'
    - Fixes writes to Gotek on Amstrad PPC series (#320)
