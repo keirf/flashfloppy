@@ -264,6 +264,7 @@ bool_t image_setup_track(
             : im->disk_handler;
     } else {
         h = &da_image_handler;
+        im->nr_sides = 1;
     }
 #endif
 

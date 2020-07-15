@@ -51,6 +51,7 @@ static void da_seek_track(struct image *im, uint16_t track)
     struct da_status_sector *dass = &im->da.dass;
     bool_t version_override = (ff_cfg.da_report_version[0] != '\0');
 
+    track &= ~1; /* force side 0 */
     if (im->cur_track == track)
         return;
     im->cur_track = track;

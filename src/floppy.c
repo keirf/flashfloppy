@@ -177,14 +177,14 @@ void floppy_cancel(void)
     /* Clear soft state. */
     timer_cancel(&drv->chgrst_timer);
     timer_cancel(&index.timer);
-    barrier(); /* cancel index.timer /then/ clear soft state */
-    drv->index_suppressed = FALSE;
-    drv->image = NULL;
-    drv->inserted = FALSE;
-    image = NULL;
+    barrier(); /* cancel index.timer /then/ clear dma rings */
     dma_rd = dma_wr = NULL;
+    barrier(); /* /then/ clear soft state */
+    drv->index_suppressed = FALSE;
+    drv->image = image = NULL;
+    drv->inserted = FALSE;
     index.fake_fired = FALSE;
-    barrier(); /* clear soft state /then/ cancel index.timer_deassert */
+    barrier(); /* /then/ cancel index.timer_deassert */
     timer_cancel(&index.timer_deassert);
     motor_chgrst_eject(drv);
 
@@ -450,12 +450,10 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Seek to the new track. */
         track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
-        if (track >= (DA_FIRST_CYL*2)) {
-            /* Remove write-protect when driven into D-A mode.
-             * D-A mode ignores the HEAD signal. */
-            drv->nr_sides = 1;
-            if ((drv->outp & m(outp_wrprot)) && !volume_readonly())
-                drive_change_output(drv, outp_wrprot, FALSE);
+        if ((track >= (DA_FIRST_CYL*2)) && (drv->outp & m(outp_wrprot))
+            && !volume_readonly()) {
+            /* Remove write-protect when driven into D-A mode. */
+            drive_change_output(drv, outp_wrprot, FALSE);
         }
         if (image_setup_track(drv->image, track, &read_start_pos))
             return TRUE;
@@ -512,10 +510,11 @@ void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 
 void floppy_get_track(struct track_info *ti)
 {
+    bool_t active = dma_wr != NULL;
     ti->cyl = drive.cyl;
-    ti->side = drive.head & (drive.nr_sides - 1);
+    ti->side = active ? drive.head & (drive.image->nr_sides - 1) : 0;
     ti->sel = drive.sel;
-    ti->writing = (dma_wr && dma_wr->state != DMA_inactive);
+    ti->writing = (active && dma_wr->state != DMA_inactive);
 }
 
 static bool_t index_is_suppressed(struct drive *drv)

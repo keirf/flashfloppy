@@ -80,11 +80,11 @@ void floppy_cancel(void)
     /* Clear soft state. */
     timer_cancel(&window.timer);
     timer_cancel(&index.timer);
-    barrier(); /* cancel index.timer /then/ clear soft state */
-    drv->index_suppressed = FALSE;
-    drv->image = NULL;
-    image = NULL;
+    barrier(); /* cancel index.timer /then/ clear dma rings */
     dma_rd = dma_wr = NULL;
+    barrier(); /* /then/ clear soft state */
+    drv->index_suppressed = FALSE;
+    drv->image = image = NULL;
     window.state = 0;
 }
 

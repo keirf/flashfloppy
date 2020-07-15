@@ -300,7 +300,7 @@ static void IRQ_SIDE_changed(void)
     } while (stk_diff(t, stk_now()) < filter);
 
     drv->head = hd;
-    if ((dma_rd != NULL) && (drv->nr_sides == 2))
+    if ((dma_rd != NULL) && (drv->image->nr_sides == 2))
         rdata_stop();
 }
 
