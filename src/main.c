@@ -460,8 +460,9 @@ static void button_timer_fn(void *unused)
         [B_LEFT] = B_RIGHT, [B_RIGHT] = B_LEFT
     };
 
+    static uint8_t rotary_ticks, rotary_scan_rate, rb;
     static uint32_t _b[3]; /* 0 = left, 1 = right, 2 = select */
-    uint8_t b = osd_buttons_rx, rb;
+    uint8_t b = osd_buttons_rx;
     bool_t twobutton_rotary =
         (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_rotary;
     int i, twobutton_reverse = !!(ff_cfg.twobutton_action & TWOBUTTON_reverse);
@@ -472,6 +473,24 @@ static void button_timer_fn(void *unused)
         cfg.usb_power_fault = TRUE;
         gpio_write_pin(gpioa, 4, HIGH);
     }
+
+    /* Higher sample rate can be specified for rotary encoder. */
+    if (++rotary_ticks < rotary_scan_rate) {
+        switch (ff_cfg.rotary & ~ROT_reverse) {
+        case ROT_trackball:
+        case ROT_buttons:
+        case ROT_none:
+            break;
+        default: /* rotary encoder */ {
+            rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
+            rb = read_rotary(rotary) ?: rb;
+            break;
+        }
+        }
+        goto out;
+    }
+    rotary_ticks = 0;
+    rotary_scan_rate = 1;
 
     /* We debounce the switches by waiting for them to be pressed continuously 
      * for 32 consecutive sample periods (32 * 2ms == 64ms) */
@@ -523,8 +542,12 @@ static void button_timer_fn(void *unused)
         rb = rotary_reverse[rotary & 3];
         break;
 
+    case ROT_none:
+        break;
+
     default: /* rotary encoder */ {
-        rb = read_rotary(rotary);
+        rb = read_rotary(rotary) ?: rb;
+        rotary_scan_rate = 4; /* sample rotary inputs at 4x button rate */
         break;
     }
 
@@ -532,6 +555,7 @@ static void button_timer_fn(void *unused)
     if (ff_cfg.rotary & ROT_reverse)
         rb = rotary_reverse[rb];
     b |= rb;
+    rb = 0;
 
     switch (display_mode) {
     case DM_LCD_OLED:
@@ -544,7 +568,9 @@ static void button_timer_fn(void *unused)
 
     /* Latch final button state and reset the timer. */
     buttons = b;
-    timer_set(&button_timer, button_timer.deadline + time_ms(BUTTON_SCAN_MS));
+out:
+    timer_set(&button_timer, button_timer.deadline
+              + time_ms(BUTTON_SCAN_MS) / rotary_scan_rate);
 }
 
 static void canary_init(void)
