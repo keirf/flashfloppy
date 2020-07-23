@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.15 - 23 July 2020
+ - New stable release series
+ - Improve rotary encoder robustness by sampling at 4x higher rate
+
 ** v3.14a - 15 July 2020
  - Properly implement non-existent tracks as empty / unformatted
    - In particular this avoids writing tracks beyond end of disk image
