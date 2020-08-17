@@ -150,7 +150,7 @@ static void lcd_scroll_init(uint16_t pause, uint16_t rate)
 static void lcd_scroll_name(void)
 {
     static struct track_info ti;
-    char msg[25];
+    char msg[lcd_columns+1];
 
     if ((lcd_scroll.ticks > 0) || (lcd_scroll.end == 0))
         return;
@@ -191,7 +191,7 @@ static void lcd_scroll_name(void)
 static void display_write_slot(bool_t nav_mode)
 {
     const struct image_type *type;
-    char msg[25], typename[4] = "";
+    char msg[lcd_columns+1], typename[4] = "";
     unsigned int i;
 
     if (display_mode != DM_LCD_OLED) {
