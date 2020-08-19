@@ -89,10 +89,10 @@ static void board_floppy_init(void)
     gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
     gpio_configure_pin(gpiob, pin_side,  GPI_bus);
 
-    /* PA[15:14] -> EXT[15:14], PB[13:2] -> EXT[13:2], PA[1:0] -> EXT[1:0] */
+    /* PA[15:14], PB[13:12], PC[11:10], PB[9:2], PA[1:0] */
     afio->exticr4 = 0x0011;
+    afio->exticr3 = 0x2211;
     afio->exticr2 = 0x1111;
-    afio->exticr3 = 0x1111;
     afio->exticr1 = 0x1100;
 
     if (gotek_enhanced()) {
@@ -107,8 +107,8 @@ static void board_floppy_init(void)
     }
 
     pins = m(pin_wgate) | m(pin_side) | m(pin_sel0);
-    exti->rtsr = pins | m(pin_motor) | m(pin_step);
-    exti->ftsr = pins | m(pin_motor) | m(pin_chgrst);
+    exti->rtsr = pins | m(pin_motor) | m(pin_step) | m(11) | m(10);
+    exti->ftsr = pins | m(pin_motor) | m(pin_chgrst) | m(11) | m(10);
     exti->imr = pins | m(pin_step);
 }
 
@@ -364,13 +364,16 @@ static void IRQ_MOTOR_CHGRST(void)
     uint32_t pr = exti->pr;
 
     drv->motor.changed = FALSE;
-    exti->pr = m(pin_motor) | m(pin_chgrst);
+    exti->pr = m(pin_motor) | m(pin_chgrst) | m(11) | m(10);
 
     if ((pr & m(pin_motor)) || changed)
         IRQ_MOTOR(drv);
 
     if ((pr & m(pin_chgrst)) || changed)
         IRQ_CHGRST(drv);
+
+    if (pr & (m(11) | m(10)))
+        IRQ_rotary();
 }
 
 static void motor_chgrst_update_status(struct drive *drv)

@@ -49,13 +49,16 @@ void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
 #define motor_irq  6
 #define reset_irq  7
 #define wgate_irq 23
+#define rotary_irq 40
 void IRQ_6(void) __attribute__((alias("IRQ_MOTOR_changed"))); /* EXTI0 */
 void IRQ_7(void) __attribute__((alias("IRQ_MOTOR_changed"))); /* EXTI1 */
 void IRQ_23(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI9_5 */
+void IRQ_40(void) __attribute__((alias("_IRQ_rotary"))); /* EXTI15_10 */
 static const struct exti_irq exti_irqs[] = {
     { motor_irq, TIMER_IRQ_PRI, 0 }, 
     { reset_irq, TIMER_IRQ_PRI, 0 },
-    { wgate_irq, FLOPPY_IRQ_WGATE_PRI, 0 }
+    { wgate_irq, FLOPPY_IRQ_WGATE_PRI, 0 },
+    { rotary_irq, TIMER_IRQ_PRI, 0 }
 };
 
 bool_t floppy_ribbon_is_reversed(void)
@@ -67,15 +70,15 @@ static void board_floppy_init(void)
 {
     uint32_t pins;
 
-    /* PA[15:14] -> EXT[15:14], PB[13:2] -> EXT[13:2], PA[1:0] -> EXT[1:0] */
+    /* PA[15:14], PB[13:12], PC[11:10], PB[9:2], PA[1:0] */
     afio->exticr4 = 0x0011;
+    afio->exticr3 = 0x2211;
     afio->exticr2 = 0x1111;
-    afio->exticr3 = 0x1111;
     afio->exticr1 = 0x1100;
 
     pins = m(pin_wgate) | m(pin_reset) | m(pin_motor);
-    exti->rtsr = pins;
-    exti->ftsr = pins;
+    exti->rtsr = pins | m(11) | m(10);
+    exti->ftsr = pins | m(11) | m(10);
     exti->imr = pins;
 }
 
@@ -135,6 +138,12 @@ static void IRQ_MOTOR_changed(void)
         }
 
     }
+}
+
+static void _IRQ_rotary(void)
+{
+    exti->pr = m(11) | m(10);
+    IRQ_rotary();
 }
 
 /*

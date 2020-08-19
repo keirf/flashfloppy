@@ -450,17 +450,35 @@ static uint8_t read_rotary(uint8_t rotary)
 
 static struct timer button_timer;
 static volatile uint8_t buttons;
-static uint8_t rotary;
+static uint8_t rotary, rb;
 #define B_LEFT 1
 #define B_RIGHT 2
 #define B_SELECT 4
+
+void IRQ_rotary(void)
+{
+    if ((ff_cfg.rotary & ~ROT_reverse) != ROT_full)
+        return;
+    rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
+    rb = read_rotary(rotary) ?: rb;
+}
+
+static void set_rotary_exti(void)
+{
+    uint32_t imr;
+
+    imr = exti->imr & ~0x0c00;
+    if ((ff_cfg.rotary & ~ROT_reverse) == ROT_full)
+        imr |= 0x0c00;
+    exti->imr = imr;
+}
+
 static void button_timer_fn(void *unused)
 {
     const uint8_t rotary_reverse[4] = {
         [B_LEFT] = B_RIGHT, [B_RIGHT] = B_LEFT
     };
 
-    static uint8_t rotary_ticks, rotary_scan_rate, rb;
     static uint32_t _b[3]; /* 0 = left, 1 = right, 2 = select */
     uint8_t b = osd_buttons_rx;
     bool_t twobutton_rotary =
@@ -473,24 +491,6 @@ static void button_timer_fn(void *unused)
         cfg.usb_power_fault = TRUE;
         gpio_write_pin(gpioa, 4, HIGH);
     }
-
-    /* Higher sample rate can be specified for rotary encoder. */
-    if (++rotary_ticks < rotary_scan_rate) {
-        switch (ff_cfg.rotary & ~ROT_reverse) {
-        case ROT_trackball:
-        case ROT_buttons:
-        case ROT_none:
-            break;
-        default: /* rotary encoder */ {
-            rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
-            rb = read_rotary(rotary) ?: rb;
-            break;
-        }
-        }
-        goto out;
-    }
-    rotary_ticks = 0;
-    rotary_scan_rate = 1;
 
     /* We debounce the switches by waiting for them to be pressed continuously 
      * for 32 consecutive sample periods (32 * 2ms == 64ms) */
@@ -547,7 +547,6 @@ static void button_timer_fn(void *unused)
 
     default: /* rotary encoder */ {
         rb = read_rotary(rotary) ?: rb;
-        rotary_scan_rate = 4; /* sample rotary inputs at 4x button rate */
         break;
     }
 
@@ -568,9 +567,7 @@ static void button_timer_fn(void *unused)
 
     /* Latch final button state and reset the timer. */
     buttons = b;
-out:
-    timer_set(&button_timer, button_timer.deadline
-              + time_ms(BUTTON_SCAN_MS) / rotary_scan_rate);
+    timer_set(&button_timer, button_timer.deadline + time_ms(BUTTON_SCAN_MS));
 }
 
 static void canary_init(void)
@@ -1237,6 +1234,9 @@ static void read_ff_cfg(void)
 
 static void process_ff_cfg_opts(const struct ff_cfg *old)
 {
+    if (ff_cfg.rotary != old->rotary)
+        set_rotary_exti();
+
     /* interface, pin02, pin34: Inform the floppy subsystem. */
     if ((ff_cfg.interface != old->interface)
         || (ff_cfg.pin02 != old->pin02)
@@ -2889,6 +2889,7 @@ int main(void)
     usbh_msc_init();
 
     rotary = (gpioc->idr >> 10) & 3;
+    set_rotary_exti();
     timer_init(&button_timer, button_timer_fn, NULL);
     timer_set(&button_timer, time_now());
 
