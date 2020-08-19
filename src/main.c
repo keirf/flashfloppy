@@ -584,6 +584,16 @@ static void canary_check(void)
     ASSERT(_thread_stackbottom[0] == 0xdeadbeef);
 }
 
+static void fix_hxc_short_slot(struct short_slot *short_slot)
+{
+    char *dot;
+    /* Get rid of trailing file extension. */
+    short_slot->name[51] = '\0';
+    if (((dot = strrchr(short_slot->name, '.')) != NULL)
+        && !strcmp(dot+1, short_slot->type))
+        *dot = '\0';
+}
+
 static void slot_from_short_slot(
     struct slot *slot, const struct short_slot *short_slot)
 {
@@ -839,6 +849,7 @@ static void update_slot_by_name(void)
                 F_read(&fs->file, &hxc->v2_slot, sizeof(hxc->v2_slot), NULL);
                 break;
             }
+            fix_hxc_short_slot(&hxc->v2_slot);
             if (!strncmp(hxc->v2_slot.name, name,
                          min_t(int, len, sizeof(hxc->v2_slot.name))))
                 break;
@@ -1704,6 +1715,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
             memcpy(&hxc->v2_slot.attributes, &hxc->v1_slot.attributes,
                    1+4+4+17);
             hxc->v2_slot.name[17] = '\0';
+            fix_hxc_short_slot(&hxc->v2_slot);
             slot_from_short_slot(&cfg.slot, &hxc->v2_slot);
         }
         break;
@@ -1737,6 +1749,7 @@ static void hxc_cfg_update(uint8_t slot_mode)
             F_lseek(&fs->file, hxc->cfg.slots_position*512
                     + cfg.slot_nr*64*hxc->cfg.number_of_drive_per_slot);
             F_read(&fs->file, &hxc->v2_slot, sizeof(hxc->v2_slot), NULL);
+            fix_hxc_short_slot(&hxc->v2_slot);
             slot_from_short_slot(&cfg.slot, &hxc->v2_slot);
         }
         break;
