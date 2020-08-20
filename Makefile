@@ -100,7 +100,10 @@ endif
 BAUD=115200
 DEV=/dev/ttyUSB0
 
-flash:
+ocd: gotek
+	python3 scripts/openocd/flash.py `pwd`/FF_Gotek-$(VER).hex
+
+flash: gotek
 	sudo stm32flash -b $(BAUD) -w FF_Gotek-$(VER).hex $(DEV)
 
 start:
