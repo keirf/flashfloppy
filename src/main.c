@@ -435,7 +435,8 @@ static uint8_t read_rotary(uint8_t rotary)
     /* Record this transition and check if we have seen enough to get 
      * us from one detent to another. */
     ts |= (1<<rotary);
-    if (popcount(ts) < rotary_transitions_per_detent[ff_cfg.rotary & 3]) {
+    if ((popcount(ts) < rotary_transitions_per_detent[ff_cfg.rotary & 3])
+        || (((ff_cfg.rotary & 3) == ROT_full) && ((rotary & 3) != 3))) {
         /* Not enough transitions yet: Remember where we are for next time. */
         t_seen[rb-1] = ts;
         return 0;
@@ -445,7 +446,7 @@ static uint8_t read_rotary(uint8_t rotary)
      * and return the movement to the caller. */
     t_seen[0] = t_seen[1] = 0;
     return rb;
-#undef pt
+#undef p_t
 }
 
 static struct timer button_timer;
