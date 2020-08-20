@@ -450,7 +450,7 @@ static uint8_t read_rotary(uint8_t rotary)
 }
 
 static struct timer button_timer;
-static volatile uint8_t buttons;
+static volatile uint8_t buttons, velocity;
 static uint8_t rotary, rb;
 #define B_LEFT 1
 #define B_RIGHT 2
@@ -480,11 +480,17 @@ static void button_timer_fn(void *unused)
         [B_LEFT] = B_RIGHT, [B_RIGHT] = B_LEFT
     };
 
+    static uint16_t cur_time, prev_time;
     static uint32_t _b[3]; /* 0 = left, 1 = right, 2 = select */
     uint8_t b = osd_buttons_rx;
     bool_t twobutton_rotary =
         (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_rotary;
     int i, twobutton_reverse = !!(ff_cfg.twobutton_action & TWOBUTTON_reverse);
+
+    cur_time++;
+    if ((uint16_t)(cur_time - prev_time) > 0x7fff)
+        prev_time = cur_time - 0x7fff;
+    velocity = 0;
 
     /* Check PA5 (USBFLT, active low). */
     if (gotek_enhanced() && !gpio_read_pin(gpioa, 5)) {
@@ -548,6 +554,12 @@ static void button_timer_fn(void *unused)
 
     default: /* rotary encoder */ {
         rb = read_rotary(rotary) ?: rb;
+        if (rb) {
+            uint16_t delta = cur_time - prev_time;
+            velocity = (BUTTON_SCAN_HZ/10)/(delta?:1);
+            velocity = range_t(int, velocity, 0, 20);
+            prev_time = cur_time;
+        }
         break;
     }
 
@@ -1907,8 +1919,15 @@ static bool_t choose_new_image(uint8_t init_b)
                    && buttons)
                 continue;
         } else if (b & B_LEFT) {
+            i -= velocity ?: 1;
+            if ((i < 0) && !ff_cfg.nav_loop) {
+                i = 0;
+                goto b_right;
+            }
+            while (i < 0)
+                i += cfg.max_slot_nr + 1;
         b_left:
-            do {
+            while (!slot_valid(i)) {
                 if (i-- == 0) {
                     if (!ff_cfg.nav_loop)
                         goto b_right;
@@ -1916,14 +1935,20 @@ static bool_t choose_new_image(uint8_t init_b)
                 }
             } while (!slot_valid(i));
         } else { /* b & B_RIGHT */
+            i += velocity ?: 1;
+            if ((i > cfg.max_slot_nr) && !ff_cfg.nav_loop) {
+                i = cfg.max_slot_nr;
+                goto b_left;
+            }
+            i = i % (cfg.max_slot_nr + 1);
         b_right:
-            do {
+            while (!slot_valid(i)) {
                 if (i++ >= cfg.max_slot_nr) {
                     if (!ff_cfg.nav_loop)
                         goto b_left;
                     i = 0;
                 }
-            } while (!slot_valid(i));
+            }
         }
 
         cfg.slot_nr = i;

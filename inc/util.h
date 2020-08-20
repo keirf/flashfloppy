@@ -43,6 +43,7 @@ typedef char bool_t;
     ({ type __x = (x); type __y = (y); __x < __y ? __x: __y; })
 #define max_t(type,x,y) \
     ({ type __x = (x); type __y = (y); __x > __y ? __x: __y; })
+#define range_t(type,x,a,b) min_t(type, max_t(type, x, a), b)
 
 struct slot {
     char name[FF_MAX_LFN+1];
