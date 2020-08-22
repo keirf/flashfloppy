@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.16 - 22 August 2020
+ - Rotary encoder: Velocity curve during image navigation
+   - Fast spin of the encoder skips multiple entries per click
+ - LCD/OLED/OSD: Fix image name when display is wider than 24 characters
+ - HFE: Fix double-step HFE images (broken since v3.14a)
+ - HxC Compat: Strip filename extension from image name display row
+
 ** v3.15 - 23 July 2020
  - New stable release series
  - Improve rotary encoder robustness by sampling at 4x higher rate
