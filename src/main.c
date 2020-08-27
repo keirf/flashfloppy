@@ -407,6 +407,18 @@ static uint8_t led_handle_display(uint8_t b)
     return b;
 }
 
+static uint8_t v2_read_rotary(uint8_t rotary)
+{
+    /* Rotary encoder outputs a Gray code, counting clockwise: 00-01-11-10. */
+    const uint32_t rotary_transitions[] = {
+        [ROT_none]    = 0x00000000, /* No encoder */
+        [ROT_full]    = 0x20000100, /* 4 transitions (full cycle) per detent */
+        [ROT_half]    = 0x24000018, /* 2 transitions (half cycle) per detent */
+        [ROT_quarter] = 0x24428118  /* 1 transition (quarter cyc) per detent */
+    };
+    return (rotary_transitions[ff_cfg.rotary & 3] >> (rotary << 1)) & 3;
+}
+
 static uint8_t read_rotary(uint8_t rotary)
 {
     /* Rotary encoder outputs a Gray code, counting clockwise: 00-01-11-10. */
@@ -562,7 +574,8 @@ static void button_timer_fn(void *unused)
         break;
 
     default: /* rotary encoder */ {
-        rb = read_rotary(rotary) ?: rb;
+        rb = (ff_cfg.rotary & ROT_v2) ? v2_read_rotary(rotary)
+            : (read_rotary(rotary) ?: rb);
         if (rb) {
             uint16_t delta = cur_time - prev_time;
             velocity = (BUTTON_SCAN_HZ/10)/(delta?:1);
@@ -1103,6 +1116,8 @@ static void read_ff_cfg(void)
                     *q++ = '\0';
                 if (!strcmp(p, "reverse")) {
                     ff_cfg.rotary |= ROT_reverse;
+                } else if (!strcmp(p, "v2")) {
+                    ff_cfg.rotary |= ROT_v2;
                 } else {
                     ff_cfg.rotary &= ~ROT_typemask;
                     ff_cfg.rotary |=
