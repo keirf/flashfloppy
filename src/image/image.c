@@ -173,14 +173,16 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
         if (try_handler(im, slot, cltbl, hint))
             return;
         /* Hint failed. Try a secondary hint. */
-        if (hint == &img_image_handler)
+        if (hint == &img_image_handler) {
             /* IMG,IMA,DSK,OUT -> XDF */
             hint = &xdf_image_handler;
-        else if (!strcmp(ext, "dsk")) 
+        } else if (!strcmp(ext, "dsk")) {
             /* DSK -> IMG */
             hint = &img_image_handler;
-        else
+            ext[0] = '\0';
+        } else {
             hint = NULL;
+        }
     }
 
     /* Filename extension hinting failed: walk the handler list. */
