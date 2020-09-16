@@ -93,7 +93,12 @@ static void IRQ_WGATE_changed(void)
 
     if (!(gpiob->idr & m(pin_wgate)) || read_pin(ready)) {
         /* !WG || !/RY */
+        drive.index_suppressed = FALSE;
         wdata_stop();
+        if (drive.index_suppressed && (window.state <= WIN_rdata_off)) {
+            window.paused = TRUE;
+            window.pause_pos = drive.restart_pos;
+        }
     } else {
         /* WG && /RY */
         rdata_stop();

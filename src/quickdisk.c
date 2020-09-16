@@ -23,6 +23,9 @@ static struct window {
 #define WIN_ready_off 3 /* Deassert /RY */
 #define WIN_rdata_off 4 /* Mask RD */
     uint8_t state; /* WIN_* */
+    /* For restarting reads after a write. */
+    bool_t paused;
+    uint32_t pause_pos;
 } window;
 
 /* RD-active has a wider window than /RY-asserted. */
@@ -139,6 +142,46 @@ void floppy_insert(unsigned int unit, struct slot *slot)
 
     /* Motor spins up, if enabled. */
     IRQx_set_pending(motor_irq);
+
+    window.paused = FALSE;
+}
+
+static void floppy_unpause_window(struct drive *drv)
+{
+    struct window *w = &window;
+    unsigned int i, state_times[] = {
+        drv->image->qd.win_start - rd_before_ry,
+        rd_before_ry,
+        drv->image->qd.win_end - drv->image->qd.win_start,
+        rd_after_ry };
+    uint32_t oldpri, pos = window.pause_pos;
+    time_t t;
+
+    oldpri = IRQ_save(TIMER_IRQ_PRI);
+
+    timer_cancel(&index.timer);
+
+    rdata_start();
+    if (!read_pin(ready))
+        gpio_configure_pin(gpio_data, pin_rdata, AFO_rdata);
+
+    t = index.timer.deadline = index.prev_time = time_now() - pos;
+    w->state = WIN_rdata_on;
+
+    for (i = 0; i < ARRAY_SIZE(state_times); i++) {
+        unsigned int delta = state_times[i];
+        if (pos < delta) {
+            timer_set(&w->timer, t + delta);
+            break;
+        }
+        w->state++;
+        t += delta;
+        pos -= delta;
+    }
+
+    window.paused = FALSE;
+
+    IRQ_restore(oldpri);
 }
 
 static void floppy_sync_flux(void)
@@ -164,6 +207,9 @@ static void floppy_sync_flux(void)
     if (nr < buf_mask)
         return;
 
+    if (window.paused)
+        return floppy_unpause_window(drv);
+
     /* Must not currently be driving through the state machine. */
     if (window.state != 0)
         return;
@@ -185,7 +231,9 @@ static bool_t dma_rd_handle(struct drive *drv)
     switch (dma_rd->state) {
 
     case DMA_inactive: {
-        time_t read_start_pos = 0;
+        time_t read_start_pos = window.paused ? window.pause_pos : 0;
+        read_start_pos %= drv->image->stk_per_rev;
+        read_start_pos *= SYSCLK_MHZ/STK_MHZ;
         if (image_setup_track(drv->image, 0, &read_start_pos))
             return TRUE;
         /* Change state /then/ check for race against step or side change. */
@@ -266,6 +314,9 @@ static void window_timer(void *_drv)
     struct drive *drv = _drv;
     struct window *w = &window;
     time_t now = w->timer.deadline;
+
+    if (window.paused)
+        return;
 
     switch (w->state) {
 
