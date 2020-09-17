@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.17 - 17 September 2020
+ - DSK: Fix infinite loop when trying to open a bad DSK image file
+ - Quick Disk: Restart read stream immediately after a write
+   - QD support now works on Sharp MZ-800
+ - IMG.CFG: Remove [default] stanza from example config
+   - Users copying the example file will no longer break their IMG files
+
 ** v3.16 - 22 August 2020
  - Rotary encoder: Velocity curve during image navigation
    - Fast spin of the encoder skips multiple entries per click
