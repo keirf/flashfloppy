@@ -771,7 +771,7 @@ static unsigned int oled_start_i2c(uint8_t *buf)
     static const uint8_t ssd1306_addr_cmds[] = {
         0x20, 0,      /* horizontal addressing mode */
         0x21, 0, 127, /* column address range: 0-127 */
-        0x22, 0, /*?*//* page address range: 0-? */
+        0x22, 0, 7,   /* page address range: 0-7 */
     }, ztech_addr_cmds[] = {
         0xda, 0x12,   /* alternate com pins config */
         0x21, 4, 131, /* column address range: 4-131 */
@@ -791,8 +791,6 @@ static unsigned int oled_start_i2c(uint8_t *buf)
         *dc++ = 0xb0 + i2c_row;
     } else {
         p += oled_queue_cmds(p, ssd1306_addr_cmds, sizeof(ssd1306_addr_cmds));
-        /* Page address max: depends on display height */
-        *dc++ = (oled_height / 8) - 1;
     }
 
     /* Display on/off according to backlight setting. */
@@ -987,6 +985,10 @@ static void oled_init(void)
     }, rot_cmds[] = {
         0xa0,       /* segment mapping (default) */
         0xc0,       /* com scan direction (default) */
+    }, ssd1306_cls_cmds[] = {
+        0x20, 1,      /* vertical addressing mode */
+        0x21, 127, 127, /* column address range: 127-127 */
+        0x22, 0, 7,     /* page address range: 0-7 */
     };
     const uint8_t *cmds;
     uint8_t dynamic_cmds[6], *dc;
@@ -1021,6 +1023,18 @@ static void oled_init(void)
     /* Display is right-way-up, or rotated. */
     cmds = (ff_cfg.display_type & DISPLAY_rotate) ? rot_cmds : norot_cmds;
     p += oled_queue_cmds(p, cmds, sizeof(rot_cmds));
+
+    if (oled_model == OLED_ssd1306) {
+        /* Clear last column of pixels. This works around an issue seen on
+         * SSD1309 128x64 displays where the last data byte in a transaction
+         * can be lost. This is less visible if that screen area is blank. */
+        int i;
+        p += oled_queue_cmds(p, ssd1306_cls_cmds, sizeof(ssd1306_cls_cmds));
+        for (i = 0; i < 8; i++) {
+            *p++ = 0xc0; /* Data */
+            *p++ = 0;
+        }
+    }
 
     /* Start off the I2C transaction. */
     p += oled_start_i2c(p);
