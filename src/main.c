@@ -75,6 +75,15 @@ static void native_get_slot_map(bool_t sorted_only);
 /* Hack inside the guts of FatFS. */
 void flashfloppy_fill_fileinfo(FIL *fp);
 
+#ifdef LOGFILE
+/* Logfile must be written to config dir. */
+#define logfile_flush(_file) do {               \
+    fatfs.cdir = cfg.cfg_cdir;                  \
+    logfile_flush(_file);                       \
+    fatfs.cdir = cfg.cur_cdir;                  \
+} while(0)
+#endif
+
 static bool_t slot_valid(unsigned int i)
 {
     if (i > cfg.max_slot_nr)
