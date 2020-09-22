@@ -408,7 +408,7 @@ static bool_t mfm_write_track(struct image *im)
     uint8_t *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
-    unsigned int sect, i;
+    unsigned int sect;
     uint16_t crc;
     uint8_t x;
 
@@ -424,9 +424,9 @@ static bool_t mfm_write_track(struct image *im)
 
         if (be16toh(buf[c++ & bufmask]) != 0x4489)
             continue;
-        for (i = 0; i < 8; i++)
-            if ((x = mfmtobin(buf[c++ & bufmask])) != 0xa1)
-                break;
+        if ((x = mfmtobin(buf[c & bufmask])) == 0xa1)
+            continue;
+        c++;
 
         switch (x) {
 

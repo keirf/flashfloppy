@@ -1834,9 +1834,9 @@ static bool_t raw_write_track(struct image *im)
 
             if (be16toh(buf[c++ & bufmask]) != 0x4489)
                 continue;
-            for (i = 0; i < 8; i++)
-                if ((x = mfmtobin(buf[c++ & bufmask])) != 0xa1)
-                    break;
+            if ((x = mfmtobin(buf[c & bufmask])) == 0xa1)
+                continue;
+            c++;
 
         }
 
