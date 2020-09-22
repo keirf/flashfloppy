@@ -1761,6 +1761,35 @@ static bool_t raw_read_track(struct image *im)
     return (im->sync == SYNC_fm) ? fm_read_track(im) : mfm_read_track(im);
 }
 
+static int raw_find_first_write_sector(
+    struct image *im, struct write *write, struct raw_trk *trk)
+{
+    uint8_t *sec_map = im->img.sec_map;
+    unsigned int i;
+    int32_t base;
+
+    base = write->start / im->ticks_per_cell; /* in data bytes */
+    base -= im->img.track_delay_bc;
+    if (base < 0)
+        base += im->tracklen_bc;
+
+    /* Convert write offset to sector number (in rotational order). */
+    base -= im->img.idx_sz + im->img.idam_sz;
+    for (i = 0; i < trk->nr_sectors; i++) {
+        /* Within small range of expected data start? */
+        if ((base >= -64) && (base <= 64))
+            break;
+        base -= enc_sec_sz(im, &im->img.sec_info[*sec_map++]);
+    }
+
+    /* Convert rotational order to logical order. */
+    if (i >= trk->nr_sectors) {
+        printk("IMG Bad Sector Offset: %u -> %u\n", base, i);
+        return -2;
+    }
+    return *sec_map;
+}
+
 static bool_t raw_write_track(struct image *im)
 {
     const uint8_t mfm_dam_header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
@@ -1777,8 +1806,7 @@ static bool_t raw_write_track(struct image *im)
     unsigned int i, off;
     time_t t;
     uint16_t crc, sec_sz;
-    uint8_t id, x, *sec_map;
-    int32_t base;
+    uint8_t id, x;
 
     /* If we are processing final data then use the end index, rounded up. */
     barrier();
@@ -1786,31 +1814,8 @@ static bool_t raw_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 15) / 16;
 
-    if (im->img.write_sector == -1) {
-        base = write->start / im->ticks_per_cell; /* in data bytes */
-        sec_map = im->img.sec_map;
-
-        base -= im->img.track_delay_bc;
-        if (base < 0)
-            base += im->tracklen_bc;
-
-        /* Convert write offset to sector number (in rotational order). */
-        base -= im->img.idx_sz + im->img.idam_sz;
-        for (i = 0; i < trk->nr_sectors; i++) {
-            /* Within small range of expected data start? */
-            if ((base >= -64) && (base <= 64))
-                break;
-            base -= enc_sec_sz(im, &im->img.sec_info[*sec_map++]);
-        }
-
-        /* Convert rotational order to logical order. */
-        if (i >= trk->nr_sectors) {
-            printk("IMG Bad Sector Offset: %u -> %u\n", base, i);
-            im->img.write_sector = -2;
-        } else {
-            im->img.write_sector = *sec_map;
-        }
-    }
+    if (im->img.write_sector == -1)
+        im->img.write_sector = raw_find_first_write_sector(im, write, trk);
 
     for (;;) {
 

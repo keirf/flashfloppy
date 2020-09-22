@@ -441,6 +441,33 @@ static bool_t dsk_read_track(struct image *im)
     return TRUE;
 }
 
+static int dsk_find_first_write_sector(
+    struct image *im, struct write *write, struct tib *tib)
+{
+    unsigned int i;
+    int32_t base = write->start / im->ticks_per_cell; /* in data bytes */
+
+    /* Convert write offset to sector number (in rotational order). */
+    base -= im->dsk.idx_sz + im->dsk.idam_sz;
+    for (i = 0; i < tib->nr_secs; i++) {
+        /* Within small range of expected data start? */
+        if ((base >= -64) && (base <= 64))
+            break;
+        base -= im->dsk.idam_sz + im->dsk.dam_sz_pre
+            + data_sz(&tib->sib[i]) + im->dsk.dam_sz_post;
+        if (is_gaps_sector(&tib->sib[i]))
+            base += im->dsk.dam_sz_post;
+    }
+
+    if (i >= tib->nr_secs) {
+        printk("DSK Bad Sector Offset: %u -> %u\n",
+               base, im->dsk.write_sector);
+        return -2;
+    }
+
+    return i;
+}
+
 static bool_t dsk_write_track(struct image *im)
 {
     const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
@@ -453,7 +480,6 @@ static bool_t dsk_write_track(struct image *im)
     unsigned int bufmask = (wr->len / 2) - 1;
     uint8_t *wrbuf = (uint8_t *)im->bufs.write_data.p + 512; /* skip DIB/TIB */
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    int32_t base = write->start / im->ticks_per_cell; /* in data bytes */
     unsigned int i;
     time_t t;
     uint16_t crc, sec_sz, off;
@@ -465,25 +491,8 @@ static bool_t dsk_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 15) / 16;
 
-    if (im->dsk.write_sector == -1) {
-        /* Convert write offset to sector number (in rotational order). */
-        base -= im->dsk.idx_sz + im->dsk.idam_sz;
-        for (i = 0; i < tib->nr_secs; i++) {
-            /* Within small range of expected data start? */
-            if ((base >= -64) && (base <= 64))
-                break;
-            base -= im->dsk.idam_sz + im->dsk.dam_sz_pre
-                + data_sz(&tib->sib[i]) + im->dsk.dam_sz_post;
-            if (is_gaps_sector(&tib->sib[i]))
-                base += im->dsk.dam_sz_post;
-        }
-        im->dsk.write_sector = i;
-        if (im->dsk.write_sector >= tib->nr_secs) {
-            printk("DSK Bad Sector Offset: %u -> %u\n",
-                   base, im->dsk.write_sector);
-            im->dsk.write_sector = -2;
-        }
-    }
+    if (im->dsk.write_sector == -1)
+        im->dsk.write_sector = dsk_find_first_write_sector(im, write, tib);
 
     for (;;) {
 
