@@ -420,15 +420,13 @@ static bool_t mfm_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 15) / 16;
 
-    while ((int16_t)(p - c) >= (3 + SEC_SZ + 2)) {
+    while ((int16_t)(p - c) > 128) {
 
-        uint32_t _c = c;
+        uint32_t sc = c;
 
-        /* Scan for sync words and IDAM. Because of the way we sync we expect
-         * to see only 2*4489 and thus consume only 3 words for the header. */
         if (be16toh(buf[c++ & bufmask]) != 0x4489)
             continue;
-        for (i = 0; i < 2; i++)
+        for (i = 0; i < 8; i++)
             if ((x = mfmtobin(buf[c++ & bufmask])) != 0xa1)
                 break;
 
@@ -455,8 +453,8 @@ static bool_t mfm_write_track(struct image *im)
         }
 
         if ((int16_t)(p - c) < (SEC_SZ + 2)) {
-            c = _c;
-            break;
+            c = sc;
+            goto out;
         }
 
         mfm_ring_to_bin(buf, bufmask, c, wrbuf, SEC_SZ + 2);
@@ -465,8 +463,8 @@ static bool_t mfm_write_track(struct image *im)
         process_wdata(im, sect, crc);
     }
 
+out:
     wr->cons = c * 16;
-
     return flush;
 }
 

@@ -482,7 +482,7 @@ static bool_t dsk_write_track(struct image *im)
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     unsigned int i;
     time_t t;
-    uint16_t crc, sec_sz, off;
+    uint16_t crc, off;
     uint8_t x;
 
     /* If we are processing final data then use the end index, rounded up. */
@@ -494,18 +494,13 @@ static bool_t dsk_write_track(struct image *im)
     if (im->dsk.write_sector == -1)
         im->dsk.write_sector = dsk_find_first_write_sector(im, write, tib);
 
-    for (;;) {
+    while ((int16_t)(p - c) > 128) {
 
-        sec_sz = (im->dsk.write_sector >= 0)
-            ? data_sz(&tib->sib[im->dsk.write_sector]) : 128;
-        if ((int16_t)(p - c) < (3 + sec_sz + 2))
-            break;
+        uint32_t sc = c;
 
-        /* Scan for sync words and IDAM. Because of the way we sync we expect
-         * to see only 2*4489 and thus consume only 3 words for the header. */
         if (be16toh(buf[c++ & bufmask]) != 0x4489)
             continue;
-        for (i = 0; i < 2; i++)
+        for (i = 0; i < 8; i++)
             if ((x = mfmtobin(buf[c++ & bufmask])) != 0xa1)
                 break;
 
@@ -534,13 +529,18 @@ static bool_t dsk_write_track(struct image *im)
             break;
 
         case 0xfb: /* DAM */ {
-            unsigned int nr, todo;
+            unsigned int nr, todo, sec_sz;
 
             if (im->dsk.write_sector < 0) {
                 printk("DSK DAM for unknown sector (%d)\n",
                        im->dsk.write_sector);
-                c += sec_sz + 2;
                 break;
+            }
+
+            sec_sz = data_sz(&tib->sib[im->dsk.write_sector]);
+            if ((int16_t)(p - c) < (sec_sz + 2)) {
+                c = sc;
+                goto out;
             }
 
             crc = crc16_ccitt(header, 4, 0xffff);
@@ -581,8 +581,8 @@ static bool_t dsk_write_track(struct image *im)
         }
     }
 
+out:
     wr->cons = c * 16;
-
     return flush;
 }
 

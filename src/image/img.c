@@ -1805,7 +1805,7 @@ static bool_t raw_write_track(struct image *im)
     struct raw_sec *sec;
     unsigned int i, off;
     time_t t;
-    uint16_t crc, sec_sz;
+    uint16_t crc;
     uint8_t id, x;
 
     /* If we are processing final data then use the end index, rounded up. */
@@ -1817,16 +1817,13 @@ static bool_t raw_write_track(struct image *im)
     if (im->img.write_sector == -1)
         im->img.write_sector = raw_find_first_write_sector(im, write, trk);
 
-    for (;;) {
+    while ((int16_t)(p - c) > 128) {
 
-        sec_sz = (im->img.write_sector >= 0)
-            ? sec_sz(im->img.sec_info[im->img.write_sector].no) : 128;
+        uint32_t sc = c;
 
         if (im->sync == SYNC_fm) {
 
             uint16_t sync;
-            if ((int16_t)(p - c) < (2 + sec_sz + 2))
-                break;
             if (buf[c++ & bufmask] != 0xaaaa)
                 continue;
             sync = buf[c & bufmask];
@@ -1837,14 +1834,9 @@ static bool_t raw_write_track(struct image *im)
 
         } else { /* MFM */
 
-            if ((int16_t)(p - c) < (3 + sec_sz + 2))
-                break;
-            /* Scan for sync words and IDAM. Because of the way we sync we
-             * expect to see only 2*4489 and thus consume only 3 words for the
-             * header. */
             if (be16toh(buf[c++ & bufmask]) != 0x4489)
                 continue;
-            for (i = 0; i < 2; i++)
+            for (i = 0; i < 8; i++)
                 if ((x = mfmtobin(buf[c++ & bufmask])) != 0xa1)
                     break;
 
@@ -1884,13 +1876,18 @@ static bool_t raw_write_track(struct image *im)
             break;
 
         case 0xfb: /* DAM */ {
-            unsigned int nr, todo;
+            unsigned int nr, todo, sec_sz;
 
             if (im->img.write_sector < 0) {
                 printk("IMG DAM for unknown sector (%d)\n",
                        im->img.write_sector);
-                c += sec_sz + 2;
                 break;
+            }
+
+            sec_sz = sec_sz(im->img.sec_info[im->img.write_sector].no);
+            if ((int16_t)(p - c) < (sec_sz + 2)) {
+                c = sc;
+                goto out;
             }
 
             crc = (im->sync == SYNC_fm)
@@ -1936,8 +1933,8 @@ static bool_t raw_write_track(struct image *im)
         }
     }
 
+out:
     wr->cons = c * 16;
-
     return flush;
 }
 
