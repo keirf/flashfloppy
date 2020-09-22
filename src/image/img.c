@@ -1895,10 +1895,10 @@ static bool_t raw_write_track(struct image *im)
                    sec->id, trk->nr_sectors);
             t = time_now();
 
-            sec = im->img.sec_info;
             if (im->img.file_sec_offsets) {
                 off = im->img.file_sec_offsets[im->img.write_sector];
             } else {
+                sec = im->img.sec_info;
                 for (i = off = 0; i < im->img.write_sector; i++)
                     off += sec_sz(sec++->no);
             }
