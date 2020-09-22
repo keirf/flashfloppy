@@ -1792,8 +1792,6 @@ static int raw_find_first_write_sector(
 
 static bool_t raw_write_track(struct image *im)
 {
-    const uint8_t mfm_dam_header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
-
     bool_t flush;
     struct raw_trk *trk = im->img.trk;
     struct write *write = get_write(im, im->wr_cons);
@@ -1890,9 +1888,7 @@ static bool_t raw_write_track(struct image *im)
                 goto out;
             }
 
-            crc = (im->sync == SYNC_fm)
-                ? crc16_ccitt(&x, 1, 0xffff)
-                : crc16_ccitt(mfm_dam_header, 4, 0xffff);
+            crc = (im->sync == SYNC_fm) ? FM_DAM_CRC : MFM_DAM_CRC;
 
             sec = &im->img.sec_info[im->img.write_sector];
             printk("Write %u[%02x]/%u... ", im->img.write_sector,
@@ -2298,15 +2294,14 @@ static bool_t mfm_read_track(struct image *im)
             break;
         }
         case 1: /* DAM */ {
-            uint8_t dam[4] = { 0xa1, 0xa1, 0xa1, 0xfb };
             if (bc_space < im->img.dam_sz_pre)
                 return FALSE;
             for (i = 0; i < GAP_SYNC; i++)
                 emit_byte(0x00);
             for (i = 0; i < 3; i++)
                 emit_raw(0x4489);
-            emit_byte(dam[3]);
-            im->img.crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
+            emit_byte(0xfb);
+            im->img.crc = MFM_DAM_CRC;
             break;
         }
         case 2: /* Data */ {
@@ -2488,13 +2483,12 @@ static bool_t fm_read_track(struct image *im)
             break;
         }
         case 1: /* DAM */ {
-            uint8_t dam[1] = { 0xfb };
             if (bc_space < im->img.dam_sz_pre)
                 return FALSE;
             for (i = 0; i < FM_GAP_SYNC; i++)
                 emit_byte(0x00);
-            emit_raw(fm_sync(dam[0], FM_SYNC_CLK));
-            im->img.crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
+            emit_raw(fm_sync(0xfb, FM_SYNC_CLK));
+            im->img.crc = FM_DAM_CRC;
             break;
         }
         case 2: /* Data */ {

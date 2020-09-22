@@ -470,8 +470,6 @@ static int dsk_find_first_write_sector(
 
 static bool_t dsk_write_track(struct image *im)
 {
-    const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
-
     bool_t flush;
     struct write *write = get_write(im, im->wr_cons);
     struct tib *tib = tib_p(im);
@@ -543,7 +541,7 @@ static bool_t dsk_write_track(struct image *im)
                 goto out;
             }
 
-            crc = crc16_ccitt(header, 4, 0xffff);
+            crc = MFM_DAM_CRC;
 
             printk("Write %d[%02x]/%u... ", im->dsk.write_sector,
                    (im->dsk.write_sector >= 0)

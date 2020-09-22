@@ -247,8 +247,7 @@ static bool_t fm_read_track(struct image *im)
         emit_raw(fm_sync(dam[0], FM_SYNC_CLK));
         for (i = 0; i < SEC_SZ; i++)
             emit_byte(buf[i]);
-        crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
-        crc = crc16_ccitt(buf, SEC_SZ, crc);
+        crc = crc16_ccitt(buf, SEC_SZ, FM_DAM_CRC);
         emit_byte(crc >> 8);
         emit_byte(crc);
         for (i = 0; i < FM_GAP_3; i++)
@@ -331,8 +330,7 @@ static bool_t mfm_read_track(struct image *im)
         emit_byte(dam[3]);
         for (i = 0; i < SEC_SZ; i++)
             emit_byte(buf[i]);
-        crc = crc16_ccitt(dam, sizeof(dam), 0xffff);
-        crc = crc16_ccitt(buf, SEC_SZ, crc);
+        crc = crc16_ccitt(buf, SEC_SZ, MFM_DAM_CRC);
         emit_byte(crc >> 8);
         emit_byte(crc);
         for (i = 0; i < MFM_GAP_3; i++)
@@ -392,7 +390,7 @@ static bool_t fm_write_track(struct image *im)
         mfm_ring_to_bin(buf, bufmask, c, wrbuf, SEC_SZ + 2);
         c += SEC_SZ + 2;
 
-        process_wdata(im, sect, crc16_ccitt(&x, 1, 0xffff));
+        process_wdata(im, sect, FM_DAM_CRC);
     }
 
     wr->cons = c * 16;
@@ -440,10 +438,9 @@ static bool_t mfm_write_track(struct image *im)
         }
 
         case 0xfb: /* Ordinary Sector */ {
-            const uint8_t header[] = { 0xa1, 0xa1, 0xa1, 0xfb };
             sect = (base - im->da.idx_sz - im->da.idam_sz + enc_sec_sz(im)/2)
                 / enc_sec_sz(im);
-            crc = crc16_ccitt(header, 4, 0xffff);
+            crc = MFM_DAM_CRC;
             break;
         }
 
