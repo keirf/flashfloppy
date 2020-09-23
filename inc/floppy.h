@@ -255,8 +255,8 @@ uint8_t mfmtobin(uint16_t x);
 void mfm_to_bin(const void *in, void *out, unsigned int nr);
 void mfm_ring_to_bin(const uint16_t *ring, unsigned int mask,
                      unsigned int idx, void *out, unsigned int nr);
-#define MFM_DAM_CRC 0xe295
-#define FM_DAM_CRC 0xbf84
+#define MFM_DAM_CRC  0xe295 /* 0xa1, 0xa1, 0xa1, 0xfb */
+#define FM_DAM_CRC   0xbf84 /* 0xfb */
 
 /* FM conversion. */
 #define FM_SYNC_CLK 0xc7
