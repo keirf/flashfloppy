@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.18 - 23 September 2020
+ - OLED/LCD: Fix potential minor display corruption
+   - Only seen with 128x64 OLED displays, bottom right corner
+ - alt/logfile: WRite FFLOG.TXT to correct folder (root or FF/)
+ - IMG, DSK: Various cleanups to sector-write handling
+
 ** v3.17 - 17 September 2020
  - DSK: Fix infinite loop when trying to open a bad DSK image file
  - Quick Disk: Restart read stream immediately after a write
