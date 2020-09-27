@@ -68,28 +68,34 @@ static void adf_setup_track(
     struct image_buf *bc = &im->bufs.read_bc;
     uint32_t decode_off, sector, sys_ticks = start_pos ? *start_pos : 0;
 
-    im->adf.trk_len = im->adf.nr_secs * 512;
-    im->adf.trk_off = track * im->adf.trk_len;
-    im->ticks_since_flux = 0;
+    if ((im->cur_track ^ track) & ~1) {
+        /* New cylinder: Refresh the sector maps (ordered by sector #). */
+        unsigned int sect;
+        for (sect = 0; sect < im->adf.nr_secs; sect++)
+            im->adf.sec_map[0][sect] = im->adf.sec_map[1][sect] = sect;
+    }
+
+    im->adf.trk_off = track * im->adf.nr_secs * 512;
     im->cur_track = track;
 
     im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;
+    im->ticks_since_flux = 0;
 
     decode_off = im->cur_bc;
     if (decode_off < POST_IDX_GAP_BC) {
         im->adf.decode_pos = 0;
-        im->adf.trk_pos = 0;
+        im->adf.sec_idx = 0;
     } else {
         decode_off -= POST_IDX_GAP_BC;
         sector = decode_off / (544*16);
         decode_off %= 544*16;
         im->adf.decode_pos = sector + 1;
-        im->adf.trk_pos = sector * 512;
-        if (im->adf.trk_pos >= im->adf.trk_len)
-            im->adf.trk_pos = 0;
+        im->adf.sec_idx = sector;
+        if (im->adf.sec_idx >= im->adf.nr_secs)
+            im->adf.sec_idx = 0;
     }
 
     rd->prod = rd->cons = 0;
@@ -98,6 +104,9 @@ static void adf_setup_track(
     if (start_pos) {
         image_read_track(im);
         bc->cons = decode_off;
+    } else {
+        im->adf.sec_idx = 0;
+        im->adf.written_secs = 0;
     }
 }
 
@@ -109,15 +118,17 @@ static bool_t adf_read_track(struct image *im)
     uint32_t *buf = rd->p;
     uint32_t pr, *bc_b = bc->p;
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
+    unsigned int hd = im->cur_track & 1;
     unsigned int i;
 
     if (rd->prod == rd->cons) {
-        F_lseek(&im->fp, im->adf.trk_off + im->adf.trk_pos);
+        unsigned int sector = im->adf.sec_map[hd][im->adf.sec_idx];
+        F_lseek(&im->fp, im->adf.trk_off + sector * sec_sz);
         F_read(&im->fp, buf, sec_sz, NULL);
         rd->prod++;
-        im->adf.trk_pos += sec_sz;
-        if (im->adf.trk_pos >= im->adf.trk_len)
-            im->adf.trk_pos = 0;
+        im->adf.sec_idx++;
+        if (im->adf.sec_idx >= im->adf.nr_secs)
+            im->adf.sec_idx = 0;
     }
 
     /* Generate some MFM if there is space in the raw-bitcell ring buffer. */
@@ -158,7 +169,8 @@ static bool_t adf_read_track(struct image *im)
 
     } else {
 
-        uint32_t info, csum, sector = im->adf.decode_pos - 1;
+        uint32_t info, csum, sec_idx = im->adf.decode_pos - 1;
+        uint32_t sector = im->adf.sec_map[hd][sec_idx];
 
         if (bc_space < (544*16)/32)
             return FALSE;
@@ -173,7 +185,7 @@ static bool_t adf_read_track(struct image *im)
         info = ((0xff << 24)
                 | (im->cur_track << 16)
                 | (sector << 8)
-                | (im->adf.nr_secs - sector));
+                | (im->adf.nr_secs - sec_idx));
         emit_long(even(info));
         emit_long(odd(info));
         /* label */
@@ -230,6 +242,7 @@ static bool_t adf_write_track(struct image *im)
     uint32_t c = wr->cons / 32, p = wr->prod / 32;
     uint32_t info, dsum, csum;
     unsigned int i, sect, batch_sect, batch, max_batch;
+    unsigned int hd = im->cur_track & 1;
 
     /* If we are processing final data then use the end index, rounded up. */
     barrier();
@@ -302,11 +315,22 @@ static bool_t adf_write_track(struct image *im)
         }
 
         /* All good: add to the write-out batch. */
+        if (!(im->adf.written_secs & (1u<<sect))) {
+            im->adf.written_secs |= 1u<<sect;
+            im->adf.sec_map[hd][im->adf.sec_idx++] = sect;
+        }
         if (batch++ == 0)
             batch_sect = sect;
     }
 
     write_batch(im, batch_sect, batch);
+
+    if (flush && (im->adf.sec_idx != im->adf.nr_secs)) {
+        /* End of write: If not all sectors were correctly written,
+         * force the default in-order sector map. */
+        for (sect = 0; sect < im->adf.nr_secs; sect++)
+            im->adf.sec_map[hd][sect] = sect;
+    }
 
     wr->cons = c * 32;
 

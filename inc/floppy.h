@@ -34,10 +34,12 @@
 
 struct adf_image {
     uint32_t trk_off;
-    uint16_t trk_pos, trk_len;
+    uint32_t sec_idx;
     int32_t decode_pos;
     uint32_t pre_idx_gap_bc;
     uint32_t nr_secs;
+    uint32_t written_secs;
+    uint8_t sec_map[2][22];
 };
 
 struct hfe_image {
