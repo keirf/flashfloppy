@@ -54,7 +54,10 @@ const static struct fintf {
     [FINTF_IBMPC_HDOUT] = {
         .pin02 = outp_hden,
         .pin34 = outp_dskchg },
-    [FINTF_AKAI_S950] = {
+    [FINTF_JPPC] = {
+        .pin02 = outp_unused,
+        .pin34 = outp_rdy },
+    [FINTF_JPPC_HDOUT] = {
         .pin02 = outp_hden,
         .pin34 = outp_rdy },
     [FINTF_AMIGA] = {
@@ -200,7 +203,8 @@ void floppy_set_fintf_mode(void)
         [FINTF_SHUGART]     = "Shugart",
         [FINTF_IBMPC]       = "IBM PC",
         [FINTF_IBMPC_HDOUT] = "IBM PC + HD_OUT",
-        [FINTF_AKAI_S950]   = "Akai S950",
+        [FINTF_JPPC]        = "Jap. PC",
+        [FINTF_JPPC_HDOUT]  = "Jap. PC + HD_OUT",
         [FINTF_AMIGA]       = "Amiga"
     };
     static const char *const outp_name[] = {

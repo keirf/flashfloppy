@@ -939,7 +939,9 @@ static void read_ff_cfg(void)
                 !strcmp(opts.arg, "shugart") ? FINTF_SHUGART
                 : !strcmp(opts.arg, "ibmpc") ? FINTF_IBMPC
                 : !strcmp(opts.arg, "ibmpc-hdout") ? FINTF_IBMPC_HDOUT
-                : !strcmp(opts.arg, "akai-s950") ? FINTF_AKAI_S950
+                : !strcmp(opts.arg, "jppc") ? FINTF_JPPC
+                : !strcmp(opts.arg, "jppc-hdout") ? FINTF_JPPC_HDOUT
+                : !strcmp(opts.arg, "akai-s950") ? FINTF_JPPC_HDOUT
                 : !strcmp(opts.arg, "amiga") ? FINTF_AMIGA
                 : FINTF_JC;
             break;

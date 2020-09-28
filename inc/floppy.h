@@ -18,8 +18,9 @@
 #define FINTF_SHUGART     0
 #define FINTF_IBMPC       1
 #define FINTF_IBMPC_HDOUT 2
-#define FINTF_AKAI_S950   3
+#define FINTF_JPPC_HDOUT  3
 #define FINTF_AMIGA       4
+#define FINTF_JPPC        5
 
 #define outp_dskchg 0
 #define outp_index  1
