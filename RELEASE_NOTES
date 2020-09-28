@@ -3,6 +3,15 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.19 - 28 September 2020
+ - Amiga, ADF: Fix X-Copy verified writes with out-of-order sectors
+   - Remember the latest written sector order for current cylinder
+   - Forgotten after head step or disk eject but sufficient for X-Copy
+ - FF.CFG: New interface= options 'jppc' and 'jppc-hdout'
+   - jppc: pin2=nc, pin34=RDY, Japanese PC standard
+   - jppc-hdout: As above but pin2=HD_OUT, similar to ibmpc-hdout
+   - akai-s950 is retained as a legacy alias for jppc-hdout
+
 ** v3.18 - 23 September 2020
  - OLED/LCD: Fix potential minor display corruption
    - Only seen with 128x64 OLED displays, bottom right corner
