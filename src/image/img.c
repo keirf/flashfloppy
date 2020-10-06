@@ -1306,15 +1306,13 @@ found:
     for (i = 2; i < im->nr_cyls * im->nr_sides; i++)
         *trk_map++ = 2+(i&1);
 
-    /* File sector offsets. */
-    im->img.file_sec_offsets = (uint32_t *)align_p(im->img.sec_map)
-        - 2*im->img.trk_info[0].nr_sectors;
+    /* File sector offsets: Dummy non-NULL until xdf_setup_track(). */
+    im->img.file_sec_offsets = (uint32_t *)0xdeadbeef;
 
-    xdf_info = (struct xdf_info *)align_p(im->img.sec_map) - 1;
-    trk = &im->img.trk_info[0];
-    offs = off = (uint32_t *)xdf_info
+    offs = off = (uint32_t *)align_p(im->img.heap_bottom)
         - 2*fmt->sec_per_track0 - 2*fmt->sec_per_trackN;
-    check_p(offs, im);
+    xdf_info = (struct xdf_info *)offs - 1;
+    check_p(xdf_info, im);
 
     xdf_info->fmt = fmt;
     xdf_info->cyl_bytes = fmt->logical_sec_per_track * 2 * 512;
@@ -1345,7 +1343,7 @@ found:
         *off++ = img_curs++ << 9;
     /* 4. MAIN Data. */
     img_curs += 5; /* skip AUX Fat duplicate */
-    remain = 2*trk->nr_sectors - (off - offs);
+    remain = 2*fmt->sec_per_track0 - (off - offs);
     while (remain--)
         *off++ = img_curs++ << 9;
 
@@ -1356,7 +1354,7 @@ found:
     xdf_info->file_sec_offsets[3] = off + fmt->sec_per_trackN;
     for (i = 0; i < 2; i++)
         for (j = 0; j < fmt->sec_per_trackN; j++)
-        *off++ = (uint32_t)fmt->cylN_sec[i][j].offs << 8;
+            *off++ = (uint32_t)fmt->cylN_sec[i][j].offs << 8;
 
     return raw_open(im);
 }
@@ -1366,10 +1364,8 @@ found:
 static void xdf_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
-    struct xdf_info *xdf_info;
+    struct xdf_info *xdf_info = (struct xdf_info *)im->img.heap_bottom;
     unsigned int offs_sel;
-
-    xdf_info = (struct xdf_info *)align_p(im->img.sec_map) - 1;
 
     im->img.track_delay_bc = 0;
     offs_sel = track & 1;
