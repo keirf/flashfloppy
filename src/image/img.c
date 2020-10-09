@@ -26,7 +26,7 @@ static void check_p(void *p, struct image *im);
 const static struct simple_layout {
     uint16_t nr_sectors, rpm, data_rate;
     uint8_t is_fm, has_iam, has_empty, no, gap3, gap4a, base[2];
-    uint8_t interleave;
+    uint8_t interleave, cskew, hskew;
 } dfl_simple_layout = {
     .nr_sectors = 0,
     .rpm = 300,
@@ -38,7 +38,9 @@ const static struct simple_layout {
     .gap3 = 0,
     .gap4a = 0,
     .base = { 1, 1 },
-    .interleave = 1 };
+    .interleave = 1,
+    .cskew = 0,
+    .hskew = 0 };
 static void simple_layout(
     struct image *im, const struct simple_layout *layout);
 
@@ -219,9 +221,9 @@ static bool_t raw_type_open(struct image *im, const struct raw_type *type)
 found:
     im->nr_cyls = nr_cyls;
     im->nr_sides = nr_sides;
-    im->img.hskew = type->hskew;
-    im->img.cskew = type->cskew;
 
+    layout.hskew = type->hskew;
+    layout.cskew = type->cskew;
     layout.rpm = (type->rpm + 5) * 60;
     layout.has_iam = type->has_iam;
     layout.nr_sectors = type->nr_secs;
@@ -349,10 +351,10 @@ static bool_t tag_open(struct image *im, char *tag)
             layout.interleave = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_cskew:
-            im->img.cskew = strtol(opts.arg, NULL, 10);
+            layout.cskew = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_hskew:
-            im->img.hskew = strtol(opts.arg, NULL, 10);
+            layout.hskew = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_rpm:
             layout.rpm = strtol(opts.arg, NULL, 10);
@@ -583,8 +585,6 @@ static bool_t ibm_3174_open(struct image *im)
 
     im->nr_cyls = 80;
     im->nr_sides = 2;
-    im->img.hskew = 0;
-    im->img.cskew = 0;
 
     trk_map = init_track_map(im);
 
@@ -874,7 +874,8 @@ static bool_t opd_open(struct image *im)
         .no = 1, /* 256-byte */
         .gap3 = 12,
         .base = { 0, 0 },
-        .interleave = 13
+        .interleave = 13,
+        .cskew = 13
     };
 
     switch (im_size(im)) {
@@ -890,8 +891,6 @@ static bool_t opd_open(struct image *im)
         return FALSE;
     }
 
-    im->img.cskew = 13;
-
     simple_layout(im, &layout);
     return raw_open(im);
 }
@@ -904,11 +903,11 @@ static bool_t dfs_open(struct image *im)
         .no = 1, /* 256-byte */
         .gap3 = 21,
         .base = { 0, 0 },
-        .interleave = 1
+        .interleave = 1,
+        .cskew = 3
     };
 
     im->nr_cyls = 80;
-    im->img.cskew = 3;
 
     simple_layout(im, &layout);
     return raw_open(im);
@@ -996,7 +995,7 @@ static bool_t ti99_open(struct image *im)
     have_vib = !strncmp(vib.id, "DSK", 3);
 
     layout.interleave = 4;
-    im->img.cskew = 3;
+    layout.cskew = 3;
     layout.no = 1;
     layout.base[0] = layout.base[1] = 0;
     im->img.layout = LAYOUT_sequential | LAYOUT_reverse_side(1);
@@ -1593,7 +1592,7 @@ static void raw_seek_track(
     if (trk->nr_sectors != 0) {
         /* Create logical sector map in rotational order. */
         memset(im->img.sec_map, 0xff, trk->nr_sectors);
-        pos = ((cyl*im->img.cskew) + (side*im->img.hskew)) % trk->nr_sectors;
+        pos = ((cyl*trk->cskew) + (side*trk->hskew)) % trk->nr_sectors;
         for (i = 0; i < trk->nr_sectors; i++) {
             while (im->img.sec_map[pos] != 0xff)
                 pos = (pos + 1) % trk->nr_sectors;
@@ -1951,7 +1950,7 @@ static void raw_dump_info(struct image *im)
     printk(" ticks_per_cell: %u, write_bc_ticks: %u, has_iam: %u\n",
            im->ticks_per_cell, im->write_bc_ticks, trk->has_iam);
     printk(" interleave: %u, cskew %u, hskew %u\n ",
-           trk->interleave, im->img.cskew, im->img.hskew);
+           trk->interleave, trk->cskew, trk->hskew);
     printk(" file-layout: %x\n", im->img.layout);
     for (i = 0; i < trk->nr_sectors; i++) {
         struct raw_sec *sec = &im->img.sec_info[im->img.sec_map[i]];
@@ -2116,6 +2115,8 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
         trk->gap_4a = layout->gap4a;
         trk->data_rate = layout->data_rate;
         trk->interleave = layout->interleave;
+        trk->cskew = layout->cskew;
+        trk->hskew = layout->hskew;
         sec = &im->img.sec_info_base[trk->sec_off];
         for (j = 0; j < layout->nr_sectors; j++) {
             sec->id = j + layout->base[i];
