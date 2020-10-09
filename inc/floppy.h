@@ -84,7 +84,7 @@ struct raw_trk {
     uint16_t sec_off;
     uint16_t data_rate;
     uint16_t rpm;
-    uint8_t gap_2, gap_3, gap_4a;
+    uint8_t gap_2, gap_3, gap_4a, interleave;
     uint8_t has_iam:1, is_fm:1, invert_data:1;
 };
 
@@ -104,7 +104,7 @@ struct img_image {
     uint32_t *file_sec_offsets;
     /* Delay start of track this many bitcells past index. */
     uint32_t track_delay_bc;
-    uint8_t interleave, cskew, hskew;
+    uint8_t cskew, hskew;
     uint16_t gap_4;
     uint32_t idx_sz, idam_sz;
     uint16_t dam_sz_pre, dam_sz_post;
