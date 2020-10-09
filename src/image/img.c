@@ -241,9 +241,39 @@ found:
     return raw_open(im);
 }
 
+static void tag_add_layout(
+    struct image *im, struct simple_layout *layout, unsigned int trk_idx)
+{
+    struct raw_sec *sec;
+    struct raw_trk *trk;
+    unsigned int i;
+
+    if (trk_idx == 0)
+        init_track_map(im);
+
+    trk = add_track_layout(im, layout->nr_sectors, trk_idx);
+    trk->is_fm = layout->is_fm;
+    trk->rpm = layout->rpm;
+    trk->has_iam = layout->has_iam;
+    trk->gap_3 = layout->gap3;
+    trk->gap_4a = layout->gap4a;
+    trk->data_rate = layout->data_rate;
+    trk->interleave = layout->interleave;
+    trk->cskew = layout->cskew;
+    trk->hskew = layout->hskew;
+
+    sec = &im->img.sec_info_base[trk->sec_off];
+    for (i = 0; i < layout->nr_sectors; i++) {
+        sec->id = i + layout->base[0];
+        sec->no = layout->no;
+        sec++;
+    }
+}
+
 static bool_t tag_open(struct image *im, char *tag)
 {
     enum {
+        IMGCFG_tracks,
         IMGCFG_cyls,
         IMGCFG_heads,
         IMGCFG_secs,
@@ -262,6 +292,7 @@ static bool_t tag_open(struct image *im, char *tag)
     };
 
     const static struct opt img_cfg_opts[IMGCFG_nr+1] = {
+        [IMGCFG_tracks] = { "tracks" },
         [IMGCFG_cyls] = { "cyls" },
         [IMGCFG_heads] = { "heads" },
         [IMGCFG_secs] = { "secs" },
@@ -278,9 +309,9 @@ static bool_t tag_open(struct image *im, char *tag)
         [IMGCFG_file_layout] = { "file-layout" },
     };
 
-    int option;
+    int option, nr_t = 0;
     bool_t matched, active;
-    struct simple_layout layout;
+    struct simple_layout t_layout, d_layout;
     struct {
         FIL file;
         struct slot slot;
@@ -303,8 +334,10 @@ static bool_t tag_open(struct image *im, char *tag)
     while ((option = get_next_opt(&opts)) != OPT_eof) {
 
         if (option == OPT_section) {
-            if (active)
-                simple_layout(im, &layout);
+            if (active) {
+                tag_add_layout(im, &t_layout, nr_t);
+                finalise_track_map(im);
+            }
             /* We process this section if we get a tag match, or if this 
              * is the default section and we have no other match so far. */
             active = (tag && !strcmp(opts.arg, tag))
@@ -312,7 +345,8 @@ static bool_t tag_open(struct image *im, char *tag)
             if (active) {
                 matched = TRUE;
                 reset_all_params(im);
-                layout = dfl_simple_layout;
+                d_layout = t_layout = dfl_simple_layout;
+                nr_t = 0;
             }
         }
 
@@ -321,6 +355,33 @@ static bool_t tag_open(struct image *im, char *tag)
 
         switch (option) {
 
+        case IMGCFG_tracks: {
+            char *p = opts.arg;
+            int c_s, c_e, h_s, h_e, c, h;
+            tag_add_layout(im, &t_layout, nr_t);
+            if (nr_t++ == 0)
+                d_layout = t_layout;
+            t_layout = d_layout;
+            do {
+                /* <cylinder>[-<cylinder>] */
+                c_s = strtol(p, &p, 10);
+                c_e = (*p == '-') ? strtol(p+1, &p, 10) : c_s;
+                c_s = max(0, min(c_s, im->nr_cyls - 1));
+                c_e = max(0, min(c_e, im->nr_cyls - 1));
+                h_s = 0;
+                h_e = im->nr_sides - 1;
+                /* [.<head>] */
+                if (*p == '.') {
+                    h_s = strtol(p+1, &p, 10);
+                    h_s = h_e = max(0, min(h_s, im->nr_sides - 1));
+                }
+                for (c = c_s; c <= c_e; c++)
+                    for (h = h_s; h <= h_e; h++)
+                        im->img.trk_map[c*im->nr_sides+h] = nr_t;
+            } while (*p++ == ',');
+            break;
+        }
+
         case IMGCFG_cyls:
             im->nr_cyls = strtol(opts.arg, NULL, 10);
             break;
@@ -328,45 +389,42 @@ static bool_t tag_open(struct image *im, char *tag)
             im->nr_sides = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_secs:
-            layout.nr_sectors = strtol(opts.arg, NULL, 10);
+            t_layout.nr_sectors = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_bps: {
             int no, sz = strtol(opts.arg, NULL, 10);
             for (no = 0; no < 8; no++)
                 if ((128u<<no) == sz)
                     break;
-            layout.no = no;
+            t_layout.no = no;
             break;
         }
-        case IMGCFG_id: {
-            char *p = opts.arg;
-            layout.base[0] = strtol(p, &p, 0);
-            layout.base[1] = (*p == ':') ? strtol(p+1, &p, 0) : layout.base[0];
+        case IMGCFG_id:
+            t_layout.base[0] = strtol(opts.arg, NULL, 0);
             break;
-        }
         case IMGCFG_mode:
-            layout.is_fm = !strcmp(opts.arg, "fm");
+            t_layout.is_fm = !strcmp(opts.arg, "fm");
             break;
         case IMGCFG_interleave:
-            layout.interleave = strtol(opts.arg, NULL, 10);
+            t_layout.interleave = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_cskew:
-            layout.cskew = strtol(opts.arg, NULL, 10);
+            t_layout.cskew = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_hskew:
-            layout.hskew = strtol(opts.arg, NULL, 10);
+            t_layout.hskew = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_rpm:
-            layout.rpm = strtol(opts.arg, NULL, 10);
+            t_layout.rpm = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_gap3:
-            layout.gap3 = strtol(opts.arg, NULL, 10);
+            t_layout.gap3 = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_iam:
-            layout.has_iam = !strcmp(opts.arg, "yes");
+            t_layout.has_iam = !strcmp(opts.arg, "yes");
             break;
         case IMGCFG_rate:
-            layout.data_rate = strtol(opts.arg, NULL, 10);
+            t_layout.data_rate = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_file_layout: {
             char *p, *q;
@@ -390,8 +448,10 @@ static bool_t tag_open(struct image *im, char *tag)
         }
     }
 
-    if (active)
-        simple_layout(im, &layout);
+    if (active) {
+        tag_add_layout(im, &t_layout, nr_t);
+        finalise_track_map(im);
+    }
 
     F_close(&heap->file);
 
@@ -2050,6 +2110,7 @@ static uint8_t *init_track_map(struct image *im)
 
     check_p(p, im);
 
+    memset(trk_map, 0, im->nr_cyls * im->nr_sides);
     return trk_map;
 }
 
@@ -2082,17 +2143,22 @@ static struct raw_trk *add_track_layout(
     return &trk[i];
 }
 
-/* Create track map. This maps track# to a track-info structure. */
+/* Check the final track-map and track-info structures for validity. */
 static void finalise_track_map(struct image *im)
 {
-    struct raw_sec *top, *sec;
+    struct raw_sec *sec;
+    struct raw_trk *trk;
+    uint8_t *trk_map = im->img.trk_map;
+    int i, j;
 
-    top = align_p(im->img.sec_map);
-    sec = im->img.sec_info_base;
-    while (sec < top) {
-        if (sec->no > 6)
-            F_die(FR_BAD_IMAGE);
-        sec++;
+    for (i = 0; i < im->nr_cyls*im->nr_sides; i++) {
+        trk = &im->img.trk_info[*trk_map++];
+        sec = &im->img.sec_info_base[trk->sec_off];
+        for (j = 0; j < trk->nr_sectors; j++) {
+            if (sec->no > 6)
+                F_die(FR_BAD_IMAGE);
+            sec++;
+        }
     }
 }
 
