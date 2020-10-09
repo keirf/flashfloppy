@@ -32,7 +32,8 @@ static void simple_layout(
 
 static struct raw_trk *add_track_layout(
     struct image *im, unsigned int nr_sectors, unsigned int trk_idx);
-static uint8_t *add_track_map(struct image *im);
+static uint8_t *init_track_map(struct image *im);
+static void finalise_track_map(struct image *im);
 
 static bool_t ibm_3174_open(struct image *im);
 static bool_t msx_open(struct image *im);
@@ -519,6 +520,8 @@ static bool_t atr_open(struct image *im)
     im->img.interleave = ATR_INTERLEAVE(nr_sectors);
     im->img.base_off = 16;
 
+    trk_map = init_track_map(im);
+
     /* Create two track layout: 0 -> Track 0; 1 -> All other tracks. */
     for (i = 0; i < 2; i++) {
         trk = add_track_layout(im, nr_sectors, i);
@@ -542,10 +545,10 @@ static bool_t atr_open(struct image *im)
     }
 
     /* Track map: Special layout for first track only. */
-    trk_map = add_track_map(im);
     *trk_map++ = 0;
     for (i = 1; i < im->nr_cyls * im->nr_sides; i++)
         *trk_map++ = 1;
+    finalise_track_map(im);
 
     return raw_open(im);
 }
@@ -581,6 +584,8 @@ static bool_t ibm_3174_open(struct image *im)
     im->img.hskew = 0;
     im->img.cskew = 0;
 
+    trk_map = init_track_map(im);
+
     /* Create two track layouts. */
     /*   0 = 15 sectors/track, 360 rpm */
     /*   1 = 30 sectors/track, 180 rpm */
@@ -601,13 +606,14 @@ static bool_t ibm_3174_open(struct image *im)
     }
 
     /* Create track map, mapping each track to its respective layout. */
-    trk_map = add_track_map(im);
     for (i = 0; i < im->nr_cyls; i++) {
         for (j = 0; j < im->nr_sides; j++) {
             /* Cylinder 0 uses layout 0. */
             *trk_map++ = (i == 0) ? 0 : 1;
         }
     }
+
+    finalise_track_map(im);
 
     return raw_open(im);
 }
@@ -1277,6 +1283,8 @@ found:
     im->nr_sides = 2;
     im->nr_cyls = 80;
 
+    trk_map = init_track_map(im);
+
     /* Create four track layouts: C0H0 C0H1 CnH0 CnH1. */
     for (i = 0; i < 2; i++) {
         unsigned int aux_id = 1, main_id = 129;
@@ -1300,11 +1308,11 @@ found:
     }
 
     /* Track map. */
-    trk_map = add_track_map(im);
     *trk_map++ = 0;
     *trk_map++ = 1;
     for (i = 2; i < im->nr_cyls * im->nr_sides; i++)
         *trk_map++ = 2+(i&1);
+    finalise_track_map(im);
 
     /* File sector offsets: Dummy non-NULL until xdf_setup_track(). */
     im->img.file_sec_offsets = (uint32_t *)0xdeadbeef;
@@ -2017,25 +2025,54 @@ static void check_p(void *p, struct image *im)
     im->img.heap_bottom = p;
 }
 
+/* Initialise track/sector-info structures at the top of the heap. 
+ * In ascending address order: 
+ * {read,write}_data (truncated to 1024 bytes)
+ * ... [volume cache]
+ * im->img.trk_info (trk_map[] points into here)
+ * im->img.sec_info_base (trk_info[] + sec_map[] point into here)
+ * im->img.sec_map (Sector info = sec_info[sec_map[sector#]])
+ * im->img.trk_map (Track info = trk_info[trk_map[track#]]) */
+static uint8_t *init_track_map(struct image *im)
+{
+    uint8_t *trk_map, *sec_map;
+    void *p;
+
+    if ((im->nr_sides < 1) || (im->nr_sides > 2)
+        || (im->nr_cyls < 1) || (im->nr_cyls > 254))
+        F_die(FR_BAD_IMAGE);
+
+    ASSERT(im->img.trk_info == NULL);
+
+    /* Top of heap. */
+    p = (uint8_t *)im->bufs.read_data.p + im->bufs.read_data.len;
+
+    trk_map = (uint8_t *)p - im->nr_cyls * im->nr_sides;
+    im->img.trk_map = trk_map;
+
+    sec_map = trk_map - 256;
+    im->img.sec_map = sec_map;
+
+    p = align_p(sec_map);
+    im->img.sec_info_base = p;
+    im->img.trk_info = p;
+
+    check_p(p, im);
+
+    return trk_map;
+}
+
 static struct raw_trk *add_track_layout(
     struct image *im, unsigned int nr_sectors, unsigned int trk_idx)
 {
     struct raw_sec *sec;
     struct raw_trk *trk;
-    void *p;
     unsigned int i;
 
-    if ((im->nr_sides < 1) || (im->nr_sides > 2)
-        || (im->nr_cyls < 1) || (im->nr_cyls > 254)
-        || (nr_sectors > 256))
-        F_die(FR_BAD_IMAGE);
+    ASSERT(im->img.trk_info != NULL);
 
-    if (!im->img.trk_info) {
-        p = (uint8_t *)im->bufs.read_data.p + im->bufs.read_data.len;
-        p = align_p(p);
-        im->img.sec_info_base = p;
-        im->img.trk_info = p;
-    }
+    if (nr_sectors > 256)
+        F_die(FR_BAD_IMAGE);
 
     sec = im->img.sec_info_base - nr_sectors;
     trk = (struct raw_trk *)align_p(sec) - trk_idx - 1;
@@ -2054,27 +2091,17 @@ static struct raw_trk *add_track_layout(
 }
 
 /* Create track map. This maps track# to a track-info structure. */
-static uint8_t *add_track_map(struct image *im)
+static void finalise_track_map(struct image *im)
 {
-    uint8_t *trk_map, *sec_map;
     struct raw_sec *top, *sec;
 
-    top = align_p((uint8_t *)im->bufs.read_data.p + im->bufs.read_data.len);
+    top = align_p(im->img.sec_map);
     sec = im->img.sec_info_base;
     while (sec < top) {
         if (sec->no > 6)
             F_die(FR_BAD_IMAGE);
         sec++;
     }
-
-    trk_map = (uint8_t *)im->img.trk_info - im->nr_cyls * im->nr_sides;
-    sec_map = trk_map - 256;
-    check_p(sec_map, im);
-
-    im->img.trk_map = trk_map;
-    im->img.sec_map = sec_map;
-
-    return trk_map;
 }
 
 static void simple_layout(struct image *im, const struct simple_layout *layout)
@@ -2083,6 +2110,8 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
     struct raw_trk *trk;
     uint8_t *trk_map;
     unsigned int i, j;
+
+    trk_map = init_track_map(im);
 
     /* Create a track layout per side. */
     for (i = 0; i < im->nr_sides; i++) {
@@ -2107,11 +2136,12 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
         trk->rpm = layout->rpm;
     }
 
-    /* Create track map, mapping each side to its respective layout. */
-    trk_map = add_track_map(im);
+    /* Map each side to its respective layout. */
     for (i = 0; i < im->nr_cyls; i++)
         for (j = 0; j < im->nr_sides; j++)
             *trk_map++ = j;
+
+    finalise_track_map(im);
 }
 
 
