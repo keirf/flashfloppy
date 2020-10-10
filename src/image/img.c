@@ -309,8 +309,7 @@ static bool_t tag_open(struct image *im, char *tag)
         [IMGCFG_file_layout] = { "file-layout" },
     };
 
-    int option, nr_t = 0;
-    bool_t matched, active;
+    int match, active, option, nr_t = 0;
     struct simple_layout t_layout, d_layout;
     struct {
         FIL file;
@@ -329,24 +328,50 @@ static bool_t tag_open(struct image *im, char *tag)
 
     fatfs_from_slot(&heap->file, &heap->slot, FA_READ);
 
-    matched = active = FALSE;
+    match = active = 0;
 
     while ((option = get_next_opt(&opts)) != OPT_eof) {
 
         if (option == OPT_section) {
+            char *p, *q;
+            /* New section: Finalise any currently-active section. */
             if (active) {
                 tag_add_layout(im, &t_layout, nr_t);
                 finalise_track_map(im);
+                active = 0;
             }
-            /* We process this section if we get a tag match, or if this 
-             * is the default section and we have no other match so far. */
-            active = (tag && !strcmp_ci(opts.arg, tag))
-                || (!matched && !strcmp_ci(opts.arg, "default"));
-            if (active) {
-                matched = TRUE;
+            /* Parse the tag name and optional size following "::". */
+            p = q = opts.arg;
+            while ((q = strchr(q, ':')) != NULL) {
+                if (*++q == ':') {
+                    /* Found "::<size>" */
+                    int size = strtol(q+1, NULL, 10);
+                    /* Match on size is worth less than a match on tagname.
+                     * Mismatch on size clobbers the section. */
+                    active += (im_size(im) == size) ? 2 : -100;
+                    q[-1] = '\0'; /* terminate tagname string */
+                    break;
+                }
+            }
+            if (tag && !strcmp_ci(p, tag)) {
+                /* Tagname match is worth the most. */
+                active += 4;
+            } else if (*p == '\0') {
+                /* Empty (default) section is worth the least. */
+                active += 1;
+            } else {
+                /* Non-match on a non-empty tagname clobbers the section. */
+                active -= 100;
+            }
+            if (active > match) {
+                /* Best score so far: Process the section. */
+                match = active;
                 reset_all_params(im);
                 d_layout = t_layout = dfl_simple_layout;
                 nr_t = 0;
+            } else {
+                /* Mark ourselves inactive for this section. */
+                active = 0;
             }
         }
 
@@ -455,7 +480,7 @@ static bool_t tag_open(struct image *im, char *tag)
 
     F_close(&heap->file);
 
-    return matched ? raw_open(im) : FALSE;
+    return match ? raw_open(im) : FALSE;
 }
 
 static bool_t img_open(struct image *im)
