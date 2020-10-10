@@ -132,6 +132,17 @@ size_t strnlen(const char *s, size_t maxlen)
     return len;
 }
 
+int strcmp_ci(const char *s1, const char *s2)
+{
+    for (;;) {
+        int diff = tolower(*s1) - tolower(*s2);
+        if (diff || !*s1)
+            return diff;
+        s1++; s2++;
+    }
+    return 0;
+}
+
 int strcmp(const char *s1, const char *s2)
 {
     return strncmp(s1, s2, INT_MAX);

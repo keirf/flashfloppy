@@ -340,8 +340,8 @@ static bool_t tag_open(struct image *im, char *tag)
             }
             /* We process this section if we get a tag match, or if this 
              * is the default section and we have no other match so far. */
-            active = (tag && !strcmp(opts.arg, tag))
-                || (!matched && !strcmp(opts.arg, "default"));
+            active = (tag && !strcmp_ci(opts.arg, tag))
+                || (!matched && !strcmp_ci(opts.arg, "default"));
             if (active) {
                 matched = TRUE;
                 reset_all_params(im);
