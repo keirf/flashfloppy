@@ -2247,10 +2247,10 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
  * MFM-Specific Handlers
  */
 
-#define GAP_1    50 /* Post-IAM */
-#define GAP_2    22 /* Post-IDAM */
-#define GAP_4A   80 /* Post-Index */
-#define GAP_SYNC 12
+#define MFM_GAP_1    50 /* Post-IAM */
+#define MFM_GAP_2    22 /* Post-IDAM */
+#define MFM_GAP_4A   80 /* Post-Index */
+#define MFM_GAP_SYNC 12
 
 static void mfm_prep_track(struct image *im)
 {
@@ -2261,20 +2261,20 @@ static void mfm_prep_track(struct image *im)
     unsigned int i;
 
     if (trk->gap_2 < 0)
-        trk->gap_2 = GAP_2;
+        trk->gap_2 = MFM_GAP_2;
     auto_gap_3 = (trk->gap_3 < 0);
     if (auto_gap_3) {
-        /* GAP_SYNC is a suitable small initial guess for auto GAP3. */
-        trk->gap_3 = GAP_SYNC;
+        /* MFM_GAP_SYNC is a suitable small initial guess for auto GAP3. */
+        trk->gap_3 = MFM_GAP_SYNC;
     }
     if (trk->gap_4a < 0)
-        trk->gap_4a = GAP_4A;
+        trk->gap_4a = MFM_GAP_4A;
 
     im->img.idx_sz = trk->gap_4a;
     if (trk->has_iam)
-        im->img.idx_sz += GAP_SYNC + 4 + GAP_1;
-    im->img.idam_sz = GAP_SYNC + 8 + 2 + trk->gap_2;
-    im->img.dam_sz_pre = GAP_SYNC + 4;
+        im->img.idx_sz += MFM_GAP_SYNC + 4 + MFM_GAP_1;
+    im->img.idam_sz = MFM_GAP_SYNC + 8 + 2 + trk->gap_2;
+    im->img.dam_sz_pre = MFM_GAP_SYNC + 4;
     im->img.dam_sz_post = 2 + trk->gap_3;
 
     im->img.idam_sz += im->img.post_crc_syncs;
@@ -2373,12 +2373,12 @@ static bool_t mfm_read_track(struct image *im)
             emit_byte(0x4e);
         if (trk->has_iam) {
             /* IAM */
-            for (i = 0; i < GAP_SYNC; i++)
+            for (i = 0; i < MFM_GAP_SYNC; i++)
                 emit_byte(0x00);
             for (i = 0; i < 3; i++)
                 emit_raw(0x5224);
             emit_byte(0xfc);
-            for (i = 0; i < GAP_1; i++)
+            for (i = 0; i < MFM_GAP_1; i++)
                 emit_byte(0x4e);
         }
     } else if (im->img.decode_pos == (trk->nr_sectors * 4 + 1)) {
@@ -2406,7 +2406,7 @@ static bool_t mfm_read_track(struct image *im)
                                 sec->id, sec->no };
             if (bc_space < im->img.idam_sz)
                 return FALSE;
-            for (i = 0; i < GAP_SYNC; i++)
+            for (i = 0; i < MFM_GAP_SYNC; i++)
                 emit_byte(0x00);
             for (i = 0; i < 3; i++)
                 emit_raw(0x4489);
@@ -2424,7 +2424,7 @@ static bool_t mfm_read_track(struct image *im)
         case 1: /* DAM */ {
             if (bc_space < im->img.dam_sz_pre)
                 return FALSE;
-            for (i = 0; i < GAP_SYNC; i++)
+            for (i = 0; i < MFM_GAP_SYNC; i++)
                 emit_byte(0x00);
             for (i = 0; i < 3; i++)
                 emit_raw(0x4489);
@@ -2479,9 +2479,9 @@ static bool_t mfm_read_track(struct image *im)
  * FM-Specific Handlers
  */
 
-#define FM_GAP_1 26 /* Post-IAM */
-#define FM_GAP_2 11 /* Post-IDAM */
-#define FM_GAP_SYNC 6
+#define FM_GAP_1    26 /* Post-IAM */
+#define FM_GAP_2    11 /* Post-IDAM */
+#define FM_GAP_SYNC  6
 
 static void fm_prep_track(struct image *im)
 {
