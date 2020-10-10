@@ -25,7 +25,8 @@ static void check_p(void *p, struct image *im);
 #define SIMPLE_EMPTY_TRK 2 /* if has_empty */
 const static struct simple_layout {
     uint16_t nr_sectors, rpm, data_rate;
-    uint8_t is_fm, has_iam, has_empty, no, gap3, gap4a, base[2];
+    int16_t gap3, gap4a;
+    uint8_t is_fm, has_iam, has_empty, no, base[2];
     uint8_t interleave, cskew, hskew;
 } dfl_simple_layout = {
     .nr_sectors = 0,
@@ -35,8 +36,8 @@ const static struct simple_layout {
     .has_iam = TRUE,
     .has_empty = FALSE,
     .no = ~0,
-    .gap3 = 0,
-    .gap4a = 0,
+    .gap3 = -1,
+    .gap4a = -1,
     .base = { 1, 1 },
     .interleave = 1,
     .cskew = 0,
@@ -229,8 +230,6 @@ found:
     layout.nr_sectors = type->nr_secs;
     layout.no = type->no;
     layout.gap3 = type->gap3;
-    layout.gap4a = 0;
-    layout.is_fm = FALSE;
     layout.interleave = type->interleave;
     layout.base[0] = layout.base[1] = type->base;
     if (type->inter_track_numbering == _ITN)
@@ -285,6 +284,7 @@ static bool_t tag_open(struct image *im, char *tag)
         IMGCFG_hskew,
         IMGCFG_rpm,
         IMGCFG_gap3,
+        IMGCFG_gap4a,
         IMGCFG_iam,
         IMGCFG_rate,
         IMGCFG_file_layout,
@@ -304,6 +304,7 @@ static bool_t tag_open(struct image *im, char *tag)
         [IMGCFG_hskew] = { "hskew" },
         [IMGCFG_rpm]  = { "rpm" },
         [IMGCFG_gap3] = { "gap3" },
+        [IMGCFG_gap4a] = { "gap4a" },
         [IMGCFG_iam]  = { "iam" },
         [IMGCFG_rate] = { "rate" },
         [IMGCFG_file_layout] = { "file-layout" },
@@ -443,7 +444,12 @@ static bool_t tag_open(struct image *im, char *tag)
             t_layout.rpm = strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_gap3:
-            t_layout.gap3 = strtol(opts.arg, NULL, 10);
+            t_layout.gap3 = (*opts.arg == 'a') ? -1
+                : (uint8_t)strtol(opts.arg, NULL, 10);
+            break;
+        case IMGCFG_gap4a:
+            t_layout.gap4a = (*opts.arg == 'a') ? -1
+                : (uint8_t)strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_iam:
             t_layout.has_iam = !strcmp(opts.arg, "yes");
@@ -896,6 +902,7 @@ static bool_t trd_open(struct image *im)
         .has_empty = TRUE, /* see comment below */
         .no = 1, /* 256-byte */
         .gap3 = 57,
+        .gap4a = -1,
         .base = { 1, 1 },
         .interleave = 1
     };
@@ -958,6 +965,7 @@ static bool_t opd_open(struct image *im)
         .has_iam = TRUE,
         .no = 1, /* 256-byte */
         .gap3 = 12,
+        .gap4a = -1,
         .base = { 0, 0 },
         .interleave = 13,
         .cskew = 13
@@ -987,6 +995,7 @@ static bool_t dfs_open(struct image *im)
         .is_fm = TRUE,
         .no = 1, /* 256-byte */
         .gap3 = 21,
+        .gap4a = -1,
         .base = { 0, 0 },
         .interleave = 1,
         .cskew = 3
@@ -2161,6 +2170,7 @@ static struct raw_trk *add_track_layout(
     memset(&trk[i], 0, sizeof(*trk));
     trk[i].nr_sectors = nr_sectors;
     trk[i].interleave = 1;
+    trk[i].gap_2 = trk[i].gap_3 = trk[i].gap_4a = -1;
 
     im->img.sec_info_base = sec;
     im->img.trk_info = trk;
@@ -2247,13 +2257,18 @@ static void mfm_prep_track(struct image *im)
     const uint8_t GAP_3[] = { 32, 54, 84, 116, 255, 255, 255, 255 };
     struct raw_trk *trk = im->img.trk;
     uint32_t tracklen;
-    uint8_t gap_3 = trk->gap_3;
+    bool_t auto_gap_3;
     unsigned int i;
 
-    trk->gap_2 = trk->gap_2 ?: GAP_2;
-    /* GAP_SYNC is a suitable small initial guess for auto GAP3. */
-    trk->gap_3 = trk->gap_3 ?: GAP_SYNC;
-    trk->gap_4a = trk->gap_4a ?: GAP_4A;
+    if (trk->gap_2 < 0)
+        trk->gap_2 = GAP_2;
+    auto_gap_3 = (trk->gap_3 < 0);
+    if (auto_gap_3) {
+        /* GAP_SYNC is a suitable small initial guess for auto GAP3. */
+        trk->gap_3 = GAP_SYNC;
+    }
+    if (trk->gap_4a < 0)
+        trk->gap_4a = GAP_4A;
 
     im->img.idx_sz = trk->gap_4a;
     if (trk->has_iam)
@@ -2285,7 +2300,7 @@ static void mfm_prep_track(struct image *im)
     im->tracklen_bc = (trk->data_rate * 400 * 300) / trk->rpm;
 
     /* Calculate a suitable GAP3 if not specified. */
-    if ((trk->nr_sectors != 0) && (gap_3 == 0)) {
+    if ((trk->nr_sectors != 0) && auto_gap_3) {
         int space;
         uint8_t no = im->img.sec_info[0].no;
         im->img.dam_sz_post -= trk->gap_3;
@@ -2473,12 +2488,21 @@ static void fm_prep_track(struct image *im)
     const uint8_t GAP_3[] = { 27, 42, 58, 138, 255, 255, 255, 255 };
     struct raw_trk *trk = im->img.trk;
     uint32_t tracklen;
+    bool_t auto_gap_3;
     unsigned int i;
 
-    trk->gap_2 = trk->gap_2 ?: FM_GAP_2;
-    /* Default post-index gap size depends on whether the track format includes 
-     * IAM or not (see uPD765A/7265 Datasheet). */
-    trk->gap_4a = trk->gap_4a ?: trk->has_iam ? 40 : 16;
+    if (trk->gap_2 < 0)
+        trk->gap_2 = FM_GAP_2;
+    auto_gap_3 = (trk->gap_3 < 0);
+    if (auto_gap_3) {
+        /* Initial auto GAP3 value: Updated later. */
+        trk->gap_3 = 0;
+    }
+    if (trk->gap_4a < 0) {
+        /* Default post-index gap size depends on whether the track format
+         * includes IAM or not (see uPD765A/7265 Datasheet). */
+        trk->gap_4a = trk->has_iam ? 40 : 16;
+    }
 
     im->img.idx_sz = trk->gap_4a;
     if (trk->has_iam)
@@ -2498,7 +2522,7 @@ static void fm_prep_track(struct image *im)
     im->tracklen_bc = (trk->data_rate * 400 * 300) / trk->rpm;
 
     /* Calculate a suitable GAP3 if not specified. */
-    if ((trk->nr_sectors != 0) && (trk->gap_3 == 0)) {
+    if ((trk->nr_sectors != 0) && auto_gap_3) {
         int space = max_t(int, 0, im->tracklen_bc - tracklen);
         uint8_t no = im->img.sec_info[0].no;
         trk->gap_3 = min_t(int, space/(16*trk->nr_sectors), GAP_3[no]);
