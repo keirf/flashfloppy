@@ -1086,6 +1086,7 @@ static void read_ff_cfg(void)
                         !strcmp(p, "rotary") ? TWOBUTTON_rotary
                         : !strcmp(p, "rotary-fast") ? TWOBUTTON_rotary_fast
                         : !strcmp(p, "eject") ? TWOBUTTON_eject
+                        : !strcmp(p, "htu") ? TWOBUTTON_htu
                         : TWOBUTTON_zero;
                 }
             }
@@ -1769,12 +1770,14 @@ static void hxc_cfg_update(uint8_t slot_mode)
         /* Slot mode: read current slot file info. */
         if (cfg.slot_nr == 0) {
             slot_from_short_slot(&cfg.slot, &cfg.autoboot);
-        } else {
+        } else if (slot_valid(cfg.slot_nr)) {
             F_lseek(&fs->file, hxc->cfg.slots_position*512
                     + cfg.slot_nr*64*hxc->cfg.number_of_drive_per_slot);
             F_read(&fs->file, &hxc->v2_slot, sizeof(hxc->v2_slot), NULL);
             fix_hxc_short_slot(&hxc->v2_slot);
             slot_from_short_slot(&cfg.slot, &hxc->v2_slot);
+        } else {
+            memset(&cfg.slot, 0, sizeof(cfg.slot));
         }
         break;
 
@@ -1875,6 +1878,52 @@ static void cfg_update(uint8_t slot_mode)
         cfg.slot.attributes |= AM_RDO;
 }
 
+static void htu_choose_new_image(uint8_t b)
+{
+    int digits[3], pos, i;
+    time_t t = time_now();
+
+    /* Isolate the digits of the current slot number. */
+    i = cfg.slot_nr;
+    for (pos = 0; pos < 3; pos++) {
+        digits[pos] = i % 10;
+        i /= 10;
+    }
+
+    /* Tens or Units depending on which button is pressed. */
+    pos = !(b & B_RIGHT);
+
+    do {
+        if (!(b ^ (B_LEFT|B_RIGHT))) {
+            /* Both Buttons: Hundreds. */
+            pos = 2;
+            if (time_since(t) > time_ms(1000)) {
+                /* After 1sec with both buttons held, immediately update the
+                 * display to show the reset to 000. */
+                i = 0;
+                goto out;
+            }
+        }
+    } while ((b = buttons&(B_LEFT|B_RIGHT)) != 0);
+
+    /* Increment the selected digit. */
+    digits[pos] = (digits[pos] + 1) % 10;
+
+    /* Reconstitute the slot number. Reset the selected digit on overflow. */
+    i = digits[0] + digits[1]*10 + digits[2]*100;
+    if (i > cfg.max_slot_nr) {
+        digits[pos] = 0;
+        i = digits[0] + digits[1]*10 + digits[2]*100;
+    }
+
+out:
+    cfg.slot_nr = i;
+    cfg_update(CFG_KEEP_SLOT_NR);
+    display_write_slot(TRUE);
+    while (b && buttons)
+        continue;
+}
+
 /* Based on button presses, change which floppy image is selected. */
 static bool_t choose_new_image(uint8_t init_b)
 {
@@ -1903,6 +1952,11 @@ static bool_t choose_new_image(uint8_t init_b)
             changes = 0;
         }
         last_change = time_now();
+
+        if (twobutton_action == TWOBUTTON_htu) {
+            htu_choose_new_image(b);
+            return FALSE;
+        }
 
         i = cfg.slot_nr;
         if (!(b ^ (B_LEFT|B_RIGHT))) {
