@@ -2242,9 +2242,6 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
 #define GAP_4A   80 /* Post-Index */
 #define GAP_SYNC 12
 
-/* Shrink the IDAM pre-sync gap if sectors are close together. */
-#define idam_gap_sync(im) min_t(uint8_t, (im)->img.trk->gap_3, GAP_SYNC)
-
 static void mfm_prep_track(struct image *im)
 {
     const uint8_t GAP_3[] = { 32, 54, 84, 116, 255, 255, 255, 255 };
@@ -2261,7 +2258,7 @@ static void mfm_prep_track(struct image *im)
     im->img.idx_sz = trk->gap_4a;
     if (trk->has_iam)
         im->img.idx_sz += GAP_SYNC + 4 + GAP_1;
-    im->img.idam_sz = idam_gap_sync(im) + 8 + 2 + trk->gap_2;
+    im->img.idam_sz = GAP_SYNC + 8 + 2 + trk->gap_2;
     im->img.dam_sz_pre = GAP_SYNC + 4;
     im->img.dam_sz_post = 2 + trk->gap_3;
 
@@ -2394,7 +2391,7 @@ static bool_t mfm_read_track(struct image *im)
                                 sec->id, sec->no };
             if (bc_space < im->img.idam_sz)
                 return FALSE;
-            for (i = 0; i < idam_gap_sync(im); i++)
+            for (i = 0; i < GAP_SYNC; i++)
                 emit_byte(0x00);
             for (i = 0; i < 3; i++)
                 emit_raw(0x4489);
