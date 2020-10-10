@@ -685,10 +685,8 @@ static bool_t ibm_3174_open(struct image *im)
     for (i = 0; i < 2; i++) {
         unsigned int nr_sectors = (i == 0) ? 15 : 30;
         trk = add_track_layout(im, nr_sectors, i);
-        trk->is_fm = FALSE;
         trk->has_iam = TRUE;
         trk->gap_3 = 104;
-        trk->gap_4a = 0;
         trk->rpm = (i == 0) ? 360 : 180;
         sec = &im->img.sec_info_base[trk->sec_off];
         for (j = 0; j < nr_sectors; j++) {
