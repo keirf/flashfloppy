@@ -100,7 +100,7 @@ const static struct raw_type {
     { 11, _S(2), _IAM,  3, 2, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 880k */
     { 18, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.44M */
     { 19, _S(2), _IAM, 70, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.52M */
-    { 21, _S(2), _IAM, 18, 2, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.68M */
+    { 21, _S(2), _IAM, 12, 2, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.68M */
     { 20, _S(2), _IAM, 40, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.6M */
     { 36, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 2.88M */
     { 0 }
@@ -147,9 +147,9 @@ const static struct raw_type {
     { 0 }
 }, mbd_type[] = {
     { 11, _S(2), _IAM,  30, 1, 3, 1, 0, 0, 0, _C(80), _R(300) },
-    {  5, _S(2), _IAM, 116, 3, 1, 1, 0, 0, 0, _C(80), _R(300) },
+    {  5, _S(2), _IAM, 116, 1, 3, 1, 0, 0, 0, _C(80), _R(300) },
     { 11, _S(2), _IAM,  30, 1, 3, 1, 0, 0, 0, _C(40), _R(300) },
-    {  5, _S(2), _IAM, 116, 3, 1, 1, 0, 0, 0, _C(40), _R(300) },
+    {  5, _S(2), _IAM, 116, 1, 3, 1, 0, 0, 0, _C(40), _R(300) },
     { 0 }
 }, memotech_type[] = {
     { 16, _S(2), _IAM, 57, 3, 1, 1, 0, 0, 0, _C(40), _R(300) }, /* Type 03 */
@@ -164,9 +164,8 @@ const static struct raw_type {
     { 16, _S(2), _IAM, 57, 3, 1, 1, 0, 8, 0, _C(80), _R(300) }, /* 360k */
     { 0 }
 }, pc98_type[] = {
-    { 8, _S(2), _IAM, 116, 1, 3, 1, 0, 0, 0, _C(80), _R(360) }, /* 1232k */
-    { 8, _S(2), _IAM, 116, 1, 2, 1, 0, 0, 0, _C(80), _R(360) }, /* 640k */
-    { 9, _S(2), _IAM, 116, 1, 2, 1, 0, 0, 0, _C(80), _R(360) }, /* 720k */
+    { 8, _S(2), _IAM, 116, 1, 3, 1, 0, 0, 0, _C(80), _R(360) }, /* HD 360RPM */
+    { 8, _S(2), _IAM, 57, 1, 2, 1, 0, 0, 0, _C(80), _R(360) }, /* DD 360RPM */
     { 0 }
 }, uknc_type[] = {
     { 10, _S(2), 0, 38, 1, 2, 1, 0, 0, 0, _C(80), _R(300) },
@@ -2262,8 +2261,8 @@ static void mfm_prep_track(struct image *im)
         trk->gap_2 = MFM_GAP_2;
     auto_gap_3 = (trk->gap_3 < 0);
     if (auto_gap_3) {
-        /* MFM_GAP_SYNC is a suitable small initial guess for auto GAP3. */
-        trk->gap_3 = MFM_GAP_SYNC;
+        /* Initial auto GAP3 value: Updated later. */
+        trk->gap_3 = 0;
     }
     if (trk->gap_4a < 0)
         trk->gap_4a = MFM_GAP_4A;
@@ -2299,30 +2298,15 @@ static void mfm_prep_track(struct image *im)
 
     /* Calculate a suitable GAP3 if not specified. */
     if ((trk->nr_sectors != 0) && auto_gap_3) {
-        int space;
+        int space = max_t(int, 0, im->tracklen_bc - tracklen);
         uint8_t no = im->img.sec_info[0].no;
-        im->img.dam_sz_post -= trk->gap_3;
-        tracklen -= 16 * trk->nr_sectors * trk->gap_3;
-        space = max_t(int, 0, im->tracklen_bc - tracklen);
         trk->gap_3 = min_t(int, space/(16*trk->nr_sectors), GAP_3[no]);
         im->img.dam_sz_post += trk->gap_3;
         tracklen += 16 * trk->nr_sectors * trk->gap_3;
     }
 
-    /* Does the track data fit within standard track length? */
-    if (im->tracklen_bc < tracklen) {
-        if ((tracklen - trk->gap_4a*16) <= im->tracklen_bc) {
-            /* Eliminate the post-index gap 4a if that suffices. */
-            tracklen -= trk->gap_4a*16;
-            im->img.idx_sz -= trk->gap_4a;
-            trk->gap_4a = 0;
-        } else {
-            /* Extend the track length ("long track"). */
-            im->tracklen_bc = tracklen + 100;
-        }
-    }
-
-    /* Round the track length up to a multiple of 32 bitcells. */
+    /* Round the track length up to fit the data and be a multiple of 32. */
+    im->tracklen_bc = max_t(uint32_t, im->tracklen_bc, tracklen);
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
 
     im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
