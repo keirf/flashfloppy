@@ -113,6 +113,7 @@ struct packed ff_cfg {
 #define ROT_quarter   2
 #define ROT_trackball 4
 #define ROT_buttons   5
+#define ROT_typemask 15
 #define ROT_reverse (1u<<7)
     uint8_t rotary;
     bool_t write_protect;

@@ -467,7 +467,7 @@ static uint8_t rotary, rb;
 
 void IRQ_rotary(void)
 {
-    if ((ff_cfg.rotary & ~ROT_reverse) != ROT_full)
+    if ((ff_cfg.rotary & ROT_typemask) != ROT_full)
         return;
     rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
     rb = read_rotary(rotary) ?: rb;
@@ -478,7 +478,7 @@ static void set_rotary_exti(void)
     uint32_t imr;
 
     imr = exti->imr & ~0x0c00;
-    if ((ff_cfg.rotary & ~ROT_reverse) == ROT_full)
+    if ((ff_cfg.rotary & ROT_typemask) == ROT_full)
         imr |= 0x0c00;
     exti->imr = imr;
 }
@@ -525,7 +525,7 @@ static void button_timer_fn(void *unused)
         b |= B_SELECT;
 
     rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
-    switch (ff_cfg.rotary & ~ROT_reverse) {
+    switch (ff_cfg.rotary & ROT_typemask) {
 
     case ROT_trackball: {
         static uint16_t count, thresh, dir;
@@ -1104,9 +1104,8 @@ static void read_ff_cfg(void)
                 if (!strcmp(p, "reverse")) {
                     ff_cfg.rotary |= ROT_reverse;
                 } else {
-                    ff_cfg.rotary &= ROT_reverse;
+                    ff_cfg.rotary &= ~ROT_typemask;
                     ff_cfg.rotary |=
-                        !strcmp(p, "gray") ? ROT_quarter /* obsolete name */
                         : !strcmp(p, "quarter") ? ROT_quarter
                         : !strcmp(p, "half") ? ROT_half
                         : !strcmp(p, "trackball") ? ROT_trackball
