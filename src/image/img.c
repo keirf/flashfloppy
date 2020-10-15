@@ -27,7 +27,7 @@ const static struct simple_layout {
     uint16_t nr_sectors, rpm, data_rate;
     int16_t gap3, gap4a;
     uint8_t is_fm, has_iam, has_empty, no, base[2];
-    uint8_t interleave, cskew, hskew;
+    uint8_t interleave, cskew, hskew, head;
 } dfl_simple_layout = {
     .nr_sectors = 0,
     .rpm = 300,
@@ -259,6 +259,7 @@ static void tag_add_layout(
     trk->interleave = layout->interleave;
     trk->cskew = layout->cskew;
     trk->hskew = layout->hskew;
+    trk->head = layout->head;
 
     sec = &im->img.sec_info_base[trk->sec_off];
     for (i = 0; i < layout->nr_sectors; i++) {
@@ -277,6 +278,7 @@ static bool_t tag_open(struct image *im, char *tag)
         IMGCFG_secs,
         IMGCFG_bps,
         IMGCFG_id,
+        IMGCFG_h,
         IMGCFG_mode,
         IMGCFG_interleave,
         IMGCFG_cskew,
@@ -295,8 +297,9 @@ static bool_t tag_open(struct image *im, char *tag)
         [IMGCFG_cyls] = { "cyls" },
         [IMGCFG_heads] = { "heads" },
         [IMGCFG_secs] = { "secs" },
-        [IMGCFG_bps]  = { "bps" },
-        [IMGCFG_id]   = { "id" },
+        [IMGCFG_bps] = { "bps" },
+        [IMGCFG_id] = { "id" },
+        [IMGCFG_h] = { "h" },
         [IMGCFG_mode] = { "mode" },
         [IMGCFG_interleave] = { "interleave" },
         [IMGCFG_cskew] = { "cskew" },
@@ -426,6 +429,10 @@ static bool_t tag_open(struct image *im, char *tag)
         }
         case IMGCFG_id:
             t_layout.base[0] = strtol(opts.arg, NULL, 0);
+            break;
+        case IMGCFG_h:
+            t_layout.head = (*opts.arg == 'a') ? 0
+                : (strtol(opts.arg, NULL, 10) & 1) + 1;
             break;
         case IMGCFG_mode:
             t_layout.is_fm = !strcmp(opts.arg, "fm");
@@ -2045,7 +2052,8 @@ static void raw_dump_info(struct image *im)
     printk(" file-layout: %x\n", im->img.layout);
     for (i = 0; i < trk->nr_sectors; i++) {
         struct raw_sec *sec = &im->img.sec_info[im->img.sec_map[i]];
-        printk("{%u,%u} ", sec->id, sec->no);
+        int hd = trk->head ? trk->head-1 : im->cur_track&1;
+        printk("{%u,%u,%u,%u} ", im->cur_track/2, hd, sec->id, sec->no);
     }
     if (trk->nr_sectors != 0)
         printk("\n");
@@ -2215,6 +2223,7 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
         trk->interleave = layout->interleave;
         trk->cskew = layout->cskew;
         trk->hskew = layout->hskew;
+        trk->head = layout->head;
         sec = &im->img.sec_info_base[trk->sec_off];
         for (j = 0; j < layout->nr_sectors; j++) {
             sec->id = j + layout->base[i];
@@ -2383,9 +2392,10 @@ static bool_t mfm_read_track(struct image *im)
                     im->img.decode_pos-1)>>2]];
         switch ((im->img.decode_pos - 1) & 3) {
         case 0: /* IDAM */ {
-            uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
-            uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe, cyl, hd,
-                                sec->id, sec->no };
+            uint8_t c = im->cur_track/2;
+            uint8_t h = trk->head ? trk->head-1 : im->cur_track&1;
+            uint8_t idam[8] = { 0xa1, 0xa1, 0xa1, 0xfe,
+                                c, h, sec->id, sec->no };
             if (bc_space < im->img.idam_sz)
                 return FALSE;
             for (i = 0; i < MFM_GAP_SYNC; i++)
@@ -2585,8 +2595,9 @@ static bool_t fm_read_track(struct image *im)
                     im->img.decode_pos-1)>>2]];
         switch ((im->img.decode_pos - 1) & 3) {
         case 0: /* IDAM */ {
-            uint8_t cyl = im->cur_track/2, hd = im->cur_track&1;
-            uint8_t idam[5] = { 0xfe, cyl, hd, sec->id, sec->no };
+            uint8_t c = im->cur_track/2;
+            uint8_t h = trk->head ? trk->head-1 : im->cur_track&1;
+            uint8_t idam[5] = { 0xfe, c, h, sec->id, sec->no };
             if (bc_space < im->img.idam_sz)
                 return FALSE;
             for (i = 0; i < FM_GAP_SYNC; i++)

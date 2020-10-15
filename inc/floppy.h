@@ -87,6 +87,8 @@ struct raw_trk {
     int16_t gap_2, gap_3, gap_4a;
     uint8_t interleave, cskew, hskew;
     uint8_t has_iam:1, is_fm:1, invert_data:1;
+#define RAW_TRK_HEAD(h) ((h)+1)
+    uint8_t head:2;
 };
 
 struct img_image {
