@@ -3,6 +3,23 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.20 - 15 October 2020
+ - Eject Menu: Replace Clone with Copy/Paste
+   - Allows an image to be copied to a different folder
+   - Navigation mode: Copy to selected folder by holding Select for 1.5s
+ - FF.CFG: New option "rotary=v2" to use v2.x encoder logic
+   - Fixes a very few encoders which don't work with stricter v3.x logic
+ - FF.CFG: New option "twobutton-action=htu"
+   - Implements hundreds/tens/units button actions of the factory firmware
+ - IMG.CFG: New parameters:
+   - tracks: Track-scoped parameter lists (geometry can vary by track)
+   - h: Override default IDAM Head field
+   - gap4a: Override default post-index track gap
+ - IMG.CFG: Tag names are now case insensitive
+ - IMG.CFG: Tag by file size and/or name
+ - IMG.CFG: Implement some example configurations under examples/Host/
+ - IMG: Fix some of the more bizarre default track geometries
+
 ** v3.19 - 28 September 2020
  - Amiga, ADF: Fix X-Copy verified writes with out-of-order sectors
    - Remember the latest written sector order for current cylinder
