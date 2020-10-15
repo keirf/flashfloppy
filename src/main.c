@@ -1121,7 +1121,7 @@ static void read_ff_cfg(void)
                 } else {
                     ff_cfg.rotary &= ~ROT_typemask;
                     ff_cfg.rotary |=
-                        : !strcmp(p, "quarter") ? ROT_quarter
+                        !strcmp(p, "quarter") ? ROT_quarter
                         : !strcmp(p, "half") ? ROT_half
                         : !strcmp(p, "trackball") ? ROT_trackball
                         : !strcmp(p, "buttons") ? ROT_buttons
