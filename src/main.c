@@ -2375,23 +2375,43 @@ static bool_t image_delete(void)
     return ok;
 }
 
+enum {
+    EJM_header = 0,
+    EJM_wrprot,
+    EJM_copy,
+    EJM_paste,
+    EJM_delete,
+    EJM_exit_to_selector,
+    EJM_exit_reinsert,
+    EJM_nr
+};
+
+static int construct_eject_menu(uint8_t *menu)
+{
+    int i, j;
+    for (i = j = 0; i < EJM_nr; i++) {
+        if ((i == EJM_paste) && !cfg.clipboard.size)
+            continue;
+        if ((i >= EJM_copy) && (i <= EJM_delete) && cfg.hxc_mode)
+            continue;
+        menu[j++] = i;
+    }
+    return j-1;
+}
+
 static uint8_t noinline eject_menu(uint8_t b)
 {
     const static char *menu_s[] = {
-        "**Eject Menu**",
-        NULL,
-        "Copy",
-        "Paste",
-        "Delete",
-        "Exit to Selector",
-        "Exit & Re-Insert",
+        [EJM_header] = "**Eject Menu**",
+        [EJM_copy]   = "Copy",
+        [EJM_paste]  = "Paste",
+        [EJM_delete] = "Delete",
+        [EJM_exit_to_selector] = "Exit to Selector",
+        [EJM_exit_reinsert] = "Exit & Re-Insert",
     };
 
-    const static uint8_t native_menu[] = { 0, 1, 2, 3, 4, 5, 6 };
-    const static uint8_t hxc_menu[] = { 0, 1, 5, 6 };
-
     char msg[17];
-    const uint8_t *menu;
+    uint8_t menu[EJM_nr];
     unsigned int wait;
     int sel = 0, sel_max;
     bool_t twobutton_eject =
@@ -2402,13 +2422,7 @@ static uint8_t noinline eject_menu(uint8_t b)
 
     ima_mark_ejected(TRUE);
 
-    if (cfg.hxc_mode) {
-        menu = hxc_menu;
-        sel_max = ARRAY_SIZE(hxc_menu) - 1;
-    } else {
-        menu = native_menu;
-        sel_max = ARRAY_SIZE(native_menu) - 1;
-    }
+    sel_max = construct_eject_menu(menu);
 
     for (;;) {
 
@@ -2418,7 +2432,7 @@ static uint8_t noinline eject_menu(uint8_t b)
             break;
         case DM_LCD_OLED:
             switch (menu[sel]) {
-            case 1: /* W.Protect */
+            case EJM_wrprot:
                 snprintf(msg, sizeof(msg), "Write Prot.: O%s",
                          (cfg.slot.attributes & AM_RDO) ? "N" : "FF");
                 lcd_write(0, 1, -1, msg);
@@ -2481,29 +2495,31 @@ static uint8_t noinline eject_menu(uint8_t b)
             if (display_mode != DM_LCD_OLED)
                 goto out;
             switch (menu[sel]) {
-            case 1: /* Toggle W.Protect */
+            case EJM_wrprot: /* Toggle W.Protect */
                 cfg.slot.attributes ^= AM_RDO;
                 if (volume_readonly()) {
                     /* Read-only filesystem: force AM_RDO always. */
                     cfg.slot.attributes |= AM_RDO;
                 }
                 break;
-            case 2: /* Copy Image */
+            case EJM_copy:
                 image_copy();
+                sel_max = construct_eject_menu(menu);
                 break;
-            case 3: /* Paste Image */
+            case EJM_paste:
                 image_paste(NULL);
                 break;
-            case 4: /* Delete Image */
+            case EJM_delete:
                 if (!image_delete())
                     break;
                 b = 0xff; /* selector */
                 goto out;
-            case 5: /* Exit & Select */
+            case EJM_exit_to_selector:
                 display_write_slot(TRUE);
                 b = 0xff; /* selector */
                 goto out;
-            case 0: case 6: /* Exit & Re-Insert */
+            case EJM_header:
+            case EJM_exit_reinsert:
                 b = 0;
                 goto out;
             }
@@ -2519,6 +2535,9 @@ out:
 
 static void folder_menu(void)
 {
+    if (display_mode != DM_LCD_OLED)
+        return;
+
     /* HACK: image_paste() clobbers fs->fp.fname so we make use of
      * cfg.slot.name instead. */
     snprintf(cfg.slot.name, sizeof(cfg.slot.name),
@@ -2694,7 +2713,6 @@ static int floppy_main(void *unused)
                 scroll_ms += lcd_scroll.end * ff_cfg.nav_scroll_rate;
                 wait_ms = max(wait_ms, scroll_ms);
             }
-        is_folder:
             for (i = 0; (wait_ms == 0) || (i < wait_ms); i++) {
                 b = buttons;
                 if (b != 0)
@@ -2708,13 +2726,18 @@ static int floppy_main(void *unused)
             /* Wait for select button to be released. */
             for (i = 0; !cfg.ejected && ((b = buttons) & B_SELECT); i++) {
                 delay_ms(1);
-                if (i >= 1500) {
-                    if ((cfg.slot.attributes & AM_DIR)
-                        && (strcmp(fs->fp.fname, "..") != 0)) {
+                if (i >= 1500) { /* 1.5 seconds */
+                    if (cfg.slot.attributes & AM_DIR) {
+                        /* Display Folder Menu. */
                         folder_menu();
-                        goto is_folder;
+                        /* We go back into the selector, and to do this we 
+                         * need to wait for all buttons released. */
+                        while (buttons)
+                            continue;
+                        goto select;
+                    } else {
+                        cfg.ejected = TRUE;
                     }
-                    cfg.ejected = TRUE;
                 }
             }
 
