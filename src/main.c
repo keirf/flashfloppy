@@ -36,7 +36,7 @@ static struct {
         struct { struct short_slot autoboot, hxcsdfe; };
         struct { struct short_slot imgcfg; };
     };
-    struct slot slot;
+    struct slot slot, clipboard;
     uint32_t cfg_cdir, cur_cdir;
     struct native_dirent **sorted;
     struct {
@@ -1301,6 +1301,7 @@ static void cfg_init(void)
     char *p;
     FRESULT fr;
 
+    memset(&cfg.clipboard, 0, sizeof(cfg.clipboard));
     cfg.dirty_slot_nr = FALSE;
     cfg.dirty_slot_name = FALSE;
     cfg.hxc_mode = FALSE;
@@ -2220,23 +2221,38 @@ static bool_t confirm(const char *op)
     snprintf(msg, sizeof(msg), "Confirm %s?", op);
     lcd_write(0, 1, -1, msg);
 
+    while (buttons)
+        continue;
+
     while ((b = menu_wait_button(TRUE, "")) == 0)
         continue;
 
     return (b == B_SELECT);
 }
 
-static void image_clone(void)
+static void image_copy(void)
+{
+    cfg.clipboard = cfg.slot;
+}
+
+static void image_paste(const char *subfolder)
 {
     time_t t;
+    uint32_t cur_cdir = fatfs.cdir;
     int i, baselen, todo, idx, max_idx = -1;
     char *p, *q;
     FIL *nfil;
+    bool_t use_basename = FALSE;
+    const struct slot *slot = &cfg.clipboard;
 
-    if (!confirm("Clone"))
+    if (!slot->size || !confirm("Paste"))
         return;
 
-    strcpy(fs->buf, cfg.slot.name);
+    if (subfolder)
+        F_chdir(subfolder);
+
+    /* Is the source filename of the form '*_000'? */
+    strcpy(fs->buf, slot->name);
     if ((p = q = strrchr(fs->buf, '_')) != NULL) {
         for (i = 0; i < 3; i++) {
             char c = *++p;
@@ -2246,46 +2262,67 @@ static void image_clone(void)
         p = ((i == 3) && (p[1] == '\0')) ? q : NULL;
     }
 
-    if (p == NULL)
+    if (p == NULL) {
+        /* Source filename is not of the form '*_000'. Does it exist at the 
+         * destinaton? */
+        FRESULT fres;
         p = fs->buf + strlen(fs->buf);
+        snprintf(p, sizeof(fs->buf)-(p-fs->buf), ".%s", slot->type);
+        fres = f_stat(fs->buf, &fs->fp);
+        /* If it doesn't exist, we use the same exact name for the clone. */
+        use_basename = (fres == FR_NO_FILE);
+    }
 
-    baselen = p - fs->buf;
-    snprintf(p, sizeof(fs->buf) - baselen, "_*.%s", cfg.slot.type);
+    if (use_basename) {
 
-    for (F_findfirst(&fs->dp, &fs->fp, "", fs->buf);
-         fs->fp.fname[0] != '\0';
-         F_findnext(&fs->dp, &fs->fp)) {
-        p = fs->fp.fname + baselen + 1;
-        /* Parse 3-digit index number. */
-        idx = 0;
-        for (i = 0; i < 3; i++) {
-            if ((*p < '0') || (*p > '9'))
-                break;
-            idx *= 10;
-            idx += *p++ - '0';
+        /* Clone the original source filename. */
+        t = time_now();
+        lcd_write(0, 1, -1, "Pasting...");
+
+    } else {
+
+        /* Search for next available three-digit clone identifier. */
+        baselen = p - fs->buf;
+        snprintf(p, sizeof(fs->buf) - baselen, "_*.%s", slot->type);
+
+        for (F_findfirst(&fs->dp, &fs->fp, "", fs->buf);
+             fs->fp.fname[0] != '\0';
+             F_findnext(&fs->dp, &fs->fp)) {
+            p = fs->fp.fname + baselen + 1;
+            /* Parse 3-digit index number. */
+            idx = 0;
+            for (i = 0; i < 3; i++) {
+                if ((*p < '0') || (*p > '9'))
+                    break;
+                idx *= 10;
+                idx += *p++ - '0';
+            }
+            /* Expect a 3-digit number. */
+            if ((i != 3) || (*p != '.'))
+                continue;
+            max_idx = max_t(int, max_idx, idx);
         }
-        /* Expect a 3-digit number. */
-        if ((i != 3) || (*p != '.'))
-            continue;
-        max_idx = max_t(int, max_idx, idx);
-    }
-    F_closedir(&fs->dp);
+        F_closedir(&fs->dp);
 
-    t = time_now();
-    if (max_idx >= 999) {
-        lcd_write(0, 1, -1, "No spare slots!");
-        goto out;
-    }
+        /* Is there already a '*_999' file? */
+        t = time_now();
+        if (max_idx >= 999) {
+            lcd_write(0, 1, -1, "No spare slots!");
+            goto out;
+        }
 
-    snprintf(fs->buf, sizeof(fs->buf), "Cloning To %03u", max_idx+1);
-    lcd_write(0, 1, -1, fs->buf);
+        snprintf(fs->buf, sizeof(fs->buf), "Pasting (%03u)...", max_idx+1);
+        lcd_write(0, 1, -1, fs->buf);
+
+        strcpy(fs->buf, slot->name);
+        snprintf(fs->buf + baselen, sizeof(fs->buf) - baselen, "_%03u.%s",
+                 max_idx+1, slot->type);
+
+    }
 
     volume_cache_destroy();
-    fatfs_from_slot(&fs->file, &cfg.slot, FA_READ);
+    fatfs_from_slot(&fs->file, slot, FA_READ);
     nfil = arena_alloc(sizeof(*nfil));
-    strcpy(fs->buf, cfg.slot.name);
-    snprintf(fs->buf + baselen, sizeof(fs->buf) - baselen, "_%03u.%s",
-             max_idx+1, cfg.slot.type);
     F_open(nfil, fs->buf, FA_CREATE_NEW|FA_WRITE);
     todo = f_size(&fs->file); 
     while (todo != 0) {
@@ -2296,11 +2333,13 @@ static void image_clone(void)
         todo -= nr;
     }
     F_close(nfil);
+    fatfs.cdir = cfg.cur_cdir;
     floppy_arena_setup();
     if (!cfg.sorted)
         cfg_update(CFG_READ_SLOT_NR);
 
 out:
+    fatfs.cdir = cur_cdir;
     delay_from(t, time_ms(2000));
 }
 
@@ -2313,12 +2352,11 @@ static bool_t image_delete(void)
     if (!confirm("Delete"))
         return FALSE;
 
-    if (cfg.hxc_mode) {
-        lcd_write(0, 1, -1, "Native Mode Only");
-        goto out;
-    }
-
     lcd_write(0, 1, -1, "Deleting...");
+
+    /* Kill the clipboard if we're deleting the copy source. */
+    if (cfg.slot.firstCluster == cfg.clipboard.firstCluster)
+        memset(&cfg.clipboard, 0, sizeof(cfg.clipboard));
 
     snprintf(fs->buf, sizeof(fs->buf), "%s.%s",
              cfg.slot.name, cfg.slot.type);
@@ -2333,25 +2371,29 @@ static bool_t image_delete(void)
     cfg_update(CFG_READ_SLOT_NR);
     ok = TRUE;
 
-out:
     delay_from(t, time_ms(2000));
     return ok;
 }
 
 static uint8_t noinline eject_menu(uint8_t b)
 {
-    const static char *menu[] = {
+    const static char *menu_s[] = {
         "**Eject Menu**",
         NULL,
-        "Clone Image",
-        "Delete Image",
+        "Copy",
+        "Paste",
+        "Delete",
         "Exit to Selector",
         "Exit & Re-Insert",
     };
 
+    const static uint8_t native_menu[] = { 0, 1, 2, 3, 4, 5, 6 };
+    const static uint8_t hxc_menu[] = { 0, 1, 5, 6 };
+
     char msg[17];
+    const uint8_t *menu;
     unsigned int wait;
-    int sel = 0;
+    int sel = 0, sel_max;
     bool_t twobutton_eject =
         ((ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject)
         || (display_mode == DM_LCD_OLED); /* or two buttons can't exit menu */
@@ -2360,26 +2402,29 @@ static uint8_t noinline eject_menu(uint8_t b)
 
     ima_mark_ejected(TRUE);
 
-    for (;;) {
+    if (cfg.hxc_mode) {
+        menu = hxc_menu;
+        sel_max = ARRAY_SIZE(hxc_menu) - 1;
+    } else {
+        menu = native_menu;
+        sel_max = ARRAY_SIZE(native_menu) - 1;
+    }
 
-        if (sel < 0)
-            sel += ARRAY_SIZE(menu);
-        if (sel >= ARRAY_SIZE(menu))
-            sel -= ARRAY_SIZE(menu);
+    for (;;) {
 
         switch (display_mode) {
         case DM_LED_7SEG:
             led_7seg_write_string("EJE");
             break;
         case DM_LCD_OLED:
-            switch (sel) {
+            switch (menu[sel]) {
             case 1: /* W.Protect */
                 snprintf(msg, sizeof(msg), "Write Prot.: O%s",
                          (cfg.slot.attributes & AM_RDO) ? "N" : "FF");
                 lcd_write(0, 1, -1, msg);
                 break;
             default:
-                lcd_write(0, 1, -1, menu[sel]);
+                lcd_write(0, 1, -1, menu_s[menu[sel]]);
                 break;
             }
             lcd_on();
@@ -2414,6 +2459,11 @@ static uint8_t noinline eject_menu(uint8_t b)
         if ((sel != 0) && (display_mode != DM_LCD_OLED))
             goto out;
 
+        if (sel < 0)
+            sel = sel_max;
+        if (sel > sel_max)
+            sel = 0;
+
         if (b & B_SELECT) {
             /* Wait for eject button to be released. */
             wait = 0;
@@ -2430,7 +2480,7 @@ static uint8_t noinline eject_menu(uint8_t b)
             /* LED display: No menu, we exit straight out. */
             if (display_mode != DM_LCD_OLED)
                 goto out;
-            switch (sel) {
+            switch (menu[sel]) {
             case 1: /* Toggle W.Protect */
                 cfg.slot.attributes ^= AM_RDO;
                 if (volume_readonly()) {
@@ -2438,19 +2488,22 @@ static uint8_t noinline eject_menu(uint8_t b)
                     cfg.slot.attributes |= AM_RDO;
                 }
                 break;
-            case 2: /* Clone Image */
-                image_clone();
+            case 2: /* Copy Image */
+                image_copy();
                 break;
-            case 3: /* Delete Image */
+            case 3: /* Paste Image */
+                image_paste(NULL);
+                break;
+            case 4: /* Delete Image */
                 if (!image_delete())
                     break;
                 b = 0xff; /* selector */
                 goto out;
-            case 4: /* Exit & Select */
+            case 5: /* Exit & Select */
                 display_write_slot(TRUE);
                 b = 0xff; /* selector */
                 goto out;
-            case 0: case 5: /* Exit & Re-Insert */
+            case 0: case 6: /* Exit & Re-Insert */
                 b = 0;
                 goto out;
             }
@@ -2462,6 +2515,19 @@ out:
     ima_mark_ejected(FALSE);
     menu_mode = FALSE;
     return b;
+}
+
+static void folder_menu(void)
+{
+    /* HACK: image_paste() clobbers fs->fp.fname so we make use of
+     * cfg.slot.name instead. */
+    snprintf(cfg.slot.name, sizeof(cfg.slot.name),
+             "%s", fs->fp.fname);
+    image_paste(cfg.slot.name);
+
+    /* Now we must refresh the display */
+    cfg_update(CFG_KEEP_SLOT_NR);
+    display_write_slot(TRUE);
 }
 
 static int floppy_main(void *unused)
@@ -2628,6 +2694,7 @@ static int floppy_main(void *unused)
                 scroll_ms += lcd_scroll.end * ff_cfg.nav_scroll_rate;
                 wait_ms = max(wait_ms, scroll_ms);
             }
+        is_folder:
             for (i = 0; (wait_ms == 0) || (i < wait_ms); i++) {
                 b = buttons;
                 if (b != 0)
@@ -2641,8 +2708,14 @@ static int floppy_main(void *unused)
             /* Wait for select button to be released. */
             for (i = 0; !cfg.ejected && ((b = buttons) & B_SELECT); i++) {
                 delay_ms(1);
-                if (i >= 2000)
+                if (i >= 1500) {
+                    if ((cfg.slot.attributes & AM_DIR)
+                        && (strcmp(fs->fp.fname, "..") != 0)) {
+                        folder_menu();
+                        goto is_folder;
+                    }
                     cfg.ejected = TRUE;
+                }
             }
 
         } while (!cfg.ejected && (b != 0));
