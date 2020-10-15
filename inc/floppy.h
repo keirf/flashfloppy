@@ -75,8 +75,8 @@ struct qd_image {
 };
 
 struct raw_sec {
-    uint8_t id;
-    uint8_t no; /* 3 bits */
+    uint8_t r;
+    uint8_t n; /* 3 bits */
 };
 
 struct raw_trk {
