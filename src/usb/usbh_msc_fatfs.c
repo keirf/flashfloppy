@@ -220,7 +220,7 @@ static DRESULT handle_usb_status(BYTE status)
     return RES_OK;
 }
 
-static DRESULT usb_disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
+static DRESULT usb_disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count)
 {
     BYTE status;
 
@@ -240,7 +240,7 @@ static DRESULT usb_disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
 }
 
 static DRESULT usb_disk_write(
-    BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
+    BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count)
 {
     BYTE status;
 

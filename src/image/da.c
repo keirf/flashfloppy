@@ -9,8 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include "../fatfs/diskio.h"
-
 #define DA_SIG "HxCFEDA"
 
 #define SEC_SZ 512

@@ -62,7 +62,7 @@ DSTATUS disk_status(BYTE pdrv)
     return vol_ops->status(pdrv);
 }
 
-DRESULT disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
+DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count)
 {
     DRESULT res;
     const void *p;
@@ -89,7 +89,7 @@ read_tail:
     return res;
 }
 
-DRESULT disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
+DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count)
 {
     DRESULT res = vol_ops->write(pdrv, buff, sector, count);
     struct cache *c;

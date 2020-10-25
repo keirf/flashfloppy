@@ -124,7 +124,7 @@ void F_truncate(FIL *fp)
 
 #endif /* !FF_FS_READONLY */
 
-void F_lseek(FIL *fp, DWORD ofs)
+void F_lseek(FIL *fp, LBA_t ofs)
 {
     FRESULT fr;
 #if !FF_FS_READONLY

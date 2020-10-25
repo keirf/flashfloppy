@@ -19,7 +19,7 @@ void F_close(FIL *fp);
 void F_read(FIL *fp, void *buff, UINT btr, UINT *br);
 void F_write(FIL *fp, const void *buff, UINT btw, UINT *bw);
 void F_sync(FIL *fp);
-void F_lseek(FIL *fp, DWORD ofs);
+void F_lseek(FIL *fp, FSIZE_t ofs);
 void F_truncate(FIL *fp);
 void F_opendir(DIR *dp, const TCHAR *path);
 void F_closedir(DIR *dp);

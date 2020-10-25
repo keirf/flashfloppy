@@ -9,8 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#include "fatfs/diskio.h"
-
 #if 1
 /* We can now switch to Default Speed (25MHz). Closest we can get is 36Mhz/2 = 
  * 18MHz. */
@@ -413,7 +411,7 @@ static DRESULT handle_sd_result(DRESULT res)
     return res;
 }
 
-static DRESULT sd_disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
+static DRESULT sd_disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count)
 {
     uint8_t retry = 0;
     UINT todo;
@@ -450,7 +448,7 @@ static DRESULT sd_disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count)
 }
 
 static DRESULT sd_disk_write(
-    BYTE pdrv, const BYTE *buff, DWORD sector, UINT count)
+    BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count)
 {
     uint8_t retry = 0;
     UINT todo;

@@ -14,8 +14,8 @@
 struct volume_ops {
     DSTATUS (*initialize)(BYTE);
     DSTATUS (*status)(BYTE);
-    DRESULT (*read)(BYTE, BYTE *, DWORD, UINT);
-    DRESULT (*write)(BYTE, const BYTE *, DWORD, UINT);
+    DRESULT (*read)(BYTE, BYTE *, LBA_t, UINT);
+    DRESULT (*write)(BYTE, const BYTE *, LBA_t, UINT);
     DRESULT (*ioctl)(BYTE, BYTE, void *);
     bool_t (*connected)(void);
     bool_t (*readonly)(void);
