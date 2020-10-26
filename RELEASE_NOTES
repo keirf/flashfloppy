@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.21 - 26 October 2020
+ - Support GUID Partition Table (GPT)
+   - Now support: GPT, MBR, and no partition table
+ - FatFS: Updated to R0.14, patchlevel 2
+ 
 ** v3.20 - 15 October 2020
  - Eject Menu: Replace Clone with Copy/Paste
    - Allows an image to be copied to a different folder
