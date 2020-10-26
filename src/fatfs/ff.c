@@ -474,7 +474,7 @@ static const char* const VolumeStr[FF_VOLUMES] = {FF_VOLUME_STRS};	/* Pre-define
 #endif
 #endif
 
-#if FF_LBA64
+#if FF_GPT
 #if FF_MIN_GPT > 0x100000000
 #error Wrong FF_MIN_GPT setting
 #endif
@@ -627,7 +627,7 @@ static DWORD ld_dword (const BYTE* ptr)	/* Load a 4-byte little-endian word */
 	return rv;
 }
 
-#if FF_FS_EXFAT
+#if FF_FS_EXFAT || FF_GPT
 static QWORD ld_qword (const BYTE* ptr)	/* Load an 8-byte little-endian word */
 {
 	QWORD rv;
@@ -3237,7 +3237,7 @@ static int get_ldnumber (	/* Returns logical drive number (-1:invalid drive numb
 /* GPT support functions                                                 */
 /*-----------------------------------------------------------------------*/
 
-#if FF_LBA64
+#if FF_GPT
 
 /* Calculate CRC32 in byte-by-byte */
 
@@ -3360,7 +3360,7 @@ static UINT find_volume (	/* Returns BS status found in the hosting drive */
 
 	/* Sector 0 is not an FAT VBR or forced partition number wants a partition */
 
-#if FF_LBA64
+#if FF_GPT
 	if (fs->win[MBR_Table + PTE_System] == 0xEE) {	/* GPT protective MBR? */
 		DWORD n_ent, v_ent, ofs;
 		QWORD pt_lba;

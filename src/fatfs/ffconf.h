@@ -216,6 +216,11 @@
 /  GET_SECTOR_SIZE command. */
 
 
+/* FLASHFLOPPY: Allow GPT partitions to be found. Does not require LBA64,
+ * nor exFAT. This option alone does not support GPT in f_mkfs. */
+#define FF_GPT			1
+
+
 #define FF_LBA64		0
 /* This option switches support for 64-bit LBA. (0:Disable or 1:Enable)
 /  To enable the 64-bit LBA, also exFAT needs to be enabled. (FF_FS_EXFAT == 1) */
