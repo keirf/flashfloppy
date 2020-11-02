@@ -101,6 +101,7 @@ struct packed ff_cfg {
 #define DISPLAY_narrow   (1<<3)
 #define DISPLAY_ztech    (1<<4)
 #define DISPLAY_oled_64  (1<<5)
+#define DISPLAY_inverse  (1<<6)
 /* Only if DISPLAY_lcd: */
 #define _DISPLAY_lcd_columns 5
 #define DISPLAY_lcd_columns(x) ((x)<<_DISPLAY_lcd_columns)

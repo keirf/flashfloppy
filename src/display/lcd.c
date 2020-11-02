@@ -987,7 +987,6 @@ static void oled_init(void)
         0xd9, 0xf1, /* pre-charge period */
         0xdb, 0x20, /* vcomh detect (default) */
         0xa4,       /* output follows ram contents */
-        0xa6,       /* normal display output (inverse=off) */
         0x2e,       /* deactivate scroll */
     }, norot_cmds[] = {
         0xa1,       /* segment mapping (reverse) */
@@ -997,7 +996,7 @@ static void oled_init(void)
         0xc0,       /* com scan direction (default) */
     };
     const uint8_t *cmds;
-    uint8_t dynamic_cmds[6], *dc;
+    uint8_t dynamic_cmds[7], *dc;
     uint8_t *p = buffer;
 
     /* Disable I2C (currently in Standard Mode). */
@@ -1018,6 +1017,7 @@ static void oled_init(void)
 
     /* Dynamically-generated initialisation commands. */
     dc = dynamic_cmds;
+    *dc++ = (ff_cfg.display_type & DISPLAY_inverse) ? 0xa7 : 0xa6; /* Video */
     *dc++ = 0x81; /* Display Contrast */
     *dc++ = ff_cfg.oled_contrast;
     *dc++ = 0xa8; /* Multiplex ratio (lcd height - 1) */

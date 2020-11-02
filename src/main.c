@@ -1159,6 +1159,8 @@ static void read_ff_cfg(void)
                 } else if (!strncmp(p, "narrow", 6)) {
                     ff_cfg.display_type |=
                         (p[6] == 'e') ? DISPLAY_narrower : DISPLAY_narrow;
+                } else if (!strcmp(p, "inverse")) {
+                    ff_cfg.display_type |= DISPLAY_inverse;
                 } else if (!strcmp(p, "ztech")) {
                     ff_cfg.display_type |= DISPLAY_ztech;
                 } else if ((r = strchr(p, 'x')) != NULL) {
