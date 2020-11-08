@@ -1154,15 +1154,6 @@ static void read_ff_cfg(void)
                     ff_cfg.display_type = DISPLAY_lcd;
                 } else if (!strcmp(p, "oled")) {
                     ff_cfg.display_type = DISPLAY_oled;
-                } else if (!strcmp(p, "rotate")) {
-                    ff_cfg.display_type |= DISPLAY_rotate;
-                } else if (!strncmp(p, "narrow", 6)) {
-                    ff_cfg.display_type |=
-                        (p[6] == 'e') ? DISPLAY_narrower : DISPLAY_narrow;
-                } else if (!strcmp(p, "inverse")) {
-                    ff_cfg.display_type |= DISPLAY_inverse;
-                } else if (!strcmp(p, "ztech")) {
-                    ff_cfg.display_type |= DISPLAY_ztech;
                 } else if ((r = strchr(p, 'x')) != NULL) {
                     unsigned int w, h;
                     *r++ = '\0';
@@ -1174,6 +1165,17 @@ static void read_ff_cfg(void)
                     } else if (ff_cfg.display_type & DISPLAY_lcd) {
                         ff_cfg.display_type |= DISPLAY_lcd_columns(w);
                         ff_cfg.display_type |= DISPLAY_lcd_rows(h);
+                    }
+                } else if (ff_cfg.display_type & DISPLAY_oled) {
+                    if (!strcmp(p, "rotate")) {
+                        ff_cfg.display_type |= DISPLAY_rotate;
+                    } else if (!strncmp(p, "narrow", 6)) {
+                        ff_cfg.display_type |=
+                            (p[6] == 'e') ? DISPLAY_narrower : DISPLAY_narrow;
+                    } else if (!strcmp(p, "inverse")) {
+                        ff_cfg.display_type |= DISPLAY_inverse;
+                    } else if (!strcmp(p, "ztech")) {
+                        ff_cfg.display_type |= DISPLAY_ztech;
                     }
                 }
             }
