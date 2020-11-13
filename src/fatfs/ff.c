@@ -3577,7 +3577,13 @@ static FRESULT mount_volume (	/* FR_OK(0): successful, !=0: an error occurred */
 			szbfat = (fmt == FS_FAT16) ?				/* (Needed FAT size) */
 				fs->n_fatent * 2 : fs->n_fatent * 3 / 2 + (fs->n_fatent & 1);
 		}
-		if (fs->fsize < (szbfat + (SS(fs) - 1)) / SS(fs)) return FR_NO_FILESYSTEM;	/* (BPB_FATSz must not be less than the size needed) */
+		if (fs->fsize < (szbfat + (SS(fs) - 1)) / SS(fs)) {
+			/* (BPB_FATSz must not be less than the size needed) */
+			if (fmt == FS_FAT12) return FR_NO_FILESYSTEM;
+			/* FlashFloppy: Auto-adjust n_fatent */
+			szbfat = fs->fsize * SS(fs);
+			fs->n_fatent = szbfat / ((fmt == FS_FAT32) ? 4 : 2);
+		}
 
 #if !FF_FS_READONLY
 		/* Get FSInfo if available */
