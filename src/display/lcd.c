@@ -101,8 +101,9 @@ static char text[4][40];
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
 
-/* Affects default OLED 128x64 layout. */
-bool_t menu_mode;
+/* Current display mode: Affects row ordering and sizing. */
+uint8_t display_mode = DM_banner;
+#define menu_mode (display_mode == DM_menu)
 
 /* Occasionally the I2C/DMA engine seems to get stuck. Detect this with 
  * a timeout timer and unwedge it by calling the I2C error handler. */
@@ -265,8 +266,9 @@ static unsigned int lcd_prep_buffer(void)
         i2c->cr1 |= I2C_CR1_START;
     }
 
-    order = (ff_cfg.display_order != DORD_default) ? ff_cfg.display_order
-        : (lcd_rows == 2) ? 0x7710 : 0x2103;
+    order = (lcd_rows == 2) ? 0x7710 : 0x2103;
+    if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
+        order = ff_cfg.display_order;
 
     row = (order >> (i2c_row * DORD_shift)) & DORD_row;
     p = (row < ARRAY_SIZE(text)) ? text[row] : NULL;
@@ -827,8 +829,9 @@ static int oled_to_lcd_row(int in_row)
     int i = 0, row;
     bool_t large = FALSE;
 
-    order = (ff_cfg.display_order != DORD_default) ? ff_cfg.display_order
-        : (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
+    order = (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
+    if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
+        order = ff_cfg.display_order;
 
     for (;;) {
         large = !!(order & DORD_double);

@@ -189,7 +189,8 @@ void set_slot_name(const char *name);
 bool_t get_img_cfg(struct slot *slot);
 void IRQ_rotary(void);
 
-extern bool_t menu_mode;
+enum { DM_normal=0, DM_banner, DM_menu };
+extern uint8_t display_mode;
 extern uint8_t board_id;
 
 /* Gotek board revisions */

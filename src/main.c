@@ -2181,7 +2181,7 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
         (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject;
     char msg[17];
 
-    menu_mode = TRUE;
+    display_mode = DM_menu;
 
     switch (display_type) {
     case DT_LED_7SEG:
@@ -2213,7 +2213,7 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
         }
     }
 
-    menu_mode = FALSE;
+    display_mode = DM_normal;
     return b;
 }
 
@@ -2422,7 +2422,7 @@ static uint8_t noinline eject_menu(uint8_t b)
         ((ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject)
         || (display_type == DT_LCD_OLED); /* or two buttons can't exit menu */
 
-    menu_mode = TRUE;
+    display_mode = DM_menu;
 
     ima_mark_ejected(TRUE);
 
@@ -2533,7 +2533,7 @@ static uint8_t noinline eject_menu(uint8_t b)
 
 out:
     ima_mark_ejected(FALSE);
-    menu_mode = FALSE;
+    display_mode = DM_normal;
     return b;
 }
 
@@ -2569,8 +2569,12 @@ static int floppy_main(void *unused)
     cfg_init();
     cfg_update(CFG_READ_SLOT_NR);
 
+    lcd_clear();
+    display_mode = DM_normal;
+
     /* If we start on a folder, go directly into the image selector. */
     if (cfg.slot.attributes & AM_DIR) {
+        volume_space();
         display_write_slot(FALSE);
         b = buttons;
         goto select;
@@ -2779,6 +2783,7 @@ static void factory_reset(void)
         break;
     case DT_LCD_OLED:
         lcd_clear();
+        display_mode = DM_banner; /* double height row 0 */
         lcd_write(0, 0, 0, "Reset Flash");
         lcd_write(0, 1, 0, "Configuration");
         lcd_on();
@@ -2860,7 +2865,7 @@ static void main_menu(void)
     if (display_type != DT_LCD_OLED)
         return;
 
-    menu_mode = TRUE;
+    display_mode = DM_menu;
 
     for (;;) {
 
@@ -2910,7 +2915,7 @@ static void main_menu(void)
     }
 
 out:
-    menu_mode = FALSE;
+    display_mode = DM_normal;
 }
 
 static void banner(void)
@@ -2929,6 +2934,7 @@ static void banner(void)
         break;
     case DT_LCD_OLED:
         lcd_clear();
+        display_mode = DM_banner; /* double height row 0 */
         lcd_write(0, 0, 0, "FlashFloppy");
         lcd_write(0, 1, 0, "v");
         lcd_write(1, 1, 0, fw_ver);
@@ -3020,6 +3026,7 @@ static void handle_errors(FRESULT fres)
         led_7seg_write_string(msg);
         break;
     case DT_LCD_OLED:
+        display_mode = DM_menu; /* double-height row 1 */
         lcd_write(0, 0, -1, "***************");
         lcd_write(0, 1, -1, msg);
         lcd_on();
