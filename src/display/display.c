@@ -9,14 +9,14 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-uint8_t display_mode;
+uint8_t display_type;
 
 void display_init(void)
 {
     char name[20];
     int probe_ms = ff_cfg.display_probe_ms;
 
-    display_mode = DM_NONE;
+    display_type = DT_NONE;
     snprintf(name, sizeof(name), "None");
 
     for (;;) {
@@ -24,14 +24,14 @@ void display_init(void)
         stk_time_t t = stk_now();
 
         if (lcd_init()) {
-            display_mode = DM_LCD_OLED;
+            display_type = DT_LCD_OLED;
             snprintf(name, sizeof(name), "LCD/OLED");
             break; /* positive identification */
         }
 
         if ((ff_cfg.display_type & 3) == DISPLAY_auto) {
             led_7seg_init();
-            display_mode = DM_LED_7SEG;
+            display_type = DT_LED_7SEG;
             snprintf(name, sizeof(name), "%u-Digit LED",
                      led_7seg_nr_digits());
             if (led_7seg_nr_digits() == 3)

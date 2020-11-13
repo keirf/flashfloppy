@@ -84,11 +84,11 @@ static void io_test(bool_t assert)
         d[2] |= 0x40;
     }
 
-    switch (display_mode) {
-    case DM_LED_7SEG:
+    switch (display_type) {
+    case DT_LED_7SEG:
         led_7seg_write_raw(d);
         break;
-    case DM_LCD_OLED:
+    case DT_LCD_OLED:
         lcd_write(0, 0, 0, p);
         lcd_write(1, 1, -1, assert ? "HI 888" : "LO");
         break;
@@ -97,11 +97,11 @@ static void io_test(bool_t assert)
 
 static void display_setting(bool_t on)
 {
-    switch (display_mode) {
-    case DM_LED_7SEG:
+    switch (display_type) {
+    case DT_LED_7SEG:
         led_7seg_display_setting(on);
         break;
-    case DM_LCD_OLED:
+    case DT_LCD_OLED:
         lcd_backlight(on);
         lcd_sync();
         break;

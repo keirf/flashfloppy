@@ -57,11 +57,11 @@ static void da_seek_track(struct image *im, uint16_t track)
     volume_cache_init(im->bufs.write_data.p + SEC_SZ + 2,
                       im->bufs.write_data.p + im->bufs.write_data.len);
 
-    switch (display_mode) {
-    case DM_LED_7SEG:
+    switch (display_type) {
+    case DT_LED_7SEG:
         led_7seg_write_string((led_7seg_nr_digits() == 3) ? "D-A" : "DA");
         break;
-    case DM_LCD_OLED:
+    case DT_LCD_OLED:
         lcd_write(0, 0, -1, "*Direct Access*");
         break;
     }

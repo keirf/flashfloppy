@@ -139,7 +139,7 @@ struct packed ff_cfg {
     uint8_t head_settle_ms;
     uint8_t oled_contrast;
     char indexed_prefix[8];
-    uint8_t display_mode;
+    uint8_t _unused; /* never been used */
 #define SORT_never  0
 #define SORT_always 1
 #define SORT_small  2

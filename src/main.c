@@ -118,7 +118,7 @@ void set_slot_name(const char *name)
 /* Turn the LCD backlight on, reset the switch-off handler and ticker. */
 static void lcd_on(void)
 {
-    if (display_mode != DM_LCD_OLED)
+    if (display_type != DT_LCD_OLED)
         return;
     display_ticks = 0;
     barrier();
@@ -203,8 +203,8 @@ static void display_write_slot(bool_t nav_mode)
     char msg[lcd_columns+1], typename[4] = "";
     unsigned int i;
 
-    if (display_mode != DM_LCD_OLED) {
-        if (display_mode == DM_LED_7SEG)
+    if (display_type != DT_LCD_OLED) {
+        if (display_type == DT_LED_7SEG)
             led_7seg_write_decimal(cfg.slot_nr);
         return;
     }
@@ -260,7 +260,7 @@ static void lcd_write_track_info(bool_t force)
     struct track_info ti;
     char msg[17];
 
-    if (display_mode != DM_LCD_OLED)
+    if (display_type != DT_LCD_OLED)
         return;
 
     floppy_get_track(&ti);
@@ -294,7 +294,7 @@ static void led_7seg_update_track(bool_t force)
     struct track_info ti;
     char msg[4];
 
-    if (display_mode != DM_LED_7SEG)
+    if (display_type != DT_LED_7SEG)
         return;
 
     floppy_get_track(&ti);
@@ -591,11 +591,11 @@ static void button_timer_fn(void *unused)
     b |= rb;
     rb = 0;
 
-    switch (display_mode) {
-    case DM_LCD_OLED:
+    switch (display_type) {
+    case DT_LCD_OLED:
         b = lcd_handle_backlight(b);
         break;
-    case DM_LED_7SEG:
+    case DT_LED_7SEG:
         b = led_handle_display(b);
         break;
     }
@@ -728,7 +728,7 @@ static bool_t native_dir_next(void)
         if (fs->fp.fattrib & AM_HID)
             continue;
         /* Allow folder navigation when LCD/OLED display is attached. */
-        if ((fs->fp.fattrib & AM_DIR) && (display_mode == DM_LCD_OLED)
+        if ((fs->fp.fattrib & AM_DIR) && (display_type == DT_LCD_OLED)
             /* Skip FF/ in root folder */
             && ((cfg.depth != 0) || strcmp(fs->fp.fname, "FF"))
             /* Skip __MACOSX/ zip-file resource-fork folder */
@@ -1443,7 +1443,7 @@ native_mode:
     }
     if (cfg.depth != 0) {
         /* No subfolder support on LED display. */
-        if (display_mode != DM_LCD_OLED)
+        if (display_type != DT_LCD_OLED)
             goto clear_image_a; /* no subfolder support on LED display */
         /* Skip '..' entry. */
         cfg.slot_nr = 1;
@@ -2069,7 +2069,7 @@ static int run_floppy(void *_b)
             lcd_write_track_info(FALSE);
             update_ticks = time_ms(20);
         }
-        if (display_mode == DM_LCD_OLED) {
+        if (display_type == DT_LCD_OLED) {
             lcd_scroll.ticks -= t_diff;
             lcd_scroll_name();
         }
@@ -2078,7 +2078,7 @@ static int run_floppy(void *_b)
         t_prev = t_now;
     }
 
-    if (display_mode == DM_LED_7SEG)
+    if (display_type == DT_LED_7SEG)
         display_state = LED_NORMAL;
 
     return 0;
@@ -2149,8 +2149,8 @@ static uint8_t menu_wait_button(bool_t twobutton_eject, const char *led_msg)
         assert_volume_connected();
         /* Update the display. */
         delay_ms(1);
-        switch (display_mode) {
-        case DM_LED_7SEG:
+        switch (display_type) {
+        case DT_LED_7SEG:
             /* Alternate the 7-segment display. */
             if ((++wait % 1000) == 0) {
                 switch (wait / 1000) {
@@ -2164,7 +2164,7 @@ static uint8_t menu_wait_button(bool_t twobutton_eject, const char *led_msg)
                 }
             }
             break;
-        case DM_LCD_OLED:
+        case DT_LCD_OLED:
             /* Continue to scroll long filename. */
             lcd_scroll.ticks -= time_ms(1);
             lcd_scroll_name();
@@ -2183,13 +2183,13 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
 
     menu_mode = TRUE;
 
-    switch (display_mode) {
-    case DM_LED_7SEG:
+    switch (display_type) {
+    case DT_LED_7SEG:
         snprintf(msg, sizeof(msg), "%c%02u",
                  (fres >= 30) ? 'E' : 'F', fres);
         led_7seg_write_string(msg);
         break;
-    case DM_LCD_OLED:
+    case DT_LCD_OLED:
         snprintf(msg, sizeof(msg), "*%s*%02u*",
                  (fres >= 30) ? "ERR" : "FAT", fres);
         lcd_write(wp_column+1, 1, -1, "");
@@ -2420,7 +2420,7 @@ static uint8_t noinline eject_menu(uint8_t b)
     int sel = 0, sel_max;
     bool_t twobutton_eject =
         ((ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject)
-        || (display_mode == DM_LCD_OLED); /* or two buttons can't exit menu */
+        || (display_type == DT_LCD_OLED); /* or two buttons can't exit menu */
 
     menu_mode = TRUE;
 
@@ -2430,11 +2430,11 @@ static uint8_t noinline eject_menu(uint8_t b)
 
     for (;;) {
 
-        switch (display_mode) {
-        case DM_LED_7SEG:
+        switch (display_type) {
+        case DT_LED_7SEG:
             led_7seg_write_string("EJE");
             break;
-        case DM_LCD_OLED:
+        case DT_LCD_OLED:
             switch (menu[sel]) {
             case EJM_wrprot:
                 snprintf(msg, sizeof(msg), "Write Prot.: O%s",
@@ -2453,7 +2453,7 @@ static uint8_t noinline eject_menu(uint8_t b)
         wait = 0;
         while (buttons != 0) {
             delay_ms(1);
-            if ((display_mode != DM_LCD_OLED) && (wait++ >= 2000)) {
+            if ((display_type != DT_LCD_OLED) && (wait++ >= 2000)) {
             toggle_wp:
                 wait = 0;
                 cfg.slot.attributes ^= AM_RDO;
@@ -2461,7 +2461,7 @@ static uint8_t noinline eject_menu(uint8_t b)
                     /* Read-only filesystem: force AM_RDO always. */
                     cfg.slot.attributes |= AM_RDO;
                 }
-                if (display_mode == DM_LED_7SEG)
+                if (display_type == DT_LED_7SEG)
                     led_7seg_write_string((cfg.slot.attributes & AM_RDO)
                                           ? "RDO" : "RIT");
             }
@@ -2474,7 +2474,7 @@ static uint8_t noinline eject_menu(uint8_t b)
             sel--;
         if (b & B_RIGHT)
             sel++;
-        if ((sel != 0) && (display_mode != DM_LCD_OLED))
+        if ((sel != 0) && (display_type != DT_LCD_OLED))
             goto out;
 
         if (sel < 0)
@@ -2492,11 +2492,11 @@ static uint8_t noinline eject_menu(uint8_t b)
                     b = B_SELECT;
                 }
                 delay_ms(1);
-                if ((display_mode != DM_LCD_OLED) && (wait++ >= 2000))
+                if ((display_type != DT_LCD_OLED) && (wait++ >= 2000))
                     goto toggle_wp;
             }
             /* LED display: No menu, we exit straight out. */
-            if (display_mode != DM_LCD_OLED)
+            if (display_type != DT_LCD_OLED)
                 goto out;
             switch (menu[sel]) {
             case EJM_wrprot: /* Toggle W.Protect */
@@ -2539,7 +2539,7 @@ out:
 
 static void folder_menu(void)
 {
-    if (display_mode != DM_LCD_OLED)
+    if (display_type != DT_LCD_OLED)
         return;
 
     /* HACK: image_paste() clobbers fs->fp.fname so we make use of
@@ -2625,7 +2625,7 @@ static int floppy_main(void *unused)
         }
 
         display_write_slot(FALSE);
-        if (display_mode == DM_LCD_OLED)
+        if (display_type == DT_LCD_OLED)
             lcd_write_track_info(TRUE);
 
         printk("Current slot: %u/%u\n", cfg.slot_nr, cfg.max_slot_nr);
@@ -2643,7 +2643,7 @@ static int floppy_main(void *unused)
             fres = F_call_cancellable(run_floppy, &b);
             floppy_cancel();
             assert_volume_connected();
-            if ((b != 0) && (display_mode == DM_LCD_OLED)) {
+            if ((b != 0) && (display_type == DT_LCD_OLED)) {
                 /* Immediate visual indication of button press. */
                 lcd_write(wp_column, 1, 1, "-");
                 lcd_on();
@@ -2711,7 +2711,7 @@ static int floppy_main(void *unused)
             wait_ms = (cfg.slot.attributes & AM_DIR) ?
                 ff_cfg.autoselect_folder_secs : ff_cfg.autoselect_file_secs;
             wait_ms *= 1000;
-            if (wait_ms && (display_mode == DM_LCD_OLED)) {
+            if (wait_ms && (display_type == DT_LCD_OLED)) {
                 /* Allow time for full name to scroll through. */
                 unsigned int scroll_ms = ff_cfg.nav_scroll_pause;
                 scroll_ms += lcd_scroll.end * ff_cfg.nav_scroll_rate;
@@ -2773,11 +2773,11 @@ static bool_t main_menu_confirm(const char *op)
 static void factory_reset(void)
 {
     /* Inform user that factory reset is about to occur. */
-    switch (display_mode) {
-    case DM_LED_7SEG:
+    switch (display_type) {
+    case DT_LED_7SEG:
         led_7seg_write_string("RST");
         break;
-    case DM_LCD_OLED:
+    case DT_LCD_OLED:
         lcd_clear();
         lcd_write(0, 0, 0, "Reset Flash");
         lcd_write(0, 1, 0, "Configuration");
@@ -2857,7 +2857,7 @@ static void main_menu(void)
     uint8_t b;
 
     /* Not available to 7-segment display. */
-    if (display_mode != DM_LCD_OLED)
+    if (display_type != DT_LCD_OLED)
         return;
 
     menu_mode = TRUE;
@@ -2915,8 +2915,8 @@ out:
 
 static void banner(void)
 {
-    switch (display_mode) {
-    case DM_LED_7SEG:
+    switch (display_type) {
+    case DT_LED_7SEG:
         led_7seg_write_string(
 #if defined(LOGFILE)
             "LOG"
@@ -2927,7 +2927,7 @@ static void banner(void)
 #endif
             );
         break;
-    case DM_LCD_OLED:
+    case DT_LCD_OLED:
         lcd_clear();
         lcd_write(0, 0, 0, "FlashFloppy");
         lcd_write(0, 1, 0, "v");
@@ -2971,7 +2971,7 @@ static void maybe_show_version(void)
     int len;
 
     /* LCD/OLED already displays version info in idle state. */
-    if (display_mode != DM_LED_7SEG)
+    if (display_type != DT_LED_7SEG)
         return;
 
     /* Check if right button is pressed and released. */
@@ -3006,7 +3006,7 @@ static void handle_errors(FRESULT fres)
     } else if (volume_connected() && (fres != FR_OK)) {
         printk("**Error %u\n", fres);
         snprintf(msg, sizeof(msg),
-                 (display_mode == DM_LED_7SEG)
+                 (display_type == DT_LED_7SEG)
                  ? ((fres >= 30) ? "E%02u" : "F%02u")
                  : ((fres >= 30) ? "*ERROR* %02u" : "*FATFS* %02u"),
                  fres);
@@ -3015,11 +3015,11 @@ static void handle_errors(FRESULT fres)
         return;
     }
 
-    switch (display_mode) {
-    case DM_LED_7SEG:
+    switch (display_type) {
+    case DT_LED_7SEG:
         led_7seg_write_string(msg);
         break;
-    case DM_LCD_OLED:
+    case DT_LCD_OLED:
         lcd_write(0, 0, -1, "***************");
         lcd_write(0, 1, -1, msg);
         lcd_on();
@@ -3079,11 +3079,11 @@ int main(void)
 
     while (floppy_ribbon_is_reversed()) {
         printk("** Error: Ribbon cable upside down?\n");
-        switch (display_mode) {
-        case DM_LED_7SEG:
+        switch (display_type) {
+        case DT_LED_7SEG:
             led_7seg_write_string("RIB");
             break;
-        case DM_LCD_OLED:
+        case DT_LCD_OLED:
             lcd_write(0, 0, -1, "Ribbon Cable May");
             lcd_write(0, 1, -1, "Be Upside Down? ");
             lcd_on();
