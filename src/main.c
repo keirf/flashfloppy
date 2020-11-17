@@ -774,7 +774,8 @@ static int native_dir_cmp(const void *a, const void *b)
     return strcmp_lower(da->name, db->name);
 }
 
-static unsigned int native_read_dir(void)
+/* Returns -1 if not read & sorted. */
+static int native_read_and_sort_dir(void)
 {
     struct native_dirent **p_ent;
     struct native_dirent *ent = arena_alloc(0);
@@ -783,7 +784,7 @@ static unsigned int native_read_dir(void)
     int nr;
 
     if (ff_cfg.folder_sort == SORT_never)
-        return 0;
+        return -1;
 
     volume_cache_destroy();
 
@@ -808,7 +809,7 @@ static unsigned int native_read_dir(void)
 
     volume_cache_init(start, end);
     cfg.sorted = NULL;
-    return 0;
+    return -1;
 
 complete:
     nr = (struct native_dirent **)end - p_ent;
@@ -1417,7 +1418,7 @@ native_mode:
         if (cfg.depth == ARRAY_SIZE(cfg.stack))
             F_die(FR_PATH_TOO_DEEP);
         /* Find slot nr, and stack it */
-        if ((nr = native_read_dir()) != 0) {
+        if ((nr = native_read_and_sort_dir()) != -1) {
             while (--nr >= 0)
                 if (!strcmp(cfg.sorted[nr]->name, fs->buf))
                     break;
@@ -1509,7 +1510,7 @@ static void native_get_slot_map(bool_t sorted_only)
     memset(&cfg.slot_map, 0xff, sizeof(cfg.slot_map));
     cfg.max_slot_nr = cfg.depth ? 1 : 0;
 
-    if ((i = native_read_dir()) != 0) {
+    if ((i = native_read_and_sort_dir()) != -1) {
         cfg.max_slot_nr += i;
     } else {
         if (sorted_only)
