@@ -3,6 +3,17 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.22 - 17 November 2020
+ - Fix various crashes when mounting a Flash drive with stale IMAGE_A.CFG
+ - FAT FS: Support filesystems for which cluster table is "too small"
+   - Windows and Linux will mount these volumes, thus so should we
+ - FF.CFG: New OLED display-type option: -inverse
+   - Reverse-video effect (black text on white background)
+ - FF.CFG: display-order= option affects normal display modes only
+   - Ignored in all banner and menu modes, to avoid jumbled display
+ - FF.CFG: Fix display-type parsing for OLED-specific options
+   - Ignore them unless an OLED display is explicitly configured
+
 ** v3.21 - 26 October 2020
  - Support GUID Partition Table (GPT)
    - Now support: GPT, MBR, and no partition table
