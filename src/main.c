@@ -1466,6 +1466,7 @@ native_mode:
         printk("%u:F: '%s' %s\n", cfg.depth, fs->buf,
                cfg.ima_ej_flag ? "(EJ)" : "");
         native_get_slot_map(TRUE);
+        cfg.slot_nr = cfg.depth ? 1 : 0;
         if (cfg.sorted) {
             nr = cfg.max_slot_nr + 1 - cfg.slot_nr;
             for (i = 0; i < nr; i++)
@@ -1499,6 +1500,7 @@ clear_image_a:
     F_close(&fs->file);
     cfg.slot_nr = cfg.depth = 0;
     cfg.ima_ej_flag = FALSE;
+    cfg.sorted = NULL;
     goto out;
 }
 
