@@ -2569,11 +2569,11 @@ static int floppy_main(void *unused)
     cfg.sorted = NULL;
     floppy_arena_setup();
 
-    cfg_init();
-    cfg_update(CFG_READ_SLOT_NR);
-
     lcd_clear();
     display_mode = DM_normal;
+
+    cfg_init();
+    cfg_update(CFG_READ_SLOT_NR);
 
     /* If we start on a folder, go directly into the image selector. */
     if (cfg.slot.attributes & AM_DIR) {
