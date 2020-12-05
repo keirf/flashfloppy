@@ -1,0 +1,28 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Dependency packages (apt)
+      run: |
+        sudo apt update
+        sudo apt -y install git gcc-arm-none-eabi python-pip srecord stm32flash zip unzip wget python-wheel
+    - name: Dependency packages (pip)
+      run: pip install --user crcmod intelhex
+    - name: Build dist
+      run: |
+        make dist
+        mkdir -p _cidist
+        cp flashfloppy-*.zip _cidist/
+    - name: Build debug dist
+      run: |
+        env debug=y make dist
+        mkdir -p _cidist/debug
+        cp flashfloppy-*.zip _cidist/debug/
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: flash-floppy.${{ github.workflow }}.${{ github.job }}.${{ github.run_number }}.${{ github.run_id }}
+        path: _cidist
