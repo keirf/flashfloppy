@@ -1,16 +1,16 @@
-name: ci
+name: CI
 on: [push, pull_request]
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v2
     - name: Dependency packages (apt)
       run: |
         sudo apt update
-        sudo apt -y install git gcc-arm-none-eabi python-pip srecord stm32flash zip unzip wget python-wheel
+        sudo apt -y install git gcc-arm-none-eabi python3-pip srecord stm32flash zip unzip wget
     - name: Dependency packages (pip)
-      run: pip install --user crcmod intelhex
+      run: python3 -m pip install --user crcmod intelhex
     - name: Build dist
       run: |
         make dist

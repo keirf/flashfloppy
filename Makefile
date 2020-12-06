@@ -53,7 +53,7 @@ dist:
 	$(MAKE) clean
 	quickdisk=y debug=n logfile=y $(MAKE) -f $(ROOT)/Rules.mk upd
 	mv FF.upd flashfloppy-$(VER)/alt/quickdisk/logfile/FF_Gotek-QuickDisk-Logfile-$(VER).upd
-	python scripts/mk_qd.py --window=6.5 flashfloppy-$(VER)/alt/quickdisk/Blank.qd
+	python3 scripts/mk_qd.py --window=6.5 flashfloppy-$(VER)/alt/quickdisk/Blank.qd
 	$(MAKE) clean
 	cp -a COPYING flashfloppy-$(VER)/
 	cp -a README.md flashfloppy-$(VER)/
