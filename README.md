@@ -1,6 +1,9 @@
 # FlashFloppy
 
-![CI Badge](https://github.com/keirf/FlashFloppy/workflows/CI/badge.svg)
+*The #1 floppy emulator.*
+
+![CI Badge][ci-badge]
+![Downloads Badge][downloads-badge]
 
 **FlashFloppy** is a floppy-drive emulator for the ubiquitous
 [**Gotek**][Gotek-Compatibility] hardware. Connect to retro machines just
@@ -54,3 +57,6 @@ file on your selling page. For example:
 [FF.CFG-Configuration-File]: https://github.com/keirf/FlashFloppy/wiki/FF.CFG-Configuration-File
 [Downloads]: https://github.com/keirf/FlashFloppy/wiki/Downloads
 [Donations]: https://github.com/keirf/FlashFloppy/wiki/Donations
+
+[ci-badge]: https://github.com/keirf/FlashFloppy/workflows/CI/badge.svg
+[downloads-badge]: https://img.shields.io/github/downloads/keirf/FlashFloppy/total
