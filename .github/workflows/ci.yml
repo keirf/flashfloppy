@@ -15,14 +15,13 @@ jobs:
       run: |
         make dist
         mkdir -p _cidist
-        cp flashfloppy-*.zip _cidist/
+        mv flashfloppy-*.zip _cidist/
     - name: Build debug dist
       run: |
         env debug=y make dist
-        mkdir -p _cidist/debug
-        cp flashfloppy-*.zip _cidist/debug/
+        mv flashfloppy-*.zip _cidist/`echo flashfloppy-*.zip | sed -e 's/.zip/-debug.zip/'`
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
-        name: flash-floppy.${{ github.workflow }}.${{ github.job }}.${{ github.run_number }}.${{ github.run_id }}
+        name: FlashFloppy.CI.${{ github.run_number }}.${{ github.run_id }}
         path: _cidist
