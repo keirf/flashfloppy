@@ -1,5 +1,7 @@
 # FlashFloppy
 
+![CI Badge](https://github.com/keirf/FlashFloppy/workflows/CI/badge.svg)
+
 **FlashFloppy** is a floppy-drive emulator for the ubiquitous
 [**Gotek**][Gotek-Compatibility] hardware. Connect to retro machines just
 like a real floppy drive but use disk images on a modern USB stick!
