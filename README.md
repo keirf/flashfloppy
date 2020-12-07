@@ -4,6 +4,7 @@
 
 ![CI Badge][ci-badge]
 ![Downloads Badge][downloads-badge]
+![Version Badge][version-badge]
 
 **FlashFloppy** is a floppy-drive emulator for the ubiquitous
 [**Gotek**][Gotek-Compatibility] hardware. Connect to retro machines just
@@ -60,3 +61,4 @@ file on your selling page. For example:
 
 [ci-badge]: https://github.com/keirf/FlashFloppy/workflows/CI/badge.svg
 [downloads-badge]: https://img.shields.io/github/downloads/keirf/FlashFloppy/total
+[version-badge]: https://img.shields.io/github/v/release/keirf/FlashFloppy
