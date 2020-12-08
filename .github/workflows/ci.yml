@@ -4,24 +4,44 @@ jobs:
   build:
     runs-on: ubuntu-20.04
     steps:
+
     - uses: actions/checkout@v2
+
+    - name: Set environment variables
+      id: vars
+      run: |
+        echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+
     - name: Dependency packages (apt)
       run: |
         sudo apt update
         sudo apt -y install git gcc-arm-none-eabi python3-pip srecord stm32flash zip unzip wget
+
     - name: Dependency packages (pip)
       run: python3 -m pip install --user crcmod intelhex
+
     - name: Build dist
       run: |
-        make dist
+        export VER=${{ steps.vars.outputs.sha_short }}
+        make -j4 dist VER=$VER
         mkdir -p _cidist
-        mv flashfloppy-*.zip _cidist/
+        rm flashfloppy-$VER.zip
+        git rev-parse HEAD >flashfloppy-$VER/COMMIT
+        zip -r flashfloppy-$VER flashfloppy-$VER
+        mv flashfloppy-$VER.zip _cidist/
+
     - name: Build debug dist
       run: |
-        env debug=y make dist
-        mv flashfloppy-*.zip _cidist/`echo flashfloppy-*.zip | sed -e 's/.zip/-debug.zip/'`
+        export VER=${{ steps.vars.outputs.sha_short }}-debug
+        env debug=y make -j4 dist VER=$VER
+        rm flashfloppy-$VER.zip
+        git rev-parse HEAD >flashfloppy-$VER/COMMIT
+        echo debug >>flashfloppy-$VER/COMMIT
+        zip -r flashfloppy-$VER flashfloppy-$VER
+        mv flashfloppy-$VER.zip _cidist/
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
-        name: FlashFloppy.CI.${{ github.run_number }}.${{ github.run_id }}
+        name: FlashFloppy.CI.${{ steps.vars.outputs.sha_short }}
         path: _cidist
