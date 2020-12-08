@@ -27,7 +27,7 @@ jobs:
         mkdir -p _cidist
         rm flashfloppy-$VER.zip
         git rev-parse HEAD >flashfloppy-$VER/COMMIT
-        zip -r flashfloppy-$VER flashfloppy-$VER
+        zip -r flashfloppy-$VER.zip flashfloppy-$VER
         mv flashfloppy-$VER.zip _cidist/
 
     - name: Build debug dist
@@ -37,7 +37,7 @@ jobs:
         rm flashfloppy-$VER.zip
         git rev-parse HEAD >flashfloppy-$VER/COMMIT
         echo debug >>flashfloppy-$VER/COMMIT
-        zip -r flashfloppy-$VER flashfloppy-$VER
+        zip -r flashfloppy-$VER.zip flashfloppy-$VER
         mv flashfloppy-$VER.zip _cidist/
 
     - name: Upload artifacts
