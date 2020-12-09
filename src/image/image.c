@@ -19,6 +19,7 @@ extern const struct image_handler st_image_handler;
 extern const struct image_handler d81_image_handler;
 extern const struct image_handler dsk_image_handler;
 extern const struct image_handler da_image_handler;
+extern const struct image_handler vgi_image_handler;
 extern const struct image_handler adfs_image_handler;
 extern const struct image_handler mbd_image_handler;
 extern const struct image_handler mgt_image_handler;
@@ -45,6 +46,7 @@ const struct image_type image_type[] = {
     { "img", &img_image_handler },
     { "ima", &img_image_handler },
     { "out", &img_image_handler },
+    { "vgi", &vgi_image_handler },
     { "st",  &st_image_handler },
     { "adl", &adfs_image_handler },
     { "adm", &adfs_image_handler },

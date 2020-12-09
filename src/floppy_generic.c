@@ -566,6 +566,8 @@ static void IRQ_rdata_dma(void)
     uint16_t nr_to_wrap, nr_to_cons, nr, dmacons, done;
     time_t now;
     struct drive *drv = &drive;
+    uint16_t csubsec = 0;
+    uint32_t subseclen_ticks = 0;
 
     /* Clear DMA peripheral interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_rdata_ch);
@@ -608,9 +610,23 @@ static void IRQ_rdata_dma(void)
         IRQx_set_pending(dma_rdata_irq);
     }
 
-    /* Check if we have crossed the index mark. If not, we're done. */
-    if (image_ticks_since_index(drv->image) >= prev_ticks_since_index)
-        return;
+    if (!drv->image->nr_hardsecs) {
+        /* Check if we have crossed the index mark. If not, we're done. */
+        if (image_ticks_since_index(drv->image) >= prev_ticks_since_index)
+            return;
+    } else {
+        uint16_t psubsec;
+        /* If tracklen ticks is not set, delay until it is available */
+        if (drv->image->tracklen_ticks == 0)
+            return;
+        /* Divide the track into half-sectors for the zero-sector index hole */
+        subseclen_ticks = (drv->image->tracklen_ticks >> 4)
+            / drv->image->nr_hardsecs / 2;
+        psubsec = prev_ticks_since_index / subseclen_ticks;
+        csubsec = image_ticks_since_index(drv->image) / subseclen_ticks;
+        if (csubsec == psubsec)
+            return;
+    }
 
     /* We crossed the index mark: Synchronise index pulse to the bitstream. */
     for (;;) {
@@ -630,8 +646,19 @@ static void IRQ_rdata_dma(void)
     /* Sum all flux timings in the DMA buffer. */
     for (i = dmacons; i != dma_rd->prod; i = (i+1) & buf_mask)
         ticks += dma_rd->buf[i] + 1;
-    /* Subtract current flux offset beyond the index. */
-    ticks -= image_ticks_since_index(drv->image);
+    if (!drv->image->nr_hardsecs) {
+        /* Subtract current flux offset beyond the index. */
+        ticks -= image_ticks_since_index(drv->image);
+    } else {
+        ticks -= image_ticks_since_index(drv->image) % subseclen_ticks;
+        csubsec -= ticks / subseclen_ticks;
+        ticks    = ticks % subseclen_ticks;
+        if ((csubsec & 1) && csubsec != drv->image->nr_hardsecs*2-1) {
+            /* First-sector index is denoted by extra index in the middle
+             * of the last sector. Align to the sector if not the last one */
+            ticks += subseclen_ticks;
+        }
+    }
     /* Calculate deadline for index timer. */
     ticks /= SYSCLK_MHZ/TIME_MHZ;
     timer_set(&index.timer, now + ticks);

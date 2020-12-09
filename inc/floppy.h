@@ -134,6 +134,12 @@ struct directaccess {
     uint16_t idx_sz, idam_sz, dam_sz;
 };
 
+struct vgi_image {
+    uint32_t trk_off;
+    uint32_t sec_idx;
+    int8_t err_cum_bc; /* sector alignment cumulative error */
+};
+
 struct image_buf {
     void *p;
     uint32_t len;
@@ -163,6 +169,7 @@ struct image {
 
     /* Info about image as a whole. */
     uint8_t nr_cyls, nr_sides;
+    uint8_t nr_hardsecs; /* 0 for soft sectors */
 
     /* Data buffers. */
     struct image_bufs bufs;
@@ -194,6 +201,7 @@ struct image {
         struct img_image img;
         struct dsk_image dsk;
         struct directaccess da;
+        struct vgi_image vgi;
     };
 
     struct slot *slot;
