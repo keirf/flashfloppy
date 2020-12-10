@@ -86,7 +86,6 @@ struct packed ff_cfg {
 #define HOST_dec        11
 #define HOST_tandy_coco 12
 #define HOST_fluke      13
-#define HOST_kaypro     14
 #define HOST_nascom     15
 #define HOST_casio      16
 #define HOST_ibm_3174   17

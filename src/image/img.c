@@ -66,7 +66,6 @@ static bool_t xdf_check(const struct bpb *bpb);
 #define sec_sz(n) (128u << (n))
 
 #define _IAM 1 /* IAM */
-#define _ITN 1 /* inter-track numbering */
 #define _C(cyls) ((cyls) / 40 - 1)
 #define _R(rpm) ((rpm) / 60 - 5)
 #define _S(sides) ((sides) - 1)
@@ -78,7 +77,7 @@ const static struct raw_type {
     uint8_t interleave:3;
     uint8_t no:3;
     uint8_t base:1;
-    uint8_t inter_track_numbering:1;
+    uint8_t _pad:1;
     uint8_t cskew:4;
     uint8_t hskew:2;
     uint8_t cyls:1;
@@ -139,11 +138,6 @@ const static struct raw_type {
     { 0 }
 }, fluke_type[] = {
     { 16, _S(2), _IAM, 57, 2, 1, 0, 0, 0, 0, _C(80), _R(300) },
-    { 0 }
-}, kaypro_type[] = {
-    { 10, _S(1), _IAM, 30, 3, 2, 0, _ITN, 0, 0, _C(40), _R(300) }, /* 200k */
-    { 10, _S(2), _IAM, 30, 3, 2, 0, _ITN, 0, 0, _C(40), _R(300) }, /* 400k */
-    { 10, _S(2), _IAM, 30, 3, 2, 0, _ITN, 0, 0, _C(80), _R(300) }, /* 800k */
     { 0 }
 }, mbd_type[] = {
     { 11, _S(2), _IAM,  30, 1, 3, 1, 0, 0, 0, _C(80), _R(300) },
@@ -231,8 +225,6 @@ found:
     layout.gap3 = type->gap3;
     layout.interleave = type->interleave;
     layout.base[0] = layout.base[1] = type->base;
-    if (type->inter_track_numbering == _ITN)
-        layout.base[1] += type->nr_secs;
 
     simple_layout(im, &layout);
 
@@ -523,9 +515,6 @@ static bool_t img_open(struct image *im)
         break;
     case HOST_ibm_3174:
         return ibm_3174_open(im);
-    case HOST_kaypro:
-        type = kaypro_type;
-        break;
     case HOST_memotech:
         type = memotech_type;
         break;
