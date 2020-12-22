@@ -575,8 +575,6 @@ static void drive_step_timer(void *_drv)
         break;
     case STEP_latched:
         speaker_pulse();
-        if ((drv->cyl >= 84) && !drv->step.inward)
-            drv->cyl = 84; /* Fast step back from D-A cyls */
         drv->cyl += drv->step.inward ? 1 : -1;
         timer_set(&drv->step.timer,
                   drv->step.start + time_ms(ff_cfg.head_settle_ms));
