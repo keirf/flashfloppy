@@ -430,6 +430,7 @@ static bool_t dma_rd_handle(struct drive *drv)
     switch (dma_rd->state) {
 
     case DMA_inactive: {
+        struct image *im = drv->image;
         time_t index_time, read_start_pos;
         unsigned int track;
         /* Allow 10ms from current rotational position to load new track */
@@ -450,16 +451,16 @@ static bool_t dma_rd_handle(struct drive *drv)
         read_start_pos = drv->index_suppressed
             ? drive.restart_pos /* start read exactly where write ended */
             : time_since(index_time) + delay;
-        read_start_pos %= drv->image->stk_per_rev;
+        read_start_pos %= im->stk_per_rev;
         /* Seek to the new track. */
         track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
-        if ((track >= (DA_FIRST_CYL*2)) && (drv->outp & m(outp_wrprot))
+        if (in_da_mode(im, track>>1) && (drv->outp & m(outp_wrprot))
             && !volume_readonly()) {
             /* Remove write-protect when driven into D-A mode. */
             drive_change_output(drv, outp_wrprot, FALSE);
         }
-        if (image_setup_track(drv->image, track, &read_start_pos))
+        if (image_setup_track(im, track, &read_start_pos))
             return TRUE;
         prefetch_start_time = time_now();
         read_start_pos /= SYSCLK_MHZ/STK_MHZ;
@@ -468,7 +469,7 @@ static bool_t dma_rd_handle(struct drive *drv)
             /* Set the deadline to match existing index timing. */
             sync_time = index_time + read_start_pos;
             if (time_diff(time_now(), sync_time) < 0)
-                sync_time += drv->image->stk_per_rev;
+                sync_time += im->stk_per_rev;
         }
         /* Change state /then/ check for race against step or side change. */
         dma_rd->state = DMA_starting;
@@ -519,6 +520,7 @@ void floppy_get_track(struct track_info *ti)
     ti->side = active ? drive.head & (drive.image->nr_sides - 1) : 0;
     ti->sel = drive.sel;
     ti->writing = (active && dma_wr->state != DMA_inactive);
+    ti->in_da_mode = active ? in_da_mode(drive.image, ti->cyl) : FALSE;
 }
 
 static bool_t index_is_suppressed(struct drive *drv)

@@ -258,7 +258,7 @@ bool_t image_setup_track(
     const struct image_handler *h = im->track_handler;
 
 #if !defined(QUICKDISK)
-    if (track < (DA_FIRST_CYL*2)) {
+    if (!in_da_mode(im, track>>1)) {
         /* If we are exiting D-A mode then need to re-read the config file. */
         if (h == &da_image_handler)
             return TRUE;

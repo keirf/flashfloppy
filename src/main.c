@@ -165,7 +165,7 @@ static void lcd_scroll_name(void)
         return;
 
     floppy_get_track(&ti);
-    if (ti.cyl >= DA_FIRST_CYL) {
+    if (ti.in_da_mode) {
         /* Display controlled by src/image/da.c */
         return;
     }
@@ -308,7 +308,7 @@ static void led_7seg_update_track(bool_t force)
         changed = TRUE;
     }
 
-    if (ti.cyl >= DA_FIRST_CYL) {
+    if (ti.in_da_mode) {
         /* Display controlled by src/image/da.c */
         display_state = LED_NORMAL;
     }
