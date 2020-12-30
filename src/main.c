@@ -32,10 +32,9 @@ struct native_dirent {
 static struct {
     uint16_t slot_nr, max_slot_nr;
     uint8_t slot_map[1000/8];
-    union {
-        struct { struct short_slot autoboot, hxcsdfe; };
-        struct { struct short_slot imgcfg; };
-    };
+    struct short_slot autoboot;
+    struct short_slot hxcsdfe;
+    struct short_slot imgcfg;
     struct slot slot, clipboard;
     uint32_t cfg_cdir, cur_cdir;
     struct native_dirent **sorted;
@@ -695,7 +694,7 @@ static void fatfs_to_slot(struct slot *slot, FIL *file, const char *name)
 
 bool_t get_img_cfg(struct slot *slot)
 {
-    if (cfg.hxc_mode || !cfg.imgcfg.size)
+    if (!cfg.imgcfg.size)
         return FALSE;
     slot_from_short_slot(slot, &cfg.imgcfg);
     return TRUE;
@@ -1316,6 +1315,13 @@ static void cfg_init(void)
     fr = f_chdir("FF");
     cfg.cfg_cdir = fatfs.cdir;
 
+    memset(&cfg.imgcfg, 0, sizeof(cfg.imgcfg));
+    fr = F_try_open(&fs->file, "IMG.CFG", FA_READ);
+    if (!fr) {
+        fatfs_to_short_slot(&cfg.imgcfg, &fs->file, "IMG.CFG");
+        F_close(&fs->file);
+    }
+
     read_ff_cfg();
     process_ff_cfg_opts(&old_ff_cfg);
 
@@ -1368,13 +1374,6 @@ static void cfg_init(void)
 native_mode:
     /* Native mode (direct navigation). */
     fatfs.cdir = cfg.cfg_cdir;
-
-    memset(&cfg.imgcfg, 0, sizeof(cfg.imgcfg));
-    fr = F_try_open(&fs->file, "IMG.CFG", FA_READ);
-    if (!fr) {
-        fatfs_to_short_slot(&cfg.imgcfg, &fs->file, "IMG.CFG");
-        F_close(&fs->file);
-    }
 
     sofar = 0;
     if (ff_cfg.image_on_startup == IMGS_static) {
