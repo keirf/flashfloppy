@@ -2498,8 +2498,18 @@ static void fm_prep_track(struct image *im)
         tracklen += enc_sec_sz(im, &im->img.sec_info[i]);
     tracklen *= 16;
 
-    /* Calculate data rate and track length. */
-    trk->data_rate = trk->data_rate ?: 125; /* SD */
+    if (trk->data_rate == 0) {
+        /* Infer the data rate:
+         * Micro-diskette = 125kbps, 8-inch disk = 250kbps */
+        for (i = 0; i < 1; i++) { /* 0=125kbps, 1=250kbps */
+            uint32_t maxlen = (((50000u * 300) / trk->rpm) << i) + 5000;
+            if (tracklen < maxlen)
+                break;
+        }
+        trk->data_rate = 125u << i; /* 125kbps or 250kbps */
+    }
+
+    /* Calculate standard track length from data rate and RPM. */
     im->tracklen_bc = (trk->data_rate * 400 * 300) / trk->rpm;
 
     /* Calculate a suitable GAP3 if not specified. */
