@@ -2118,7 +2118,7 @@ static uint8_t *init_track_map(struct image *im)
     void *p;
 
     if ((im->nr_sides < 1) || (im->nr_sides > 2)
-        || (im->nr_cyls < 1) || (im->nr_cyls > 254))
+        || (im->nr_cyls < 1) || (im->nr_cyls > 255))
         F_die(FR_BAD_IMAGE);
 
     ASSERT(im->img.trk_info == NULL);
