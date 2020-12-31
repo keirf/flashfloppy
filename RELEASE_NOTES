@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.23 - 31 December 2020
+ - OLED/LCD: Fix missing folder name display row when inserting USB drive
+ - IMG.CFG: New examples for Roland, Sinclair QL, Kaypro
+ - IMG.CFG: Now supported in HxC-compat and indexed navigation modes
+ - IMG: Fix default 8-inch single-density data rate
+ - IMG, HFE: Support 255-cylinder image files
+
 ** v3.22 - 17 November 2020
  - Fix various crashes when mounting a Flash drive with stale IMAGE_A.CFG
  - FAT FS: Support filesystems for which cluster table is "too small"
