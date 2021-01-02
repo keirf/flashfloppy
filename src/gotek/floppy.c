@@ -271,8 +271,9 @@ static void IRQ_STEP_changed(void)
         rdata_stop();
         if (!ff_cfg.index_suppression) {
             /* Opportunistically insert an INDEX pulse ahead of seek op. */
-            drive_change_output(drv, outp_index, TRUE);
-            index.fake_fired = TRUE;
+            // FIXME: But why? Delete fake_fired completely?
+            //drive_change_output(drv, outp_index, TRUE);
+            //index.fake_fired = TRUE;
         }
     }
     IRQx_set_pending(FLOPPY_SOFTIRQ);

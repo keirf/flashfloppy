@@ -26,6 +26,8 @@ void IRQ_43(void) __attribute__((alias("IRQ_soft")));
 /* Index-pulse timer functions. */
 static void index_assert(void *);   /* index.timer */
 static void index_deassert(void *); /* index.timer_deassert */
+static void index_custom_assert(void *);   /* index.custom_timer */
+static void index_custom_deassert(void *); /* index.custom_timer_deassert */
 
 static time_t sync_time, sync_pos;
 
@@ -180,6 +182,7 @@ void floppy_cancel(void)
     /* Clear soft state. */
     timer_cancel(&drv->chgrst_timer);
     timer_cancel(&index.timer);
+    timer_cancel(&index.custom_timer);
     barrier(); /* cancel index.timer /then/ clear dma rings */
     dma_rd = dma_wr = NULL;
     barrier(); /* /then/ clear soft state */
@@ -189,6 +192,7 @@ void floppy_cancel(void)
     index.fake_fired = FALSE;
     barrier(); /* /then/ cancel index.timer_deassert */
     timer_cancel(&index.timer_deassert);
+    timer_cancel(&index.custom_timer_deassert);
     motor_chgrst_eject(drv);
 
     /* Set outputs for empty drive. */
@@ -294,6 +298,8 @@ void floppy_init(void)
 
     timer_init(&index.timer, index_assert, NULL);
     timer_init(&index.timer_deassert, index_deassert, NULL);
+    timer_init(&index.custom_timer, index_custom_assert, NULL);
+    timer_init(&index.custom_timer_deassert, index_custom_deassert, NULL);
 
     motor_chgrst_eject(drv);
 }
@@ -396,6 +402,7 @@ static void floppy_sync_flux(void)
         uint32_t oldpri = IRQ_save(TIMER_IRQ_PRI);
 
         timer_cancel(&index.timer);
+        timer_cancel(&index.custom_timer);
 
         /* If we crossed the index mark while filling the DMA buffer then we
          * need to set up the index pulse (usually done by IRQ_rdata_dma). */
@@ -414,6 +421,17 @@ static void floppy_sync_flux(void)
             /* Calculate deadline for index timer. */
             ticks /= SYSCLK_MHZ/TIME_MHZ;
             timer_set(&index.timer, time_now() + ticks);
+        }
+
+        /* Realign custom_timer to index. */
+        if (index.custom_pulses_len) {
+            int i;
+            for (i = 0; i < index.custom_pulses_len; i++)
+                if (sync_pos < index.custom_pulses[i])
+                    break;
+            if (i < index.custom_pulses_len)
+                timer_set(&index.custom_timer,
+                          time_now() - sync_pos + index.custom_pulses[i]);
         }
 
         IRQ_global_disable();
@@ -543,15 +561,42 @@ static void index_assert(void *dat)
 {
     struct drive *drv = &drive;
     index.prev_time = index.timer.deadline;
-    if (drv->motor.on && !index_is_suppressed(drv)) {
-        drive_change_output(drv, outp_index, TRUE);
-        timer_set(&index.timer_deassert, index.prev_time + time_ms(2));
-    }
+    if (index.custom_pulses_len)
+        timer_set(&index.custom_timer, index.prev_time + index.custom_pulses[0]);
+    else
+        if (drv->motor.on && !index_is_suppressed(drv)) {
+            drive_change_output(drv, outp_index, TRUE);
+            timer_set(&index.timer_deassert, index.prev_time + time_ms(2));
+        }
     if (dma_rd->state != DMA_active) /* timer set from input flux stream */
         timer_set(&index.timer, index.prev_time + drv->image->stk_per_rev);
 }
 
 static void index_deassert(void *dat)
+{
+    struct drive *drv = &drive;
+    drive_change_output(drv, outp_index, FALSE);
+}
+
+static void index_custom_assert(void *dat)
+{
+    struct drive *drv = &drive;
+    time_t current_pulse_pos;
+    int i;
+    if (drv->motor.on && !index_is_suppressed(drv)) {
+        drive_change_output(drv, outp_index, TRUE);
+        timer_set(&index.custom_timer_deassert,
+                  index.custom_timer.deadline + time_ms(2));
+    }
+    current_pulse_pos = time_since(index.prev_time);
+    for (i = 0; i < index.custom_pulses_len; i++)
+        if (current_pulse_pos < index.custom_pulses[i])
+            break;
+    if (i < index.custom_pulses_len)
+        timer_set(&index.custom_timer, index.prev_time + index.custom_pulses[i]);
+}
+
+static void index_custom_deassert(void *dat)
 {
     struct drive *drv = &drive;
     drive_change_output(drv, outp_index, FALSE);

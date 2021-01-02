@@ -141,6 +141,7 @@ static void hfe_setup_track(
     uint32_t sys_ticks;
     uint8_t cyl = track >> (im->hfe.double_step ? 2 : 1);
     uint8_t side = track & (im->nr_sides - 1);
+    int i;
 
     track = cyl*2 + side;
     if (track != im->cur_track)
@@ -157,6 +158,20 @@ static void hfe_setup_track(
 
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
+
+    /* If there are opcodes (other than random) in the track, seeking will not
+     * be precise as opcodes contribute zero bitcells. The HFE track data will
+     * _appear_ misaligned to the previous until the track is read from the
+     * beginning. So even with perfectly aligned HFE tracks, we'll find this
+     * new track has different pulses than the previous.
+     *
+     * Note that this problem also applies to writes and will shift writes
+     * backward in time.
+     */
+    for (i = 0; i < im->index_pulses_len; i++)
+        if (im->cur_ticks < im->index_pulses[i])
+            break;
+    im->hfe.next_index_pulses_pos = i;
 
     /* Aggressively batch our reads at HD data rate, as that can be faster 
      * than some USB drives will serve up a single block.*/
@@ -243,6 +258,11 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             im->cur_bc = im->cur_ticks = 0;
             /* Skip tail of current 256-byte block. */
             bc_c = (bc_c + 256*8-1) & ~(256*8-1);
+            if (im->index_pulses_len != im->hfe.next_index_pulses_pos) {
+                im->index_pulses_len = im->hfe.next_index_pulses_pos;
+                im->index_pulses_ver++;
+            }
+            im->hfe.next_index_pulses_pos = 0;
             continue;
         }
         y = bc_c % 8;
@@ -250,8 +270,17 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
         if (is_v3 && (y == 0) && ((x & 0xf) == 0xf)) {
             /* V3 byte-aligned opcode processing. */
             switch (x >> 4) {
-            case OP_nop:
             case OP_index:
+                if (im->hfe.next_index_pulses_pos < MAX_CUSTOM_PULSES
+                    && im->index_pulses[im->hfe.next_index_pulses_pos] != im->cur_ticks) {
+
+                    im->index_pulses[im->hfe.next_index_pulses_pos]
+                        = im->cur_ticks;
+                    im->index_pulses_ver++;
+                }
+                im->hfe.next_index_pulses_pos++;
+                /* fallthrough */
+            case OP_nop:
             default:
                 bc_c += 8;
                 im->cur_bc += 8;
@@ -261,6 +290,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
                 x = _rbit32(bc_b[(bc_c/8+1) & bc_mask]) >> 24;
                 im->ticks_per_cell = ticks_per_cell = 
                     (sysclk_us(2) * 16 * x) / 72;
+                im->write_bc_ticks = ticks_per_cell / 16;
                 bc_c += 2*8;
                 im->cur_bc += 2*8;
                 y = 8;
@@ -273,8 +303,6 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
                 x = bc_b[(bc_c/8) & bc_mask] >> y;
                 break;
             case OP_rand:
-                bc_c += 8;
-                im->cur_bc += 8;
                 x = rand();
                 break;
             }
@@ -315,6 +343,7 @@ static bool_t hfe_write_track(struct image *im)
     uint32_t i, space, c = wr->cons / 8, p = wr->prod / 8;
     bool_t writeback = FALSE;
     time_t t;
+    bool_t is_v3 = im->hfe.is_v3;
 
     /* If we are processing final data then use the end index, rounded to
      * nearest. */
@@ -332,6 +361,30 @@ static bool_t hfe_write_track(struct image *im)
         F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
         F_read(&im->fp, wrbuf, im->hfe.write_batch.len, NULL);
         F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
+
+        if (is_v3 && (im->hfe.trk_pos & 255) >= 1) {
+            /* Avoid writing in the middle of an opcode. This would most likely
+             * occur at the start of the track. */
+            w = wrbuf
+                + (im->cur_track & 1) * 256
+                + im->hfe.trk_pos - im->hfe.write_batch.off
+                - 1;
+            if ((im->hfe.trk_pos & 255) >= 2)
+                if ((*(w-1) & 0xf) == 0xf && (*(w-1) >> 4) == OP_skip)
+                    im->hfe.trk_pos++;
+            if ((*w & 0xf) == 0xf) {
+                switch (*w >> 4) {
+                case OP_skip:
+                    im->hfe.trk_pos += 2;
+                    break;
+                case OP_bitrate:
+                    im->hfe.trk_pos++;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
     }
 
     for (;;) {
@@ -364,13 +417,42 @@ static bool_t hfe_write_track(struct image *im)
             + (im->cur_track & 1) * 256
             + batch_off - im->hfe.write_batch.off
             + (off & 255);
-        for (i = 0; i < nr; i++)
+        for (i = 0; i < nr; i++) {
+            if (is_v3 && (*w & 0xf) == 0xf) {
+                switch (*w >> 4) {
+                case OP_skip:
+                    /* Don't bother; these bits are unlikely to matter. */
+                    w++;
+                    i++;
+                    /* fallthrough */
+                case OP_bitrate:
+                    /* Assume bitrate does not change for the entire track, and
+                     * write_bc_ticks already adjusted when reading. */
+                    w++;
+                    i++;
+                    /* fallthrough */
+                case OP_nop:
+                case OP_index:
+                default:
+                    /* Preserve opcode. But making sure not to write past end of
+                     * buffer. */
+                    w++;
+                    continue;
+
+                case OP_rand:
+                    /* Replace with data. */
+                    break;
+                }
+            }
             *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
+        }
         im->hfe.write_batch.dirty = TRUE;
 
-        im->hfe.trk_pos += nr;
+        im->hfe.trk_pos += i; /* i may be larger than nr due to opcodes. */
         if (im->hfe.trk_pos >= im->hfe.trk_len) {
-            ASSERT(im->hfe.trk_pos == im->hfe.trk_len);
+            ASSERT(im->hfe.trk_pos - im->hfe.trk_len <= 2);
+            /* Although trk_pos may exceed trk_len, it could only be caused by
+             * truncated opcodes. */
             im->hfe.trk_pos = 0;
             im->hfe.write.wrapped = TRUE;
         }

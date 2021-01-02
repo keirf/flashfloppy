@@ -79,8 +79,13 @@ static struct image *image;
 
 static struct {
     struct timer timer, timer_deassert;
+    struct timer custom_timer, custom_timer_deassert;
     time_t prev_time;
     bool_t fake_fired;
+    uint8_t custom_pulses_ver;
+    uint8_t custom_pulses_len;
+    /* Durations relative to track start. Must be in increasing order. */
+    time_t custom_pulses[MAX_CUSTOM_PULSES];
 } index;
 
 static void rdata_stop(void);
@@ -238,6 +243,8 @@ static void floppy_mount(struct slot *slot)
 
     drv->index_suppressed = FALSE;
     index.prev_time = time_now();
+    index.custom_pulses_len = 0;
+    index.custom_pulses_ver = 0xFF;
 }
 
 /* Initialise timers and DMA for RDATA/WDATA. */
@@ -366,12 +373,13 @@ static void wdata_stop(void)
 #if !defined(QUICKDISK)
     if (!ff_cfg.index_suppression) {
         /* Opportunistically insert an INDEX pulse ahead of writeback. */
-        drive_change_output(drv, outp_index, TRUE);
-        index.fake_fired = TRUE;
-        IRQx_set_pending(FLOPPY_SOFTIRQ);
+        // FIXME: But why? Delete fake_fired completely?
+        //drive_change_output(drv, outp_index, TRUE);
+        //index.fake_fired = TRUE;
+        //IRQx_set_pending(FLOPPY_SOFTIRQ);
         /* Position read head so it quickly triggers an INDEX pulse. */
-        drv->restart_pos = drv->image->stk_per_rev - stk_ms(20);
-        drv->index_suppressed = TRUE;
+        //drv->restart_pos = drv->image->stk_per_rev - stk_ms(20);
+        //drv->index_suppressed = TRUE;
     }
 #endif
 }
@@ -606,6 +614,28 @@ static void IRQ_rdata_dma(void)
     } else if (nr != nr_to_cons) {
         /* We didn't fill the ring: re-enter this ISR to do more work. */
         IRQx_set_pending(dma_rdata_irq);
+    }
+
+    ASSERT(drv->image->index_pulses_len < MAX_CUSTOM_PULSES);
+    if (drv->image->index_pulses_ver != index.custom_pulses_ver) {
+        time_t current_pulse_pos = time_since(index.prev_time);
+        uint32_t oldpri;
+
+        oldpri = IRQ_save(TIMER_IRQ_PRI);
+        for (i = 0; i < drv->image->index_pulses_len; i++)
+            index.custom_pulses[i] = (drv->image->index_pulses[i]>>4)
+                / (SYSCLK_MHZ/TIME_MHZ);
+        index.custom_pulses_len = drv->image->index_pulses_len;
+        index.custom_pulses_ver = drv->image->index_pulses_ver;
+
+        for (i = 0; i < index.custom_pulses_len; i++)
+            if (current_pulse_pos <= index.custom_pulses[i])
+                break;
+        if (i < index.custom_pulses_len)
+            timer_set(&index.custom_timer, index.prev_time + index.custom_pulses[i]);
+        else
+            timer_cancel(&index.custom_timer);
+        IRQ_restore(oldpri);
     }
 
     /* Check if we have crossed the index mark. If not, we're done. */
