@@ -72,6 +72,7 @@ struct hfe_image {
     uint16_t tlut_base;
     uint16_t trk_pos, trk_len;
     bool_t is_v3, double_step, fresh_seek;
+    uint8_t next_index_pulses_pos;
 };
 
 struct qd_image {
@@ -165,6 +166,8 @@ struct directaccess {
     bool_t read_op_started;
 };
 
+#define MAX_CUSTOM_PULSES 34 /* 33+1 for minor track misalignment */
+
 struct image {
     /* Handler for currently-selected type of disk image. */
     const struct image_handler *disk_handler;
@@ -177,6 +180,11 @@ struct image {
 
     /* Info about image as a whole. */
     uint8_t nr_cyls, nr_sides;
+    uint8_t index_pulses_ver; /* Changed when pulses or length changed. */
+    uint8_t index_pulses_len;
+    /* Alternative index pulse locations, in ticks. When non-empty, disables
+     * regular index pulse. */
+    uint32_t index_pulses[MAX_CUSTOM_PULSES];
 
     /* Data buffers. */
     struct image_bufs bufs;
