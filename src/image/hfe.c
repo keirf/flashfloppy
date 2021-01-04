@@ -154,7 +154,7 @@ static void hfe_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
     struct image_buf *bc = &im->bufs.read_bc;
-    uint32_t sys_ticks;
+    uint32_t sys_ticks, opcode_adj_bc = 0;
     uint8_t cyl = track >> (im->hfe.double_step ? 2 : 1);
     uint8_t side = track & (im->nr_sides - 1);
 
@@ -179,10 +179,34 @@ static void hfe_setup_track(
 
     sys_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
     im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
-    if (im->cur_bc >= im->tracklen_bc)
+    if (im->hfe.is_v3 && im->tracklen_ticks > 0
+        && im->tracklen_ticks < im->tracklen_bc * im->ticks_per_cell) {
+
+        /* If there are opcodes (other than random) in the track, seeking will
+         * not be precise as opcodes contribute zero bitcells and thus zero
+         * ticks. The HFE track data will _appear_ misaligned to the previous
+         * until the track is read from the beginning. Misalignment greater
+         * than 3 ms is possible and can shift writes backward in time.
+         *
+         * Severe misalignment is most likely caused by regular occurrences of
+         * OP_bitrate evenly distributed through the track. Assume opcodes
+         * numerous enough to become noticeable are evenly distributed in the
+         * track.
+         */
+        uint32_t assumed_tracklen_ticks = im->tracklen_bc * im->ticks_per_cell;
+        uint32_t opcode_ticks = assumed_tracklen_ticks - im->tracklen_ticks;
+        uint32_t opcode_bc = opcode_ticks / im->ticks_per_cell;
+        opcode_adj_bc = im->cur_bc * opcode_bc / (im->tracklen_bc - opcode_bc);
+    }
+    if (im->cur_bc + opcode_adj_bc >= im->tracklen_bc) {
         im->cur_bc = 0;
+        opcode_adj_bc  = 0;
+    }
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
+
+    /* Must be careful to exclude opcode_adj_bc from tick calculations. */
+    im->cur_bc += opcode_adj_bc;
 
     sys_ticks = im->cur_ticks / 16;
 
