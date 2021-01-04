@@ -153,9 +153,30 @@ static void hfe_setup_track(
 
     start_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
     im->cur_bc = (start_ticks * 16) / im->ticks_per_cell;
-    if (im->cur_bc >= im->tracklen_bc)
-        im->cur_bc = 0;
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;
+    if (im->hfe.is_v3) {
+        /* Seeking is not precise as opcodes contribute zero bitcells and thus
+         * zero ticks. The HFE track data will _appear_ misaligned to the
+         * previous until the track is read from the beginning. Misalignment
+         * greater than 3 ms is possible and can shift writes backward in time.
+         *
+         * Severe misalignment is most likely caused by regular occurrences of
+         * OP_bitrate evenly distributed through the track. Assume opcodes
+         * numerous enough to become noticeable are evenly distributed in the
+         * track.
+         */
+        uint32_t assumed_tracklen = im->tracklen_bc;
+        uint32_t actual_tracklen = im->tracklen_ticks / im->ticks_per_cell;
+        /* The subtraction avoids overflowing the multiplication. A max-length
+         * HFE track avoids overflow as long as opcodes account for less than
+         * 6% of the data. High density at 10% and double-density at 42%. */
+        im->cur_bc += im->cur_bc
+            * (assumed_tracklen - actual_tracklen) / actual_tracklen;
+    }
+    if (im->cur_bc >= im->tracklen_bc) {
+        im->cur_bc = 0;
+        im->cur_ticks = 0;
+    }
     im->ticks_since_flux = 0;
 
     start_ticks = im->cur_ticks / 16;
