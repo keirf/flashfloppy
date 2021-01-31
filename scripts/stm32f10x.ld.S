@@ -44,6 +44,9 @@ SECTIONS
     _thread_stackbottom = .;
     . = . + 1024;
     _thread_stacktop = .;
+    _thread1_stackbottom = .;
+    . = . + 512;
+    _thread1_stacktop = .;
     _sbss = .;
     *(.bss)
     *(.bss*)

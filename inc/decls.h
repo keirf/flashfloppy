@@ -29,6 +29,7 @@
 #include "cancellation.h"
 #include "spi.h"
 #include "timer.h"
+#include "thread.h"
 #include "fs.h"
 #include "floppy.h"
 #include "volume.h"

@@ -212,6 +212,7 @@ extern char _sbss[], _ebss[];
 
 /* Stacks. */
 extern uint32_t _thread_stacktop[], _thread_stackbottom[];
+extern uint32_t _thread1_stacktop[], _thread1_stackbottom[];
 extern uint32_t _irq_stacktop[], _irq_stackbottom[];
 
 /* Default exception handler. */

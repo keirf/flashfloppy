@@ -73,8 +73,12 @@ void EXC_unexpected(struct extra_exception_frame *extra)
 
     if ((psp >= (uint32_t)_thread_stackbottom)
         && (psp < (uint32_t)_thread_stacktop)) {
-        printk("Process Call Trace:", psp);
+        printk("Process Call Trace (Thread 0):", psp);
         show_stack(psp, (uint32_t)_thread_stacktop);
+    } else if ((psp >= (uint32_t)_thread1_stackbottom)
+        && (psp < (uint32_t)_thread1_stacktop)) {
+        printk("Process Call Trace (Thread 1):", psp);
+        show_stack(psp, (uint32_t)_thread1_stacktop);
     }
 
     system_reset();
