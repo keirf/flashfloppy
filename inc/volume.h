@@ -23,6 +23,10 @@ struct volume_ops {
 
 bool_t volume_connected(void);
 bool_t volume_readonly(void);
+/* Returns TRUE if volume is in the middle of an operation that may
+ * thread_yield(); FALSE if no I/O in progress. When TRUE, the thread will
+ * yield as soon as calling this method would begin returning FALSE. */
+bool_t volume_interrupt(void);
 
 void volume_cache_init(void *start, void *end);
 void volume_cache_destroy(void);

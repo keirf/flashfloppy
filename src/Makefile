@@ -8,6 +8,7 @@ OBJS += flash_cfg.o
 OBJS += vectors.o
 OBJS += fpec.o
 OBJS += fs.o
+OBJS += fs_async.o
 OBJS += main.o
 OBJS += sd_spi.o
 OBJS += spi.o

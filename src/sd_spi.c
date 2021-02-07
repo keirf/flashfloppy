@@ -67,10 +67,12 @@ static void spi_release(void)
 static uint8_t wait_ready(void)
 {
     stk_time_t start = stk_now();
-    uint8_t res;
+    uint8_t res = 0xff;
 
     /* Wait 500ms for card to be ready. */
     do {
+        if (res != 0xff)
+            thread_yield();
         res = spi_recv8(spi);
     } while ((res != 0xff) && (stk_timesince(start) < stk_ms(500)));
 
@@ -171,12 +173,14 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg)
 
 static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
 {
-    uint8_t token, _crc[2];
+    uint8_t token = 0, _crc[2];
     uint32_t start = stk_now();
     uint16_t todo, w, crc;
 
     /* Wait 100ms for data to be ready. */
     do {
+        if (token == 0xff)
+            thread_yield();
         token = spi_recv8(spi);
     } while ((token == 0xff) && (stk_timesince(start) < stk_ms(100)));
     if (token != 0xfe) /* valid data token? */

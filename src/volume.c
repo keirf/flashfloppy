@@ -15,6 +15,8 @@ extern struct volume_ops usb_ops;
 static struct volume_ops *vol_ops = &usb_ops;
 
 static struct cache *cache;
+static bool_t interrupt;
+static bool_t inprogress;
 static void *metadata_addr;
 #define SECSZ 512
 
@@ -23,6 +25,8 @@ void volume_cache_init(void *start, void *end)
 {
     volume_cache_destroy();
     cache = cache_init(start, end, SECSZ);
+    interrupt = FALSE;
+    inprogress = FALSE;
 }
 
 void volume_cache_destroy(void)
@@ -57,9 +61,29 @@ out:
     return disk_status(pdrv);
 }
 
+static inline void start_op(void)
+{
+    ASSERT(!inprogress);
+    inprogress = TRUE;
+}
+
+static inline void end_op(void)
+{
+    ASSERT(inprogress);
+    inprogress = FALSE;
+    if (interrupt) {
+        thread_yield();
+        interrupt = FALSE;
+    }
+}
+
 DSTATUS disk_status(BYTE pdrv)
 {
-    return vol_ops->status(pdrv);
+    DSTATUS status;
+    start_op();
+    status = vol_ops->status(pdrv);
+    end_op();
+    return status;
 }
 
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count)
@@ -69,8 +93,12 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count)
     struct cache *c;
 
     if (((c = cache) == NULL)
-        || (metadata_addr && (buff != metadata_addr)))
-        return vol_ops->read(pdrv, buff, sector, count);
+        || (metadata_addr && (buff != metadata_addr))) {
+        start_op();
+        res = vol_ops->read(pdrv, buff, sector, count);
+        end_op();
+        return res;
+    }
 
     while (count) {
         if ((p = cache_lookup(c, sector)) == NULL)
@@ -83,25 +111,34 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count)
     return RES_OK;
 
 read_tail:
+    start_op();
     res = vol_ops->read(pdrv, buff, sector, count);
     if (res == RES_OK)
         cache_update_N(c, sector, buff, count);
+    end_op();
     return res;
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count)
 {
-    DRESULT res = vol_ops->write(pdrv, buff, sector, count);
+    DRESULT res;
     struct cache *c;
+    start_op();
+    res = vol_ops->write(pdrv, buff, sector, count);
     if ((res == RES_OK) && ((c = cache) != NULL)
         && (!metadata_addr || (buff == metadata_addr)))
         cache_update_N(c, sector, buff, count);
+    end_op();
     return res;
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE ctrl, void *buff)
 {
-    return vol_ops->ioctl(pdrv, ctrl, buff);
+    DRESULT res;
+    start_op();
+    res = vol_ops->ioctl(pdrv, ctrl, buff);
+    end_op();
+    return res;
 }
 
 bool_t volume_connected(void)
@@ -114,7 +151,18 @@ bool_t volume_connected(void)
 
 bool_t volume_readonly(void)
 {
-    return vol_ops->readonly();
+    bool_t ret;
+    start_op();
+    ret = vol_ops->readonly();
+    end_op();
+    return ret;
+}
+
+bool_t volume_interrupt(void)
+{
+    if (inprogress)
+        interrupt = TRUE;
+    return inprogress;
 }
 
 /*

@@ -234,6 +234,8 @@ static DRESULT usb_disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count)
             return handle_usb_status(USBH_MSC_FAIL);
         status = USBH_MSC_Read10(&USB_OTG_Core, buff, sector, 512 * count);
         USBH_MSC_HandleBOTXfer(&USB_OTG_Core, &USB_Host);
+        if (status == USBH_MSC_BUSY)
+            thread_yield();
     } while (status == USBH_MSC_BUSY);
 
     return handle_usb_status(status);
@@ -257,6 +259,8 @@ static DRESULT usb_disk_write(
         status = USBH_MSC_Write10(
             &USB_OTG_Core, (BYTE *)buff, sector, 512 * count);
         USBH_MSC_HandleBOTXfer(&USB_OTG_Core, &USB_Host);
+        if (status == USBH_MSC_BUSY)
+            thread_yield();
     } while (status == USBH_MSC_BUSY);
 
     return handle_usb_status(status);

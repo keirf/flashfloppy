@@ -606,7 +606,7 @@ static void button_timer_fn(void *unused)
 
 static void canary_init(void)
 {
-    _irq_stackbottom[0] = _thread_stackbottom[0] = _thread2_stackbottom[0]
+    _irq_stackbottom[0] = _thread_stackbottom[0] = _thread1_stackbottom[0]
         = 0xdeadbeef;
 }
 
@@ -614,7 +614,7 @@ static void canary_check(void)
 {
     ASSERT(_irq_stackbottom[0] == 0xdeadbeef);
     ASSERT(_thread_stackbottom[0] == 0xdeadbeef);
-    ASSERT(_thread2_stackbottom[0] == 0xdeadbeef);
+    ASSERT(_thread1_stackbottom[0] == 0xdeadbeef);
 }
 
 static void fix_hxc_short_slot(struct short_slot *short_slot)
