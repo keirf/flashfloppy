@@ -44,19 +44,10 @@ struct adf_image {
 };
 
 struct hfe_image {
+    struct ring_io ring_io;
     uint16_t tlut_base;
-    uint16_t trk_off;
     uint16_t trk_pos, trk_len;
     bool_t is_v3, double_step;
-    uint8_t batch_secs;
-    struct {
-        uint16_t start;
-        bool_t wrapped;
-    } write;
-    struct {
-        uint16_t off, len;
-        bool_t dirty;
-    } write_batch;
 };
 
 struct qd_image {
@@ -212,6 +203,8 @@ struct image_handler {
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
     bool_t (*write_track)(struct image *im);
+
+    bool_t async;
 };
 
 /* List of supported image types. */

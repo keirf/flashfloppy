@@ -73,6 +73,7 @@ static struct drive {
     } step;
     uint32_t restart_pos;
     struct image *image;
+    struct thread io_thread;
 } drive;
 
 static struct image *image;
@@ -145,8 +146,10 @@ static void floppy_mount(struct slot *slot)
     FSIZE_t fastseek_sz;
     DWORD *cltbl;
     FRESULT fr;
+    bool_t async = FALSE, retry;
 
     do {
+        retry = FALSE;
 
         arena_init();
 
@@ -183,9 +186,29 @@ static void floppy_mount(struct slot *slot)
         /* ~0 avoids sync match within fewer than 32 bits of scan start. */
         im->write_bc_window = ~0;
 
-        /* Large buffer to absorb write latencies at mass-storage layer. */
-        im->bufs.write_bc.len = 32*1024; /* 32kB, power of two. */
-        im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
+        if (!async) {
+            /* Large buffer to absorb write latencies at mass-storage layer. */
+            im->bufs.write_bc.len = 32*1024; /* 32kB, power of two. */
+            im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
+        } else {
+            /* Make sure there is enough memory to fully buffer writes for an
+             * entire track. HFE is the least compact storage supported, with
+             * half the density of write_bc, so we use it as a worst-case.
+             */
+            uint32_t min_write_buffer = (200000/8 + 255) & ~255;
+            uint32_t for_data = arena_avail() & ~511;
+            uint32_t bc_len = 0;
+            if (for_data/2 < min_write_buffer) {
+                bc_len = min_write_buffer - for_data/2;
+                /* Round up to power of 2. */
+                bc_len = 1 << (sizeof(int)*8 - __builtin_clz(bc_len-1));
+            }
+            /* Size at least 4kb so a 512 byte sector (1k bc) can be fully
+             * encoded into the 2kb read_bc, with space to spare. */
+            bc_len = max_t(uint32_t, bc_len, 4*1024);
+            im->bufs.write_bc.len = bc_len; /* Power of two. */
+            im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
+        }
 
         /* Read BC buffer overlaps the second half of the write BC buffer. This 
          * is because:
@@ -227,6 +250,11 @@ static void floppy_mount(struct slot *slot)
                 image_open(im, slot, cltbl, TRUE);
         }
 #endif
+        if (async != im->disk_handler->async) {
+            async = im->disk_handler->async;
+            retry = TRUE;
+            continue;
+        }
         if (!im->disk_handler->write_track || volume_readonly())
             slot->attributes |= AM_RDO;
         if (slot->attributes & AM_RDO) {
@@ -235,7 +263,7 @@ static void floppy_mount(struct slot *slot)
             image_extend(im);
         }
 
-    } while (f_size(&im->fp) != fastseek_sz);
+    } while (f_size(&im->fp) != fastseek_sz || retry);
 
     /* After image is extended at mount time, we permit no further changes 
      * to the file metadata. Clear the dirent info to ensure this. */
@@ -544,7 +572,8 @@ static bool_t dma_wr_handle(struct drive *drv)
         im->bufs.write_bc.cons = (write->bc_end + 31) & ~31;
 
         /* Sync back to mass storage. */
-        F_sync(&im->fp);
+        if (!im->track_handler->async)
+            F_sync(&im->fp);
 
         IRQ_global_disable();
         /* Consume the write from the pipeline buffer. */

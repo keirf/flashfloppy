@@ -69,7 +69,9 @@ enum {
     OP_rand = 2     /* 4: flaky byte */
 };
 
-static void hfe_seek_track(struct image *im, uint16_t track);
+#define MAX_BC_SECS 8
+
+static void hfe_seek_track(struct image *im, uint16_t track, bool_t async);
 
 static bool_t hfe_open(struct image *im)
 {
@@ -107,44 +109,57 @@ static bool_t hfe_open(struct image *im)
     im->ticks_per_cell = im->write_bc_ticks * 16;
     im->sync = SYNC_none;
 
-    ASSERT(8*512 <= im->bufs.read_data.len);
-    volume_cache_init(im->bufs.read_data.p + 8*512,
-                      im->bufs.read_data.p + im->bufs.read_data.len);
-    volume_cache_metadata_only(&im->fp);
-
     /* Get an initial value for ticks per revolution. */
-    hfe_seek_track(im, 0);
+    hfe_seek_track(im, 0, FALSE);
+    im->cur_track = -1;
 
     return TRUE;
 }
 
-static void hfe_seek_track(struct image *im, uint16_t track)
+static void hfe_seek_track(struct image *im, uint16_t track, bool_t async)
 {
     struct track_header thdr;
+    uint16_t trk_off;
+    uint8_t batch_secs;
 
-    F_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
-    F_read(&im->fp, &thdr, sizeof(thdr), NULL);
+    if (async) {
+        F_lseek_async(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
+        F_async_wait(F_read_async(&im->fp, &thdr, sizeof(thdr), NULL));
+    } else {
+        F_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
+        F_read(&im->fp, &thdr, sizeof(thdr), NULL);
+    }
 
-    im->hfe.trk_off = le16toh(thdr.offset);
+    trk_off = le16toh(thdr.offset);
     im->hfe.trk_len = le16toh(thdr.len) / 2;
     im->tracklen_bc = im->hfe.trk_len * 8;
     im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
 
-    im->cur_track = track;
+    /* Aggressively batch our reads at HD data rate, as that can be faster
+     * than some USB drives will serve up a single block.*/
+    batch_secs = (im->write_bc_ticks > sysclk_ns(1500)) ? 4 : 8;
+    ring_io_init(&im->hfe.ring_io, &im->fp, &im->bufs.read_data,
+            (LBA_t)trk_off * 512, (im->hfe.trk_len*2 + 511) / 512, batch_secs,
+            MAX_BC_SECS);
 }
 
 static void hfe_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
-    struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
     uint32_t sys_ticks;
     uint8_t cyl = track >> (im->hfe.double_step ? 2 : 1);
     uint8_t side = track & (im->nr_sides - 1);
 
     track = cyl*2 + side;
-    if (track != im->cur_track)
-        hfe_seek_track(im, track);
+    if (track/2 != im->cur_track/2) {
+        ring_io_sync(&im->hfe.ring_io);
+
+        im->cur_track = track;
+        hfe_seek_track(im, track, TRUE);
+    } else if (track != im->cur_track) {
+        im->cur_track = track;
+    }
 
     sys_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
     im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
@@ -155,26 +170,21 @@ static void hfe_setup_track(
 
     sys_ticks = im->cur_ticks / 16;
 
-    rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
-
-    /* Aggressively batch our reads at HD data rate, as that can be faster 
-     * than some USB drives will serve up a single block.*/
-    im->hfe.batch_secs = (im->write_bc_ticks > sysclk_ns(1500)) ? 2 : 8;
 
     if (start_pos) {
         /* Read mode. */
-        im->hfe.trk_pos = (im->cur_bc/8) & ~255;
-        image_read_track(im);
-        bc->cons = im->cur_bc & 2047;
+        ring_io_seek(&im->hfe.ring_io, im->cur_bc / 8 / 256 * 512, FALSE);
+        /* Consumer may be ahead of producer, but only until the first read
+         * completes. */
+        bc->cons = im->cur_bc % (256*8);
         *start_pos = sys_ticks;
     } else {
+        uint32_t pos = im->cur_bc / 8 / 256 * 512
+                     + im->cur_bc / 8 % 256
+                     + (im->cur_track & 1) * 256;
         /* Write mode. */
-        im->hfe.trk_pos = im->cur_bc / 8;
-        im->hfe.write.start = im->hfe.trk_pos;
-        im->hfe.write.wrapped = FALSE;
-        im->hfe.write_batch.len = 0;
-        im->hfe.write_batch.dirty = FALSE;
+        ring_io_seek(&im->hfe.ring_io, pos, TRUE);
     }
 }
 
@@ -187,34 +197,28 @@ static bool_t hfe_read_track(struct image *im)
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     unsigned int nr_sec;
 
-    if (rd->prod == rd->cons) {
-        nr_sec = min_t(unsigned int, im->hfe.batch_secs,
-                       (im->hfe.trk_len+255 - im->hfe.trk_pos) / 256);
-        F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.trk_pos * 2);
-        F_read(&im->fp, buf, nr_sec*512, NULL);
-        rd->cons = 0;
-        rd->prod = nr_sec;
-        im->hfe.trk_pos += nr_sec * 256;
-        if (im->hfe.trk_pos >= im->hfe.trk_len)
-            im->hfe.trk_pos = 0;
-    }
+    ring_io_progress(&im->hfe.ring_io);
+    if (rd->cons >= rd->prod)
+        return FALSE;
 
     /* Fill the raw-bitcell ring buffer. */
     bc_p = bc->prod / 8;
     bc_c = bc->cons / 8;
     bc_len = bc->len;
     bc_mask = bc_len - 1;
-    bc_space = bc_len - (uint16_t)(bc_p - bc_c);
+    bc_space = min_t(uint32_t, bc_len, MAX_BC_SECS*256)
+        - (int16_t)(bc_p - bc_c);
 
-    nr_sec = min_t(unsigned int, rd->prod - rd->cons, bc_space/256);
+    nr_sec = min_t(unsigned int, (rd->prod - rd->cons)/512, bc_space/256);
     if (nr_sec == 0)
         return FALSE;
 
     while (nr_sec--) {
+        uint32_t cons = rd->cons + (im->cur_track&1)*256;
         memcpy(&bc_b[bc_p & bc_mask],
-               &buf[rd->cons*512 + (im->cur_track&1)*256],
+               &buf[ring_io_idx(&im->hfe.ring_io, cons)],
                256);
-        rd->cons++;
+        rd->cons += 512;
         bc_p += 256;
     }
 
@@ -235,10 +239,10 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     uint8_t x;
     bool_t is_v3 = im->hfe.is_v3;
 
-    while ((uint32_t)(bc_p - bc_c) >= 3*8) {
+    while ((int32_t)(bc_p - bc_c) >= 3*8) {
         ASSERT(y == 8);
         if (im->cur_bc >= im->tracklen_bc) {
-            ASSERT(im->cur_bc == im->tracklen_bc);
+            //ASSERT(im->cur_bc == im->tracklen_bc);
             im->tracklen_ticks = im->cur_ticks;
             im->cur_bc = im->cur_ticks = 0;
             /* Skip tail of current 256-byte block. */
@@ -305,16 +309,14 @@ out:
 
 static bool_t hfe_write_track(struct image *im)
 {
-    const unsigned int batch_secs = 8;
     bool_t flush;
     struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_bc;
     uint8_t *buf = wr->p;
     unsigned int bufmask = wr->len - 1;
-    uint8_t *w, *wrbuf = im->bufs.write_data.p;
+    uint8_t *w;
+    struct image_buf *rd = &im->bufs.read_data;
     uint32_t i, space, c = wr->cons / 8, p = wr->prod / 8;
-    bool_t writeback = FALSE;
-    time_t t;
 
     /* If we are processing final data then use the end index, rounded to
      * nearest. */
@@ -323,82 +325,44 @@ static bool_t hfe_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 4) / 8;
 
-    if (im->hfe.write_batch.len == 0) {
-        ASSERT(!im->hfe.write_batch.dirty);
-        im->hfe.write_batch.off = (im->hfe.trk_pos & ~255) << 1;
-        im->hfe.write_batch.len = min_t(
-            uint32_t, batch_secs * 512,
-            (((im->hfe.trk_len * 2) + 511) & ~511) - im->hfe.write_batch.off);
-        F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
-        F_read(&im->fp, wrbuf, im->hfe.write_batch.len, NULL);
-        F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
-    }
-
     for (;;) {
 
-        uint32_t batch_off, off = im->hfe.trk_pos;
+        uint32_t pos = ring_io_pos(&im->hfe.ring_io, rd->cons);
         UINT nr;
 
         /* All bytes remaining in the raw-bitcell buffer. */
         nr = space = (p - c) & bufmask;
         /* Limit to end of current 256-byte HFE block. */
-        nr = min_t(UINT, nr, 256 - (off & 255));
+        nr = min_t(UINT, nr, 256 - (pos & 255));
         /* Limit to end of HFE track. */
-        nr = min_t(UINT, nr, im->hfe.trk_len - off);
+        nr = min_t(UINT, nr, im->hfe.trk_len - pos / 512 * 256 - pos % 256);
 
         /* Bail if no bytes to write. */
         if (nr == 0)
             break;
 
-        /* Bail if required data not in the write buffer. */
-        batch_off = (off & ~255) << 1; 
-        if ((batch_off < im->hfe.write_batch.off)
-            || (batch_off >= (im->hfe.write_batch.off
-                              + im->hfe.write_batch.len))) {
-            writeback = TRUE;
+        /* It should be quite rare to wait on the read, as that'd be like a
+         * buffer underrun during normal reading. */
+        if (rd->cons + nr > rd->prod) {
+            flush = FALSE;
             break;
         }
 
         /* Encode into the sector buffer for later write-out. */
-        w = wrbuf
-            + (im->cur_track & 1) * 256
-            + batch_off - im->hfe.write_batch.off
-            + (off & 255);
+        w = rd->p + ring_io_idx(&im->hfe.ring_io, rd->cons);
         for (i = 0; i < nr; i++)
             *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
-        im->hfe.write_batch.dirty = TRUE;
 
-        im->hfe.trk_pos += nr;
-        if (im->hfe.trk_pos >= im->hfe.trk_len) {
-            ASSERT(im->hfe.trk_pos == im->hfe.trk_len);
-            im->hfe.trk_pos = 0;
-            im->hfe.write.wrapped = TRUE;
-        }
+        rd->cons += nr;
+        /* Stay aligned to track side. */
+        if (rd->cons % 256 == 0)
+            rd->cons += 256;
     }
 
-    if (writeback) {
-        /* If writeback requested then ensure we get called again. */
-        flush = FALSE;
-    } else if (flush) {
-        /* If this is the final call, we should do writeback. */
-        writeback = TRUE;
-    }
-
-    if (writeback && im->hfe.write_batch.dirty) {
-        t = time_now();
-        printk("Write %u-%u (%u)... ",
-               im->hfe.write_batch.off,
-               im->hfe.write_batch.off + im->hfe.write_batch.len - 1,
-               im->hfe.write_batch.len);
-        F_write(&im->fp, wrbuf, im->hfe.write_batch.len, NULL);
-        printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
-        im->hfe.write_batch.len = 0;
-        im->hfe.write_batch.dirty = FALSE;
-    }
-
-    if (flush && im->hfe.write.wrapped
-        && (im->hfe.trk_pos > im->hfe.write.start))
-        printk("Wrapped (%u > %u)\n", im->hfe.trk_pos, im->hfe.write.start);
+    if (flush)
+        ring_io_flush(&im->hfe.ring_io);
+    else
+        ring_io_progress(&im->hfe.ring_io);
 
     wr->cons = c * 8;
 
@@ -411,6 +375,8 @@ const struct image_handler hfe_image_handler = {
     .read_track = hfe_read_track,
     .rdata_flux = hfe_rdata_flux,
     .write_track = hfe_write_track,
+
+    .async = TRUE,
 };
 
 /*
