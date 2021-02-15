@@ -10,6 +10,7 @@ OBJS += fpec.o
 OBJS += fs.o
 OBJS += fs_async.o
 OBJS += main.o
+OBJS += ring_io.o
 OBJS += sd_spi.o
 OBJS += spi.o
 OBJS += string.o

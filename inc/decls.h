@@ -32,6 +32,7 @@
 #include "thread.h"
 #include "fs.h"
 #include "fs_async.h"
+#include "ring_io.h"
 #include "floppy.h"
 #include "volume.h"
 #include "config.h"
