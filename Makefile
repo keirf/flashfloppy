@@ -45,13 +45,13 @@ dist:
 	cp -a FF_Gotek-Bootloader-$(VER).upd flashfloppy-$(VER)/alt/bootloader/
 	cp -a FF_Gotek-IO-Test-$(VER).upd flashfloppy-$(VER)/alt/io-test/
 	$(MAKE) clean
-	debug=n logfile=y $(MAKE) -f $(ROOT)/Rules.mk upd
+	$(MAKE) debug=n logfile=y -f $(ROOT)/Rules.mk upd
 	mv FF.upd flashfloppy-$(VER)/alt/logfile/FF_Gotek-Logfile-$(VER).upd
 	$(MAKE) clean
-	quickdisk=y $(MAKE) -f $(ROOT)/Rules.mk upd
+	$(MAKE) quickdisk=y -f $(ROOT)/Rules.mk upd
 	mv FF.upd flashfloppy-$(VER)/alt/quickdisk/FF_Gotek-QuickDisk-$(VER).upd
 	$(MAKE) clean
-	quickdisk=y debug=n logfile=y $(MAKE) -f $(ROOT)/Rules.mk upd
+	$(MAKE) quickdisk=y debug=n logfile=y -f $(ROOT)/Rules.mk upd
 	mv FF.upd flashfloppy-$(VER)/alt/quickdisk/logfile/FF_Gotek-QuickDisk-Logfile-$(VER).upd
 	python3 scripts/mk_qd.py --window=6.5 flashfloppy-$(VER)/alt/quickdisk/Blank.qd
 	$(MAKE) clean
@@ -81,12 +81,12 @@ upd:
 
 all:
 	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
-	bootloader=y debug=n logfile=n $(MAKE) -C bootloader \
+	$(MAKE) bootloader=y logfile=n -C bootloader \
 		-f $(ROOT)/Rules.mk \
 		Bootloader.elf Bootloader.bin Bootloader.hex
-	logfile=n $(MAKE) -C bl_update -f $(ROOT)/Rules.mk \
+	$(MAKE) logfile=n -C bl_update -f $(ROOT)/Rules.mk \
 		BL_Update.elf BL_Update.bin BL_Update.hex
-	logfile=n $(MAKE) -C io_test -f $(ROOT)/Rules.mk \
+	$(MAKE) logfile=n -C io_test -f $(ROOT)/Rules.mk \
 		IO_Test.elf IO_Test.bin IO_Test.hex
 	srec_cat bootloader/Bootloader.hex -Intel src/$(PROJ).hex -Intel \
 	-o FF.hex -Intel
