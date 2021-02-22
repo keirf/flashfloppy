@@ -14,7 +14,7 @@ FLAGS += -Wall -Werror -Wno-format -Wdeclaration-after-statement
 FLAGS += -Wstrict-prototypes -Wredundant-decls -Wnested-externs
 FLAGS += -fno-common -fno-exceptions -fno-strict-aliasing
 FLAGS += -mlittle-endian -mthumb -mcpu=cortex-m3 -mfloat-abi=soft
-FLAGS += -Wno-unused-value -fdata-sections -ffunction-sections
+FLAGS += -Wno-unused-value -ffunction-sections
 
 ifneq ($(debug),y)
 FLAGS += -DNDEBUG
