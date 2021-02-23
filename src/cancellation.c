@@ -9,23 +9,27 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-asm (
-    ".global call_cancellable_fn\n"
-    ".thumb_func \n"
-    "call_cancellable_fn:\n"
-    "    stmdb.w sp!, {r0, r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"
-    "    str     sp, [r0]\n" /* c->sp = PSP */
-    "    mov     r0, r2\n"   /* r0 = arg */
-    "    blx     r1\n"       /* (*fn)(arg) */
-    "    ldr     r2, [sp]\n"
-    "    movs    r1, #0\n"
-    "    str     r1, [r2]\n" /* c->sp = NULL */
-    "do_cancel:\n"
-    "    add     sp, #4\n"
-    "    ldmia.w sp!, {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n"
-    );
+__attribute__((naked))
+int call_cancellable_fn(struct cancellation *c, int (*fn)(void *), void *arg) {
+    asm (
+        "    stmdb.w sp!, {r0, r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"
+        "    str     sp, [r0]\n" /* c->sp = PSP */
+        "    mov     r0, r2\n"   /* r0 = arg */
+        "    blx     r1\n"       /* (*fn)(arg) */
+        "    ldr     r2, [sp]\n"
+        "    movs    r1, #0\n"
+        "    str     r1, [r2]\n" /* c->sp = NULL */
+        "    b       do_cancel\n"
+        );
+}
 
-void do_cancel(void);
+__attribute__((naked))
+void do_cancel(void) {
+    asm (
+        "    add     sp, #4\n"
+        "    ldmia.w sp!, {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n"
+        );
+}
 
 /* An exception context for cancel_call(), when initially called from Thread 
  * context. */
