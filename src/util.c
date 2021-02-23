@@ -62,34 +62,40 @@ void *memcpy(void *dest, const void *src, size_t n)
     return dest;
 }
 
-asm (
-".global memcpy_fast, memset_fast\n"
-"memcpy_fast:\n"
-"    push  {r4-r10}\n"
-"1:  ldmia r1!,{r3-r10}\n"
-"    stmia r0!,{r3-r10}\n"
-"    subs  r2,r2,#32\n"
-"    bne   1b\n"
-"    pop   {r4-r10}\n"
-"    bx    lr\n"
-"memset_fast:\n"
-"    push  {r4-r10}\n"
-"    uxtb  r5, r1\n"
-"    mov.w r4, #0x01010101\n"
-"    muls  r4, r5\n"
-"    mov   r3, r4\n"
-"    mov   r5, r4\n"
-"    mov   r6, r4\n"
-"    mov   r7, r4\n"
-"    mov   r8, r4\n"
-"    mov   r9, r4\n"
-"    mov   r10, r4\n"
-"1:  stmia r0!,{r3-r10}\n"
-"    subs  r2,r2,#32\n"
-"    bne   1b\n"
-"    pop   {r4-r10}\n"
-"    bx    lr\n"
-    );
+__attribute__((naked))
+void memcpy_fast(void *dest, const void *src, size_t n) {
+    asm (
+        "    push  {r4-r10}\n"
+        "1:  ldmia r1!,{r3-r10}\n"
+        "    stmia r0!,{r3-r10}\n"
+        "    subs  r2,r2,#32\n"
+        "    bne   1b\n"
+        "    pop   {r4-r10}\n"
+        "    bx    lr\n"
+        );
+}
+
+__attribute__((naked))
+void memset_fast(void *s, int c, size_t n) {
+    asm (
+        "    push  {r4-r10}\n"
+        "    uxtb  r5, r1\n"
+        "    mov.w r4, #0x01010101\n"
+        "    muls  r4, r5\n"
+        "    mov   r3, r4\n"
+        "    mov   r5, r4\n"
+        "    mov   r6, r4\n"
+        "    mov   r7, r4\n"
+        "    mov   r8, r4\n"
+        "    mov   r9, r4\n"
+        "    mov   r10, r4\n"
+        "1:  stmia r0!,{r3-r10}\n"
+        "    subs  r2,r2,#32\n"
+        "    bne   1b\n"
+        "    pop   {r4-r10}\n"
+        "    bx    lr\n"
+        );
+}
 
 void *memmove(void *dest, const void *src, size_t n)
 {
