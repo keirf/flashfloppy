@@ -47,7 +47,7 @@ void IRQ_12(void) __attribute__((alias("IRQ_wdata_dma")));
 void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
 
 /* EXTI IRQs. */
-/*void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed")));*/ /* EXTI0 */
+void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI0 */
 void IRQ_7(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI1 */
 void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
 void IRQ_23(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI9_5 */
@@ -132,25 +132,20 @@ static void board_floppy_init(void)
  * Note that the entirety of the SELA handler is in SRAM (.data) -- not only 
  * is this faster to execute, but allows us to co-locate gpio_out_active for 
  * even faster access in the time-critical speculative entry point. */
-void IRQ_SELA_changed(void);
-asm (
-"    .section .data.ramfuncs\n"
-"    .align 4\n"
-"    .thumb_func\n"
-"    .type IRQ_SELA_changed,%function\n"
-"IRQ_SELA_changed:\n"
-"    ldr  r0, [pc, #8]\n"  /* r0 = gpio_out_active */
-"    ldr  r1, [pc, #12]\n" /* r1 = &gpiob->b[s]rr */
-"    uxth r2,r0\n"         /* r2 = (uint16_t)gpio_out_active */
-"    str  r2, [r1, #0]\n"  /* gpiob->b[s]rr = (uint16_t)gpio_out_active */
-"    b.n  _IRQ_SELA_changed\n" /* branch to the main ISR entry point */
-"    nop\n"
-"gpio_out_active: .word 0\n"
-"gpiob_setreset:  .word 0x40010c10\n" /* gpiob->b[s]rr */
-"    .global IRQ_6\n"
-"    .thumb_set IRQ_6,IRQ_SELA_changed\n"
-"    .previous\n"
-);
+__attribute__((naked)) __attribute__((section(".data.ramfuncs@")))
+void IRQ_SELA_changed(void) {
+    asm (
+        ".global gpio_out_active, gpiob_setreset\n"
+        "    ldr  r0, [pc, #8]\n"  /* r0 = gpio_out_active */
+        "    ldr  r1, [pc, #12]\n" /* r1 = &gpiob->b[s]rr */
+        "    uxth r2,r0\n"         /* r2 = (uint16_t)gpio_out_active */
+        "    str  r2, [r1, #0]\n"  /* gpiob->b[s]rr = gpio_out_active */
+        "    b.n  _IRQ_SELA_changed\n" /* branch to the main ISR entry point */
+        "    nop\n"
+        "gpio_out_active: .word 0\n"
+        "gpiob_setreset:  .word 0x40010c10\n" /* gpiob->b[s]rr */
+        );
+}
 
 /* Subset of output pins which are active (O_TRUE). */
 extern uint32_t gpio_out_active;
