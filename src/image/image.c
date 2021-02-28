@@ -132,7 +132,8 @@ static bool_t try_handler(struct image *im, struct slot *slot,
 
 #if !defined(QUICKDISK)
 
-void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
+void image_open(struct image *im, struct slot *slot, DWORD *cltbl,
+        bool_t da_mode)
 {
     static const struct image_handler * const image_handlers[] = {
         /* Special handler for dummy slots (empty HxC slot 0). */
@@ -146,6 +147,12 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
     const struct image_handler *hint;
     const struct image_type *type;
     int i;
+
+    if (da_mode) {
+        if (try_handler(im, slot, cltbl, &da_image_handler))
+            return;
+        F_die(FR_BAD_IMAGE);
+    }
 
     /* Extract filename extension (if available). */
     memcpy(ext, slot->type, sizeof(slot->type));
@@ -197,7 +204,8 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 
 #else /* defined(QUICKDISK) */
 
-void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
+void image_open(struct image *im, struct slot *slot, DWORD *cltbl,
+        bool_t da_mode)
 {
     if (try_handler(im, slot, cltbl, &qd_image_handler))
         return;
@@ -207,6 +215,15 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 }
 
 #endif
+
+bool_t image_in_da_mode(struct image *im)
+{
+#if !defined(QUICKDISK)
+    return im->disk_handler == &da_image_handler;
+#else
+    return FALSE;
+#endif
+}
 
 void image_extend(struct image *im)
 {
@@ -252,30 +269,21 @@ static void print_image_info(struct image *im)
     lcd_write(0, 2, -1, msg);
 }
 
-bool_t image_setup_track(
+void image_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
     const struct image_handler *h = im->track_handler;
 
 #if !defined(QUICKDISK)
-    if (!in_da_mode(im, track>>1)) {
-        /* If we are exiting D-A mode then need to re-read the config file. */
-        if (h == &da_image_handler)
-            return TRUE;
+    if (h != &da_image_handler)
         h = ((track>>1) >= im->nr_cyls) ? &dummy_image_handler
             : im->disk_handler;
-    } else {
-        h = &da_image_handler;
-        im->nr_sides = 1;
-    }
 #endif
 
     im->track_handler = h;
     h->setup_track(im, track, start_pos);
 
     print_image_info(im);
-
-    return FALSE;
 }
 
 bool_t image_read_track(struct image *im)

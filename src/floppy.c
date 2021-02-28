@@ -455,13 +455,12 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* Seek to the new track. */
         track = drive_calc_track(drv);
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
-        if (in_da_mode(im, track>>1) && (drv->outp & m(outp_wrprot))
-            && !volume_readonly()) {
-            /* Remove write-protect when driven into D-A mode. */
-            drive_change_output(drv, outp_wrprot, FALSE);
-        }
-        if (image_setup_track(im, track, &read_start_pos))
+        if (in_da_mode(im, track>>1) != image_in_da_mode(im)) {
+            /* Changing D-A mode requires changing image handler and may need
+             * to re-read the config file since D-A can change it. */
             return TRUE;
+        }
+        image_setup_track(im, track, &read_start_pos);
         prefetch_start_time = time_now();
         read_start_pos /= SYSCLK_MHZ/STK_MHZ;
         sync_pos = read_start_pos;

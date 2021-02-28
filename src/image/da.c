@@ -44,6 +44,12 @@ static unsigned int enc_sec_sz(struct image *im)
     return im->da.idam_sz + im->da.dam_sz;
 }
 
+static bool_t da_open(struct image *im)
+{
+    im->nr_sides = 1;
+    return TRUE;
+}
+
 static void da_seek_track(struct image *im, uint16_t track)
 {
     struct da_status_sector *dass = &im->da.dass;
@@ -539,6 +545,7 @@ static void process_wdata(struct image *im, unsigned int sect, uint16_t crc)
 }
 
 const struct image_handler da_image_handler = {
+    .open = da_open,
     .setup_track = da_setup_track,
     .read_track = da_read_track,
     .rdata_flux = bc_rdata_flux,

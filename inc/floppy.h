@@ -224,7 +224,11 @@ extern const struct image_type {
 bool_t image_valid(FILINFO *fp);
 
 /* Open specified image file on mass storage device. */
-void image_open(struct image *im, struct slot *slot, DWORD *cltbl);
+void image_open(struct image *im, struct slot *slot, DWORD *cltbl,
+        bool_t da_mode);
+
+/* Returns TRUE if opened in Direct Access mode. */
+bool_t image_in_da_mode(struct image *im);
 
 /* Extend a trunated image file. */
 void image_extend(struct image *im);
@@ -233,10 +237,8 @@ void image_extend(struct image *im);
  * position (specified as number of SYSCLK ticks past the index mark).
  * 
  * If start_pos is NULL then the caller is in write mode and thus is not
- * interested in fetching data from a particular rotational position.
- * 
- * Returns TRUE if the config file needs to be re-read (exiting D-A mode). */
-bool_t image_setup_track(
+ * interested in fetching data from a particular rotational position. */
+void image_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos);
 
 /* Read track data into memory. Returns TRUE if any new data was read. */
