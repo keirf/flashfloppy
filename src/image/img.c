@@ -99,7 +99,7 @@ const static struct raw_type {
     { 11, _S(2), _IAM,  3, 2, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 880k */
     { 18, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.44M */
     { 19, _S(2), _IAM, 70, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.52M */
-    { 21, _S(2), _IAM, 12, 2, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.68M */
+    { 21, _S(2), _IAM, 12, 2, 2, 1, 0, 3, 0, _C(80), _R(300) }, /* 1.68M */
     { 20, _S(2), _IAM, 40, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 1.6M */
     { 36, _S(2), _IAM, 84, 1, 2, 1, 0, 0, 0, _C(80), _R(300) }, /* 2.88M */
     { 0 }
@@ -869,6 +869,12 @@ static bool_t pc_dos_open(struct image *im)
      * Our caller will fall back to the XDF handler. */
     if ((bpb.sec_per_track == 23) && xdf_check(&bpb))
         goto fail;
+
+    /* Detect MSDMF layout, which requires interleave and skew. */
+    if ((bpb.sec_per_track == 21) && (no == 2)) {
+        layout.interleave = 2;
+        layout.cskew = 3;
+    }
 
     if ((bpb.num_heads != 1) && (bpb.num_heads != 2))
         goto fail;
