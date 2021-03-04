@@ -234,8 +234,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         time_t read_start_pos = window.paused ? window.pause_pos : 0;
         read_start_pos %= drv->image->stk_per_rev;
         read_start_pos *= SYSCLK_MHZ/STK_MHZ;
-        if (image_setup_track(drv->image, 0, &read_start_pos))
-            return TRUE;
+        image_setup_track(drv->image, 0, &read_start_pos);
         /* Change state /then/ check for race against step or side change. */
         dma_rd->state = DMA_starting;
         barrier();
