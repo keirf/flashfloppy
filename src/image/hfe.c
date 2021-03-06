@@ -120,7 +120,6 @@ static void hfe_seek_track(struct image *im, uint16_t track, bool_t async)
 {
     struct track_header thdr;
     uint16_t trk_off;
-    uint8_t batch_secs;
 
     if (async) {
         F_lseek_async(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
@@ -135,12 +134,13 @@ static void hfe_seek_track(struct image *im, uint16_t track, bool_t async)
     im->tracklen_bc = im->hfe.trk_len * 8;
     im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
 
+    ring_io_init(&im->hfe.ring_io, &im->fp, &im->bufs.read_data,
+            (LBA_t)trk_off * 512, ~0, (im->hfe.trk_len*2 + 511) / 512);
     /* Aggressively batch our reads at HD data rate, as that can be faster
      * than some USB drives will serve up a single block.*/
-    batch_secs = (im->write_bc_ticks > sysclk_ns(1500)) ? 4 : 8;
-    ring_io_init(&im->hfe.ring_io, &im->fp, &im->bufs.read_data,
-            (LBA_t)trk_off * 512, (im->hfe.trk_len*2 + 511) / 512, batch_secs,
-            MAX_BC_SECS);
+    im->hfe.ring_io.batch_secs =
+        (im->write_bc_ticks > sysclk_ns(1500)) ? 4 : 8;
+    im->hfe.ring_io.trailing_secs = MAX_BC_SECS;
 }
 
 static void hfe_setup_track(
@@ -174,7 +174,7 @@ static void hfe_setup_track(
 
     if (start_pos) {
         /* Read mode. */
-        ring_io_seek(&im->hfe.ring_io, im->cur_bc / 8 / 256 * 512, FALSE);
+        ring_io_seek(&im->hfe.ring_io, im->cur_bc/8 / 256 * 512, FALSE, FALSE);
         /* Consumer may be ahead of producer, but only until the first read
          * completes. */
         bc->cons = im->cur_bc % (256*8);
@@ -184,7 +184,7 @@ static void hfe_setup_track(
                      + im->cur_bc / 8 % 256
                      + (im->cur_track & 1) * 256;
         /* Write mode. */
-        ring_io_seek(&im->hfe.ring_io, pos, TRUE);
+        ring_io_seek(&im->hfe.ring_io, pos, TRUE, FALSE);
     }
 }
 
