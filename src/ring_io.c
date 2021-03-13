@@ -88,7 +88,7 @@ static void write_start(struct ring_io *rio)
         rio->wd_cons += 512;
     /* Since seeks can rewind the reader, check for writes past the producer. */
     cons = rio->wd_cons;
-    while (cons + 511 < rio->wd_prod
+    while (cons + 511 < rd->prod
             && !BIT_GET(rio->dirty_bitfield, ring_io_idx(rio, cons)/512))
         cons += 512;
 
