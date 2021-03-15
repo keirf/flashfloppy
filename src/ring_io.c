@@ -22,6 +22,8 @@ static void enqueue_io(struct ring_io *rio);
 void ring_io_init(struct ring_io *rio, FIL *fp, struct image_buf *read_data,
         FSIZE_t off, FSIZE_t shadow_off, uint16_t sec_len)
 {
+    ASSERT(off % 512 == 0);
+    ASSERT(shadow_off == ~0 || shadow_off % 512 == 0);
     memset(rio, 0, sizeof(*rio));
     rio->fp = fp;
     rio->read_data = read_data;
@@ -29,7 +31,6 @@ void ring_io_init(struct ring_io *rio, FIL *fp, struct image_buf *read_data,
     rio->f_shadow_off = shadow_off;
     rio->f_len = sec_len * 512;
     rio->ring_len = sec_len * 512;
-    // FIXME: this doesn't allow image driver to 'steal' space from read_data
     if (shadow_off == ~0) {
         if (rio->ring_len > read_data->len)
             rio->ring_len = read_data->len & ~511;

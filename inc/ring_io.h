@@ -72,6 +72,11 @@ static inline uint32_t ring_io_idx(struct ring_io *rio, uint32_t idx)
     return idx % rio->ring_len + (rio->shadow_active ? rio->ring_len : 0);
 }
 
+static inline uint32_t ring_io_idxend(struct ring_io *rio)
+{
+    return rio->ring_len + (rio->shadow_active ? rio->ring_len : 0);
+}
+
 /* Find position in file (relative to ring_io_init offset). */
 static inline uint32_t ring_io_pos(struct ring_io *rio, uint32_t idx)
 {

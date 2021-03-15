@@ -33,6 +33,23 @@
 
 #define verbose_image_log FALSE
 
+struct image_buf {
+    void *p;
+    uint32_t len;
+    uint32_t prod, cons;
+};
+
+struct image_bufs {
+    /* Buffering for bitcells being written to disk. */
+    struct image_buf write_bc;
+    /* Buffering for bitcells we generate from read_data. */
+    struct image_buf read_bc;
+    /* Staging area for writeout to mass storage. */
+    struct image_buf write_data;
+    /* Read buffer for track data to be used for generating flux pattern. */
+    struct image_buf read_data;
+};
+
 struct adf_image {
     uint32_t trk_off;
     uint32_t sec_idx;
@@ -84,6 +101,9 @@ struct raw_trk {
 
 struct img_image {
     uint32_t trk_off, base_off;
+    /* Length on-disk that encompases all track data. May contain other data
+     * (e.g., the other side of the cylinder). */
+    uint32_t trk_len;
     uint16_t trk_sec, rd_sec_pos;
     int32_t decode_pos;
     uint16_t decode_data_pos, crc;
@@ -99,9 +119,12 @@ struct img_image {
     /* Delay start of track this many bitcells past index. */
     uint32_t track_delay_bc;
     uint16_t gap_4;
+    uint8_t shadow;
     uint32_t idx_sz, idam_sz;
     uint16_t dam_sz_pre, dam_sz_post;
     void *heap_bottom;
+    struct image_buf track_data;
+    struct ring_io ring_io;
 };
 
 struct dsk_image {
@@ -123,23 +146,6 @@ struct directaccess {
     int32_t decode_pos;
     uint16_t trk_sec;
     uint16_t idx_sz, idam_sz, dam_sz;
-};
-
-struct image_buf {
-    void *p;
-    uint32_t len;
-    uint32_t prod, cons;
-};
-
-struct image_bufs {
-    /* Buffering for bitcells being written to disk. */
-    struct image_buf write_bc;
-    /* Buffering for bitcells we generate from read_data. */
-    struct image_buf read_bc;
-    /* Staging area for writeout to mass storage. */
-    struct image_buf write_data;
-    /* Read buffer for track data to be used for generating flux pattern. */
-    struct image_buf read_data;
 };
 
 struct image {

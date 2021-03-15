@@ -1474,6 +1474,7 @@ static void xdf_setup_track(
     }
 
     im->img.trk_off = (track>>1) * xdf_info->cyl_bytes;
+    im->img.trk_len = xdf_info->cyl_bytes;
     im->img.file_sec_offsets = xdf_info->file_sec_offsets[offs_sel];
 
     raw_setup_track(im, track, start_pos);
@@ -1485,6 +1486,7 @@ const struct image_handler img_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler d81_image_handler = {
@@ -1493,6 +1495,7 @@ const struct image_handler d81_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler st_image_handler = {
@@ -1501,6 +1504,7 @@ const struct image_handler st_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler adfs_image_handler = {
@@ -1509,6 +1513,7 @@ const struct image_handler adfs_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler atr_image_handler = {
@@ -1517,6 +1522,7 @@ const struct image_handler atr_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler mbd_image_handler = {
@@ -1525,6 +1531,7 @@ const struct image_handler mbd_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler mgt_image_handler = {
@@ -1533,6 +1540,7 @@ const struct image_handler mgt_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler pc98fdi_image_handler = {
@@ -1541,6 +1549,7 @@ const struct image_handler pc98fdi_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler pc98hdm_image_handler = {
@@ -1549,6 +1558,7 @@ const struct image_handler pc98hdm_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler trd_image_handler = {
@@ -1558,6 +1568,7 @@ const struct image_handler trd_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler opd_image_handler = {
@@ -1566,6 +1577,7 @@ const struct image_handler opd_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler ssd_image_handler = {
@@ -1575,6 +1587,7 @@ const struct image_handler ssd_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler dsd_image_handler = {
@@ -1584,6 +1597,7 @@ const struct image_handler dsd_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler sdu_image_handler = {
@@ -1592,6 +1606,7 @@ const struct image_handler sdu_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler jvc_image_handler = {
@@ -1600,6 +1615,7 @@ const struct image_handler jvc_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler vdk_image_handler = {
@@ -1608,6 +1624,7 @@ const struct image_handler vdk_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler ti99_image_handler = {
@@ -1616,6 +1633,7 @@ const struct image_handler ti99_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 const struct image_handler xdf_image_handler = {
@@ -1624,6 +1642,7 @@ const struct image_handler xdf_image_handler = {
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
+    .async = TRUE,
 };
 
 
@@ -1664,17 +1683,48 @@ static unsigned int file_idx(
         : (_c * im->nr_sides) + _s;
 }
 
+static inline unsigned int calc_track_len(
+    struct image *im, unsigned int cyl, unsigned int side)
+{
+    struct raw_trk *trk =
+        &im->img.trk_info[im->img.trk_map[cyl*im->nr_sides + side]];
+    struct raw_sec *sec = &im->img.sec_info_base[trk->sec_off];
+    unsigned int off = 0;
+    for (unsigned int k = 0; k < trk->nr_sectors; k++) {
+        off += sec_sz(sec->n);
+        sec++;
+    }
+    return off;
+}
+
+static unsigned int calc_track_off(
+    struct image *im, unsigned int cyl, unsigned int side)
+{
+    unsigned int off = im->img.base_off;
+    unsigned int i, j;
+    unsigned int idx = file_idx(im, cyl, side);
+    for (i = 0; i < im->nr_cyls; i++) {
+        for (j = 0; j < im->nr_sides; j++) {
+            if (file_idx(im, i, j) >= idx)
+                continue;
+            off += calc_track_len(im, i, j);
+        }
+    }
+    return off;
+}
+
 static void raw_seek_track(
     struct image *im, uint16_t track, unsigned int cyl, unsigned int side)
 {
-    unsigned int i, j, k, pos, idx, off;
+    unsigned int i, pos;
     struct raw_trk *trk;
-    struct raw_sec *sec;
+    uint16_t old_track = im->cur_track;
+    uint32_t trk_off, trk_len;
+    uint32_t shadow_trk_off, shadow_trk_len = 0;
 
     im->cur_track = track;
 
     /* Update image structure with info for this track. */
-    idx = cyl*im->nr_sides + side;
     trk = &im->img.trk_info[im->img.trk_map[cyl*im->nr_sides + side]];
     im->img.trk = trk;
     im->img.sec_info = &im->img.sec_info_base[trk->sec_off];
@@ -1701,23 +1751,48 @@ static void raw_seek_track(
         mfm_prep_track(im);
     }
 
-    if (im->img.file_sec_offsets == NULL) {
-        /* Find offset of track data in the image file. */
-        idx = file_idx(im, cyl, side);
-        off = im->img.base_off;
-        for (i = 0; i < im->nr_cyls; i++) {
-            for (j = 0; j < im->nr_sides; j++) {
-                if (file_idx(im, i, j) >= idx)
-                    continue;
-                trk = &im->img.trk_info[im->img.trk_map[i*im->nr_sides + j]];
-                sec = &im->img.sec_info_base[trk->sec_off];
-                for (k = 0; k < trk->nr_sectors; k++) {
-                    off += sec_sz(sec->n);
-                    sec++;
+    if (im->img.file_sec_offsets != NULL) {
+        /* Assume xdf, where track offset is the same for both side. */
+        trk_off = im->img.trk_off;
+        trk_len = im->img.trk_len;
+    } else {
+        trk_off = calc_track_off(im, cyl, 0);
+        trk_len = calc_track_len(im, cyl, 0);
+        if (im->nr_sides > 1) {
+            shadow_trk_off = calc_track_off(im, cyl, 1);
+            shadow_trk_len = calc_track_len(im, cyl, 1);
+            ASSERT(trk_len == shadow_trk_len);
+
+            /* Check whether both sides fit in memory. */
+            if (im->img.track_data.len < (((trk_len+511)&~511) + 512)*2) {
+                if (side > 1) {
+                    trk_off = shadow_trk_off;
+                    trk_len = shadow_trk_len;
                 }
+                shadow_trk_len = 0;
+                old_track = ~track; /* Force re-init. */
             }
         }
-        im->img.trk_off = off;
+
+        im->img.shadow = shadow_trk_len > 0 && side > 0;
+        if (im->img.shadow) {
+            im->img.trk_off = shadow_trk_off;
+            im->img.trk_len = shadow_trk_len;
+        } else {
+            im->img.trk_off = trk_off;
+            im->img.trk_len = trk_len;
+        }
+    }
+
+    if (old_track >> 1 != track >> 1) {
+        FSIZE_t shadow_off = shadow_trk_len > 0 ? shadow_trk_off & ~511 : ~0;
+        /* Potentially overshoot number of blocks to make sure to encompass all
+         * of both tracks, since their offsets have different alignments. */
+        uint16_t blk_len = (trk_len + 511) / 512 + 1;
+        ring_io_sync(&im->img.ring_io);
+        ring_io_init(&im->img.ring_io, &im->fp, &im->img.track_data,
+                trk_off & ~511, shadow_off, blk_len);
+        im->img.ring_io.batch_secs = 4;
     }
 }
 
@@ -1813,7 +1888,6 @@ static void raw_setup_track(
     bc->prod = bc->cons = 0;
 
     if (start_pos) {
-        image_read_track(im);
         bc->cons = decode_off * 16;
         *start_pos = sys_ticks;
     }
@@ -1821,10 +1895,11 @@ static void raw_setup_track(
 
 static bool_t raw_open(struct image *im)
 {
-    volume_cache_init(im->bufs.write_data.p + 1024,
-                      im->img.heap_bottom);
+    im->img.track_data.p = im->bufs.write_data.p + 1024;
+    im->img.track_data.len = im->img.heap_bottom - im->img.track_data.p;
 
     /* Initialise write_bc_ticks (used by floppy_insert to set outp_hden). */
+    im->cur_track = ~0;
     raw_seek_track(im, 0, 0, 0);
 
     return TRUE;
@@ -1890,7 +1965,6 @@ static bool_t raw_write_track(struct image *im)
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     struct raw_sec *sec;
     unsigned int i, off;
-    time_t t;
     uint16_t crc;
     uint8_t idam_r, x;
 
@@ -1980,8 +2054,6 @@ static bool_t raw_write_track(struct image *im)
             crc = (im->sync == SYNC_fm) ? FM_DAM_CRC : MFM_DAM_CRC;
 
             sec = &im->img.sec_info[sec_nr];
-            printk("Write %u[%02x]/%u... ", sec_nr, sec->r, trk->nr_sectors);
-            t = time_now();
 
             if (im->img.file_sec_offsets) {
                 off = im->img.file_sec_offsets[sec_nr];
@@ -1990,18 +2062,32 @@ static bool_t raw_write_track(struct image *im)
                 for (i = off = 0; i < sec_nr; i++)
                     off += sec_sz(sec++->n);
             }
-            F_lseek(&im->fp, im->img.trk_off + off);
+            off += im->img.trk_off % 512;
+            ring_io_seek(&im->img.ring_io, off, TRUE, im->img.shadow);
+            /* It should be quite rare to wait on the read, as that'd be like a
+             * buffer underrun during normal reading. */
+            if (im->img.track_data.cons + sec_sz > im->img.track_data.prod) {
+                c = sc;
+                goto out;
+            }
+            printk("Write %u[%02x]/%u\n", sec_nr, sec->r, trk->nr_sectors);
 
             for (todo = sec_sz; todo != 0; todo -= nr) {
+                uint32_t idx =
+                    ring_io_idx(&im->img.ring_io, im->img.track_data.cons);
+                uint32_t idxend = ring_io_idxend(&im->img.ring_io);
                 nr = min_t(unsigned int, todo, 1024);
+                nr = min_t(unsigned int, nr, idxend - idx);
                 mfm_ring_to_bin(buf, bufmask, c, wrbuf, nr);
                 c += nr;
                 crc = crc16_ccitt(wrbuf, nr, crc);
                 process_data(im, wrbuf, nr);
-                F_write(&im->fp, wrbuf, nr, NULL);
+                ASSERT(idx % 4 == 0);
+                ASSERT(nr % 32 == 0);
+                memcpy_fast(im->img.track_data.p + idx, wrbuf, nr);
+                im->img.track_data.cons += nr;
             }
-
-            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
+            ring_io_flush(&im->img.ring_io);
 
             mfm_ring_to_bin(buf, bufmask, c, wrbuf, 2);
             c += 2;
@@ -2020,6 +2106,7 @@ static bool_t raw_write_track(struct image *im)
     }
 
 out:
+    ring_io_progress(&im->img.ring_io);
     wr->cons = c * 16;
     return flush;
 }
@@ -2090,8 +2177,21 @@ static void img_fetch_data(struct image *im)
             im->img.trk_sec = 0;
     }
 
-    F_lseek(&im->fp, im->img.trk_off + off);
-    F_read(&im->fp, buf, len, NULL);
+    off += im->img.trk_off % 512;
+    ring_io_seek(&im->img.ring_io, off, FALSE, im->img.shadow);
+    if (im->img.track_data.cons + len > im->img.track_data.prod)
+        return;
+
+    for (uint16_t todo = len; todo > 0;) {
+        uint32_t idx = ring_io_idx(&im->img.ring_io, im->img.track_data.cons);
+        uint32_t idxend = ring_io_idxend(&im->img.ring_io);
+        uint16_t tocopy = min_t(uint16_t, todo, idxend - idx);
+        ASSERT(idx % 4 == 0);
+        ASSERT(tocopy % 32 == 0);
+        memcpy_fast(buf, im->img.track_data.p + idx, tocopy);
+        im->img.track_data.cons += tocopy;
+        todo -= tocopy;
+    }
     process_data(im, buf, len);
 
     rd->prod++;
@@ -2113,7 +2213,7 @@ static void check_p(void *p, struct image *im)
 /* Initialise track/sector-info structures at the top of the heap. 
  * In ascending address order: 
  * {read,write}_data (truncated to 1024 bytes)
- * ... [volume cache]
+ * ... [ring cache]
  * im->img.trk_info (trk_map[] points into here)
  * im->img.sec_info_base (trk_info[] + sec_map[] point into here)
  * im->img.sec_map (Sector info = sec_info[sec_map[sector#]])
@@ -2336,13 +2436,17 @@ static bool_t mfm_read_track(struct image *im)
     unsigned int i;
 
     img_fetch_data(im);
+    ring_io_progress(&im->img.ring_io);
+
+    if (im->img.trk->nr_sectors != 0 && rd->prod == rd->cons)
+        return FALSE; /* Wait for read to complete. */
 
     /* Generate some MFM if there is space in the raw-bitcell ring buffer. */
     bc_p = bc->prod / 16; /* MFM words */
     bc_c = bc->cons / 16; /* MFM words */
     bc_len = bc->len / 2; /* MFM words */
     bc_mask = bc_len - 1;
-    bc_space = bc_len - (uint16_t)(bc_p - bc_c);
+    bc_space = bc_len - (bc_p > bc_c ? (uint16_t)(bc_p - bc_c) : 0);
 
     pr = be16toh(bc_b[(bc_p-1) & bc_mask]);
 #define emit_raw(r) ({                                   \
@@ -2553,13 +2657,17 @@ static bool_t fm_read_track(struct image *im)
     unsigned int i;
 
     img_fetch_data(im);
+    ring_io_progress(&im->img.ring_io);
+
+    if (im->img.trk->nr_sectors != 0 && rd->prod == rd->cons)
+        return FALSE; /* Wait for read to complete. */
 
     /* Generate some FM if there is space in the raw-bitcell ring buffer. */
     bc_p = bc->prod / 16; /* FM words */
     bc_c = bc->cons / 16; /* FM words */
     bc_len = bc->len / 2; /* FM words */
     bc_mask = bc_len - 1;
-    bc_space = bc_len - (uint16_t)(bc_p - bc_c);
+    bc_space = bc_len - (bc_p > bc_c ? (uint16_t)(bc_p - bc_c) : 0);
 
 #define emit_raw(r) ({                          \
     uint16_t _r = (r);                          \
