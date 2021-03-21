@@ -120,7 +120,12 @@ FOP F_lseek_async(FIL *fp, FSIZE_t ofs) {
 }
 
 static void do_read(struct op *op) {
+    time_t start = time_now(), duration;
     F_read(op->fp, op->args.read.buff, op->args.read.btr, op->args.read.br);
+    duration = time_since(start);
+    if (duration > time_us(9000))
+        printk("Lengthy read. %d bytes took %d us\n", op->args.read.btr,
+                duration / TIME_MHZ);
 }
 
 FOP F_read_async(FIL *fp, void *buff, UINT btr, UINT *br) {
@@ -129,7 +134,12 @@ FOP F_read_async(FIL *fp, void *buff, UINT btr, UINT *br) {
 }
 
 static void do_write(struct op *op) {
+    time_t start = time_now(), duration;
     F_write(op->fp, op->args.write.buff, op->args.write.btw, op->args.write.bw);
+    duration = time_since(start);
+    if (duration > time_us(9000))
+        printk("Lengthy write. %d bytes took %d us\n", op->args.write.btw,
+                duration / TIME_MHZ);
 }
 
 FOP F_write_async(FIL *fp, const void *buff, UINT btw, UINT *bw) {
