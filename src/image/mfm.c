@@ -75,7 +75,7 @@ void mfm_ring_to_bin(const uint16_t *ring, unsigned int mask,
 {
     unsigned int head;
     head = min_t(unsigned int, nr, mask+1-idx);
-    mfm_to_bin(&ring[idx], out, head);
+    mfm_to_bin(&ring[idx & mask], out, head);
     if (head != nr) 
         mfm_to_bin(ring, (uint8_t *)out + head, nr - head);
 }
