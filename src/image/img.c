@@ -2168,6 +2168,12 @@ static void img_fetch_data(struct image *im)
     off += im->img.rd_sec_pos * 1024;
     len -= im->img.rd_sec_pos * 1024;
 
+    off += im->img.trk_off % 512;
+    ring_io_seek(&im->img.ring_io, off, FALSE, im->img.shadow);
+    if (im->img.track_data.cons + min_t(uint16_t, len, 1024)
+            > im->img.track_data.prod)
+        return;
+
     if (len > 1024) {
         len = 1024;
         im->img.rd_sec_pos++;
@@ -2176,11 +2182,6 @@ static void img_fetch_data(struct image *im)
         if (++im->img.trk_sec >= im->img.trk->nr_sectors)
             im->img.trk_sec = 0;
     }
-
-    off += im->img.trk_off % 512;
-    ring_io_seek(&im->img.ring_io, off, FALSE, im->img.shadow);
-    if (im->img.track_data.cons + len > im->img.track_data.prod)
-        return;
 
     for (uint16_t todo = len; todo > 0;) {
         uint32_t idx = ring_io_idx(&im->img.ring_io, im->img.track_data.cons);
