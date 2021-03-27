@@ -1888,7 +1888,7 @@ static void raw_setup_track(
     if (start_pos) {
         decode_off = calc_start_pos(im);
 
-        bc->cons = decode_off * 16;
+        im->img.trash_bc = decode_off;
         *start_pos = sys_ticks;
     } else {
         im->img.decode_pos = 0;
@@ -2463,7 +2463,7 @@ static bool_t mfm_read_track(struct image *im)
     bc_c = bc->cons / 16; /* MFM words */
     bc_len = bc->len / 2; /* MFM words */
     bc_mask = bc_len - 1;
-    bc_space = bc_len - (bc_p > bc_c ? (uint16_t)(bc_p - bc_c) : 0);
+    bc_space = bc_len - (uint16_t)(bc_p - bc_c);
 
     pr = be16toh(bc_b[(bc_p-1) & bc_mask]);
 #define emit_raw(r) ({                                   \
@@ -2576,6 +2576,11 @@ static bool_t mfm_read_track(struct image *im)
 #undef emit_raw
 #undef emit_byte
 
+    if (im->img.trash_bc) {
+        int16_t to_consume = min_t(uint16_t, bc_p - bc_c, im->img.trash_bc);
+        im->img.trash_bc -= to_consume;
+        bc->cons += to_consume * 16;
+    }
     im->img.decode_pos++;
     bc->prod = bc_p * 16;
 
