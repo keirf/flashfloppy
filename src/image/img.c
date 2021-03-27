@@ -1882,14 +1882,16 @@ static void raw_setup_track(
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
 
-    decode_off = calc_start_pos(im);
-
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
 
     if (start_pos) {
+        decode_off = calc_start_pos(im);
+
         bc->cons = decode_off * 16;
         *start_pos = sys_ticks;
+    } else {
+        im->img.decode_pos = 0;
     }
 }
 
@@ -1963,10 +1965,9 @@ static bool_t raw_write_track(struct image *im)
     unsigned int bufmask = (wr->len / 2) - 1;
     uint8_t *wrbuf = im->bufs.write_data.p;
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
+    struct image_buf *td = &im->img.track_data;
     struct raw_sec *sec;
-    unsigned int i, off;
-    uint16_t crc;
-    uint8_t idam_r, x;
+    unsigned int i;
 
     /* If we are processing final data then use the end index, rounded up. */
     barrier();
@@ -1974,43 +1975,50 @@ static bool_t raw_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 15) / 16;
 
-    while ((int16_t)(p - c) > 128) {
-
-        uint32_t sc = c;
-
-        if (im->sync == SYNC_fm) {
-
-            uint16_t sync;
-            if (buf[c++ & bufmask] != 0xaaaa)
-                continue;
-            sync = buf[c & bufmask];
-            if (mfmtobin(sync >> 1) != FM_SYNC_CLK)
-                continue;
-            x = mfmtobin(sync);
-            c++;
-
-        } else { /* MFM */
-
-            if (be16toh(buf[c++ & bufmask]) != 0x4489)
-                continue;
-            if ((x = mfmtobin(buf[c & bufmask])) == 0xa1)
-                continue;
-            c++;
-
-        }
-
-        switch (x) {
-
-        case 0xfe: /* IDAM */
+    while ((int16_t)(p - c) > 1) { /* At least 2 bytes. */
+        if (im->img.decode_pos == 0) {
+            uint8_t x;
             if (im->sync == SYNC_fm) {
-                wrbuf[0] = x;
+
+                uint16_t sync;
+                if (buf[c++ & bufmask] != 0xaaaa)
+                    continue;
+                sync = buf[c & bufmask];
+                if (mfmtobin(sync >> 1) != FM_SYNC_CLK)
+                    continue;
+                x = mfmtobin(sync);
+                c++;
+
+            } else { /* MFM */
+
+                if (be16toh(buf[c++ & bufmask]) != 0x4489)
+                    continue;
+                if ((x = mfmtobin(buf[c & bufmask])) == 0xa1)
+                    continue;
+                c++;
+
+            }
+
+            if (x == 0xfe) /* IDAM */
+                im->img.decode_pos = 1;
+            else if (x == 0xfb) /* DAM */
+                im->img.decode_pos = 2;
+
+        } else if (im->img.decode_pos == 1) {
+            /* ID record, shy address mark */
+            uint8_t idam_r;
+            uint16_t crc;
+            if (p - c < 4 + 2)
+                break;
+            if (im->sync == SYNC_fm) {
+                wrbuf[0] = 0xfe;
                 for (i = 1; i < 7; i++)
                     wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
                 idam_r = wrbuf[3];
             } else { /* MFM */
                 for (i = 0; i < 3; i++)
                     wrbuf[i] = 0xa1;
-                wrbuf[i++] = x;
+                wrbuf[i++] = 0xfe;
                 for (; i < 10; i++)
                     wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
                 idam_r = wrbuf[6];
@@ -2018,7 +2026,8 @@ static bool_t raw_write_track(struct image *im)
             crc = crc16_ccitt(wrbuf, i, 0xffff);
             if (crc != 0) {
                 printk("IMG IDAM Bad CRC: %04x, %u\n", crc, idam_r);
-                break;
+                im->img.decode_pos = 0;
+                continue;
             }
             /* Search by sector id for this sector's logical order. */
             for (i = 0, sec = im->img.sec_info;
@@ -2030,82 +2039,89 @@ static bool_t raw_write_track(struct image *im)
                 printk("IMG IDAM Bad Sector: %02x\n", idam_r);
                 im->img.write_sector = -2;
             }
-            break;
-
-        case 0xfb: /* DAM */ {
-            unsigned int nr, todo, sec_sz;
+            im->img.decode_data_pos = 0;
+            im->img.decode_pos = 0;
+        } else if (im->img.decode_pos == 2) {
+            /* Data record, shy address mark */
+            unsigned int sec_sz;
             int sec_nr = im->img.write_sector;
 
             if (sec_nr < 0) {
-                if (sec_nr == -1)
+                if (sec_nr == -1) {
                     sec_nr = raw_find_first_write_sector(im, write, trk);
+                    im->img.write_sector = sec_nr;
+                }
                 if (sec_nr < 0) {
                     printk("IMG DAM Unknown\n");
-                    goto dam_out;
+                    im->img.write_sector = -2;
+                    im->img.decode_pos = 0;
+                    continue;
                 }
             }
 
             sec_sz = sec_sz(im->img.sec_info[sec_nr].n);
-            if ((int16_t)(p - c) < (sec_sz + 2)) {
-                c = sc;
-                goto out;
+
+            if (!im->img.decode_data_pos) {
+                unsigned int off;
+                if (p - c < 4) /* Will we able to increment decode_data_pos? */
+                    break;
+                im->img.crc = (im->sync == SYNC_fm) ? FM_DAM_CRC : MFM_DAM_CRC;
+
+                sec = &im->img.sec_info[sec_nr];
+
+                if (im->img.file_sec_offsets) {
+                    off = im->img.file_sec_offsets[sec_nr];
+                } else {
+                    sec = im->img.sec_info;
+                    for (i = off = 0; i < sec_nr; i++)
+                        off += sec_sz(sec++->n);
+                }
+                off += im->img.trk_off % 512;
+                ring_io_seek(&im->img.ring_io, off, TRUE, im->img.shadow);
+                printk("Write %u[%02x]/%u\n", sec_nr, sec->r, trk->nr_sectors);
             }
 
-            crc = (im->sync == SYNC_fm) ? FM_DAM_CRC : MFM_DAM_CRC;
+            if (im->img.decode_data_pos < sec_sz) {
+                unsigned int nr;
+                uint32_t idx = ring_io_idx(&im->img.ring_io, td->cons);
+                nr = sec_sz - im->img.decode_data_pos;
+                nr = min_t(unsigned int, nr,
+                        ring_io_idxend(&im->img.ring_io) - idx);
+                /* Keep alignment for process_data(). */
+                if (nr && p - c < 4)
+                    break;
+                nr = min_t(unsigned int, nr, (p - c) & ~3);
 
-            sec = &im->img.sec_info[sec_nr];
+                /* It should be quite rare to wait on the read, as that'd be
+                 * like a buffer underrun during normal reading. */
+                if (td->cons + nr > td->prod)
+                    break;
 
-            if (im->img.file_sec_offsets) {
-                off = im->img.file_sec_offsets[sec_nr];
-            } else {
-                sec = im->img.sec_info;
-                for (i = off = 0; i < sec_nr; i++)
-                    off += sec_sz(sec++->n);
-            }
-            off += im->img.trk_off % 512;
-            ring_io_seek(&im->img.ring_io, off, TRUE, im->img.shadow);
-            /* It should be quite rare to wait on the read, as that'd be like a
-             * buffer underrun during normal reading. */
-            if (im->img.track_data.cons + sec_sz > im->img.track_data.prod) {
-                c = sc;
-                goto out;
-            }
-            printk("Write %u[%02x]/%u\n", sec_nr, sec->r, trk->nr_sectors);
-
-            for (todo = sec_sz; todo != 0; todo -= nr) {
-                uint32_t idx =
-                    ring_io_idx(&im->img.ring_io, im->img.track_data.cons);
-                uint32_t idxend = ring_io_idxend(&im->img.ring_io);
-                nr = min_t(unsigned int, todo, 1024);
-                nr = min_t(unsigned int, nr, idxend - idx);
-                mfm_ring_to_bin(buf, bufmask, c, wrbuf, nr);
+                mfm_ring_to_bin(buf, bufmask, c, td->p + idx, nr);
                 c += nr;
-                crc = crc16_ccitt(wrbuf, nr, crc);
-                process_data(im, wrbuf, nr);
-                ASSERT(idx % 4 == 0);
-                ASSERT(nr % 32 == 0);
-                memcpy_fast(im->img.track_data.p + idx, wrbuf, nr);
-                im->img.track_data.cons += nr;
+                im->img.crc = crc16_ccitt(td->p + idx, nr, im->img.crc);
+                process_data(im, td->p + idx, nr);
+                td->cons += nr;
+                im->img.decode_data_pos += nr;
+                if (im->img.decode_data_pos == sec_sz)
+                    ring_io_flush(&im->img.ring_io);
             }
-            ring_io_flush(&im->img.ring_io);
 
+            if (im->img.decode_data_pos < sec_sz)
+                continue;
+
+            if (p - c < 2)
+                break;
             mfm_ring_to_bin(buf, bufmask, c, wrbuf, 2);
             c += 2;
-            crc = crc16_ccitt(wrbuf, 2, crc);
-            if (crc != 0) {
-                printk("IMG Bad CRC: %04x, %u[%02x]\n",
-                       crc, sec_nr, sec->r);
-            }
-
-            dam_out:
+            im->img.crc = crc16_ccitt(wrbuf, 2, im->img.crc);
+            if (im->img.crc != 0)
+                printk("IMG Bad CRC: %04x\n", im->img.crc);
             im->img.write_sector = -2;
-            break;
-        }
-
+            im->img.decode_pos = 0;
         }
     }
 
-out:
     ring_io_progress(&im->img.ring_io);
     wr->cons = c * 16;
     return flush;
