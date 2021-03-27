@@ -2793,6 +2793,11 @@ static bool_t fm_read_track(struct image *im)
 #undef emit_raw
 #undef emit_byte
 
+    if (im->img.trash_bc) {
+        int16_t to_consume = min_t(uint16_t, bc_p - bc_c, im->img.trash_bc);
+        im->img.trash_bc -= to_consume;
+        bc->cons += to_consume * 16;
+    }
     im->img.decode_pos++;
     bc->prod = bc_p * 16;
 
