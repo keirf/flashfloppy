@@ -2050,6 +2050,7 @@ static bool_t raw_write_track(struct image *im)
                 if (sec_nr == -1) {
                     sec_nr = raw_find_first_write_sector(im, write, trk);
                     im->img.write_sector = sec_nr;
+                    im->img.decode_data_pos = 0;
                 }
                 if (sec_nr < 0) {
                     printk("IMG DAM Unknown\n");
