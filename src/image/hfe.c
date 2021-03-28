@@ -161,6 +161,14 @@ static void hfe_setup_track(
         im->cur_track = track;
     }
 
+    /* If track does not fit in memory, now is a good time to flush writes to
+     * reduce chances of future buffer underrun caused by a very slow write.
+     * However if write-drain=realtime, then any delays cut into reads so we
+     * just accept the buffer underrun risk. */
+    if ((im->hfe.trk_len*2 + 511) / 512 > im->bufs.read_data.len
+            && ff_cfg.write_drain != WDRAIN_realtime)
+        ring_io_sync(&im->hfe.ring_io);
+
     sys_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
     im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
     if (im->cur_bc >= im->tracklen_bc)
