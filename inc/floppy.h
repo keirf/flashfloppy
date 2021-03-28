@@ -210,6 +210,7 @@ struct image_handler {
     bool_t (*read_track)(struct image *im);
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
     bool_t (*write_track)(struct image *im);
+    void (*sync)(struct image *im);
 
     bool_t async;
 };
@@ -252,6 +253,10 @@ uint16_t bc_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr);
  * was completed for the write at the tail of the pipeline. */
 bool_t image_write_track(struct image *im);
 
+/* Sync track data from memory to mass storage. Only useful to call when normal
+ * processing may be interrupted, like before floppy_cancel(). */
+void image_sync(struct image *im);
+
 /* Rotational position of last-generated flux (SYSCLK ticks past index). */
 uint32_t image_ticks_since_index(struct image *im);
 
@@ -273,6 +278,7 @@ uint16_t fm_sync(uint8_t dat, uint8_t clk);
 void floppy_init(void);
 bool_t floppy_ribbon_is_reversed(void);
 void floppy_insert(unsigned int unit, struct slot *slot);
+void floppy_sync(void);
 void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
 void floppy_set_cyl(uint8_t unit, uint8_t cyl);

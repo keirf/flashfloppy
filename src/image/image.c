@@ -280,6 +280,8 @@ void image_setup_track(
             : im->disk_handler;
 #endif
 
+    if (h != im->track_handler)
+        image_sync(im);
     im->track_handler = h;
     h->setup_track(im, track, start_pos);
 
@@ -299,6 +301,12 @@ uint16_t image_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
 bool_t image_write_track(struct image *im)
 {
     return im->track_handler->write_track(im);
+}
+
+void image_sync(struct image *im)
+{
+    if (im->track_handler->sync != NULL)
+        im->track_handler->sync(im);
 }
 
 uint32_t image_ticks_since_index(struct image *im)

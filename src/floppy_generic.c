@@ -764,6 +764,14 @@ static void IRQ_wdata_dma(void)
     dma_wr->prev_sample = prev;
 }
 
+void floppy_sync(void)
+{
+    struct drive *drv = &drive;
+    struct image *im = drv->image;
+
+    image_sync(im);
+}
+
 /*
  * Local variables:
  * mode: C

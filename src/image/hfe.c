@@ -369,12 +369,18 @@ static bool_t hfe_write_track(struct image *im)
     return flush;
 }
 
+static void hfe_sync(struct image *im)
+{
+    ring_io_sync(&im->hfe.ring_io);
+}
+
 const struct image_handler hfe_image_handler = {
     .open = hfe_open,
     .setup_track = hfe_setup_track,
     .read_track = hfe_read_track,
     .rdata_flux = hfe_rdata_flux,
     .write_track = hfe_write_track,
+    .sync = hfe_sync,
 
     .async = TRUE,
 };
