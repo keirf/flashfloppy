@@ -154,6 +154,7 @@ static void hfe_setup_track(
     track = cyl*2 + side;
     if (track/2 != im->cur_track/2) {
         ring_io_sync(&im->hfe.ring_io);
+        ring_io_shutdown(&im->hfe.ring_io);
 
         im->cur_track = track;
         hfe_seek_track(im, track, TRUE);
@@ -380,6 +381,7 @@ static bool_t hfe_write_track(struct image *im)
 static void hfe_sync(struct image *im)
 {
     ring_io_sync(&im->hfe.ring_io);
+    ring_io_shutdown(&im->hfe.ring_io);
 }
 
 const struct image_handler hfe_image_handler = {

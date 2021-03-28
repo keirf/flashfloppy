@@ -43,7 +43,7 @@ struct op {
     bool_t cancelled;
 };
 
-#define OPS_LEN 8 /* Power of 2. */
+#define OPS_LEN 4 /* Power of 2. */
 #define OPS_MASK(x) ((x)&(OPS_LEN-1))
 static struct {
     struct op ops[OPS_LEN];
@@ -51,6 +51,7 @@ static struct {
 } f_async_queue;
 
 bool_t F_async_isdone(FOP oper) {
+    ASSERT(oper - f_async_queue.prod < 0);
     return oper - f_async_queue.cons < 0;
 }
 

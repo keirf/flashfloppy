@@ -1811,6 +1811,7 @@ static void raw_seek_track(
          * of both tracks, since their offsets have different alignments. */
         uint16_t blk_len = (trk_len + 511) / 512 + 1;
         ring_io_sync(&im->img.ring_io);
+        ring_io_shutdown(&im->img.ring_io);
         ring_io_init(&im->img.ring_io, &im->fp, &im->img.track_data,
                 trk_off & ~511, shadow_off, blk_len);
         im->img.ring_io.batch_secs = 4;
@@ -2152,6 +2153,7 @@ static bool_t raw_write_track(struct image *im)
 static void raw_sync(struct image *im)
 {
     ring_io_sync(&im->img.ring_io);
+    ring_io_shutdown(&im->img.ring_io);
 }
 
 static void raw_dump_info(struct image *im)

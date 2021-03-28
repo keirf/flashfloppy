@@ -27,6 +27,7 @@ void ring_io_init(struct ring_io *rio, FIL *fp, struct image_buf *read_data,
     memset(rio, 0, sizeof(*rio));
     rio->fp = fp;
     rio->read_data = read_data;
+    rio->fop_extra = F_async_get_completed_op();
     rio->f_off = off;
     rio->f_shadow_off = shadow_off;
     rio->f_len = sec_len * 512;
@@ -189,9 +190,11 @@ static void read_start(struct ring_io *rio)
 
     if (rio->f_shadow_off != ~0) {
         F_lseek_async(rio->fp, rio->f_shadow_off + ring_io_pos(rio, rd->prod));
-        F_read_async(rio->fp,
+        rio->fop_extra = F_read_async(rio->fp,
                 rd->p + rio->ring_len + rd->prod % rio->ring_len,
                 rio->io_cnt * 512, NULL);
+    } else {
+        rio->fop_extra = F_async_get_completed_op();
     }
     F_lseek_async(rio->fp, rio->f_off + ring_io_pos(rio, rd->prod));
     fop = F_read_async(rio->fp, rd->p + rd->prod % rio->ring_len,
@@ -253,6 +256,16 @@ void ring_io_sync(struct ring_io *rio)
         progress_io(rio);
     }
     rio->disable_reading = FALSE;
+}
+
+void ring_io_shutdown(struct ring_io *rio)
+{
+    if (rio->fop_cb == NULL)
+        return;
+    rio->fop_cb = NULL;
+    F_async_cancel(rio->fop);
+    F_async_cancel(rio->fop_extra);
+    F_async_wait(rio->fop);
 }
 
 void ring_io_seek(
