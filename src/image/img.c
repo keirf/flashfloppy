@@ -1784,8 +1784,10 @@ static void raw_seek_track(
             shadow_trk_len = calc_track_len(im, cyl, 1);
             ASSERT(trk_len == shadow_trk_len);
 
-            /* Check whether both sides fit in memory. */
-            if (im->img.track_data.len < (((trk_len+511)&~511) + 512)*2) {
+            /* Check whether both sides fit in memory or if data rate stresses
+             * reads too much. */
+            if (im->img.track_data.len < (((trk_len+511)&~511) + 512)*2
+                    || trk->data_rate == /*ED*/ 1000) {
                 if (side > 1) {
                     trk_off = shadow_trk_off;
                     trk_len = shadow_trk_len;
@@ -1814,7 +1816,6 @@ static void raw_seek_track(
         ring_io_shutdown(&im->img.ring_io);
         ring_io_init(&im->img.ring_io, &im->fp, &im->img.track_data,
                 trk_off & ~511, shadow_off, blk_len);
-        im->img.ring_io.batch_secs = 4;
     }
 }
 
@@ -2194,7 +2195,7 @@ static void img_fetch_data(struct image *im)
     uint8_t sec_i;
     uint16_t off, len;
 
-    if ((im->img.trk->nr_sectors == 0) || (rd->prod != rd->cons))
+    if (im->img.trk->nr_sectors == 0)
         return;
 
     sec_i = im->img.sec_map[im->img.trk_sec];
@@ -2214,7 +2215,12 @@ static void img_fetch_data(struct image *im)
     len -= im->img.rd_sec_pos * BATCH_SIZE;
 
     off += im->img.trk_off % 512;
+    im->img.ring_io.batch_secs = min_t(uint8_t, (len + 511) / 512, 2);
     ring_io_seek(&im->img.ring_io, off, FALSE, im->img.shadow);
+    ring_io_progress(&im->img.ring_io);
+
+    if (rd->prod != rd->cons)
+        return;
     if (im->img.track_data.cons + min_t(uint16_t, len, BATCH_SIZE)
             > im->img.track_data.prod)
         return;
@@ -2482,7 +2488,6 @@ static bool_t mfm_read_track(struct image *im)
     unsigned int i;
 
     img_fetch_data(im);
-    ring_io_progress(&im->img.ring_io);
 
     if (im->img.trk->nr_sectors != 0 && rd->prod == rd->cons)
         return FALSE; /* Wait for read to complete. */
@@ -2708,7 +2713,6 @@ static bool_t fm_read_track(struct image *im)
     unsigned int i;
 
     img_fetch_data(im);
-    ring_io_progress(&im->img.ring_io);
 
     if (im->img.trk->nr_sectors != 0 && rd->prod == rd->cons)
         return FALSE; /* Wait for read to complete. */
