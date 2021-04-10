@@ -34,13 +34,13 @@ struct ring_io {
     struct image_buf *read_data;
     FOP fop;
     void (*fop_cb)(struct ring_io*);
-    FOP fop_extra;
+    uint32_t unread_bitfield[(RING_IO_MAX_RING_LEN/512+31)/32];
     uint32_t dirty_bitfield[(RING_IO_MAX_RING_LEN/512+31)/32];
     FSIZE_t f_off;
     FSIZE_t f_shadow_off;
     uint32_t f_len;
     uint32_t ring_len, ring_off;
-    uint32_t read_bytes;
+    uint16_t io_idx;
     uint8_t io_cnt;
     uint32_t wd_cons; /* Internal cursor of oldest write. Sector aligned. */
     uint32_t wd_prod; /* Internal cursor that follows rd->cons. */
@@ -56,9 +56,7 @@ struct ring_io {
 void ring_io_init(struct ring_io *rio, FIL *fp, struct image_buf *read_data,
         FSIZE_t off, FSIZE_t shadow_off, uint16_t sec_len);
 void ring_io_sync(struct ring_io *rio);
-/* Stop all I/O activity and wait for outstanding I/O to complete. If there are
- * outstanding writes they may be lost, even if ring_io_sync() is called in the
- * future. */
+/* Stop all I/O activity and wait for outstanding I/O to complete. */
 void ring_io_shutdown(struct ring_io *rio);
 /* Seek ring to 'pos' in file; read_data.cons and .prod will be adjusted. If
  * 'writing', read data will be made available via read_data as normal, but
