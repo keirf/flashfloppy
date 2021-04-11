@@ -282,14 +282,17 @@ static void enqueue_io(struct ring_io *rio)
 void ring_io_sync(struct ring_io *rio)
 {
     struct image_buf *rd = rio->read_data;
+    uint8_t batch_secs = rio->batch_secs;
     ASSERT(!rio->writing || rio->wd_prod == rd->cons); /* Missing a flush? */
     /* Write out as quickly as possible. Avoid lingering reads, as the caller
      * will likely call ring_io_init() just after this.  */
     rio->disable_reading = TRUE;
+    rio->batch_secs = 255;
     while (rio->sync_needed) {
         ASSERT(rio->fop_cb != NULL);
         progress_io(rio);
     }
+    rio->batch_secs = batch_secs;
     rio->disable_reading = FALSE;
 }
 
