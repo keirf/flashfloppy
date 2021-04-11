@@ -304,6 +304,7 @@ void ring_io_seek(
         struct ring_io *rio, uint32_t pos, bool_t writing, bool_t shadow)
 {
     struct image_buf *rd = rio->read_data;
+    bool_t has_shadow = rio->f_shadow_off != ~0;
     ASSERT(!rio->writing || rio->wd_prod == rd->cons); /* Missing a flush? */
     ASSERT(!shadow || rio->f_shadow_off != ~0);
 
@@ -319,6 +320,15 @@ void ring_io_seek(
             pos += rio->f_len;
         rd->cons = rio->rd_valid + pos - valid_pos;
         rd->prod = rd->cons & ~511;
+    }
+    /* Advance read cursor past already read blocks. */
+    while (rio->rd_valid + rio->ring_len > rd->prod) {
+        uint32_t i = (rd->prod % rio->ring_len) / 512;
+        if (BIT_GET(rio->unread_bitfield, i))
+            break;
+        if (has_shadow && BIT_GET(rio->unread_bitfield, i + rio->ring_len/512))
+            break;
+        rd->prod += 512;
     }
     if (writing) {
         rio->wd_prod = rd->cons;

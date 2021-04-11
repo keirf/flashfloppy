@@ -1816,6 +1816,7 @@ static void raw_seek_track(
         ring_io_shutdown(&im->img.ring_io);
         ring_io_init(&im->img.ring_io, &im->fp, &im->img.track_data,
                 trk_off & ~511, shadow_off, blk_len);
+        im->img.ring_io.batch_secs = 2;
     }
 }
 
@@ -2215,7 +2216,6 @@ static void img_fetch_data(struct image *im)
     len -= im->img.rd_sec_pos * BATCH_SIZE;
 
     off += im->img.trk_off % 512;
-    im->img.ring_io.batch_secs = min_t(uint8_t, (len + 511) / 512, 2);
     ring_io_seek(&im->img.ring_io, off, FALSE, im->img.shadow);
     ring_io_progress(&im->img.ring_io);
 
