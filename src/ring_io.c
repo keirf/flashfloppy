@@ -265,7 +265,7 @@ static void enqueue_io(struct ring_io *rio)
         rd->prod += 512;
     }
 
-    if (!rio->disable_reading && BIT_ANY(rio->unread_bitfield)) {
+    if (!rio->disable_reading && rio->rd_valid + rio->ring_len > rd->prod) {
         read_start(rio);
         return;
     }
