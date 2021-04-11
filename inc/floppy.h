@@ -51,12 +51,13 @@ struct image_bufs {
 };
 
 struct adf_image {
-    uint32_t trk_off;
+    struct ring_io ring_io;
     uint32_t sec_idx;
     int32_t decode_pos;
     uint32_t pre_idx_gap_bc;
     uint32_t nr_secs;
     uint32_t written_secs;
+    uint16_t trash_bc; /* Number of shorts of bitcells to throw away. */
     uint8_t sec_map[2][22];
 };
 
