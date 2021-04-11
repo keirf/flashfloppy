@@ -18,6 +18,34 @@
 #define even(x) ((x)>>1)
 #define odd(x) (x)
 
+static void progress_write(struct image *im)
+{
+    struct image_buf *wb = &im->adf.write_buffer;
+    uint16_t idx, off, cnt;
+    uint32_t c = wb->cons;
+
+    ASSERT(im->adf.write_offsets != NULL);
+
+    thread_yield();
+    if (!F_async_isdone(im->adf.write_op))
+        return;
+    if (im->adf.write_cnt) {
+        wb->cons += im->adf.write_cnt;
+        im->adf.write_cnt = 0;
+    }
+    if (wb->prod == wb->cons)
+        return;
+
+    idx = c++ % wb->len;
+    off = im->adf.write_offsets[idx];
+    for (cnt = 1; c < wb->prod && idx + cnt < wb->len; cnt++)
+        if (im->adf.write_offsets[idx+cnt] != off + cnt)
+            break;
+    F_lseek_async(&im->fp, off*512);
+    im->adf.write_op = F_write_async(&im->fp, wb->p + idx*512, cnt*512, NULL);
+    im->adf.write_cnt = cnt;
+}
+
 static uint32_t amigados_checksum(void *dat, unsigned int bytes)
 {
     uint32_t *p = dat, csum = 0;
@@ -60,6 +88,7 @@ static void adf_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
     const UINT sec_sz = 512;
+    struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
     uint32_t decode_off, sector, sys_ticks = start_pos ? *start_pos : 0;
 
@@ -68,13 +97,9 @@ static void adf_setup_track(
         unsigned int sect;
         for (sect = 0; sect < im->adf.nr_secs; sect++)
             im->adf.sec_map[0][sect] = im->adf.sec_map[1][sect] = sect;
-        ring_io_sync(&im->adf.ring_io);
-        ring_io_shutdown(&im->adf.ring_io);
-        ring_io_init(&im->adf.ring_io, &im->fp, &im->bufs.read_data,
-                (track & ~1) * im->adf.nr_secs * 512,
-                ((track & ~1) + 1) * im->adf.nr_secs * 512,
-                im->adf.nr_secs);
-        im->adf.ring_io.batch_secs = 2;
+        if (im->adf.ring_io_inited)
+            ring_io_shutdown(&im->adf.ring_io);
+        im->adf.ring_io_inited = FALSE;
     }
 
     im->cur_track = track;
@@ -101,12 +126,27 @@ static void adf_setup_track(
 
     bc->prod = bc->cons = 0;
 
-    ring_io_seek(&im->adf.ring_io,
-            im->adf.sec_map[im->cur_track&1][im->adf.sec_idx] * sec_sz,
-            FALSE, im->cur_track&1);
     if (start_pos) {
+        if (im->adf.ring_io_inited)
+            ring_io_seek(&im->adf.ring_io,
+                    im->adf.sec_map[im->cur_track&1][im->adf.sec_idx] * sec_sz,
+                    FALSE, im->cur_track&1);
         im->adf.trash_bc = decode_off;
     } else {
+        if (im->adf.write_offsets == NULL) {
+            ring_io_shutdown(&im->adf.ring_io);
+            im->adf.ring_io_inited = FALSE;
+
+            im->adf.write_offsets = rd->p;
+            im->adf.write_buffer.prod = 0;
+            im->adf.write_buffer.cons = 0;
+            im->adf.write_buffer.p = rd->p + 512;
+            im->adf.write_buffer.len = rd->len / 512 - 1;
+            ASSERT(im->adf.write_buffer.len * sizeof(*im->adf.write_offsets)
+                    <= 512);
+            im->adf.write_op = F_async_get_completed_op();
+        }
+
         im->adf.sec_idx = 0;
         im->adf.written_secs = 0;
     }
@@ -140,6 +180,26 @@ static bool_t adf_read_track(struct image *im)
     _l |= (~((l>>2)|l) & 0x55555555u) << 1; /* clock bits */    \
     emit_raw(_l); })
 
+    if (im->adf.write_offsets != NULL) {
+        if (im->adf.write_buffer.prod != im->adf.write_buffer.cons) {
+            progress_write(im);
+            return FALSE;
+        }
+        im->adf.write_offsets = NULL;
+        im->adf.write_buffer.p = NULL;
+    }
+    if (!im->adf.ring_io_inited) {
+        ring_io_init(&im->adf.ring_io, &im->fp, &im->bufs.read_data,
+                (im->cur_track & ~1) * im->adf.nr_secs * 512,
+                ((im->cur_track & ~1) + 1) * im->adf.nr_secs * 512,
+                im->adf.nr_secs);
+        im->adf.ring_io.batch_secs = 2;
+        im->adf.ring_io_inited = TRUE;
+
+        ring_io_seek(&im->adf.ring_io,
+                im->adf.sec_map[im->cur_track&1][im->adf.sec_idx] * sec_sz,
+                FALSE, im->cur_track&1);
+    }
     ring_io_progress(&im->adf.ring_io);
 
     if (im->adf.decode_pos == 0) {
@@ -231,7 +291,7 @@ static bool_t adf_write_track(struct image *im)
     uint32_t *buf = wr->p;
     unsigned int bufmask = (wr->len / 4) - 1;
     uint32_t *w;
-    struct image_buf *rd = &im->bufs.read_data;
+    struct image_buf *wb = &im->adf.write_buffer;
     uint32_t c = wr->cons / 32, p = wr->prod / 32;
     uint32_t info, dsum, csum;
     unsigned int i, sect;
@@ -274,28 +334,33 @@ static bool_t adf_write_track(struct image *im)
             continue;
         }
 
-        ring_io_seek(&im->adf.ring_io, sect * sec_sz, FALSE, im->cur_track&1);
-
         if ((int16_t)(p - c_sav) < (542/2)) {
             c = c_sav;
             break;
         }
 
-        if (rd->prod < rd->cons + sec_sz) {
+        if (wb->prod - wb->cons >= wb->len) {
             c = c_sav;
             break;
         }
+
+        ring_io_seek(&im->adf.ring_io, sect * sec_sz, FALSE, im->cur_track&1);
 
         /* Data checksum. */
         csum = (buf[c++ & bufmask] & 0x55555555) << 1;
         csum |= buf[c++ & bufmask] & 0x55555555;
 
-        /* Data area. Validate checksum, then perform write. */
+        /* Data area. Decode to a write buffer and key a running checksum.*/
+        im->adf.write_offsets[wb->prod % wb->len]
+            = im->cur_track * im->adf.nr_secs + sect;
+        w = wb->p + (wb->prod % wb->len) * 512;
         for (i = dsum = 0; i < 128; i++) {
-            uint32_t o = buf[(c + i + 128) & bufmask] & 0x55555555;
-            uint32_t e = buf[(c + i) & bufmask] & 0x55555555;
+            uint32_t o = buf[(c + 128) & bufmask] & 0x55555555;
+            uint32_t e = buf[c++ & bufmask] & 0x55555555;
             dsum ^= o ^ e;
+            *w++ = (e << 1) | o;
         }
+        c += 128;
 
         /* Validate the data checksum. */
         csum = be32toh(csum ^ dsum);
@@ -304,28 +369,17 @@ static bool_t adf_write_track(struct image *im)
             continue;
         }
 
-        ring_io_seek(&im->adf.ring_io, sect * sec_sz, TRUE, im->cur_track&1);
-
         printk("Write %u/%u...\n", im->cur_track, sect);
-        /* Decode to write buffer. */
-        w = rd->p + ring_io_idx(&im->adf.ring_io, rd->cons);
-        for (i = 0; i < 128; i++) {
-            uint32_t o = buf[(c + 128) & bufmask] & 0x55555555;
-            uint32_t e = buf[c++ & bufmask] & 0x55555555;
-            *w++ = (e << 1) | o;
-        }
-        c += 128;
-        rd->cons += 512;
+        wb->prod += 1;
 
         /* All good: add to the write-out batch. */
         if (!(im->adf.written_secs & (1u<<sect))) {
             im->adf.written_secs |= 1u<<sect;
             im->adf.sec_map[hd][im->adf.sec_idx++] = sect;
         }
-        ring_io_flush(&im->adf.ring_io);
     }
 
-    ring_io_progress(&im->adf.ring_io);
+    progress_write(im);
 
     if (flush && (im->adf.sec_idx != im->adf.nr_secs)) {
         /* End of write: If not all sectors were correctly written,
@@ -341,8 +395,14 @@ static bool_t adf_write_track(struct image *im)
 
 static void adf_sync(struct image *im)
 {
-    ring_io_sync(&im->adf.ring_io);
-    ring_io_shutdown(&im->adf.ring_io);
+    if (im->adf.write_offsets == NULL) {
+        ring_io_shutdown(&im->adf.ring_io);
+    } else {
+        while (im->adf.write_buffer.prod != im->adf.write_buffer.cons) {
+            progress_write(im);
+            F_async_wait(im->adf.write_op);
+        }
+    }
 }
 
 const struct image_handler adf_image_handler = {

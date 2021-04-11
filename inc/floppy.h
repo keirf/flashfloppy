@@ -59,6 +59,11 @@ struct adf_image {
     uint32_t written_secs;
     uint16_t trash_bc; /* Number of shorts of bitcells to throw away. */
     uint8_t sec_map[2][22];
+    struct image_buf write_buffer;
+    uint16_t *write_offsets; /* File offset of each 512 byte buffer segment */
+    FOP write_op;
+    uint8_t write_cnt;
+    bool_t ring_io_inited;
 };
 
 struct hfe_image {
