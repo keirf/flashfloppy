@@ -9,14 +9,9 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define ram_kb 64
-
-#define ram_bytes (ram_kb*1024)
-
 #define heap_bot (_ebss)
-#define heap_top ((char *)0x20000000 + ram_bytes)
-
 static char *heap_p;
+static char *heap_top;
 
 void *arena_alloc(uint32_t sz)
 {
@@ -39,6 +34,7 @@ uint32_t arena_avail(void)
 void arena_init(void)
 {
     heap_p = heap_bot;
+    heap_top = (char *)0x20000000 + ram_kb*1024;
 }
 
 /*

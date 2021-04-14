@@ -9,42 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#ifndef NDEBUG
-#define ASSERT(p) do { if (!(p)) illegal(); } while (0)
-#else
-#define ASSERT(p) do { if (0 && (p)) {} } while (0)
-#endif
-
-typedef char bool_t;
-#define TRUE 1
-#define FALSE 0
-
-#ifndef offsetof
-#define offsetof(a,b) __builtin_offsetof(a,b)
-#endif
-#define container_of(ptr, type, member) ({                      \
-        typeof( ((type *)0)->member ) *__mptr = (ptr);          \
-        (type *)( (char *)__mptr - offsetof(type,member) );})
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
-#define min(x,y) ({                             \
-    const typeof(x) _x = (x);                   \
-    const typeof(y) _y = (y);                   \
-    (void) (&_x == &_y);                        \
-    _x < _y ? _x : _y; })
-
-#define max(x,y) ({                             \
-    const typeof(x) _x = (x);                   \
-    const typeof(y) _y = (y);                   \
-    (void) (&_x == &_y);                        \
-    _x > _y ? _x : _y; })
-
-#define min_t(type,x,y) \
-    ({ type __x = (x); type __y = (y); __x < __y ? __x: __y; })
-#define max_t(type,x,y) \
-    ({ type __x = (x); type __y = (y); __x > __y ? __x: __y; })
-#define range_t(type,x,a,b) min_t(type, max_t(type, x, a), b)
-
 struct slot {
     char name[FF_MAX_LFN+1];
     char type[7];
@@ -198,6 +162,14 @@ extern uint8_t board_id;
 #define BRDREV_Gotek_enhanced 0x0
 #define BRDREV_Gotek_sd_card  0x1
 #define gotek_enhanced() (board_id != BRDREV_Gotek_standard)
+
+#define FULL_ROTARY_MASK (m(14) | m(13) | m(11) | m(10))
+unsigned int board_get_rotary_mask(void);
+unsigned int board_get_rotary(void);
+unsigned int board_get_buttons(void);
+#define B_LEFT 1
+#define B_RIGHT 2
+#define B_SELECT 4
 
 /* Build info. */
 extern const char fw_ver[];

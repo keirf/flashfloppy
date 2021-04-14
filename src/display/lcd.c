@@ -371,6 +371,10 @@ static void i2c_stop(void)
     i2c->cr1 |= I2C_CR1_STOP;
     while (i2c->cr1 & I2C_CR1_STOP)
         continue;
+    if (is_artery_mcu) {
+        i2c->cr1 = 0;
+        i2c->cr1 = I2C_CR1_PE;
+    }
 }
 
 /* Synchronously transmit an I2C byte. */

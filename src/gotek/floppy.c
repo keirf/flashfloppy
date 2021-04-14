@@ -89,8 +89,8 @@ static void board_floppy_init(void)
     gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
     gpio_configure_pin(gpiob, pin_side,  GPI_bus);
 
-    /* PA[15:14], PB[13:12], PC[11:10], PB[9:2], PA[1:0] */
-    afio->exticr4 = 0x0011;
+    /* PA[15:12], PC[11:10], PB[9:2], PA[1:0] */
+    afio->exticr4 = 0x0000;
     afio->exticr3 = 0x2211;
     afio->exticr2 = 0x1111;
     afio->exticr1 = 0x1100;
@@ -107,8 +107,8 @@ static void board_floppy_init(void)
     }
 
     pins = m(pin_wgate) | m(pin_side) | m(pin_sel0);
-    exti->rtsr = pins | m(pin_motor) | m(pin_step) | m(11) | m(10);
-    exti->ftsr = pins | m(pin_motor) | m(pin_chgrst) | m(11) | m(10);
+    exti->rtsr = pins | m(pin_motor) | m(pin_step) | FULL_ROTARY_MASK;
+    exti->ftsr = pins | m(pin_motor) | m(pin_chgrst) | FULL_ROTARY_MASK;
     exti->imr = pins | m(pin_step);
 }
 
@@ -361,10 +361,11 @@ static void IRQ_MOTOR_CHGRST(void)
 {
     struct drive *drv = &drive;
     bool_t changed = drv->motor.changed;
-    uint32_t pr = exti->pr;
+    uint32_t rot_mask, pr = exti->pr;
 
+    rot_mask = board_get_rotary_mask();
     drv->motor.changed = FALSE;
-    exti->pr = m(pin_motor) | m(pin_chgrst) | m(11) | m(10);
+    exti->pr = pr & (m(pin_motor) | m(pin_chgrst) | rot_mask);
 
     if ((pr & m(pin_motor)) || changed)
         IRQ_MOTOR(drv);
@@ -372,7 +373,7 @@ static void IRQ_MOTOR_CHGRST(void)
     if ((pr & m(pin_chgrst)) || changed)
         IRQ_CHGRST(drv);
 
-    if (pr & (m(11) | m(10)))
+    if (pr & rot_mask)
         IRQ_rotary();
 }
 

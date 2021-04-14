@@ -67,6 +67,22 @@ static void canary_check(void)
     ASSERT(_thread_stackbottom[0] == 0xdeadbeef);
 }
 
+#define MAIN_FW_KEY 0x39b5ba2c
+static void reset_to_main_fw(void) __attribute__((noreturn));
+static void reset_to_main_fw(void)
+{
+    *(volatile uint32_t *)_ebss = MAIN_FW_KEY;
+    cpu_sync();
+    system_reset();
+}
+
+static bool_t main_fw_requested(void)
+{
+    bool_t req = (*(volatile uint32_t *)_ebss == MAIN_FW_KEY);
+    *(volatile uint32_t *)_ebss = 0;
+    return req;
+}
+
 static bool_t fw_update_requested(void)
 {
     bool_t requested;
@@ -88,7 +104,7 @@ static bool_t fw_update_requested(void)
 static void erase_old_firmware(void)
 {
     uint32_t p;
-    for (p = FIRMWARE_START; p < FIRMWARE_END; p += FLASH_PAGE_SIZE)
+    for (p = FIRMWARE_START; p < FIRMWARE_END; p += flash_page_size)
         fpec_page_erase(p);
 }
 
@@ -225,19 +241,14 @@ static void display_setting(bool_t on)
     }
 }
 
-#define B_LEFT 1
-#define B_RIGHT 2
-#define B_SELECT 4
-
 static bool_t buttons_pressed(void)
 {
+    unsigned int b = board_get_buttons() | osd_buttons_rx;
     return (
         /* Check for both LEFT and RIGHT buttons pressed. */
-        (!gpio_read_pin(gpioc, 8) && !gpio_read_pin(gpioc, 7))
-        || ((osd_buttons_rx & (B_LEFT|B_RIGHT)) == (B_LEFT|B_RIGHT))
+        ((b & (B_LEFT|B_RIGHT)) == (B_LEFT|B_RIGHT))
         /* Also respond to third (SELECT) button on its own. */
-        || !gpio_read_pin(gpioc, 6)
-        || (osd_buttons_rx & B_SELECT));
+        || (b & B_SELECT));
 }
 
 /* Wait for both buttons to be pressed (LOW) or not pressed (HIGH). Perform 
@@ -252,10 +263,8 @@ static void wait_buttons(uint8_t level)
         x <<= 1;
         if (level) {
             /* All buttons must be released. */
-            x |= gpio_read_pin(gpioc, 8)
-                && gpio_read_pin(gpioc, 7)
-                && gpio_read_pin(gpioc, 6)
-                && !osd_buttons_rx;
+            unsigned int b = board_get_buttons() | osd_buttons_rx;
+            x |= !b;
         } else {
             x |= buttons_pressed();
         }
@@ -266,23 +275,16 @@ int main(void)
 {
     char msg[20];
     FRESULT fres;
+    bool_t update_requested;
 
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
         memcpy(_sdat, _ldat, _edat-_sdat);
     memset(_sbss, 0, _ebss-_sbss);
 
-    /* Enable GPIOC, set all pins as input with weak pull-up. */
-    rcc->apb2enr = RCC_APB2ENR_IOPCEN;
-    gpioc->odr = 0xffffu;
-    gpioc->crh = 0x88888888u;
-    gpioc->crl = 0x88888888u;
+    update_requested = fw_update_requested();
 
-    /* Enter update mode only if:
-     *  1. Buttons are pressed; or 
-     *  2. It was requested via main firmware; or 
-     *  3. No valid main firmware is found in Flash. */
-    if (!buttons_pressed() && !fw_update_requested()) {
+    if (main_fw_requested() && !update_requested) {
         /* Check for, and jump to, the main firmware. */
         uint32_t sp = *(uint32_t *)FIRMWARE_START;
         uint32_t pc = *(uint32_t *)(FIRMWARE_START + 4);
@@ -291,6 +293,7 @@ int main(void)
                 "mov sp,%0 ; blx %1"
                 :: "r" (sp), "r" (pc));
         }
+        update_requested = TRUE;
     }
 
     /*
@@ -303,11 +306,15 @@ int main(void)
     time_init();
     console_init();
     board_init();
-    delay_ms(200); /* 5v settle */
 
     printk("\n** FF Update Bootloader v%s for Gotek\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
+
+    if (!update_requested && !buttons_pressed())
+        reset_to_main_fw();
+
+    delay_ms(200); /* 5v settle */
 
     flash_ff_cfg_read();
 

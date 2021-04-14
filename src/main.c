@@ -472,15 +472,12 @@ static uint8_t read_rotary(uint8_t rotary)
 static struct timer button_timer;
 static volatile uint8_t buttons, velocity;
 static uint8_t rotary, rb;
-#define B_LEFT 1
-#define B_RIGHT 2
-#define B_SELECT 4
 
 void IRQ_rotary(void)
 {
     if ((ff_cfg.rotary & ROT_typemask) != ROT_full)
         return;
-    rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
+    rotary = ((rotary << 2) | board_get_rotary()) & 15;
     rb = read_rotary(rotary) ?: rb;
 }
 
@@ -488,9 +485,9 @@ static void set_rotary_exti(void)
 {
     uint32_t imr;
 
-    imr = exti->imr & ~0x0c00;
+    imr = exti->imr & ~FULL_ROTARY_MASK;
     if ((ff_cfg.rotary & ROT_typemask) == ROT_full)
-        imr |= 0x0c00;
+        imr |= board_get_rotary_mask();
     exti->imr = imr;
 }
 
@@ -502,7 +499,7 @@ static void button_timer_fn(void *unused)
 
     static uint16_t cur_time, prev_time;
     static uint32_t _b[3]; /* 0 = left, 1 = right, 2 = select */
-    uint8_t b = osd_buttons_rx;
+    uint8_t x, b = osd_buttons_rx;
     bool_t twobutton_rotary =
         (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_rotary;
     int i, twobutton_reverse = !!(ff_cfg.twobutton_action & TWOBUTTON_reverse);
@@ -521,21 +518,23 @@ static void button_timer_fn(void *unused)
 
     /* We debounce the switches by waiting for them to be pressed continuously 
      * for 32 consecutive sample periods (32 * 2ms == 64ms) */
+    x = ~board_get_buttons();
     for (i = 0; i < 3; i++) {
         _b[i] <<= 1;
-        _b[i] |= gpio_read_pin(gpioc, 8-i);
+        _b[i] |= x & 1;
+        x >>= 1;
     }
 
-    if (_b[twobutton_reverse] == 0)
+    if (_b[!twobutton_reverse] == 0)
         b |= twobutton_rotary ? B_LEFT|B_RIGHT : B_LEFT;
 
-    if (_b[!twobutton_reverse] == 0)
+    if (_b[twobutton_reverse] == 0)
         b |= twobutton_rotary ? B_SELECT : B_RIGHT;
 
     if (_b[2] == 0)
         b |= B_SELECT;
 
-    rotary = ((rotary << 2) | ((gpioc->idr >> 10) & 3)) & 15;
+    rotary = ((rotary << 2) | board_get_rotary()) & 15;
     switch (ff_cfg.rotary & ROT_typemask) {
 
     case ROT_trackball: {
@@ -3101,7 +3100,7 @@ int main(void)
 
     usbh_msc_init();
 
-    rotary = (gpioc->idr >> 10) & 3;
+    rotary = board_get_rotary();
     set_rotary_exti();
     timer_init(&button_timer, button_timer_fn, NULL);
     timer_set(&button_timer, time_now());
