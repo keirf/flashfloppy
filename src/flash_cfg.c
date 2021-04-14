@@ -87,6 +87,8 @@ void flash_ff_cfg_update(void *scratch)
     } else {
         /* No blank slots available. Erase whole page. */
         fpec_page_erase((uint32_t)SLOT_BASE);
+        if (flash_page_size < FLASH_PAGE_SIZE)
+            fpec_page_erase((uint32_t)SLOT_BASE + flash_page_size);
         slot = SLOT_BASE;
         printk("Config: Erased Whole Page\n");
     }

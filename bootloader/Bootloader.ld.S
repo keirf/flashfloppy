@@ -2,6 +2,6 @@
 #define FLASH_LEN  32K
 
 #define RAM_BASE   0x20000000
-#define RAM_LEN    64K
+#define RAM_LEN    16K
 
 #include "../scripts/stm32f10x.ld.S"

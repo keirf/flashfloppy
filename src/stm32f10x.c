@@ -9,6 +9,10 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+bool_t is_artery_mcu;
+unsigned int flash_page_size = FLASH_PAGE_SIZE;
+unsigned int ram_kb = 64;
+
 struct extra_exception_frame {
     uint32_t r4, r5, r6, r7, r8, r9, r10, r11, lr;
 };
@@ -114,6 +118,28 @@ static void exception_init(void)
     scb->shpr3 = 0xff<<16;
 }
 
+static void identify_mcu(void)
+{
+    /* DBGMCU_IDCODE (E0042000): 
+     *  STM32F105RB:  10016418 (device id: 418) 
+     *  AT32F415CBT7: 700301c5 (device id: 1c5)
+     *  AT32F415RCT7: 70030240 (device id: 240) 
+     * However the AT32 IDCODE values are undocumented so we cannot rely 
+     * on them (for example, what will be the ID for chips with differing 
+     * amounts of Flash, or numbers of pins?) */
+
+    /* We detect an Artery MCU by presence of Cortex-M4 CPUID. 
+     * Cortex-M4: 41xfc24x ; Cortex-M3: 41xfc23x */
+    is_artery_mcu = ((scb->cpuid >> 4) & 0xf) == 4;
+
+    if (is_artery_mcu) {
+        unsigned int flash_kb = *(uint16_t *)0x1ffff7e0;
+        ram_kb = 32;
+        if (flash_kb == 128)
+            flash_page_size = 1024;
+    }
+}
+
 static void clock_init(void)
 {
     /* Flash controller: reads require 2 wait states at 72MHz. */
@@ -180,6 +206,7 @@ static void peripheral_init(void)
 void stm32_init(void)
 {
     exception_init();
+    identify_mcu();
     clock_init();
     peripheral_init();
     cpu_sync();

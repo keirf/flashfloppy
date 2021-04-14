@@ -10,8 +10,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define m(bitnr) (1u<<(bitnr))
-
 /* A DMA buffer for running a timer associated with a floppy-data I/O pin. */
 struct dma_ring {
     /* Current state of DMA (RDATA): 
@@ -147,6 +145,7 @@ static void floppy_mount(struct slot *slot)
     DWORD *cltbl;
     FRESULT fr;
     bool_t async = FALSE, retry;
+    int max_ring_kb = (ram_kb >= 64) ? 32 : 8;
 
     do {
         retry = FALSE;
@@ -188,7 +187,7 @@ static void floppy_mount(struct slot *slot)
 
         if (!async) {
             /* Large buffer to absorb write latencies at mass-storage layer. */
-            im->bufs.write_bc.len = 32*1024; /* 32kB, power of two. */
+            im->bufs.write_bc.len = max_ring_kb * 1024; /* power of two */
             im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
         } else {
             /* Make sure there is enough memory to fully buffer writes for an
@@ -206,6 +205,7 @@ static void floppy_mount(struct slot *slot)
             /* Size at least 4kb so a 512 byte sector (1k bc) can be fully
              * encoded into the 2kb read_bc, with space to spare. */
             bc_len = max_t(uint32_t, bc_len, 4*1024);
+            bc_len = min_t(uint32_t, bc_len, max_ring_kb*1024);
             im->bufs.write_bc.len = bc_len; /* Power of two. */
             im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
         }

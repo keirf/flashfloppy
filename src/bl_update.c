@@ -50,7 +50,7 @@ uint8_t board_id;
 static void erase_old_firmware(void)
 {
     uint32_t p;
-    for (p = FIRMWARE_START; p < FIRMWARE_END; p += FLASH_PAGE_SIZE)
+    for (p = FIRMWARE_START; p < FIRMWARE_END; p += flash_page_size)
         fpec_page_erase(p);
 }
 

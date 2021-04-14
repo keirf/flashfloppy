@@ -15,6 +15,7 @@
 #include <stddef.h>
 #include <limits.h>
 
+#include "types.h"
 #include "stm32f10x_regs.h"
 #include "stm32f10x.h"
 #include "intrinsics.h"

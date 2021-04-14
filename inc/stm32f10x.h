@@ -68,7 +68,8 @@ extern uint32_t vector_table[];
 
 /* System */
 void stm32_init(void);
-void system_reset(void);
+void system_reset(void) __attribute__((noreturn));
+extern bool_t is_artery_mcu;
 
 /* Clocks */
 #define SYSCLK_MHZ 72
@@ -126,6 +127,8 @@ void fpec_page_erase(uint32_t flash_address);
 void fpec_write(const void *data, unsigned int size, uint32_t flash_address);
 
 #define FLASH_PAGE_SIZE 2048
+extern unsigned int flash_page_size;
+extern unsigned int ram_kb;
 
 /*
  * Local variables:
