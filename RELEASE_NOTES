@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.24 - 15 April 2021
+ - Beta support for new Artery microcontrollers used on latest Gotek models
+   - See the wiki for more details
+   - https://github.com/keirf/FlashFloppy/wiki/Gotek-Compatibility
+ - IMG: Fix skew/interleave on MSDMF (1.68M) images
+
 ** v3.23 - 31 December 2020
  - OLED/LCD: Fix missing folder name display row when inserting USB drive
  - IMG.CFG: New examples for Roland, Sinclair QL, Kaypro
