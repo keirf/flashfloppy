@@ -272,9 +272,10 @@ static bool_t adf_read_track(struct image *im)
     }
 
     if (im->adf.trash_bc) {
-        int16_t to_consume = min_t(uint16_t, bc_p - bc_c, im->adf.trash_bc);
+        int16_t to_consume =
+            min_t(uint16_t, (bc_p - bc_c)*16, im->adf.trash_bc);
         im->adf.trash_bc -= to_consume;
-        bc->cons += to_consume * 16;
+        bc->cons += to_consume;
     }
     im->adf.decode_pos++;
     bc->prod = bc_p * 32;

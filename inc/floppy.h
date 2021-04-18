@@ -57,7 +57,7 @@ struct adf_image {
     uint32_t pre_idx_gap_bc;
     uint32_t nr_secs;
     uint32_t written_secs;
-    uint16_t trash_bc; /* Number of shorts of bitcells to throw away. */
+    uint16_t trash_bc; /* Number of bitcells to throw away. */
     uint8_t sec_map[2][22];
     struct image_buf write_buffer;
     uint16_t *write_offsets; /* File offset of each 512 byte buffer segment */
