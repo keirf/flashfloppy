@@ -14,6 +14,10 @@
 #define DD_TRACKLEN_BC 101376 /* multiple of 32 */
 #define POST_IDX_GAP_BC 1024
 
+#define SYNCED      0
+#define SYNC_NEEDED 1
+#define SYNCING     2
+
 /* Shift even/odd bits into MFM data-bit positions */
 #define even(x) ((x)>>1)
 #define odd(x) (x)
@@ -32,8 +36,15 @@ static void progress_write(struct image *im)
         wb->cons += im->adf.write_cnt;
         im->adf.write_cnt = 0;
     }
-    if (wb->prod == wb->cons)
+    if (wb->prod == wb->cons) {
+        if (im->adf.sync_state == SYNCING)
+            im->adf.sync_state = SYNCED;
+        else if (im->adf.sync_state == SYNC_NEEDED) {
+            im->adf.write_op = disk_ioctl_async(0, CTRL_SYNC, NULL, NULL);
+            im->adf.sync_state = SYNCING;
+        }
         return;
+    }
 
     idx = wb->cons % wb->len;
     off = im->adf.write_offsets[idx];
@@ -43,6 +54,7 @@ static void progress_write(struct image *im)
     F_lseek_async(&im->fp, off*512);
     im->adf.write_op = F_write_async(&im->fp, wb->p + idx*512, cnt*512, NULL);
     im->adf.write_cnt = cnt;
+    im->adf.sync_state = SYNC_NEEDED;
 }
 
 static uint32_t amigados_checksum(void *dat, unsigned int bytes)
@@ -180,10 +192,9 @@ static bool_t adf_read_track(struct image *im)
     emit_raw(_l); })
 
     if (im->adf.write_offsets != NULL) {
-        if (im->adf.write_buffer.prod != im->adf.write_buffer.cons) {
-            progress_write(im);
+        progress_write(im);
+        if (im->adf.sync_state)
             return FALSE;
-        }
         im->adf.write_offsets = NULL;
         im->adf.write_buffer.p = NULL;
     }
@@ -395,7 +406,7 @@ static void adf_sync(struct image *im)
     if (im->adf.write_offsets == NULL) {
         ring_io_shutdown(&im->adf.ring_io);
     } else {
-        while (im->adf.write_buffer.prod != im->adf.write_buffer.cons) {
+        while (im->adf.sync_state) {
             progress_write(im);
             F_async_wait(im->adf.write_op);
         }

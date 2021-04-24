@@ -63,6 +63,7 @@ struct adf_image {
     uint16_t *write_offsets; /* File offset of each 512 byte buffer segment */
     FOP write_op;
     uint8_t write_cnt;
+    uint8_t sync_state;
     bool_t ring_io_inited;
 };
 
