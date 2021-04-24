@@ -10,26 +10,35 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-struct lseek_args {
-    FSIZE_t ofs;
-};
-
-struct read_args {
-    void *buff;
-    UINT btr;
-    UINT *br;
-};
-
-struct write_args {
-    const void *buff;
-    UINT btw;
-    UINT *bw;
-};
-
 union op_args {
-    struct lseek_args lseek;
-    struct read_args read;
-    struct write_args write;
+    struct {
+        FSIZE_t ofs;
+    } lseek;
+    struct {
+        void *buff;
+        UINT btr;
+        UINT *br;
+    } read;
+    struct {
+        const void *buff;
+        UINT btw;
+        UINT *bw;
+    } write;
+    struct {
+        BYTE *buff;
+        LBA_t sector;
+        UINT count;
+    } disk_read;
+    struct {
+        const BYTE *buff;
+        LBA_t sector;
+        UINT count;
+    } disk_write;
+    struct {
+        BYTE cmd;
+        void* buff;
+        DRESULT *res;
+    } disk_ioctl;
 };
 
 struct op;
@@ -155,4 +164,45 @@ static void do_sync(struct op *op) {
 FOP F_sync_async(FIL *fp) {
     union op_args args = { 0 };
     return enqueue(do_sync, fp, &args);
+}
+
+static void do_disk_read(struct op *op) {
+    if (disk_read((uintptr_t) op->fp, op->args.disk_read.buff,
+            op->args.disk_read.sector, op->args.disk_read.count) != RES_OK)
+        F_die(FR_DISK_ERR);
+}
+
+FOP disk_read_async(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
+    union op_args args = { .disk_read = {buff, sector, count} };
+    return enqueue(do_disk_read, (void*)(uintptr_t) pdrv, &args);
+}
+
+static void do_disk_write(struct op *op) {
+    time_t start = time_now();
+    if (disk_write((uintptr_t) op->fp, op->args.disk_write.buff,
+            op->args.disk_write.sector, op->args.disk_write.count) != RES_OK)
+        F_die(FR_DISK_ERR);
+    printk("Disk write %08x (size 0x%x): %u us\n",
+            op->args.disk_write.sector,
+            op->args.disk_write.count,
+            time_since(start) / TIME_MHZ);
+}
+
+FOP disk_write_async(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
+    union op_args args = { .disk_write = {buff, sector, count} };
+    return enqueue(do_disk_write, (void*)(uintptr_t) pdrv, &args);
+}
+
+static void do_disk_ioctl(struct op *op) {
+    DRESULT res = disk_ioctl((uintptr_t) op->fp, op->args.disk_ioctl.cmd,
+            op->args.disk_ioctl.buff);
+    if (op->args.disk_ioctl.res != NULL)
+        *op->args.disk_ioctl.res = res;
+    else if (res != RES_OK)
+        F_die(FR_DISK_ERR);
+}
+
+FOP disk_ioctl_async(BYTE pdrv, BYTE cmd, void* buff, DRESULT *res) {
+    union op_args args = { .disk_ioctl = {cmd, buff, res} };
+    return enqueue(do_disk_ioctl, (void*)(uintptr_t) pdrv, &args);
 }

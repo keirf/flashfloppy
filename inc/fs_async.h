@@ -10,12 +10,18 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#include "../src/fatfs/diskio.h"
+
 typedef int FOP;
 
 FOP F_lseek_async(FIL *fp, FSIZE_t ofs);
 FOP F_read_async(FIL *fp, void *buff, UINT btr, UINT *br);
 FOP F_write_async(FIL *fp, const void *buff, UINT btw, UINT *bw);
 FOP F_sync_async(FIL *fp);
+FOP disk_read_async(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count);
+FOP disk_write_async(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count);
+/* If res == NULL, then it will F_die() if result of ioctl != RES_OK. */
+FOP disk_ioctl_async(BYTE pdrv, BYTE cmd, void* buff, DRESULT *res);
 
 /* Returns TRUE if oper has completed or is cancelled. */
 bool_t F_async_isdone(FOP oper);
