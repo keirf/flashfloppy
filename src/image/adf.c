@@ -284,7 +284,6 @@ static bool_t adf_read_track(struct image *im)
 
 static bool_t adf_write_track(struct image *im)
 {
-    const UINT sec_sz = 512;
     bool_t flush;
     struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_bc;
@@ -343,8 +342,6 @@ static bool_t adf_write_track(struct image *im)
             c = c_sav;
             break;
         }
-
-        ring_io_seek(&im->adf.ring_io, sect * sec_sz, FALSE, im->cur_track&1);
 
         /* Data checksum. */
         csum = (buf[c++ & bufmask] & 0x55555555) << 1;
