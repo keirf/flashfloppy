@@ -22,7 +22,6 @@ static void progress_write(struct image *im)
 {
     struct image_buf *wb = &im->adf.write_buffer;
     uint16_t idx, off, cnt;
-    uint32_t c = wb->cons;
 
     ASSERT(im->adf.write_offsets != NULL);
 
@@ -36,9 +35,9 @@ static void progress_write(struct image *im)
     if (wb->prod == wb->cons)
         return;
 
-    idx = c++ % wb->len;
+    idx = wb->cons % wb->len;
     off = im->adf.write_offsets[idx];
-    for (cnt = 1; c < wb->prod && idx + cnt < wb->len; cnt++)
+    for (cnt = 1; wb->cons + cnt < wb->prod && idx + cnt < wb->len; cnt++)
         if (im->adf.write_offsets[idx+cnt] != off + cnt)
             break;
     F_lseek_async(&im->fp, off*512);
