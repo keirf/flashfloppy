@@ -37,31 +37,81 @@ static bool_t fm_write_track(struct image *im);
 static bool_t mfm_read_track(struct image *im);
 static bool_t mfm_write_track(struct image *im);
 
-static void process_wdata(struct image *im, unsigned int sect, uint16_t crc);
+#define SYNCED      0
+#define SYNC_NEEDED 1
+#define SYNCING     2
+
+static void process_wdata(
+        struct image *im, unsigned int sect, uint16_t crc, uint16_t crc_data);
 
 static unsigned int enc_sec_sz(struct image *im)
 {
     return im->da.idam_sz + im->da.dam_sz;
 }
 
-static bool_t da_open(struct image *im)
+static void progress_write(struct image *im)
 {
-    im->nr_sides = 1;
-    return TRUE;
+    struct image_buf *wb = &im->da.write_buffer;
+    uint16_t idx, cnt;
+    LBA_t off;
+
+    ASSERT(im->da.write_offsets != NULL);
+
+    thread_yield();
+    if (!F_async_isdone(im->da.write_op))
+        return;
+    if (im->da.write_cnt) {
+        wb->cons += im->da.write_cnt;
+        im->da.write_cnt = 0;
+    }
+    if (wb->prod == wb->cons) {
+        if (im->da.sync_state == SYNCING)
+            im->da.sync_state = SYNCED;
+        else if (im->da.sync_state == SYNC_NEEDED) {
+            im->da.write_op = disk_ioctl_async(0, CTRL_SYNC, NULL, NULL);
+            im->da.sync_state = SYNCING;
+        }
+        return;
+    }
+
+    idx = wb->cons % wb->len;
+    off = im->da.write_offsets[idx];
+    for (cnt = 1; wb->cons + cnt < wb->prod && idx + cnt < wb->len; cnt++)
+        if (im->da.write_offsets[idx+cnt] != off + cnt)
+            break;
+    ASSERT(off);
+    im->da.write_op = disk_write_async(0, wb->p + idx*512, off, cnt);
+    im->da.write_cnt = cnt;
+    im->da.sync_state = SYNC_NEEDED;
 }
 
-static void da_seek_track(struct image *im, uint16_t track)
+static bool_t da_open(struct image *im)
 {
     struct da_status_sector *dass = &im->da.dass;
+    struct image_buf *rd = &im->bufs.read_data;
+    int p_used = 0;
     bool_t version_override = (ff_cfg.da_report_version[0] != '\0');
 
-    track &= ~1; /* force side 0 */
-    if (im->cur_track == track)
-        return;
-    im->cur_track = track;
+    printk("D-A Mode Entered\n");
+    im->nr_sides = 1;
 
-    volume_cache_init(im->bufs.write_data.p + SEC_SZ + 2,
-                      im->bufs.write_data.p + im->bufs.write_data.len);
+    im->da.rd_buf = rd->p + p_used;
+    p_used += SEC_SZ;
+    /* 768 bytes for cache overhead. */
+    volume_cache_init(rd->p + p_used, rd->p + p_used + 8*SEC_SZ + 768);
+    p_used += 8*SEC_SZ + 768;
+    im->da.write_buffer.p = rd->p + p_used;
+    im->da.write_buffer.len =
+        (rd->len - p_used - 3) / (512 + sizeof(*im->da.write_offsets));
+    im->da.write_offsets = rd->p + p_used;
+    p_used += (im->da.write_buffer.len*sizeof(*im->da.write_offsets) + 3) & ~3;
+    p_used += im->da.write_buffer.len * 512;
+    ASSERT(p_used <= rd->len);
+    ASSERT(im->da.write_buffer.len >= 8);
+
+    im->da.write_buffer.prod = 0;
+    im->da.write_buffer.cons = 0;
+    im->da.write_op = F_async_get_completed_op();
 
     switch (display_type) {
     case DT_LED_7SEG:
@@ -72,13 +122,22 @@ static void da_seek_track(struct image *im, uint16_t track)
         break;
     }
 
-    memset(&im->da, 0, sizeof(im->da));
-
     snprintf(dass->sig, sizeof(dass->sig), "%s", DA_SIG);
     snprintf(dass->fw_ver, sizeof(dass->fw_ver),
              version_override ? "%s" : "FF-v%s",
              version_override ? ff_cfg.da_report_version : fw_ver);
     dass->current_index = get_slot_nr();
+    return TRUE;
+}
+
+static void da_seek_track(struct image *im, uint16_t track)
+{
+    struct da_status_sector *dass = &im->da.dass;
+
+    track &= ~1; /* force side 0 */
+    if (im->cur_track == track)
+        return;
+    im->cur_track = track;
 
     switch (im->cur_track>>1) {
     case DA_SD_FM_CYL:
@@ -159,10 +218,10 @@ static void da_setup_track(
 
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
+    im->da.read_op_started = FALSE;
 
     if (start_pos) {
-        image_read_track(im);
-        bc->cons = decode_off * 16;
+        im->da.trash_bc = decode_off * 16;
         *start_pos = sys_ticks;
     }
 }
@@ -171,8 +230,9 @@ static bool_t da_read_track(struct image *im)
 {
     struct da_status_sector *dass = &im->da.dass;
     struct image_buf *rd = &im->bufs.read_data;
-    uint8_t *buf = rd->p;
+    uint8_t *buf = im->da.rd_buf;
 
+    progress_write(im);
     if (rd->prod == rd->cons) {
         uint8_t sec = im->da.trk_sec;
         if (sec == 0) {
@@ -185,8 +245,17 @@ static bool_t da_read_track(struct image *im)
             if (sec == 1)
                 strcpy((char *)buf, im->slot->name);
         } else {
-            if (disk_read(0, buf, dass->lba_base+sec-1, 1) != RES_OK)
-                F_die(FR_DISK_ERR);
+            if (!im->da.read_op_started) {
+                if (im->da.sync_state)
+                    return FALSE;
+                im->da.read_op =
+                    disk_read_async(0, buf, dass->lba_base+sec-1, 1);
+                im->da.read_op_started = TRUE;
+            }
+            thread_yield();
+            if (!F_async_isdone(im->da.read_op))
+                return FALSE;
+            im->da.read_op_started = FALSE;
         }
         rd->prod++;
         if (++im->da.trk_sec >= (dass->nr_sec + 1))
@@ -201,7 +270,7 @@ static bool_t fm_read_track(struct image *im)
     struct da_status_sector *dass = &im->da.dass;
     struct image_buf *bc = &im->bufs.read_bc;
     struct image_buf *rd = &im->bufs.read_data;
-    uint8_t *buf = rd->p;
+    uint8_t *buf = im->da.rd_buf;
     uint16_t *bc_b = bc->p;
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     uint16_t crc;
@@ -261,6 +330,12 @@ static bool_t fm_read_track(struct image *im)
 #undef emit_raw
 #undef emit_byte
 
+    if (im->da.trash_bc) {
+        int16_t to_consume =
+            min_t(uint16_t, (bc_p - bc_c)*16, im->da.trash_bc);
+        im->da.trash_bc -= to_consume;
+        bc->cons += to_consume;
+    }
     im->da.decode_pos++;
     bc->prod = bc_p * 16;
 
@@ -272,7 +347,7 @@ static bool_t mfm_read_track(struct image *im)
     struct da_status_sector *dass = &im->da.dass;
     struct image_buf *bc = &im->bufs.read_bc;
     struct image_buf *rd = &im->bufs.read_data;
-    uint8_t *buf = rd->p;
+    uint8_t *buf = im->da.rd_buf;
     uint16_t *bc_b = bc->p;
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     uint16_t pr, crc;
@@ -344,6 +419,12 @@ static bool_t mfm_read_track(struct image *im)
 #undef emit_raw
 #undef emit_byte
 
+    if (im->da.trash_bc) {
+        int16_t to_consume =
+            min_t(uint16_t, (bc_p - bc_c)*16, im->da.trash_bc);
+        im->da.trash_bc -= to_consume;
+        bc->cons += to_consume;
+    }
     im->da.decode_pos++;
     bc->prod = bc_p * 16;
 
@@ -362,11 +443,12 @@ static bool_t fm_write_track(struct image *im)
     struct image_buf *wr = &im->bufs.write_bc;
     uint16_t *buf = wr->p;
     unsigned int bufmask = (wr->len / 2) - 1;
-    uint8_t *wrbuf = im->bufs.write_data.p;
+    struct image_buf *wb = &im->da.write_buffer;
+    uint8_t *wrbuf;
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
     unsigned int sect;
-    uint16_t sync;
+    uint16_t sync, crc_data;
     uint8_t x;
 
     /* If we are processing final data then use the end index, rounded up. */
@@ -376,6 +458,7 @@ static bool_t fm_write_track(struct image *im)
         p = (write->bc_end + 15) / 16;
 
     while ((int16_t)(p - c) >= (2 + SEC_SZ + 2)) {
+        uint32_t sc = c;
 
         if (buf[c++ & bufmask] != 0xaaaa)
             continue;
@@ -388,15 +471,25 @@ static bool_t fm_write_track(struct image *im)
         if (x != 0xfb)
             continue;
 
+        if (wb->prod - wb->cons >= wb->len) {
+            c = sc;
+            flush = FALSE;
+            break;
+        }
+
         sect = (base - im->da.idx_sz - im->da.idam_sz + enc_sec_sz(im)/2)
             / enc_sec_sz(im);
 
-        mfm_ring_to_bin(buf, bufmask, c, wrbuf, SEC_SZ + 2);
-        c += SEC_SZ + 2;
+        wrbuf = wb->p + (wb->prod % wb->len) * 512;
+        mfm_ring_to_bin(buf, bufmask, c, wrbuf, SEC_SZ);
+        c += SEC_SZ;
+        mfm_ring_to_bin(buf, bufmask, c, &crc_data, 2);
+        c += 2;
 
-        process_wdata(im, sect, FM_DAM_CRC);
+        process_wdata(im, sect, FM_DAM_CRC, crc_data);
     }
 
+    progress_write(im);
     wr->cons = c * 16;
 
     return flush;
@@ -409,11 +502,12 @@ static bool_t mfm_write_track(struct image *im)
     struct image_buf *wr = &im->bufs.write_bc;
     uint16_t *buf = wr->p;
     unsigned int bufmask = (wr->len / 2) - 1;
-    uint8_t *wrbuf = im->bufs.write_data.p;
+    struct image_buf *wb = &im->da.write_buffer;
+    uint8_t *wrbuf;
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     uint32_t base = write->start / im->ticks_per_cell; /* in data bytes */
     unsigned int sect;
-    uint16_t crc;
+    uint16_t crc, crc_data;
     uint8_t x;
 
     /* If we are processing final data then use the end index, rounded up. */
@@ -458,25 +552,37 @@ static bool_t mfm_write_track(struct image *im)
             goto out;
         }
 
-        mfm_ring_to_bin(buf, bufmask, c, wrbuf, SEC_SZ + 2);
-        c += SEC_SZ + 2;
+        if (wb->prod - wb->cons >= wb->len) {
+            c = sc;
+            flush = FALSE;
+            goto out;
+        }
 
-        process_wdata(im, sect, crc);
+        wrbuf = wb->p + (wb->prod % wb->len) * 512;
+        mfm_ring_to_bin(buf, bufmask, c, wrbuf, SEC_SZ);
+        c += SEC_SZ;
+        mfm_ring_to_bin(buf, bufmask, c, &crc_data, 2);
+        c += 2;
+
+        process_wdata(im, sect, crc, crc_data);
     }
 
 out:
+    progress_write(im);
     wr->cons = c * 16;
     return flush;
 }
 
-static void process_wdata(struct image *im, unsigned int sect, uint16_t crc)
+static void process_wdata(
+        struct image *im, unsigned int sect, uint16_t crc, uint16_t crc_data)
 {
     struct da_status_sector *dass = &im->da.dass;
-    uint8_t *wrbuf = im->bufs.write_data.p;
+    struct image_buf *wb = &im->da.write_buffer;
+    uint8_t *wrbuf = wb->p + (wb->prod % wb->len) * 512;
     unsigned int i;
-    time_t t;
 
-    crc = crc16_ccitt(wrbuf, SEC_SZ + 2, crc);
+    crc = crc16_ccitt(wrbuf, SEC_SZ, crc);
+    crc = crc16_ccitt(&crc_data, 2, crc);
     if ((crc != 0) || (sect > dass->nr_sec)) {
         printk("D-A Bad Sector: CRC %04x, ID %u\n", crc, sect);
         return;
@@ -536,12 +642,21 @@ static void process_wdata(struct image *im, unsigned int sect, uint16_t crc)
     } else if (dass->lba_base != ~0u) {
         /* All good: write out to mass storage. */
         dass->write_cnt++;
-        printk("Write %08x+%u... ", dass->lba_base, sect-1);
-        t = time_now();
-        if (disk_write(0, wrbuf, dass->lba_base+sect-1, 1) != RES_OK)
-            F_die(FR_DISK_ERR);
-        printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
+        im->da.write_offsets[wb->prod % wb->len] = dass->lba_base+sect-1;
+        wb->prod++;
     }
+}
+
+static void da_sync(struct image *im)
+{
+    if (im->da.read_op_started) {
+        F_async_wait(im->da.read_op);
+    }
+    while (im->da.sync_state) {
+        progress_write(im);
+        F_async_wait(im->da.write_op);
+    }
+    printk("D-A Mode Exited\n");
 }
 
 const struct image_handler da_image_handler = {
@@ -550,6 +665,9 @@ const struct image_handler da_image_handler = {
     .read_track = da_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = da_write_track,
+    .sync = da_sync,
+
+    .async = TRUE,
 };
 
 /*

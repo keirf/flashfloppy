@@ -154,6 +154,15 @@ struct directaccess {
     int32_t decode_pos;
     uint16_t trk_sec;
     uint16_t idx_sz, idam_sz, dam_sz;
+    uint16_t trash_bc; /* Number of bitcells to throw away. */
+    uint8_t *rd_buf;
+    FOP read_op;
+    struct image_buf write_buffer;
+    LBA_t *write_offsets; /* Disk offset of each 512 byte buffer segment */
+    FOP write_op;
+    uint8_t write_cnt;
+    uint8_t sync_state;
+    bool_t read_op_started;
 };
 
 struct image {
