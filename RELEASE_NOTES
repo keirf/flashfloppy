@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.25 - 25 April 2021
+ - IMG, DSK: Fix track formatting on Artery microcontrollers
+   - Firmware would crash during format operations
+
 ** v3.24 - 15 April 2021
  - Beta support for new Artery microcontrollers used on latest Gotek models
    - See the wiki for more details
