@@ -1741,7 +1741,7 @@ static void raw_seek_track(
     struct raw_trk *trk;
     uint16_t old_track = im->cur_track;
     uint32_t trk_off, trk_len;
-    uint32_t shadow_trk_off, shadow_trk_len = 0;
+    uint32_t shadow_trk_off = 0, shadow_trk_len = 0;
 
     im->cur_track = track;
 
@@ -1782,22 +1782,9 @@ static void raw_seek_track(
         if (im->nr_sides > 1) {
             shadow_trk_off = calc_track_off(im, cyl, 1);
             shadow_trk_len = calc_track_len(im, cyl, 1);
-            ASSERT(trk_len == shadow_trk_len);
-
-            /* Check whether both sides fit in memory or if data rate stresses
-             * reads too much. */
-            if (im->img.track_data.len < (((trk_len+511)&~511) + 512)*2
-                    || trk->data_rate == /*ED*/ 1000) {
-                if (side > 1) {
-                    trk_off = shadow_trk_off;
-                    trk_len = shadow_trk_len;
-                }
-                shadow_trk_len = 0;
-                old_track = ~track; /* Force re-init. */
-            }
         }
 
-        im->img.shadow = shadow_trk_len > 0 && side > 0;
+        im->img.shadow = side > 0;
         if (im->img.shadow) {
             im->img.trk_off = shadow_trk_off;
             im->img.trk_len = shadow_trk_len;
@@ -1807,15 +1794,49 @@ static void raw_seek_track(
         }
     }
 
+    /* Align to 512-byte block boundaries for ring_io, so im->img.trk_off/len
+     * is unchanged. This will generally have no effect because normally
+     * sec_sz*nr_sec is a multiple of 512. */
+    trk_len += trk_off % 512;
+    trk_off -= trk_off % 512;
+    trk_len = (trk_len + 511) & ~511;
+    shadow_trk_len += shadow_trk_off % 512;
+    shadow_trk_off -= shadow_trk_off % 512;
+    shadow_trk_len = (shadow_trk_len + 511) & ~511;
+
+    if (shadow_trk_len) {
+        bool_t disable_shadow = FALSE;
+        trk_len = shadow_trk_len = max_t(uint32_t, trk_len, shadow_trk_len);
+
+        /* Check if both sides fit in memory. We want to fully-buffer at least
+         * the current side. */
+        disable_shadow |= im->img.track_data.len < trk_len*2;
+        /* Check if the two sides overlap, which would confuse the ring. This
+         * implies tracks are not 512-byte aligned which we choose not to
+         * bother optimizing. */
+        if (trk_off < shadow_trk_off)
+            disable_shadow |= trk_off + trk_len > shadow_trk_off;
+        else
+            disable_shadow |= shadow_trk_off + shadow_trk_len > trk_off;
+        /* ED rate stresses reads too much to use shadow ring. */
+        disable_shadow |= trk->data_rate == /*ED*/ 1000;
+        if (disable_shadow) {
+            if (side > 1) {
+                trk_off = shadow_trk_off;
+                trk_len = shadow_trk_len;
+            }
+            shadow_trk_off = shadow_trk_len = 0;
+            im->img.shadow = FALSE;
+            old_track = ~track; /* Force re-init. */
+        }
+    }
+
     if (old_track >> 1 != track >> 1) {
-        FSIZE_t shadow_off = shadow_trk_len > 0 ? shadow_trk_off & ~511 : ~0;
-        /* Potentially overshoot number of blocks to make sure to encompass all
-         * of both tracks, since their offsets have different alignments. */
-        uint16_t blk_len = (trk_len + 511) / 512 + 1;
+        FSIZE_t shadow_off = shadow_trk_len > 0 ? shadow_trk_off : ~0;
         ring_io_sync(&im->img.ring_io);
         ring_io_shutdown(&im->img.ring_io);
         ring_io_init(&im->img.ring_io, &im->fp, &im->img.track_data,
-                trk_off & ~511, shadow_off, blk_len);
+                trk_off, shadow_off, trk_len / 512);
         im->img.ring_io.batch_secs = 2;
     }
 }

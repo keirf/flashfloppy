@@ -35,6 +35,8 @@ void ring_io_init(struct ring_io *rio, FIL *fp, struct image_buf *read_data,
         if (rio->ring_len > read_data->len)
             rio->ring_len = read_data->len & ~511;
     } else {
+        ASSERT(off < shadow_off ? off + sec_len*512 <= shadow_off
+                                : shadow_off + sec_len*512 <= off);
         if (rio->ring_len*2 > read_data->len)
             rio->ring_len = (read_data->len / 2) & ~511;
     }
