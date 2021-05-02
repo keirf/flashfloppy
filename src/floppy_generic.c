@@ -232,8 +232,10 @@ static void floppy_mount(struct slot *slot)
                 image_open(im, slot, cltbl, FALSE);
             /* Now that the number of image cylinders is known, do a precise D-A
              * check. */
-            if (in_da_mode(im, cyl))
+            if (in_da_mode(im, cyl)) {
+                volume_cache_destroy(); /* Clean up after other image format. */
                 image_open(im, slot, cltbl, TRUE);
+            }
         }
 #endif
         if (async != im->disk_handler->async) {
