@@ -145,7 +145,6 @@ static void floppy_mount(struct slot *slot)
     DWORD *cltbl;
     FRESULT fr;
     bool_t async = FALSE, retry;
-    int max_ring_kb = (ram_kb >= 64) ? 32 : 8;
 
     do {
         retry = FALSE;
@@ -187,26 +186,13 @@ static void floppy_mount(struct slot *slot)
 
         if (!async) {
             /* Large buffer to absorb write latencies at mass-storage layer. */
-            im->bufs.write_bc.len = max_ring_kb * 1024; /* power of two */
+            int ring_kb = (ram_kb >= 64) ? 32 : 8;
+            im->bufs.write_bc.len = ring_kb * 1024; /* power of two */
             im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
         } else {
-            /* Make sure there is enough memory to fully buffer writes for an
-             * entire track. HFE is the least compact storage supported, with
-             * half the density of write_bc, so we use it as a worst-case.
-             */
-            uint32_t min_write_buffer = (200000/8 + 255) & ~255;
-            uint32_t for_data = arena_avail() & ~511;
-            uint32_t bc_len = 0;
-            if (for_data/2 < min_write_buffer) {
-                bc_len = min_write_buffer - for_data/2;
-                /* Round up to power of 2. */
-                bc_len = 1 << (sizeof(int)*8 - __builtin_clz(bc_len-1));
-            }
             /* Size at least 4kb so a 512 byte sector (1k bc) can be fully
              * encoded into the 2kb read_bc, with space to spare. */
-            bc_len = max_t(uint32_t, bc_len, 4*1024);
-            bc_len = min_t(uint32_t, bc_len, max_ring_kb*1024);
-            im->bufs.write_bc.len = bc_len; /* Power of two. */
+            im->bufs.write_bc.len = 4*1024; /* Power of two. */
             im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
         }
 

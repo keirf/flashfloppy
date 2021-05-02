@@ -77,6 +77,8 @@ static bool_t hfe_open(struct image *im)
 {
     struct disk_header dhdr;
     uint16_t bitrate;
+    /* File data is less compact since it contains data for both heads. */
+    uint32_t norm_buf_size = im->bufs.write_bc.len + im->bufs.read_data.len/2;
 
     F_read(&im->fp, &dhdr, sizeof(dhdr), NULL);
     if (!strncmp(dhdr.sig, "HXCHFEV3", sizeof(dhdr.sig))) {
@@ -112,6 +114,11 @@ static bool_t hfe_open(struct image *im)
     /* Get an initial value for ticks per revolution. */
     hfe_seek_track(im, 0, FALSE);
     im->cur_track = -1;
+
+    /* Not essential, but we want to know if we are unable to fully buffer
+     * writes for an HD track when we'd expect there to be enough RAM to make
+     * it possible. */
+    ASSERT(ram_kb < 64 || ((200000/8 + 255) & ~255) < norm_buf_size);
 
     return TRUE;
 }
