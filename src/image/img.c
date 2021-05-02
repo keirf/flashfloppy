@@ -2743,7 +2743,7 @@ static bool_t fm_read_track(struct image *im)
     bc_c = bc->cons / 16; /* FM words */
     bc_len = bc->len / 2; /* FM words */
     bc_mask = bc_len - 1;
-    bc_space = bc_len - (bc_p > bc_c ? (uint16_t)(bc_p - bc_c) : 0);
+    bc_space = bc_len - (uint16_t)(bc_p - bc_c);
 
 #define emit_raw(r) ({                          \
     uint16_t _r = (r);                          \
