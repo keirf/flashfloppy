@@ -127,7 +127,7 @@ struct img_image {
     uint32_t track_delay_bc;
     uint16_t gap_4;
     uint8_t shadow;
-    uint16_t trash_bc; /* Number of shorts of bitcells to throw away. */
+    uint16_t trash_bc; /* Number of bitcells to throw away. */
     uint32_t idx_sz, idam_sz;
     uint16_t dam_sz_pre, dam_sz_post;
     void *heap_bottom;

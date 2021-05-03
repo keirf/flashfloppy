@@ -1933,7 +1933,7 @@ static void raw_setup_track(
     if (start_pos) {
         decode_off = calc_start_pos(im);
 
-        im->img.trash_bc = decode_off;
+        im->img.trash_bc = decode_off * 16;
         *start_pos = sys_ticks;
     } else {
         im->img.decode_pos = 0;
@@ -2632,9 +2632,9 @@ static bool_t mfm_read_track(struct image *im)
 #undef emit_byte
 
     if (im->img.trash_bc) {
-        int16_t to_consume = min_t(uint16_t, bc_p - bc_c, im->img.trash_bc);
+        int16_t to_consume = min_t(uint16_t, (bc_p - bc_c)*16, im->img.trash_bc);
         im->img.trash_bc -= to_consume;
-        bc->cons += to_consume * 16;
+        bc->cons += to_consume;
     }
     im->img.decode_pos++;
     bc->prod = bc_p * 16;
@@ -2845,9 +2845,9 @@ static bool_t fm_read_track(struct image *im)
 #undef emit_byte
 
     if (im->img.trash_bc) {
-        int16_t to_consume = min_t(uint16_t, bc_p - bc_c, im->img.trash_bc);
+        int16_t to_consume = min_t(uint16_t, (bc_p - bc_c)*16, im->img.trash_bc);
         im->img.trash_bc -= to_consume;
-        bc->cons += to_consume * 16;
+        bc->cons += to_consume;
     }
     im->img.decode_pos++;
     bc->prod = bc_p * 16;
