@@ -71,7 +71,7 @@ struct hfe_image {
     struct ring_io ring_io;
     uint16_t tlut_base;
     uint16_t trk_pos, trk_len;
-    bool_t is_v3, double_step;
+    bool_t is_v3, double_step, fresh_seek;
 };
 
 struct qd_image {

@@ -201,6 +201,7 @@ static void hfe_setup_track(
                      + (im->cur_track & 1) * 256;
         /* Write mode. */
         ring_io_seek(&im->hfe.ring_io, pos, TRUE, FALSE);
+        im->hfe.fresh_seek = TRUE;
     }
 }
 
@@ -281,6 +282,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
                 x = _rbit32(bc_b[(bc_c/8+1) & bc_mask]) >> 24;
                 im->ticks_per_cell = ticks_per_cell = 
                     (sysclk_us(2) * 16 * x) / 72;
+                im->write_bc_ticks = ticks_per_cell / 16;
                 bc_c += 2*8;
                 im->cur_bc += 2*8;
                 y = 8;
@@ -331,6 +333,7 @@ static bool_t hfe_write_track(struct image *im)
     uint8_t *w;
     struct image_buf *rd = &im->bufs.read_data;
     uint32_t i, space, c = wr->cons / 8, p = wr->prod / 8;
+    bool_t is_v3 = im->hfe.is_v3;
 
     /* If we are processing final data then use the end index, rounded to
      * nearest. */
@@ -364,10 +367,64 @@ static bool_t hfe_write_track(struct image *im)
 
         /* Encode into the sector buffer for later write-out. */
         w = rd->p + ring_io_idx(&im->hfe.ring_io, rd->cons);
-        for (i = 0; i < nr; i++)
-            *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
+        i = 0;
 
-        rd->cons += nr;
+        if (im->hfe.fresh_seek && is_v3 && (pos & 255) >= 1) {
+            /* Avoid writing in the middle of an opcode. */
+            char b = *(w-1);
+            if ((pos & 255) >= 2)
+                if ((*(w-2) & 0xf) == 0xf && (*(w-2) >> 4) == OP_skip) {
+                    w++;
+                    i++;
+                }
+            if ((b & 0xf) == 0xf) {
+                switch (b >> 4) {
+                case OP_skip:
+                    w += 2;
+                    i += 2;
+                    break;
+                case OP_bitrate:
+                    w++;
+                    i++;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+        im->hfe.fresh_seek = FALSE;
+
+        for (; i < nr; i++) {
+            if (is_v3 && (*w & 0xf) == 0xf) {
+                switch (*w >> 4) {
+                case OP_skip:
+                    /* Don't bother; these bits are unlikely to matter. */
+                    w++;
+                    i++;
+                    /* fallthrough */
+                case OP_bitrate:
+                    /* Assume bitrate does not change for the entire track, and
+                     * write_bc_ticks already adjusted when reading. */
+                    w++;
+                    i++;
+                    /* fallthrough */
+                case OP_nop:
+                case OP_index:
+                default:
+                    /* Preserve opcode. But making sure not to write past end of
+                     * buffer. */
+                    w++;
+                    continue;
+
+                case OP_rand:
+                    /* Replace with data. */
+                    break;
+                }
+            }
+            *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
+        }
+
+        rd->cons += i; /* i may be larger than nr due to opcodes. */
         /* Stay aligned to track side. */
         if (rd->cons % 256 == 0)
             rd->cons += 256;
