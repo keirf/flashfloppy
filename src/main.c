@@ -1826,7 +1826,8 @@ indexed_mode:
                  fs->fp.fname[0] != '\0';
                  F_findnext(&fs->dp, &fs->fp)) {
                 const char *p = fs->fp.fname
-                    + strnlen(ff_cfg.indexed_prefix, 256);
+                    + strnlen(ff_cfg.indexed_prefix,
+                            sizeof(ff_cfg.indexed_prefix));
                 unsigned int idx = 0;
                 /* Skip directories. */
                 if (fs->fp.fattrib & AM_DIR)
