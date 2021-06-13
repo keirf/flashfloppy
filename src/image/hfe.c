@@ -293,8 +293,6 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
                 x = bc_b[(bc_c/8) & bc_mask] >> y;
                 break;
             case OP_rand:
-                bc_c += 8;
-                im->cur_bc += 8;
                 x = rand();
                 break;
             }
