@@ -241,6 +241,7 @@ struct rcc {
 #define RCC_APB2ENR_TIM1EN   (1u<<11)
 #define RCC_APB2ENR_ADC2EN   (1u<<10)
 #define RCC_APB2ENR_ADC1EN   (1u<< 9)
+#define RCC_APB2ENR_IOPFEN   (1u<< 7)
 #define RCC_APB2ENR_IOPEEN   (1u<< 6)
 #define RCC_APB2ENR_IOPDEN   (1u<< 5)
 #define RCC_APB2ENR_IOPCEN   (1u<< 4)
