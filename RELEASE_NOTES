@@ -3,6 +3,9 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.26 - 24 June 2021
+ - Support new Gotek board SFRKC30.AT4.7
+
 ** v3.25 - 25 April 2021
  - IMG, DSK: Fix track formatting on Artery microcontrollers
    - Firmware would crash during format operations
