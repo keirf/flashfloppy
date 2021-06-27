@@ -365,7 +365,7 @@ static void wdata_stop(void)
     image->wr_prod++;
 
 #if !defined(QUICKDISK)
-    if (!ff_cfg.index_suppression) {
+    if (!ff_cfg.index_suppression && ff_cfg.write_drain != WDRAIN_realtime) {
         /* Opportunistically insert an INDEX pulse ahead of writeback. */
         drive_change_output(drv, outp_index, TRUE);
         index.fake_fired = TRUE;
