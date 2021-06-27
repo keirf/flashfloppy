@@ -128,7 +128,12 @@ static void hfe_seek_track(struct image *im, uint16_t track)
     im->hfe.trk_off = le16toh(thdr.offset);
     im->hfe.trk_len = le16toh(thdr.len) / 2;
     im->tracklen_bc = im->hfe.trk_len * 8;
-    im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
+    /* Opcodes in v3 make it difficult to predict the track's length. Keep the
+     * previous track's value if this isn't the first seek. */
+    if (!(im->hfe.is_v3 && im->tracklen_ticks)) {
+        im->tracklen_ticks = im->tracklen_bc * im->ticks_per_cell;
+        im->stk_per_rev = stk_sampleclk(im->tracklen_ticks / 16);
+    }
 
     im->cur_track = track;
 }
@@ -242,6 +247,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
              * multi-byte opcode which extends beyond reported track length. */
             ASSERT(im->cur_bc == im->tracklen_bc);
             im->tracklen_ticks = im->cur_ticks;
+            im->stk_per_rev = stk_sampleclk(im->tracklen_ticks / 16);
             im->cur_bc = im->cur_ticks = 0;
             /* Skip tail of current 256-byte block. */
             bc_c = (bc_c + 256*8-1) & ~(256*8-1);
