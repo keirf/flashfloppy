@@ -264,7 +264,8 @@ static void IRQ_STEP_changed(void)
         drive_change_output(drv, outp_trk0, FALSE);
     if (dma_rd != NULL) {
         rdata_stop();
-        if (!ff_cfg.index_suppression) {
+        if (!ff_cfg.index_suppression
+                && ff_cfg.track_change != TRKCHG_realtime) {
             /* Opportunistically insert an INDEX pulse ahead of seek op. */
             drive_change_output(drv, outp_index, TRUE);
             index.fake_fired = TRUE;
