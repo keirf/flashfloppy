@@ -69,6 +69,9 @@ enum {
     OP_Rand     = 0x2f  /* Random byte (or bits, if following OP_skip) */
 };
 
+#define absdiff_t(type,x,y) \
+    ({ type __x = (x); type __y = (y); __x < __y ? __y-__x: __x-__y; })
+
 static void hfe_seek_track(struct image *im, uint16_t track);
 
 static bool_t hfe_open(struct image *im)
@@ -121,14 +124,20 @@ static bool_t hfe_open(struct image *im)
 static void hfe_seek_track(struct image *im, uint16_t track)
 {
     struct track_header thdr;
+    uint16_t old_len;
 
     F_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
     F_read(&im->fp, &thdr, sizeof(thdr), NULL);
 
     im->hfe.trk_off = le16toh(thdr.offset);
+    old_len = im->hfe.trk_len;
     im->hfe.trk_len = le16toh(thdr.len) / 2;
     im->tracklen_bc = im->hfe.trk_len * 8;
-    im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
+    /* Opcodes in v3 make it difficult to predict the track's length. Keep the
+     * previous track's value if the track byte lengths are close. */
+    if (!(im->hfe.is_v3 && im->stk_per_rev
+            && absdiff_t(uint16_t, old_len, im->hfe.trk_len) < 256))
+        im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
 
     im->cur_track = track;
 }
@@ -243,6 +252,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             ASSERT(im->cur_bc == im->tracklen_bc);
             im->tracklen_ticks = im->cur_ticks;
             im->cur_bc = im->cur_ticks = 0;
+            im->stk_per_rev = stk_sysclk(im->tracklen_ticks / 16);
             /* Skip tail of current 256-byte block. */
             bc_c = (bc_c + 256*8-1) & ~(256*8-1);
             continue;
