@@ -31,7 +31,8 @@ unsigned int board_get_buttons(void)
      *  PA5 = SELECT, PA4 = LEFT, PA3 = RIGHT
      * SFRKC30 (dedicated rotary header):
      *  PF6 = SELECT */
-    unsigned int x = gpioa->idr >> 3;
+    unsigned int x = (board_id == BRDREV_Gotek_standard)
+        ? gpioa->idr >> 3 : -1;
     if (!is_48pin_mcu)
         x &= _rbit32(gpioc->idr) >> 23;
     x = ~x & 7;
