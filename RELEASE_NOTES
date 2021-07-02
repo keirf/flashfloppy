@@ -3,6 +3,9 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.27 - 2 July 2021
+ - Fix v3.26 regression in button handling for GOEX hardware
+
 ** v3.26 - 24 June 2021
  - Support new Gotek board SFRKC30.AT4.7
 
