@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.28 - 2 July 2021
+ - Gotek model SFR1M44-U100LQD: Fix occasional rotary encoder issue
+   - This model uses SFRKC40.AT4.7 PCB with encoder on new pin header
+   - Rotary encoder would occasionally not be detected at power on
+
 ** v3.27 - 2 July 2021
  - Fix v3.26 regression in button handling for GOEX hardware
 
