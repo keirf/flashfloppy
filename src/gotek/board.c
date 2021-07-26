@@ -93,7 +93,7 @@ void board_init(void)
     gpio_pull_up_pins(gpioc, ~0x0000);
 
     /* Wait for ID to stabilise at PC[15:12]. */
-    delay_us(5);
+    delay_us(100);
     id = (gpioc->idr >> 12) & 0xf;
 
     if (is_artery_mcu) {
@@ -107,7 +107,7 @@ void board_init(void)
          * and PF7=VDD, hence we take care here. */
         rcc->apb2enr |= RCC_APB2ENR_IOPFEN;
         gpio_configure_pin(gpiof, 7, GPI_pull_down);
-        delay_us(10);
+        delay_us(100);
         has_kc30_header = (gpio_read_pin(gpiof, 7) == LOW);
         gpio_configure_pin(gpiof, 7, GPI_floating);
         if (has_kc30_header)
