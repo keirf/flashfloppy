@@ -96,9 +96,16 @@ void board_init(void)
     delay_us(100);
     id = (gpioc->idr >> 12) & 0xf;
 
-    if (is_artery_mcu) {
+    if (is_artery_mcu && (id & 2)) {
 
+        /* This is a factory Gotek board design, or direct clone, with an
+         * Artery MCU. We now check which factory design: variants exist for
+         * 48- and 64-pin Artery MCUs, and with various headers for buttons and
+         * rotary encoders. Though we have discriminated on PC13 alone, the 
+         * only expected ID values here are 1110 (48-pin MCU) and 1111 (64-pin 
+         * MCU). */
         board_id = BRDREV_Gotek_standard;
+
         /* 48-pin package has PC12 permanently LOW. */
         is_48pin_mcu = !(id & 1);
 
