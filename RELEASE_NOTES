@@ -3,6 +3,14 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v4.0a - 10 August 2021
+ - Contains fixes up to v3.28 from v3 stable release series
+ - New asynchonous I/O handling (Eric Anderson / ejona86)
+   - Smarter prefetching of cylinder data
+   - Smarter writeback of modified tracks/sectors
+   - More accurate emulation
+ - Hard sector HFE image support (Eric Anderson / ajona86)
+
 ** v3.23 - 31 December 2020
  - OLED/LCD: Fix missing folder name display row when inserting USB drive
  - IMG.CFG: New examples for Roland, Sinclair QL, Kaypro
