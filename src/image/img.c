@@ -25,7 +25,7 @@ static void check_p(void *p, struct image *im);
 #define SIMPLE_EMPTY_TRK 2 /* if has_empty */
 const static struct simple_layout {
     uint16_t nr_sectors, rpm, data_rate;
-    int16_t gap3, gap4a;
+    int16_t gap2, gap3, gap4a;
     uint8_t is_fm, has_iam, has_empty, no, base[2];
     uint8_t interleave, cskew, hskew, head;
 } dfl_simple_layout = {
@@ -36,6 +36,7 @@ const static struct simple_layout {
     .has_iam = TRUE,
     .has_empty = FALSE,
     .no = ~0,
+    .gap2 = -1,
     .gap3 = -1,
     .gap4a = -1,
     .base = { 1, 1 },
@@ -232,7 +233,7 @@ found:
 }
 
 static void tag_add_layout(
-    struct image *im, struct simple_layout *layout, unsigned int trk_idx)
+    struct image *im, const struct simple_layout *layout, unsigned int trk_idx)
 {
     struct raw_sec *sec;
     struct raw_trk *trk;
@@ -245,6 +246,7 @@ static void tag_add_layout(
     trk->is_fm = layout->is_fm;
     trk->rpm = layout->rpm;
     trk->has_iam = layout->has_iam;
+    trk->gap_2 = layout->gap2;
     trk->gap_3 = layout->gap3;
     trk->gap_4a = layout->gap4a;
     trk->data_rate = layout->data_rate;
@@ -276,6 +278,7 @@ static bool_t tag_open(struct image *im, char *tag)
         IMGCFG_cskew,
         IMGCFG_hskew,
         IMGCFG_rpm,
+        IMGCFG_gap2,
         IMGCFG_gap3,
         IMGCFG_gap4a,
         IMGCFG_iam,
@@ -297,6 +300,7 @@ static bool_t tag_open(struct image *im, char *tag)
         [IMGCFG_cskew] = { "cskew" },
         [IMGCFG_hskew] = { "hskew" },
         [IMGCFG_rpm]  = { "rpm" },
+        [IMGCFG_gap2] = { "gap2" },
         [IMGCFG_gap3] = { "gap3" },
         [IMGCFG_gap4a] = { "gap4a" },
         [IMGCFG_iam]  = { "iam" },
@@ -440,6 +444,10 @@ static bool_t tag_open(struct image *im, char *tag)
             break;
         case IMGCFG_rpm:
             t_layout.rpm = strtol(opts.arg, NULL, 10);
+            break;
+        case IMGCFG_gap2:
+            t_layout.gap2 = (*opts.arg == 'a') ? -1
+                : (uint8_t)strtol(opts.arg, NULL, 10);
             break;
         case IMGCFG_gap3:
             t_layout.gap3 = (*opts.arg == 'a') ? -1
@@ -900,6 +908,7 @@ static bool_t trd_open(struct image *im)
         .has_iam = TRUE,
         .has_empty = TRUE, /* see comment below */
         .no = 1, /* 256-byte */
+        .gap2 = -1,
         .gap3 = 57,
         .gap4a = -1,
         .base = { 1, 1 },
@@ -963,6 +972,7 @@ static bool_t opd_open(struct image *im)
         .is_fm = FALSE,
         .has_iam = TRUE,
         .no = 1, /* 256-byte */
+        .gap2 = -1,
         .gap3 = 12,
         .gap4a = -1,
         .base = { 0, 0 },
@@ -993,6 +1003,7 @@ static bool_t dfs_open(struct image *im)
         .nr_sectors = 10,
         .is_fm = TRUE,
         .no = 1, /* 256-byte */
+        .gap2 = -1,
         .gap3 = 21,
         .gap4a = -1,
         .base = { 0, 0 },
@@ -1255,6 +1266,7 @@ static bool_t vdk_open(struct image *im)
         .is_fm = FALSE,
         .has_iam = TRUE,
         .no = 1, /* 256-byte sectors */
+        .gap2 = -1,
         .gap3 = 20,
         .gap4a = 54,
         .base = { 1, 1 },
@@ -2212,6 +2224,7 @@ static void simple_layout(struct image *im, const struct simple_layout *layout)
         trk->is_fm = layout->is_fm;
         trk->rpm = layout->rpm;
         trk->has_iam = layout->has_iam;
+        trk->gap_2 = layout->gap2;
         trk->gap_3 = layout->gap3;
         trk->gap_4a = layout->gap4a;
         trk->data_rate = layout->data_rate;
