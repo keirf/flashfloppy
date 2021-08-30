@@ -379,23 +379,21 @@ static void floppy_sync_flux(void)
 
     if (!drv->index_suppressed) {
         ticks = time_diff(time_now(), sync_time) - time_us(1);
-        if (ticks > time_ms(15)) {
-            /* Too long to wait. Immediately re-sync index timing. */
-            drv->index_suppressed = TRUE;
-            printk("Trk %u: skip %ums\n",
-                   drv->image->cur_track, (ticks+time_us(500))/time_ms(1));
-        } else if (ticks > time_ms(5)) {
+        if (ticks > time_ms(5)) {
             /* A while to wait. Go do other work. */
             return;
         } else {
             if (ticks > 0)
                 delay_ticks(ticks);
-            /* If we're out of sync then forcibly re-sync index timing. */
+            /* If we're out of sync then start over. */
             ticks = time_diff(time_now(), sync_time);
             if (ticks < -100) {
-                drv->index_suppressed = TRUE;
                 printk("Trk %u: late %uus\n",
                        drv->image->cur_track, -ticks/time_us(1));
+
+                dma_rd->state = DMA_inactive;
+                dma_rd->prod = dma_rd->cons;
+                return;
             }
         }
     } else if (drv->step.state) {
@@ -466,6 +464,7 @@ static bool_t dma_rd_handle(struct drive *drv)
         struct image *im = drv->image;
         time_t index_time, read_start_pos;
         unsigned int track;
+        time_t start_time = time_now();
         /* Allow 10ms from current rotational position to load new track */
         int32_t delay = time_ms(10);
         /* Allow extra time if heads are settling. */
@@ -499,9 +498,17 @@ static bool_t dma_rd_handle(struct drive *drv)
         sync_pos = read_start_pos;
         if (!drv->index_suppressed) {
             /* Set the deadline to match existing index timing. */
+            time_t now = time_now();
             sync_time = index_time + read_start_pos;
-            if (time_diff(time_now(), sync_time) < 0)
+            if (time_diff(now, sync_time) < 0)
                 sync_time += im->stk_per_rev;
+            if (time_diff(now, sync_time) < 0
+                    || time_diff(now, sync_time) > delay) {
+                /* image_setup_track() consumed the entire delay. Try again. */
+                time_t ticks = time_since(start_time) - delay;
+                printk("Trk %u: trk late %uus\n", track, ticks/time_us(1));
+                break;
+            }
         }
         /* Change state /then/ check for race against step or side change. */
         dma_rd->state = DMA_starting;
