@@ -352,6 +352,7 @@ static void flush(struct ring_io *rio, bool_t partial)
     ASSERT(rio->writing);
     ASSERT(rd->cons - rio->wd_prod < 512);
     if (partial && rio->wd_prod < rd->cons) {
+        BIT_SET(rio->dirty_bitfield, ring_io_idx(rio, rio->wd_prod) / 512);
         BIT_SET(rio->dirty_bitfield, ring_io_idx(rio, rd->cons - 1) / 512);
         rio->wd_prod = rd->cons;
     }
