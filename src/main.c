@@ -3070,8 +3070,8 @@ int main(void)
     stm32_init();
     time_init();
     console_init();
-    console_crash_on_input();
     board_init();
+    console_crash_on_input();
     delay_ms(200); /* 5v settle */
 
     printk("\n** FlashFloppy v%s for Gotek\n", fw_ver);

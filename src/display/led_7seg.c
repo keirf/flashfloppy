@@ -21,8 +21,8 @@
 #define CYCLE 8
 
 /* TM1651, 74HC164: DAT = PB10, CLK = PB11 */
-#define DAT_PIN 10
-#define CLK_PIN 11
+static uint8_t DAT_PIN = 10;
+static uint8_t CLK_PIN = 11;
 
 /* TM1651, 74HC164: Alphanumeric segment arrangements.  */
 static const uint8_t letters[] = {
@@ -261,6 +261,11 @@ void led_7seg_write_decimal(unsigned int val)
 
 void led_7seg_init(void)
 {
+    if (is_32pin_mcu) {
+        DAT_PIN = 6; /* PB6 */
+        CLK_PIN = 7; /* PB7 */
+    }
+
     nr_digits = !tm1651_init() ? 3 : 2;
     if (nr_digits == 2)
         shiftreg_init();

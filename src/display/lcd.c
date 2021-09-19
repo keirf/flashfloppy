@@ -43,25 +43,60 @@ struct packed i2c_osd_info {
 };
 
 /* STM32 I2C peripheral. */
-#define i2c i2c2
-#define SCL 10
-#define SDA 11
+static volatile struct i2c *i2c = i2c2;
+
+const static struct i2c_cfg {
+    uint8_t en;
+    uint8_t scl;
+    uint8_t sda;
+    uint8_t error_irq;
+    uint8_t event_irq;
+    uint8_t dma_tx;
+    uint8_t dma_rx;
+} i2c1_cfg = {
+    .en = 21, /* RCC_APB1ENR_I2C1EN */
+    .scl = 6,
+    .sda = 7,
+    .error_irq = 32,
+    .event_irq = 31,
+    .dma_tx = 6,
+    .dma_rx = 7,
+}, i2c2_cfg = {
+    .en = 22, /* RCC_APB1ENR_I2C2EN */
+    .scl = 10,
+    .sda = 11,
+    .error_irq = 34,
+    .event_irq = 33,
+    .dma_tx = 4,
+    .dma_rx = 5
+}, *i2c_cfg;
+
+#define SCL i2c_cfg->scl
+#define SDA i2c_cfg->sda
 
 /* I2C error ISR. */
-#define I2C_ERROR_IRQ 34
+#define I2C_ERROR_IRQ i2c_cfg->error_irq
 void IRQ_34(void) __attribute__((alias("IRQ_i2c_error")));
+void IRQ_32(void) __attribute__((alias("IRQ_i2c_error")));
 
 /* I2C event ISR. */
-#define I2C_EVENT_IRQ 33
+#define I2C_EVENT_IRQ i2c_cfg->event_irq
 void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
+void IRQ_31(void) __attribute__((alias("IRQ_i2c_event")));
 
-/* DMA completion ISR. */
-#define DMA1_CH4_IRQ 14
+/* DMA Tx. */
+#define i2c_tx_dma dma1->ch[i2c_cfg->dma_tx-1]
+#define DMA_TX_CGIF DMA_IFCR_CGIF(i2c_cfg->dma_tx)
+#define DMA_TX_IRQ (i2c_cfg->dma_tx + 10)
 void IRQ_14(void) __attribute__((alias("IRQ_dma_tx_tc")));
+void IRQ_16(void) __attribute__((alias("IRQ_dma_tx_tc")));
 
-/* DMA completion ISR. */
-#define DMA1_CH5_IRQ 15
+/* DMA Rx. */
+#define i2c_rx_dma dma1->ch[i2c_cfg->dma_rx-1]
+#define DMA_RX_CGIF DMA_IFCR_CGIF(i2c_cfg->dma_rx)
+#define DMA_RX_IRQ (i2c_cfg->dma_rx + 10)
 void IRQ_15(void) __attribute__((alias("IRQ_dma_rx_tc")));
+void IRQ_17(void) __attribute__((alias("IRQ_dma_rx_tc")));
 
 bool_t has_osd;
 uint8_t osd_buttons_tx;
@@ -126,8 +161,8 @@ static void IRQ_i2c_error(void)
     i2c->cr1 = I2C_CR1_SWRST;
 
     /* Clear the DMA controller. */
-    dma1->ch4.ccr = dma1->ch5.ccr = 0;
-    dma1->ifcr = DMA_IFCR_CGIF(4) | DMA_IFCR_CGIF(5);
+    i2c_tx_dma.ccr = i2c_rx_dma.ccr = 0;
+    dma1->ifcr = DMA_TX_CGIF | DMA_RX_CGIF;
 
     timer_cancel(&timeout_timer);
 
@@ -168,21 +203,21 @@ static void dma_start(unsigned int sz)
     ASSERT(sz <= sizeof(buffer));
 
     if (in_osd == OSD_read) {
-        dma1->ch5.cndtr = sz;
-        dma1->ch5.ccr = (DMA_CCR_MSIZE_8BIT |
-                         DMA_CCR_PSIZE_16BIT |
-                         DMA_CCR_MINC |
-                         DMA_CCR_DIR_P2M |
-                         DMA_CCR_TCIE |
-                         DMA_CCR_EN);
+        i2c_rx_dma.cndtr = sz;
+        i2c_rx_dma.ccr = (DMA_CCR_MSIZE_8BIT |
+                          DMA_CCR_PSIZE_16BIT |
+                          DMA_CCR_MINC |
+                          DMA_CCR_DIR_P2M |
+                          DMA_CCR_TCIE |
+                          DMA_CCR_EN);
     } else {
-        dma1->ch4.cndtr = sz;
-        dma1->ch4.ccr = (DMA_CCR_MSIZE_8BIT |
-                         DMA_CCR_PSIZE_16BIT |
-                         DMA_CCR_MINC |
-                         DMA_CCR_DIR_M2P |
-                         DMA_CCR_TCIE |
-                         DMA_CCR_EN);
+        i2c_tx_dma.cndtr = sz;
+        i2c_tx_dma.ccr = (DMA_CCR_MSIZE_8BIT |
+                          DMA_CCR_PSIZE_16BIT |
+                          DMA_CCR_MINC |
+                          DMA_CCR_DIR_M2P |
+                          DMA_CCR_TCIE |
+                          DMA_CCR_EN);
     }
 
     /* Set the timeout timer in case the DMA hangs for any reason. */
@@ -285,8 +320,8 @@ static unsigned int lcd_prep_buffer(void)
 static void IRQ_dma_tx_tc(void)
 {
     /* Clear the DMA controller. */
-    dma1->ch4.ccr = 0;
-    dma1->ifcr = DMA_IFCR_CGIF(4);
+    i2c_tx_dma.ccr = 0;
+    dma1->ifcr = DMA_TX_CGIF;
 
     /* Wait for BTF. We then get called back on dma_tx_tc_btf().
      *
@@ -319,8 +354,8 @@ static void IRQ_dma_rx_tc(void)
     struct i2c_osd_info *info = (struct i2c_osd_info *)buffer;
 
     /* Clear the DMA controller. */
-    dma1->ch5.ccr = 0;
-    dma1->ifcr = DMA_IFCR_CGIF(5);
+    i2c_rx_dma.ccr = 0;
+    dma1->ifcr = DMA_RX_CGIF;
 
     /* Clean up I2C. */
     i2c->cr2 &= ~I2C_CR2_LAST;
@@ -477,7 +512,15 @@ bool_t lcd_init(void)
     in_osd = OSD_no;
     osd_buttons_rx = 0;
 
-    rcc->apb1enr |= RCC_APB1ENR_I2C2EN;
+    if (is_32pin_mcu) {
+        i2c = i2c1;
+        i2c_cfg = &i2c1_cfg;
+    } else {
+        i2c = i2c2;
+        i2c_cfg = &i2c2_cfg;
+    }
+
+    rcc->apb1enr |= 1<<i2c_cfg->en;
 
     /* Check we have a clear I2C bus. Both clock and data must be high. If SDA 
      * is stuck low then slave may be stuck in an ACK cycle. We can try to 
@@ -601,20 +644,20 @@ bool_t lcd_init(void)
     i2c->cr2 |= I2C_CR2_ITERREN;
 
     /* Initialise DMA1 channel 4 and its completion interrupt. */
-    dma1->ch4.cmar = (uint32_t)(unsigned long)buffer;
-    dma1->ch4.cpar = (uint32_t)(unsigned long)&i2c->dr;
-    dma1->ifcr = DMA_IFCR_CGIF(4);
-    IRQx_set_prio(DMA1_CH4_IRQ, I2C_IRQ_PRI);
-    IRQx_clear_pending(DMA1_CH4_IRQ);
-    IRQx_enable(DMA1_CH4_IRQ);
+    i2c_tx_dma.cmar = (uint32_t)(unsigned long)buffer;
+    i2c_tx_dma.cpar = (uint32_t)(unsigned long)&i2c->dr;
+    dma1->ifcr = DMA_TX_CGIF;
+    IRQx_set_prio(DMA_TX_IRQ, I2C_IRQ_PRI);
+    IRQx_clear_pending(DMA_TX_IRQ);
+    IRQx_enable(DMA_TX_IRQ);
 
     /* Initialise DMA1 channel 5 and its completion interrupt. */
-    dma1->ch5.cmar = (uint32_t)(unsigned long)buffer;
-    dma1->ch5.cpar = (uint32_t)(unsigned long)&i2c->dr;
-    dma1->ifcr = DMA_IFCR_CGIF(5);
-    IRQx_set_prio(DMA1_CH5_IRQ, I2C_IRQ_PRI);
-    IRQx_clear_pending(DMA1_CH5_IRQ);
-    IRQx_enable(DMA1_CH5_IRQ);
+    i2c_rx_dma.cmar = (uint32_t)(unsigned long)buffer;
+    i2c_rx_dma.cpar = (uint32_t)(unsigned long)&i2c->dr;
+    dma1->ifcr = DMA_RX_CGIF;
+    IRQx_set_prio(DMA_RX_IRQ, I2C_IRQ_PRI);
+    IRQx_clear_pending(DMA_RX_IRQ);
+    IRQx_enable(DMA_RX_IRQ);
 
     /* Timeout handler for if I2C transmission borks. */
     timer_init(&timeout_timer, timeout_fn, NULL);
@@ -664,12 +707,12 @@ fail:
         return FALSE;
     IRQx_disable(I2C_EVENT_IRQ);
     IRQx_disable(I2C_ERROR_IRQ);
-    IRQx_disable(DMA1_CH4_IRQ);
-    IRQx_disable(DMA1_CH5_IRQ);
+    IRQx_disable(DMA_TX_IRQ);
+    IRQx_disable(DMA_RX_IRQ);
     i2c->cr1 &= ~I2C_CR1_PE;
     gpio_configure_pin(gpiob, SCL, GPI_pull_up);
     gpio_configure_pin(gpiob, SDA, GPI_pull_up);
-    rcc->apb1enr &= ~RCC_APB1ENR_I2C2EN;
+    rcc->apb1enr &= ~(1<<i2c_cfg->en);
     return FALSE;
 }
 

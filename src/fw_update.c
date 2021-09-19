@@ -307,7 +307,7 @@ int main(void)
     console_init();
     board_init();
 
-    printk("\n** FF Update Bootloader v%s for Gotek\n", fw_ver);
+    printk("\n** FF Update Bootloader v%s for Gotek %08x\n", fw_ver, dbg->mcu_idcode);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
 
