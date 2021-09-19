@@ -13,6 +13,7 @@
 #define STK volatile struct stk * const
 #define SCB volatile struct scb * const
 #define NVIC volatile struct nvic * const
+#define DBG volatile struct dbg * const
 #define FLASH volatile struct flash * const
 #define PWR volatile struct pwr * const
 #define BKP volatile struct bkp * const
@@ -31,6 +32,7 @@
 static STK stk = (struct stk *)STK_BASE;
 static SCB scb = (struct scb *)SCB_BASE;
 static NVIC nvic = (struct nvic *)NVIC_BASE;
+static DBG dbg = (struct dbg *)DBG_BASE;
 static FLASH flash = (struct flash *)FLASH_BASE;
 static PWR pwr = (struct pwr *)PWR_BASE;
 static BKP bkp = (struct bkp *)BKP_BASE;
@@ -129,6 +131,8 @@ void fpec_write(const void *data, unsigned int size, uint32_t flash_address);
 #define FLASH_PAGE_SIZE 2048
 extern unsigned int flash_page_size;
 extern unsigned int ram_kb;
+
+extern bool_t is_32pin_mcu;
 
 /*
  * Local variables:

@@ -68,7 +68,7 @@ const static struct fintf {
 static always_inline void drive_change_pin(
     struct drive *drv, uint8_t pin, bool_t assert)
 {
-    uint16_t pin_mask = m(pin);
+    uint32_t pin_mask = m(pin);
 
     /* Logically assert or deassert the pin. */
     if (assert)
@@ -77,8 +77,10 @@ static always_inline void drive_change_pin(
         gpio_out_active &= ~pin_mask;
 
     /* Update the physical output pin, if the drive is selected. */
-    if (drv->sel)
-        gpio_write_pins(gpio_out, pin_mask, assert ? O_TRUE : O_FALSE);
+    if (drv->sel) {
+        gpio_write_pins(gpiob, (uint16_t)pin_mask, assert ? O_TRUE : O_FALSE);
+        gpio_write_pins(gpioa, pin_mask>>16, assert ? O_TRUE : O_FALSE);
+    }
 
     /* Caller expects us to re-enable interrupts. */
     IRQ_global_enable();
@@ -148,11 +150,7 @@ static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
      * the HD-ID sequence 101010... with the host poll loop. It turns out that
      * starting with pin 34 asserted when the HD image is mounted seems to
      * generally work! */
-    gpio_out_active |= m(pin_34);
-    if (drive.sel)
-        gpio_write_pins(gpio_out, m(pin_34), O_TRUE);
-
-    IRQ_global_enable();
+    drive_change_pin(&drive, pin_34, TRUE);
 }
 
 void floppy_cancel(void)
@@ -221,7 +219,8 @@ void floppy_set_fintf_mode(void)
         /* Jumper JC selects default floppy interface configuration:
          *   - No Jumper: Shugart
          *   - Jumpered:  IBM PC */
-        mode = gpio_read_pin(gpiob, 1) ? FINTF_SHUGART : FINTF_IBMPC;
+        mode = (is_32pin_mcu || gpio_read_pin(gpiob, 1))
+            ? FINTF_SHUGART : FINTF_IBMPC;
     }
 
     ASSERT(mode < ARRAY_SIZE(fintfs));
@@ -247,8 +246,12 @@ void floppy_set_fintf_mode(void)
     update_SELA_irq(FALSE);
 
     if (drv->sel) {
-        gpio_write_pins(gpio_out, old_active & ~gpio_out_active, O_FALSE);
-        gpio_write_pins(gpio_out, ~old_active & gpio_out_active, O_TRUE);
+        uint32_t r = old_active & ~gpio_out_active;
+        uint32_t s = ~old_active & gpio_out_active;
+        gpio_write_pins(gpioa, r>>16, O_FALSE);
+        gpio_write_pins(gpioa, s>>16, O_TRUE);
+        gpio_write_pins(gpiob, (uint16_t)r, O_FALSE);
+        gpio_write_pins(gpiob, (uint16_t)s, O_TRUE);
     }
 
     IRQ_global_enable();
@@ -260,6 +263,15 @@ void floppy_set_fintf_mode(void)
            fintf_name[mode],
            pin02_inverted ? "not-" : "", outp_name[pin02] ?: "?",
            pin34_inverted ? "not-" : "", outp_name[pin34] ?: "?");
+}
+
+static void drive_configure_output_pin(unsigned int pin)
+{
+    if (pin >= 16) {
+        gpio_configure_pin(gpioa, pin-16, GPO_bus);
+    } else {
+        gpio_configure_pin(gpiob, pin, GPO_bus);
+    }
 }
 
 void floppy_init(void)
@@ -274,11 +286,11 @@ void floppy_init(void)
     timer_init(&drv->motor.timer, motor_spinup_timer, drv);
     timer_init(&drv->chgrst_timer, chgrst_timer, drv);
 
-    gpio_configure_pin(gpio_out, pin_02, GPO_bus);
-    gpio_configure_pin(gpio_out, pin_08, GPO_bus);
-    gpio_configure_pin(gpio_out, pin_26, GPO_bus);
-    gpio_configure_pin(gpio_out, pin_28, GPO_bus);
-    gpio_configure_pin(gpio_out, pin_34, GPO_bus);
+    drive_configure_output_pin(pin_02);
+    drive_configure_output_pin(pin_08);
+    drive_configure_output_pin(pin_26);
+    drive_configure_output_pin(pin_28);
+    drive_configure_output_pin(pin_34);
 
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);

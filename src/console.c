@@ -133,6 +133,12 @@ void console_init(void)
  * any serial input to cause a crash dump of the stuck context. */
 void console_crash_on_input(void)
 {
+    if (is_32pin_mcu) {
+        /* Unavailable: PA10 is reassigned from SER_RX to K4 (rotary select 
+         * on the KC30 header). */
+        return;
+    }
+
     (void)usart1->dr; /* clear UART_SR_RXNE */
     usart1->cr1 |= USART_CR1_RXNEIE;
     IRQx_set_prio(USART1_IRQ, RESET_IRQ_PRI);

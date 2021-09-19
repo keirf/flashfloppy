@@ -3,12 +3,47 @@
  * 
  * Gotek board-specific setup and management.
  * 
+ * SFRC922, SFRC922C, SFRC922D et al
+ *  Original LQFP64 designs, using STM or AT chips.
+ *  Buttons: PC6 = Select, PC7 = Left, PC7 = Right
+ *  Rotary:  PC10, PC11
+ * 
+ * SFRC922AT3
+ *  LQFP48 design, missing rotary header.
+ *  Alternative rotary location at PA13, PA14
+ *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
+ * 
+ * SFRKC30AT4, SFRKC30.AT4, SFRKC30.AT4.7
+ *  LQFP64 designs with original rotary header and "KC30" rotary header.
+ *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
+ *  Rotary:  PC10, PC11
+ *  KC30: PF6 = Select, PA6/PA15 = Rotary
+ * 
+ * SFRKC30AT3
+ *  LQFP48 design similar to SFRC922AT3 but with the "KC30" rotary header.
+ *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
+ *  KC30: PF6 = Select, PA6/PA15 = Rotary
+ * 
+ * SFRKC30.AT2
+ *  QFN32 design with various pin changes and features missing:
+ *  Missing:
+ *   * Original rotary header
+ *   * JC jumper position
+ *  Relocated to new MCU pins:
+ *   * Display header is moved to PB[7:6] using I2C1 instead of I2C2
+ *   * KC30 header SELECT/button pin
+ *   * Floppy output pins 2 and 26
+ *   * Floppy WGATE input pin
+ *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
+ *  KC30: PA10 = Select, PA6/PA15 = Rotary
+ * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+bool_t is_32pin_mcu;
 static bool_t is_48pin_mcu;
 static bool_t has_kc30_header;
 
@@ -25,20 +60,23 @@ static void gpio_pull_up_pins(GPIO gpio, uint16_t mask)
 
 unsigned int board_get_buttons(void)
 {
-    /* SFRC922D (64-pin MCU; these pins don't exist on 48-pin MCU):
-     *  PC6 = SELECT, PC7 = LEFT, PC8 = RIGHT
-     * SFRC922AT3 (48p), SFRKC30:
-     *  PA5 = SELECT, PA4 = LEFT, PA3 = RIGHT
-     * SFRKC30 (dedicated rotary header):
-     *  PF6 = SELECT */
+    /* All recent Gotek revisions, regardless of MCU model or package: 
+     *  PA5 = Select, PA4 = Left, PA3 = Right. 
+     * Note: "Enhanced Gotek" design uses these pins so must skip them here. */
     unsigned int x = (board_id == BRDREV_Gotek_standard)
         ? gpioa->idr >> 3 : -1;
-    if (!is_48pin_mcu)
+    /* Earlier Gotek revisions (all of which are LQFP64): 
+     *  PC6 = Select, PC7 = Left, PC8 = Right. */
+    if (!is_48pin_mcu && !is_32pin_mcu)
         x &= _rbit32(gpioc->idr) >> 23;
     x = ~x & 7;
     if (has_kc30_header) {
-        unsigned int kc30 = ~(gpiof->idr >> (6-2)) & 4;
-        x |= kc30;
+        /* KC30 Select pin, Artery models only: 
+         *  PF6 = Select; except QFN32: PA10 = Select. */
+        unsigned int kc30 = (is_32pin_mcu
+                             ? gpioa->idr >> (10-2)  /* PA10 */
+                             : gpiof->idr >> (6-2)); /* PF6 */
+        x |= ~kc30 & 4;
     }
     /* SLR -> SRL */
     return (x&4) | ((x&1)<<1) | ((x&2)>>1);
@@ -46,19 +84,19 @@ unsigned int board_get_buttons(void)
 
 unsigned int board_get_rotary(void)
 {
-    /* SFRC922D (64-pin MCU; these pins don't exist on 48-pin MCU):
-     *  PC10, PC11
-     * SFRC922AT3 (48p; no rotary header, so use SWD header):
-     *  PA13, PA14
-     * SFRKC30 (dedicated rotary header):
-     *  PC10, PC11 *and* PA6, PA15 */
     unsigned int x;
-    if (is_48pin_mcu) {
+    if (is_32pin_mcu) {
+        /* No original rotary header. No alternative location. */
+        x = 3;
+    } else if (is_48pin_mcu) {
+        /* No original rotary header. Alternative location at PA13, PA14. */
         x = (ff_cfg.chgrst != CHGRST_pa14) ? gpioa->idr >> 13 : 3;
     } else {
+        /* Original rotary header at PC10, PC11. */
         x = gpioc->idr >> 10;
     }
     if (has_kc30_header) {
+        /* KC30 rotary pins PA6, PA15. */
         unsigned int kc30 = gpioa->idr;
         kc30 = ((kc30>>6)&1) | ((kc30>>(15-1))&2);
         x &= kc30;
@@ -78,8 +116,13 @@ void board_init(void)
     uint16_t pa_skip, pb_skip;
     uint8_t id;
 
-    /* PA0-1,8 (floppy inputs), PA2 (speaker), PA9-10 (serial console). */
-    pa_skip = 0x0707;
+    /* PA0-1,8 (floppy inputs), PA2 (speaker). */
+    pa_skip = 0x0107;
+
+#if !defined(NDEBUG)
+    /* PA9-10 (serial console). */
+    pa_skip |= 0x0600;
+#endif
 
     /* PB0,4,9 (floppy inputs). */
     pb_skip = 0x0211;
@@ -96,6 +139,16 @@ void board_init(void)
     delay_us(100);
     id = (gpioc->idr >> 12) & 0xf;
 
+    if (is_artery_mcu) {
+        switch (dbg->mcu_idcode & 0xfff) {
+        case 0x1c6: /* AT32F415KBU7-4 */
+        case 0x242: /* AT32F415KCU7-4 */
+            is_32pin_mcu = TRUE;
+            id = 0xf;
+            break;
+        }
+    }
+
     if (is_artery_mcu && (id & 2)) {
 
         /* This is a factory Gotek board design, or direct clone, with an
@@ -106,17 +159,27 @@ void board_init(void)
          * MCU). */
         board_id = BRDREV_Gotek_standard;
 
-        /* 48-pin package has PC12 permanently LOW. */
-        is_48pin_mcu = !(id & 1);
+        if (is_32pin_mcu) {
 
-        /* If PF7 is floating then we may be running on a board with the
-         * optional rotary-encoder header (SFRKC30). On earlier boards PF6=VSS
-         * and PF7=VDD, hence we take care here. */
-        rcc->apb2enr |= RCC_APB2ENR_IOPFEN;
-        gpio_configure_pin(gpiof, 7, GPI_pull_down);
-        delay_us(100);
-        has_kc30_header = (gpio_read_pin(gpiof, 7) == LOW);
-        gpio_configure_pin(gpiof, 7, GPI_floating);
+            has_kc30_header = TRUE;
+            pa_skip &= ~(1<<10); /* PA10 is not used as serial rx */
+
+        } else {
+
+            /* 48-pin package has PC12 permanently LOW. */
+            is_48pin_mcu = !(id & 1);
+
+            /* If PF7 is floating then we may be running on a board with the
+             * optional rotary-encoder header (SFRKC30). On earlier boards
+             * PF6=VSS and PF7=VDD, hence we take care here. */
+            rcc->apb2enr |= RCC_APB2ENR_IOPFEN;
+            gpio_configure_pin(gpiof, 7, GPI_pull_down);
+            delay_us(100);
+            has_kc30_header = (gpio_read_pin(gpiof, 7) == LOW);
+            gpio_configure_pin(gpiof, 7, GPI_floating);
+
+        }
+
         if (has_kc30_header)
             gpio_configure_pin(gpiof, 6, GPI_pull_up);
 

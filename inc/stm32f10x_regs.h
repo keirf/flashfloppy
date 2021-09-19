@@ -102,6 +102,13 @@ struct nvic {
 
 #define NVIC_BASE 0xe000e100
 
+struct dbg {
+    uint32_t mcu_idcode; /* 00: MCU ID code */
+    uint32_t mcu_cr;     /* 04: Debug MCU configuration */
+};
+
+#define DBG_BASE 0xe0042000
+
 /* Flash memory interface */
 struct flash {
     uint32_t acr;      /* 00: Flash access control */
@@ -334,13 +341,7 @@ struct dma_chn {
 struct dma {
     uint32_t isr;        /* 00: Interrupt status */
     uint32_t ifcr;       /* 04: Interrupt flag clear */
-    struct dma_chn ch1;  /* 08: Channel 1 */
-    struct dma_chn ch2;  /* 1C: Channel 2 */
-    struct dma_chn ch3;  /* 30: Channel 3 */
-    struct dma_chn ch4;  /* 44: Channel 4 */
-    struct dma_chn ch5;  /* 58: Channel 5 */
-    struct dma_chn ch6;  /* 6C: Channel 6 */
-    struct dma_chn ch7;  /* 80: Channel 7 */
+    struct dma_chn ch[7];
 };
 
 /* n=1..7 */

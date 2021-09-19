@@ -51,7 +51,11 @@ static volatile struct {
 } pins;
 #define read_pin(pin) pins.pin
 #define write_pin(pin, level) ({                \
-    gpio_write_pin(gpio_out, pin_##pin, level); \
+    unsigned int __pin = pin_##pin;             \
+    if (__pin >= 16)                            \
+        gpio_write_pin(gpioa, __pin-16, level); \
+    else                                        \
+        gpio_write_pin(gpiob, __pin, level);    \
     pins.pin = level; })
 
 #include "floppy_generic.c"
@@ -96,6 +100,15 @@ void floppy_set_fintf_mode(void)
     /* Quick Disk interface is static. */
 }
 
+static void drive_configure_output_pin(unsigned int pin)
+{
+    if (pin >= 16) {
+        gpio_configure_pin(gpioa, pin-16, GPO_bus);
+    } else {
+        gpio_configure_pin(gpiob, pin, GPO_bus);
+    }
+}
+
 void floppy_init(void)
 {
     struct drive *drv = &drive;
@@ -110,11 +123,11 @@ void floppy_init(void)
     timer_init(&motor.timer, motor_timer, drv);
     timer_init(&window.timer, window_timer, drv);
 
-    gpio_configure_pin(gpio_out, pin_02, GPO_bus);
-    gpio_configure_pin(gpio_out, pin_08, GPO_bus);
-    gpio_configure_pin(gpio_out, pin_26, GPO_bus);
-    gpio_configure_pin(gpio_out, pin_28, GPO_bus);
-    gpio_configure_pin(gpio_out, pin_34, GPO_bus);
+    drive_configure_output_pin(pin_02);
+    drive_configure_output_pin(pin_08);
+    drive_configure_output_pin(pin_26);
+    drive_configure_output_pin(pin_28);
+    drive_configure_output_pin(pin_34);
 
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_data, pin_rdata, GPO_rdata);
