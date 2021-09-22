@@ -37,6 +37,9 @@
  *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
  *  KC30: PA10 = Select, PA6/PA15 = Rotary
  * 
+ * Future QFN32:
+ *  Agreed that JC will be implemented at PA9.
+ * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
  * This is free and unencumbered software released into the public domain.
@@ -109,6 +112,18 @@ unsigned int board_get_rotary_mask(void)
     if (is_48pin_mcu)
         return (ff_cfg.chgrst != CHGRST_pa14) ? m(14) | m(13) : 0;
     return m(11) | m(10); /* PC10,11 */
+}
+
+bool_t board_jc_strapped(void)
+{
+    if (is_32pin_mcu) {
+#if !defined(NDEBUG)
+        return FALSE; /* PA9 is used for serial tx */
+#else
+        return !gpio_read_pin(gpioa, 9);
+#endif
+    }
+    return !gpio_read_pin(gpiob, 1);
 }
 
 void board_init(void)

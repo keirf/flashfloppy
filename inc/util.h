@@ -170,6 +170,7 @@ unsigned int board_get_buttons(void);
 #define B_LEFT 1
 #define B_RIGHT 2
 #define B_SELECT 4
+bool_t board_jc_strapped(void);
 
 /* Build info. */
 extern const char fw_ver[];
