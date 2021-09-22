@@ -147,7 +147,7 @@ static void _IRQ_MOTOR_RESET_changed(unsigned int gpioa_idr)
         if (/* RESET immediately clears READY */
             (off & m(pin_reset))
             /* !MOTOR immediately clears READY iff Jumper JC is strapped */
-            || ((off & m(pin_motor)) && !gpio_read_pin(gpiob, 1))) {
+            || ((off & m(pin_motor)) && board_jc_strapped())) {
             write_pin(ready, HIGH);
         }
 

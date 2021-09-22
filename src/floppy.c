@@ -231,8 +231,7 @@ void floppy_set_fintf_mode(void)
         /* Jumper JC selects default floppy interface configuration:
          *   - No Jumper: Shugart
          *   - Jumpered:  IBM PC */
-        mode = (is_32pin_mcu || gpio_read_pin(gpiob, 1))
-            ? FINTF_SHUGART : FINTF_IBMPC;
+        mode = board_jc_strapped() ? FINTF_IBMPC : FINTF_SHUGART;
     }
 
     ASSERT(mode < ARRAY_SIZE(fintfs));
