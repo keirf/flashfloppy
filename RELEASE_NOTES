@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v4.1a - 2 October 2021
+ - Contains fixes/features up to v3.29 from v3 stable release series
+ - Do not use index_suppressed if starting rd DMA is slow
+ - ringio: Do not lose write for unaligned wd_prod
+ - hfe: Protect HFEv3 against a broken run of 1s
+
 ** v4.0a - 10 August 2021
  - Contains fixes up to v3.28 from v3 stable release series
  - New asynchonous I/O handling (Eric Anderson / ejona86)
