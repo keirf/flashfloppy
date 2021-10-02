@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.29 - 2 October 2021
+ - Support new Gotek board SFRKC30.AT2 using AT32F415KBU7-4 (QFN32)
+ - Support LQFP64 AT32F415RxT7 chips on existing "Enhanced Gotek" boards
+ - IMG: Fix default GAP2 for ED (eg. 2.88M) images
+ - IMG.CFG: New parameter gap2= to set Post-ID Gap value
+
 ** v3.28 - 2 July 2021
  - Gotek model SFR1M44-U100LQD: Fix occasional rotary encoder issue
    - This model uses SFRKC40.AT4.7 PCB with encoder on new pin header
