@@ -375,13 +375,14 @@ void ring_io_progress(struct ring_io *rio)
             doflush = TRUE;
         }
 
-        if (!rio->sync_needed) {
-            rio->sync_needed = TRUE;
-            rio->wd_cons = saved_wd_prod & ~511;
-        }
+        if (doflush) {
+            if (!rio->sync_needed) {
+                rio->sync_needed = TRUE;
+                rio->wd_cons = saved_wd_prod & ~511;
+            }
 
-        if (doflush)
             flush(rio, FALSE);
+        }
     }
     progress_io(rio);
     enqueue_io(rio);
