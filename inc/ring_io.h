@@ -46,6 +46,7 @@ struct ring_io {
     uint32_t wd_prod; /* Internal cursor that follows rd->cons. */
     uint32_t rd_valid; /* Cursor of oldest valid read data. */
     bool_t sync_needed:1;
+    bool_t sync_requested:1;
     bool_t writing:1; /* The caller is writing, per ring_io_seek. */
     bool_t shadow_active:1; /* The caller is using shadow ring, per ring_io_seek. */
     bool_t disable_reading:1; /* Inhibit read ops in the I/O scheduler. */

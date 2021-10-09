@@ -70,8 +70,10 @@ static void register_fop_whendone(
 
 static void sync_complete(struct ring_io *rio)
 {
-    if (!BIT_ANY(rio->dirty_bitfield))
+    if (!BIT_ANY(rio->dirty_bitfield)) {
         rio->sync_needed = FALSE;
+        rio->sync_requested = FALSE;
+    }
     enqueue_io(rio);
 }
 
@@ -275,7 +277,7 @@ static void enqueue_io(struct ring_io *rio)
     if (rio->sync_needed) {
         if (BIT_ANY(rio->dirty_bitfield))
             write_start(rio);
-        else
+        else if (rio->sync_requested)
             register_fop_whendone(rio, F_sync_async(rio->fp), sync_complete);
         return;
     }
@@ -291,6 +293,7 @@ void ring_io_sync(struct ring_io *rio)
     rio->disable_reading = TRUE;
     rio->batch_secs = 255;
     while (rio->sync_needed) {
+        rio->sync_requested = TRUE;
         ASSERT(rio->fop_cb != NULL);
         progress_io(rio);
     }
@@ -360,6 +363,8 @@ static void flush(struct ring_io *rio, bool_t partial)
         }
         rio->wd_prod = rd->cons;
     }
+    if (partial && rio->sync_needed)
+        rio->sync_requested = TRUE;
     enqueue_io(rio);
 }
 
@@ -369,6 +374,7 @@ void ring_io_progress(struct ring_io *rio)
     if (rio->writing && rio->wd_prod < rd->cons) {
         uint32_t saved_wd_prod = rio->wd_prod;
         bool_t doflush = FALSE;
+        rio->sync_requested = FALSE;
         while (rio->wd_prod + 512 <= rd->cons) {
             BIT_SET(rio->dirty_bitfield, ring_io_idx(rio, rio->wd_prod) / 512);
             rio->wd_prod += 512;
