@@ -354,6 +354,10 @@ static void flush(struct ring_io *rio, bool_t partial)
     if (partial && rio->wd_prod < rd->cons) {
         BIT_SET(rio->dirty_bitfield, ring_io_idx(rio, rio->wd_prod) / 512);
         BIT_SET(rio->dirty_bitfield, ring_io_idx(rio, rd->cons - 1) / 512);
+        if (!rio->sync_needed) {
+            rio->sync_needed = TRUE;
+            rio->wd_cons = rio->wd_prod & ~511;
+        }
         rio->wd_prod = rd->cons;
     }
     enqueue_io(rio);
