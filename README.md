@@ -26,15 +26,6 @@ like a real floppy drive but use disk images on a modern USB stick!
 ## Documentation
 - [**Read the GitHub Wiki**](https://github.com/keirf/FlashFloppy/wiki)
 
-## Donations
-
-FlashFloppy is a labour of love: working on it takes a **lot** of time
-and effort. Although it is [Free Software](Redistribution) and
-a pet project of mine, beer & coffee tokens will fuel me in the
-push onwards and upwards!
-
-For further information please see the [**Donations page**][Donations].
-
 ## Redistribution
 
 Most code is public domain; the rest is MIT/BSD or Open Source friendly
@@ -57,7 +48,6 @@ file on your selling page. For example:
 [Track-Layouts]: https://github.com/keirf/FlashFloppy/wiki/Track-Layouts
 [FF.CFG-Configuration-File]: https://github.com/keirf/FlashFloppy/wiki/FF.CFG-Configuration-File
 [Downloads]: https://github.com/keirf/FlashFloppy/wiki/Downloads
-[Donations]: https://github.com/keirf/FlashFloppy/wiki/Donations
 
 [ci-badge]: https://github.com/keirf/FlashFloppy/workflows/CI/badge.svg
 [downloads-badge]: https://img.shields.io/github/downloads/keirf/FlashFloppy/total
