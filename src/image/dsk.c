@@ -515,9 +515,6 @@ static bool_t dsk_write_track(struct image *im)
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
     struct image_buf *td = &im->dsk.track_data;
     unsigned int i;
-    time_t t;
-    uint16_t crc, off;
-    uint8_t x;
 
     /* If we are processing final data then use the end index, rounded up. */
     barrier();
@@ -525,28 +522,33 @@ static bool_t dsk_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 15) / 16;
 
-    while ((int16_t)(p - c) > 128) {
-
-        uint32_t sc = c;
-
-        if (be16toh(buf[c++ & bufmask]) != 0x4489)
-            continue;
-        if ((x = mfmtobin(buf[c & bufmask])) == 0xa1)
-            continue;
-        c++;
-
-        switch (x) {
-
-        case 0xfe: /* IDAM */
+    while ((int16_t)(p - c) > 1) { /* At least 2 bytes. */
+        if (im->dsk.decode_pos == 0) {
+            uint8_t x;
+            if (be16toh(buf[c++ & bufmask]) != 0x4489)
+                continue;
+            if ((x = mfmtobin(buf[c & bufmask])) == 0xa1)
+                continue;
+            c++;
+            if (x == 0xfe) /* IDAM */
+                im->dsk.decode_pos = 1;
+            else if (x == 0xfb) /* DAM */
+                im->dsk.decode_pos = 2;
+        } else if (im->dsk.decode_pos == 1) {
+            /* ID record, shy address mark */
+            uint16_t crc;
+            if (p - c < 4 + 2)
+                break;
             for (i = 0; i < 3; i++)
                 wrbuf[i] = 0xa1;
-            wrbuf[i++] = x;
+            wrbuf[i++] = 0xfe;
             for (; i < 10; i++)
                 wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
             crc = crc16_ccitt(wrbuf, i, 0xffff);
             if (crc != 0) {
                 printk("DSK IDAM Bad CRC: %04x, %02x\n", crc, wrbuf[6]);
-                break;
+                im->dsk.decode_pos = 0;
+                continue;
             }
             /* Convert logical sector number -> rotational number. */
             for (i = 0; i < tib->nr_secs; i++)
@@ -557,73 +559,83 @@ static bool_t dsk_write_track(struct image *im)
                 printk("DSK IDAM Bad Sector: %02x\n", wrbuf[6]);
                 im->dsk.write_sector = -2;
             }
-            break;
-
-        case 0xfb: /* DAM */ {
-            unsigned int nr, todo, sec_sz;
+            im->dsk.decode_data_pos = 0;
+            im->dsk.decode_pos = 0;
+        } else if (im->dsk.decode_pos == 2) {
+            /* Data record, shy address mark */
+            unsigned int sec_sz;
             int sec_nr = im->dsk.write_sector;
-            uint32_t idx;
 
             if (sec_nr < 0) {
-                if (sec_nr == -1)
+                if (sec_nr == -1) {
                     sec_nr = dsk_find_first_write_sector(im, write, tib);
+                    im->dsk.write_sector = sec_nr;
+                    im->dsk.decode_data_pos = 0;
+                }
                 if (sec_nr < 0) {
                     printk("DSK DAM Unknown\n");
-                    goto dam_out;
+                    im->dsk.write_sector = -2;
+                    im->dsk.decode_pos = 0;
+                    continue;
                 }
             }
 
             sec_sz = data_sz(&tib->sib[sec_nr]);
-            if ((int16_t)(p - c) < (sec_sz + 2)) {
-                c = sc;
-                goto out;
+
+            if (!im->dsk.decode_data_pos) {
+                unsigned int off;
+                if (p - c < 4) /* Will we able to increment decode_data_pos? */
+                    break;
+                im->dsk.crc = MFM_DAM_CRC;
+
+                printk("Write %d[%02x]/%u\n",
+                       sec_nr, tib->sib[sec_nr].r, tib->nr_secs);
+
+                for (i = off = 0; i < sec_nr; i++)
+                    off += tib->sib[i].actual_length;
+                off += im->dsk.trk_off % 512;
+                ring_io_seek(&im->dsk.ring_io, off, TRUE, FALSE);
             }
 
-            crc = MFM_DAM_CRC;
+            if (im->dsk.decode_data_pos < sec_sz) {
+                unsigned int nr;
+                uint32_t idx = ring_io_idx(&im->dsk.ring_io, td->cons);
+                nr = sec_sz - im->dsk.decode_data_pos;
+                nr = min_t(unsigned int, nr,
+                        ring_io_idxend(&im->dsk.ring_io) - idx);
+                nr = min_t(unsigned int, nr, p - c);
 
-            printk("Write %d[%02x]/%u... ",
-                   sec_nr, tib->sib[sec_nr].r, tib->nr_secs);
-            t = time_now();
+                /* It should be quite rare to wait on the read, as that'd be
+                 * like a buffer underrun during normal reading. */
+                if (td->cons + nr > td->prod)
+                    break;
 
-            for (i = off = 0; i < sec_nr; i++)
-                off += tib->sib[i].actual_length;
-            off += im->dsk.trk_off % 512;
-            ring_io_seek(&im->dsk.ring_io, off, TRUE, FALSE);
-
-            /* It should be quite rare to wait on the read, as that'd be
-             * like a buffer underrun during normal reading. */
-            if (td->cons + sec_sz > td->prod)
-                break;
-
-            idx = ring_io_idx(&im->dsk.ring_io, td->cons);
-            for (todo = sec_sz; todo != 0; todo -= nr) {
-                nr = min_t(unsigned int, todo, BATCH_SIZE);
                 mfm_ring_to_bin(buf, bufmask, c, td->p + idx, nr);
                 c += nr;
-                crc = crc16_ccitt(td->p + idx, nr, crc);
+                im->dsk.crc = crc16_ccitt(td->p + idx, nr, im->dsk.crc);
                 td->cons += nr;
+                im->dsk.decode_data_pos += nr;
+                if (im->dsk.decode_data_pos == sec_sz)
+                    ring_io_flush(&im->dsk.ring_io);
             }
-            ring_io_flush(&im->dsk.ring_io);
 
-            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
+            if (im->dsk.decode_data_pos < sec_sz)
+                continue;
 
+            if (p - c < 2)
+                break;
             mfm_ring_to_bin(buf, bufmask, c, wrbuf, 2);
             c += 2;
-            crc = crc16_ccitt(wrbuf, 2, crc);
-            if (crc != 0) {
+            im->dsk.crc = crc16_ccitt(wrbuf, 2, im->dsk.crc);
+            if (im->dsk.crc != 0) {
                 printk("DSK Bad CRC: %04x, %d[%02x]\n",
-                       crc, sec_nr, tib->sib[sec_nr].r);
+                       im->dsk.crc, sec_nr, tib->sib[sec_nr].r);
             }
-
-            dam_out:
             im->dsk.write_sector = -2;
-            break;
-        }
-
+            im->dsk.decode_pos = 0;
         }
     }
 
-out:
     if (tib->nr_secs)
         ring_io_progress(&im->dsk.ring_io);
     wr->cons = c * 16;
