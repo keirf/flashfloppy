@@ -2032,9 +2032,15 @@ static bool_t raw_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 15) / 16;
 
-    while ((int16_t)(p - c) > 1) { /* At least 2 bytes. */
+    while ((int16_t)(p - c) > 0) {
         if (im->img.decode_pos == 0) {
             uint8_t x;
+            /* When IRQ_write_dma finds the sync it will rewrite 32 bits that
+             * may have already been observed by the consumer to align the
+             * bitstream and throws away all but 32 bits of the sync. Give
+             * SYNC_mfm 32 bits of margin to avoid missing the sync. */
+            if (p - c < 2 + 2)
+                break;
             if (im->sync == SYNC_fm) {
 
                 uint16_t sync;
