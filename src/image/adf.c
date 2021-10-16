@@ -351,6 +351,7 @@ static bool_t adf_write_track(struct image *im)
 
         if (wb->prod - wb->cons >= wb->len) {
             c = c_sav;
+            flush = FALSE;
             break;
         }
 
@@ -398,7 +399,7 @@ static bool_t adf_write_track(struct image *im)
 
     wr->cons = c * 32;
 
-    return flush && (int16_t)(p - c) < (542/2);
+    return flush;
 }
 
 static void adf_sync(struct image *im)

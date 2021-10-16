@@ -613,8 +613,10 @@ static bool_t dsk_write_track(struct image *im)
 
                 /* It should be quite rare to wait on the read, as that'd be
                  * like a buffer underrun during normal reading. */
-                if (td->cons + nr > td->prod)
+                if (td->cons + nr > td->prod) {
+                    flush = FALSE;
                     break;
+                }
 
                 mfm_ring_to_bin(buf, bufmask, c, td->p + idx, nr);
                 c += nr;
