@@ -297,7 +297,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     while ((int32_t)(bc_p - bc_c) >= 3*8) {
         ASSERT(y == 8);
         if (im->cur_bc >= im->tracklen_bc) {
-            //ASSERT(im->cur_bc == im->tracklen_bc);
+            ASSERT(im->cur_bc == im->tracklen_bc);
             im->tracklen_ticks = im->cur_ticks;
             im->cur_bc = im->cur_ticks = 0;
             im->stk_per_rev = stk_sysclk(im->tracklen_ticks / 16);
@@ -403,6 +403,13 @@ static bool_t hfe_write_track(struct image *im)
         uint32_t pos = ring_io_pos(&im->hfe.ring_io, rd->cons);
         UINT nr;
 
+        if (pos / 512 * 256 + pos % 256 >= im->hfe.trk_len) {
+            ASSERT(pos / 512 * 256 + pos % 256 == im->hfe.trk_len);
+            ring_io_flush(&im->hfe.ring_io);
+            rd->cons += 512 - pos%256;
+            continue;
+        }
+
         /* All bytes remaining in the raw-bitcell buffer. */
         nr = space = (p - c) & bufmask;
         /* Limit to end of current 256-byte HFE block. */
@@ -487,10 +494,10 @@ static bool_t hfe_write_track(struct image *im)
             *w++ = b;
         }
 
-        rd->cons += i; /* i may be larger than nr due to opcodes. */
         /* Stay aligned to track side. */
-        if (rd->cons % 256 == 0)
+        if (rd->cons / 256 != (rd->cons + i) / 256)
             rd->cons += 256;
+        rd->cons += i; /* i may be larger than nr due to opcodes. */
     }
 
     if (flush)
