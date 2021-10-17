@@ -20,6 +20,8 @@ struct track_header {
     uint32_t win_end;   /* Byte offset of read/write window end */
 };
 
+#define MAX_BC_SECS 4
+
 static void qd_seek_track(struct image *im, uint16_t track);
 
 static bool_t qd_open(struct image *im)
@@ -37,11 +39,6 @@ static bool_t qd_open(struct image *im)
     im->ticks_per_cell = im->write_bc_ticks;
     im->sync = SYNC_none;
 
-    ASSERT(8*512 <= im->bufs.read_data.len);
-    volume_cache_init(im->bufs.read_data.p + 8*512,
-                      im->bufs.read_data.p + im->bufs.read_data.len);
-    volume_cache_metadata_only(&im->fp);
-
     /* There is only one track: Seek to it. */
     qd_seek_track(im, 0);
 
@@ -51,12 +48,13 @@ static bool_t qd_open(struct image *im)
 static void qd_seek_track(struct image *im, uint16_t track)
 {
     struct track_header thdr;
+    uint32_t trk_off;
 
     F_lseek(&im->fp, im->qd.tb*512 + (track/2)*16);
     F_read(&im->fp, &thdr, sizeof(thdr), NULL);
 
     /* Byte offset and length of track data. */
-    im->qd.trk_off = le32toh(thdr.offset);
+    trk_off = le32toh(thdr.offset);
     im->qd.trk_len = le32toh(thdr.len);
 
     /* Read/write window limits in STK ticks from data start. */
@@ -66,13 +64,16 @@ static void qd_seek_track(struct image *im, uint16_t track)
     im->tracklen_bc = im->qd.trk_len * 8;
     im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
 
+    ring_io_init(&im->qd.ring_io, &im->fp, &im->bufs.read_data,
+            trk_off, ~0, (im->qd.trk_len+511) / 512);
+    im->qd.ring_io.trailing_secs = MAX_BC_SECS;
+
     im->cur_track = track;
 }
 
 static void qd_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
-    struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
     uint32_t sys_ticks;
 
@@ -85,28 +86,25 @@ static void qd_setup_track(
 
     sys_ticks = im->cur_ticks;
 
-    rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
 
     if (start_pos) {
         /* Read mode. */
-        im->qd.trk_pos = (im->cur_bc/8) & ~511;
-        image_read_track(im);
+        im->qd.ring_io.batch_secs = 2;
+        ring_io_seek(&im->qd.ring_io, (im->cur_bc/8) & ~511, FALSE, FALSE);
+        /* Consumer may be ahead of producer, but only until the first read
+         * completes. */
         bc->cons = im->cur_bc & 4095;
         *start_pos = sys_ticks;
     } else {
         /* Write mode. */
-        im->qd.trk_pos = im->cur_bc / 8;
-        im->qd.write.start = im->qd.trk_pos;
-        im->qd.write.wrapped = FALSE;
-        im->qd.write_batch.len = 0;
-        im->qd.write_batch.dirty = FALSE;
+        im->qd.ring_io.batch_secs = 8;
+        ring_io_seek(&im->qd.ring_io, im->cur_bc/8, TRUE, FALSE);
     }
 }
 
 static bool_t qd_read_track(struct image *im)
 {
-    const unsigned int batch_secs = 2;
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
     uint8_t *buf = rd->p;
@@ -114,32 +112,27 @@ static bool_t qd_read_track(struct image *im)
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     unsigned int nr_sec;
 
-    if (rd->prod == rd->cons) {
-        nr_sec = min_t(unsigned int, batch_secs,
-                       (im->qd.trk_len+511 - im->qd.trk_pos) / 512);
-        F_lseek(&im->fp, im->qd.trk_off + im->qd.trk_pos);
-        F_read(&im->fp, buf, nr_sec*512, NULL);
-        rd->cons = 0;
-        rd->prod = nr_sec;
-        im->qd.trk_pos += nr_sec * 512;
-        if (im->qd.trk_pos >= im->qd.trk_len)
-            im->qd.trk_pos = 0;
-    }
+    ring_io_progress(&im->qd.ring_io);
+    if (rd->cons >= rd->prod)
+        return FALSE;
 
     /* Fill the raw-bitcell ring buffer. */
     bc_p = bc->prod / 8;
     bc_c = bc->cons / 8;
     bc_len = bc->len;
     bc_mask = bc_len - 1;
-    bc_space = bc_len - (uint16_t)(bc_p - bc_c);
+    bc_space = min_t(uint32_t, bc_len, MAX_BC_SECS*512)
+        - (uint16_t)(bc_p - bc_c);
 
-    nr_sec = min_t(unsigned int, rd->prod - rd->cons, bc_space/512);
+    nr_sec = min_t(unsigned int, (rd->prod - rd->cons)/512, bc_space/512);
     if (nr_sec == 0)
         return FALSE;
 
     while (nr_sec--) {
-        memcpy(&bc_b[bc_p & bc_mask], &buf[rd->cons*512], 512);
-        rd->cons++;
+        memcpy(&bc_b[bc_p & bc_mask],
+               &buf[ring_io_idx(&im->qd.ring_io, rd->cons)],
+               512);
+        rd->cons += 512;
         bc_p += 512;
     }
 
@@ -197,16 +190,14 @@ out:
 
 static bool_t qd_write_track(struct image *im)
 {
-    const unsigned int batch_secs = 8;
     bool_t flush;
     struct write *write = get_write(im, im->wr_cons);
     struct image_buf *wr = &im->bufs.write_bc;
     uint8_t *buf = wr->p;
     unsigned int bufmask = wr->len - 1;
-    uint8_t *w, *wrbuf = im->bufs.write_data.p;
+    uint8_t *w;
+    struct image_buf *rd = &im->bufs.read_data;
     uint32_t i, space, c = wr->cons / 8, p = wr->prod / 8;
-    bool_t writeback = FALSE;
-    time_t t;
 
     /* If we are processing final data then use the end index, rounded to
      * nearest. */
@@ -215,81 +206,56 @@ static bool_t qd_write_track(struct image *im)
     if (flush)
         p = (write->bc_end + 4) / 8;
 
-    if (im->qd.write_batch.len == 0) {
-        ASSERT(!im->qd.write_batch.dirty);
-        im->qd.write_batch.off = im->qd.trk_pos & ~511;
-        im->qd.write_batch.len = min_t(
-            uint32_t, batch_secs * 512,
-            ((im->qd.trk_len + 511) & ~511) - im->qd.write_batch.off);
-        F_lseek(&im->fp, im->qd.trk_off + im->qd.write_batch.off);
-        F_read(&im->fp, wrbuf, im->qd.write_batch.len, NULL);
-        F_lseek(&im->fp, im->qd.trk_off + im->qd.write_batch.off);
-    }
-
     for (;;) {
 
-        uint32_t off = im->qd.trk_pos;
+        uint32_t pos = ring_io_pos(&im->qd.ring_io, rd->cons);
         UINT nr;
 
         /* All bytes remaining in the raw-bitcell buffer. */
         nr = space = (p - c) & bufmask;
         /* Limit to end of current 512-byte QD block. */
-        nr = min_t(UINT, nr, 512 - (off & 511));
+        nr = min_t(UINT, nr, 512 - (pos & 511));
         /* Limit to end of QD track. */
-        nr = min_t(UINT, nr, im->qd.trk_len - off);
+        nr = min_t(UINT, nr, im->qd.trk_len - pos);
 
         /* Bail if no bytes to write. */
         if (nr == 0)
             break;
 
-        /* Bail if required data not in the write buffer. */
-        if ((off < im->qd.write_batch.off)
-            || (off >= (im->qd.write_batch.off + im->qd.write_batch.len))) {
-            writeback = TRUE;
+        /* It should be quite rare to wait on the read, as that'd be like a
+         * buffer underrun during normal reading. */
+        if (rd->cons + nr > rd->prod) {
+            flush = FALSE;
             break;
         }
 
         /* Encode into the sector buffer for later write-out. */
-        w = &wrbuf[off - im->qd.write_batch.off];
+        w = rd->p + ring_io_idx(&im->qd.ring_io, rd->cons);
         for (i = 0; i < nr; i++)
             *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
-        im->qd.write_batch.dirty = TRUE;
 
-        im->qd.trk_pos += nr;
-        if (im->qd.trk_pos >= im->qd.trk_len) {
-            ASSERT(im->qd.trk_pos == im->qd.trk_len);
-            im->qd.trk_pos = 0;
-            im->qd.write.wrapped = TRUE;
+        rd->cons += nr;
+        if (pos + nr >= im->qd.trk_len) {
+            ASSERT(pos + nr == im->qd.trk_len);
+            ring_io_flush(&im->qd.ring_io);
+            rd->cons += 512 - pos%512;
         }
     }
 
-    if (writeback) {
-        /* If writeback requested then ensure we get called again. */
-        flush = FALSE;
-    } else if (flush) {
-        /* If this is the final call, we should do writeback. */
-        writeback = TRUE;
-    }
-
-    if (writeback && im->qd.write_batch.dirty) {
-        t = time_now();
-        printk("Write %u-%u (%u)... ",
-               im->qd.write_batch.off,
-               im->qd.write_batch.off + im->qd.write_batch.len - 1,
-               im->qd.write_batch.len);
-        F_write(&im->fp, wrbuf, im->qd.write_batch.len, NULL);
-        printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
-        im->qd.write_batch.len = 0;
-        im->qd.write_batch.dirty = FALSE;
-    }
-
-    if (flush && im->qd.write.wrapped
-        && (im->qd.trk_pos > im->qd.write.start))
-        printk("Wrapped (%u > %u)\n", im->qd.trk_pos, im->qd.write.start);
+    if (flush)
+        ring_io_flush(&im->qd.ring_io);
+    else
+        ring_io_progress(&im->qd.ring_io);
 
     wr->cons = c * 8;
 
     return flush;
+}
+
+static void qd_sync(struct image *im)
+{
+    ring_io_sync(&im->qd.ring_io);
+    ring_io_shutdown(&im->qd.ring_io);
 }
 
 const struct image_handler qd_image_handler = {
@@ -298,6 +264,9 @@ const struct image_handler qd_image_handler = {
     .read_track = qd_read_track,
     .rdata_flux = qd_rdata_flux,
     .write_track = qd_write_track,
+    .sync = qd_sync,
+
+    .async = TRUE,
 };
 
 /*

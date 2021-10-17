@@ -70,24 +70,16 @@ struct adf_image {
 struct hfe_image {
     struct ring_io ring_io;
     uint16_t tlut_base;
-    uint16_t trk_pos, trk_len;
+    uint16_t trk_len;
     bool_t is_v3, double_step, fresh_seek;
     uint8_t next_index_pulses_pos;
 };
 
 struct qd_image {
+    struct ring_io ring_io;
     uint16_t tb;
-    uint32_t trk_off;
-    uint32_t trk_pos, trk_len;
+    uint32_t trk_len;
     uint32_t win_start, win_end;
-    struct {
-        uint32_t start;
-        bool_t wrapped;
-    } write;
-    struct {
-        uint32_t off, len;
-        bool_t dirty;
-    } write_batch;
 };
 
 struct raw_sec {

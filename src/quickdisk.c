@@ -141,11 +141,19 @@ void floppy_init(void)
     timer_init(&index.timer, index_assert, NULL);
 }
 
+static void io_thread_main(void *arg) {
+    while (1) {
+        F_async_drain();
+        thread_yield();
+    }
+}
+
 void floppy_insert(unsigned int unit, struct slot *slot)
 {
     floppy_mount(slot);
 
     timer_dma_init();
+    thread_start(&drive.io_thread, _thread1_stacktop, io_thread_main, NULL);
     tim_rdata->ccr2 = sysclk_ns(1500); /* RD: 1.5us positive pulses */
 
     /* Drive is ready. Set output signals appropriately. */
