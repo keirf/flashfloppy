@@ -645,6 +645,7 @@ static void IRQ_rdata_dma(void)
         IRQx_set_pending(dma_rdata_irq);
     }
 
+#if !defined(QUICKDISK)
     ASSERT(drv->image->index_pulses_len < MAX_CUSTOM_PULSES);
     if (drv->image->index_pulses_ver != index.custom_pulses_ver) {
         time_t current_pulse_pos = time_since(index.prev_time);
@@ -666,6 +667,7 @@ static void IRQ_rdata_dma(void)
             timer_cancel(&index.custom_timer);
         IRQ_restore(oldpri);
     }
+#endif
 
     /* Check if we have crossed the index mark. If not, we're done. */
     if (image_ticks_since_index(drv->image) >= prev_ticks_since_index)
