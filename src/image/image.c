@@ -305,8 +305,7 @@ bool_t image_write_track(struct image *im)
 
 void image_sync(struct image *im)
 {
-    if (im->track_handler->sync != NULL)
-        im->track_handler->sync(im);
+    im->track_handler->sync(im);
 }
 
 uint32_t image_ticks_since_index(struct image *im)

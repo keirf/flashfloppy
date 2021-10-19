@@ -149,7 +149,7 @@ static void floppy_mount(struct slot *slot)
     FSIZE_t fastseek_sz;
     DWORD *cltbl;
     FRESULT fr;
-    bool_t async = FALSE, retry;
+    bool_t async = TRUE, retry;
 
     do {
         retry = FALSE;
