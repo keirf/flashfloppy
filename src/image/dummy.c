@@ -51,12 +51,19 @@ static bool_t dummy_write_track(struct image *im)
     return flush;
 }
 
+static void dummy_sync(struct image *im)
+{
+}
+
 const struct image_handler dummy_image_handler = {
     .open = dummy_open,
     .setup_track = dummy_setup_track,
     .read_track = dummy_read_track,
     .rdata_flux = dummy_rdata_flux,
     .write_track = dummy_write_track,
+    .sync = dummy_sync,
+
+    .async = TRUE,
 };
 
 /*
