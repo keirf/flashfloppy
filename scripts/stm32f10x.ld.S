@@ -31,6 +31,7 @@ SECTIONS
     _sdat = .;
     *(.data)
     *(.data*)
+    *(.ramfuncs)
     . = ALIGN(4);
     _edat = .;
     _ldat = LOADADDR(.data);
