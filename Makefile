@@ -99,15 +99,16 @@ endif
 
 BAUD=115200
 DEV=/dev/ttyUSB0
+SUDO=sudo
 
 ocd: gotek
 	python3 scripts/openocd/flash.py `pwd`/FF_Gotek-$(VER).hex
 
 flash: gotek
-	sudo stm32flash -b $(BAUD) -w FF_Gotek-$(VER).hex $(DEV)
+	$(SUDO) stm32flash -b $(BAUD) -w FF_Gotek-$(VER).hex $(DEV)
 
 start:
-	sudo stm32flash -b $(BAUD) -g 0 $(DEV)
+	$(SUDO) stm32flash -b $(BAUD) -g 0 $(DEV)
 
 serial:
-	sudo miniterm.py $(DEV) 3000000
+	$(SUDO) miniterm.py $(DEV) 3000000
