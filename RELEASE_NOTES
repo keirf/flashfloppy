@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v4.3a - 14 December 2021
+ - QuickDisk: Ported to new async I/O framework
+ - Various I/O bug fixes
+
 ** v4.2a - 13 October 2021
  - DSK: Ported to new async I/O framework
  - ringio: A few bug fixes
