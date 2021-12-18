@@ -120,6 +120,8 @@ static void dsk_seek_track(
     uint32_t tracklen;
     uint32_t trk_off, trk_len;
 
+    ring_io_sync(&im->dsk.ring_io);
+    ring_io_shutdown(&im->dsk.ring_io);
     im->cur_track = track;
 
     if (cyl >= im->nr_cyls) {
@@ -127,8 +129,6 @@ static void dsk_seek_track(
         if (verbose_image_log)
             printk("T%u.%u: Empty\n", cyl, side);
         memset(tib, 0, sizeof(*tib));
-        ring_io_sync(&im->dsk.ring_io);
-        ring_io_shutdown(&im->dsk.ring_io);
         goto out;
     }
 
@@ -172,8 +172,6 @@ static void dsk_seek_track(
     trk_off -= trk_off % 512;
     trk_len = (trk_len + 511) & ~511;
 
-    ring_io_sync(&im->dsk.ring_io);
-    ring_io_shutdown(&im->dsk.ring_io);
     ring_io_init(&im->dsk.ring_io, &im->fp, &im->dsk.track_data, trk_off, ~0,
             trk_len / 512);
     im->dsk.ring_io.batch_secs = 2;
