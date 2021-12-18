@@ -315,6 +315,7 @@ static bool_t dsk_read_track(struct image *im)
     if (tib->nr_secs && (rd->prod == rd->cons)) {
         uint16_t off = 0, len;
         uint32_t idx;
+        bool_t partial = FALSE;
         for (i = 0; i < im->dsk.trk_pos; i++)
             off += tib->sib[i].actual_length;
         len = data_sz(&tib->sib[i]);
@@ -326,6 +327,15 @@ static bool_t dsk_read_track(struct image *im)
         len -= im->dsk.rd_sec_pos * BATCH_SIZE;
         if (len > BATCH_SIZE) {
             len = BATCH_SIZE;
+            partial = TRUE;
+        }
+        off += im->dsk.trk_off % 512;
+        ring_io_seek(&im->dsk.ring_io, off, FALSE, FALSE);
+        ring_io_progress(&im->dsk.ring_io);
+        if (im->dsk.track_data.cons + len > im->dsk.track_data.prod)
+            return FALSE;
+
+        if (partial) {
             im->dsk.rd_sec_pos++;
         } else {
             im->dsk.rd_sec_pos = 0;
@@ -334,12 +344,6 @@ static bool_t dsk_read_track(struct image *im)
                 im->dsk.rev++;
             }
         }
-        off += im->dsk.trk_off % 512;
-        ring_io_seek(&im->dsk.ring_io, off, FALSE, FALSE);
-        ring_io_progress(&im->dsk.ring_io);
-        if (im->dsk.track_data.cons + len > im->dsk.track_data.prod)
-            return FALSE;
-
         idx = ring_io_idx(&im->dsk.ring_io, im->dsk.track_data.cons);
         memcpy_fast(buf, im->dsk.track_data.p + idx, len);
         rd->prod++;
