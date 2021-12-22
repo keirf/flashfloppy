@@ -24,7 +24,7 @@ like a real floppy drive but use disk images on a modern USB stick!
 - [**Download FlashFloppy**][Downloads]
 
 ## Documentation
-- [**Read the GitHub Wiki**](https://github.com/keirf/FlashFloppy/wiki)
+- [**Read the GitHub Wiki**](https://github.com/keirf/flashfloppy/wiki)
 
 ## Redistribution
 
@@ -42,13 +42,13 @@ file on your selling page. For example:
 - FlashFloppy is free software. For more information see the
   [license](COPYING).
 
-[Gotek-Compatibility]: https://github.com/keirf/FlashFloppy/wiki/Gotek-Compatibility
-[Host-Platforms]: https://github.com/keirf/FlashFloppy/wiki/Host-Platforms
-[Image-Formats]: https://github.com/keirf/FlashFloppy/wiki/Image-Formats
-[Track-Layouts]: https://github.com/keirf/FlashFloppy/wiki/Track-Layouts
-[FF.CFG-Configuration-File]: https://github.com/keirf/FlashFloppy/wiki/FF.CFG-Configuration-File
-[Downloads]: https://github.com/keirf/FlashFloppy/wiki/Downloads
+[Gotek-Compatibility]: https://github.com/keirf/flashfloppy/wiki/Gotek-Compatibility
+[Host-Platforms]: https://github.com/keirf/flashfloppy/wiki/Host-Platforms
+[Image-Formats]: https://github.com/keirf/flashfloppy/wiki/Image-Formats
+[Track-Layouts]: https://github.com/keirf/flashfloppy/wiki/Track-Layouts
+[FF.CFG-Configuration-File]: https://github.com/keirf/flashfloppy/wiki/FF.CFG-Configuration-File
+[Downloads]: https://github.com/keirf/flashfloppy/wiki/Downloads
 
-[ci-badge]: https://github.com/keirf/FlashFloppy/workflows/CI/badge.svg
-[downloads-badge]: https://img.shields.io/github/downloads/keirf/FlashFloppy/total
-[version-badge]: https://img.shields.io/github/v/release/keirf/FlashFloppy
+[ci-badge]: https://github.com/keirf/flashfloppy/workflows/CI/badge.svg
+[downloads-badge]: https://img.shields.io/github/downloads/keirf/flashfloppy/total
+[version-badge]: https://img.shields.io/github/v/release/keirf/flashfloppy

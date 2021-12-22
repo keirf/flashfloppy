@@ -38,7 +38,7 @@ jobs:
       with:
         tag_name: ${{ github.ref }}
         release_name: ${{ steps.vars.outputs.ref }}
-        body: "[**Release Notes:**](https://github.com/keirf/FlashFloppy/blob/master/RELEASE_NOTES)"
+        body: "[**Release Notes:**](https://github.com/keirf/flashfloppy/blob/master/RELEASE_NOTES)"
         draft: false
         prerelease: false
 
