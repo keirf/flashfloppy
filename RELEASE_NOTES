@@ -156,7 +156,7 @@
    - Extra logging in FFLOG.TXT for debug purposes
  - Amiga AutoSwap new title: Gobliiiins
    - Thanks to Arkadiusz Makarenko!
-   - https://github.com/keirf/FF_AutoSwap/wiki/Downloads
+   - https://github.com/keirf/flashfloppy-autoswap/wiki/Downloads
 
 ** v3.6a - 13 October 2019
  - Quick Disk Initial Release
@@ -216,7 +216,7 @@
  - LCD/OLED: Improve power-on initialisation robustness
  - Roland: Direct support for *.OUT images
  - IO-Test: New alternative firmware to test Gotek I/O pins
-   - https://github.com/keirf/FlashFloppy/wiki/Testing-IO-Pins
+   - https://github.com/keirf/flashfloppy/wiki/Testing-IO-Pins
 
 ** v2.11a - 23 May 2019
  - Simpler bootloader update process with all-in-one update file
@@ -320,7 +320,7 @@
  - Game/demo AutoSwap-disks feature
    - No manual disk swapping, at all!
    - Requires patching of host software titles
-   - Amiga titles so far (github:keirf/FF_AutoSwap):
+   - Amiga titles so far (github:keirf/flashfloppy-autoswap):
      - Beneath a Steel Sky
      - Indiana Jones and the Fate of Atlantis
      - The Secret of Monkey Island
