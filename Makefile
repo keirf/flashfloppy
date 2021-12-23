@@ -27,7 +27,7 @@ gotek: all
 	mv BL.upd FF_Gotek-Bootloader-$(VER).upd
 	mv IOT.upd FF_Gotek-IO-Test-$(VER).upd
 
-HXC_FF_URL := https://www.github.com/keirf/HxC_FF_File_Selector
+HXC_FF_URL := https://www.github.com/keirf/flashfloppy-hxc-file-selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
 HXC_FF_VER := v9-FF
 
