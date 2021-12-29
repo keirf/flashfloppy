@@ -269,6 +269,7 @@ static bool_t tag_open(struct image *im, char *tag)
         IMGCFG_tracks,
         IMGCFG_cyls,
         IMGCFG_heads,
+        IMGCFG_step,
         IMGCFG_secs,
         IMGCFG_bps,
         IMGCFG_id,
@@ -291,6 +292,7 @@ static bool_t tag_open(struct image *im, char *tag)
         [IMGCFG_tracks] = { "tracks" },
         [IMGCFG_cyls] = { "cyls" },
         [IMGCFG_heads] = { "heads" },
+        [IMGCFG_step] = { "step" },
         [IMGCFG_secs] = { "secs" },
         [IMGCFG_bps] = { "bps" },
         [IMGCFG_id] = { "id" },
@@ -414,8 +416,11 @@ static bool_t tag_open(struct image *im, char *tag)
             break;
         case IMGCFG_secs:
             t_layout.nr_sectors = strtol(opts.arg, NULL, 10);
+            break; 
+        case IMGCFG_step:
+            im->step = strtol(opts.arg, NULL, 10);
             break;
-        case IMGCFG_bps: {
+       case IMGCFG_bps: {
             int no, sz = strtol(opts.arg, NULL, 10);
             for (no = 0; no < 8; no++)
                 if ((128u<<no) == sz)
@@ -1804,7 +1809,7 @@ static void raw_setup_track(
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
     uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
-    uint8_t cyl = track/2, side = track & (im->nr_sides - 1);
+    uint8_t cyl = track/(2*im->step), side = track & (im->nr_sides - 1);
 
     track = cyl*2 + side;
     if (track != im->cur_track)
@@ -1833,6 +1838,9 @@ static void raw_setup_track(
 
 static bool_t raw_open(struct image *im)
 {
+    if (im->step == 0)
+        im->step = 1;
+
     volume_cache_init(im->bufs.write_data.p + 1024,
                       im->img.heap_bottom);
 
@@ -2044,10 +2052,11 @@ static void raw_dump_info(struct image *im)
     if (!verbose_image_log)
         return;
 
-    printk("C%u S%u:: %s %u-%u-%u:\n",
+    printk("C%u S%u:: %s %u-%u-%u step=%u:\n",
            im->cur_track/2, im->cur_track&1,
            (im->sync == SYNC_fm) ? "FM" : "MFM",
-           im->nr_cyls, im->nr_sides, trk->nr_sectors);
+           im->nr_cyls, im->nr_sides, trk->nr_sectors,
+           im->step);
     printk(" rpm: %u, tracklen: %u, datarate: %u\n",
            trk->rpm, im->tracklen_bc, trk->data_rate);
     printk(" gap2: %u, gap3: %u, gap4a: %u, gap4: %u\n",

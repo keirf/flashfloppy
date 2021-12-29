@@ -262,8 +262,8 @@ bool_t image_setup_track(
         /* If we are exiting D-A mode then need to re-read the config file. */
         if (h == &da_image_handler)
             return TRUE;
-        h = ((track>>1) >= im->nr_cyls) ? &dummy_image_handler
-            : im->disk_handler;
+        h = ((track>>1) >= im_nphys_cyls(im)) ? &dummy_image_handler
+             : im->disk_handler;
     } else {
         h = &da_image_handler;
         im->nr_sides = 1;

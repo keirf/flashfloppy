@@ -100,8 +100,7 @@ static bool_t hfe_open(struct image *im)
     im->hfe.double_step = !dhdr.single_step;
     im->hfe.tlut_base = le16toh(dhdr.track_list_offset);
     im->nr_cyls = dhdr.nr_tracks;
-    if (im->hfe.double_step)
-        im->nr_cyls = min_t(unsigned int, im->nr_cyls*2, 255);
+    im->step = im->hfe.double_step ? 2 : 1;
     im->nr_sides = dhdr.nr_sides;
     im->write_bc_ticks = sysclk_us(500) / bitrate;
     im->ticks_per_cell = im->write_bc_ticks * 16;

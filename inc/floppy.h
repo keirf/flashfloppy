@@ -163,6 +163,7 @@ struct image {
 
     /* Info about image as a whole. */
     uint8_t nr_cyls, nr_sides;
+    uint8_t step;
 
     /* Data buffers. */
     struct image_bufs bufs;
@@ -279,9 +280,13 @@ struct track_info {
 };
 void floppy_get_track(struct track_info *ti);
 void floppy_set_fintf_mode(void);
+static inline unsigned int im_nphys_cyls(struct image *im)
+{
+    return min_t(unsigned int, im->nr_cyls * (im->step?:1), 255);
+}
 static inline bool_t in_da_mode(struct image *im, unsigned int cyl)
 {
-    return cyl >= max_t(unsigned int, DA_FIRST_CYL, im->nr_cyls);
+    return cyl >= max_t(unsigned int, DA_FIRST_CYL, im_nphys_cyls(im));
 }
 
 /*
