@@ -276,7 +276,7 @@ void image_setup_track(
 
 #if !defined(QUICKDISK)
     if (h != &da_image_handler)
-        h = ((track>>1) >= im->nr_cyls) ? &dummy_image_handler
+        h = ((track>>1) >= im_nphys_cyls(im)) ? &dummy_image_handler
             : im->disk_handler;
 #endif
 
