@@ -162,6 +162,7 @@ struct packed ff_cfg {
 #define WDRAIN_realtime 1
 #define WDRAIN_eot      2
     uint8_t write_drain;
+    uint8_t max_cyl;
 };
 
 extern struct ff_cfg ff_cfg;

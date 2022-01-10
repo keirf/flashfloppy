@@ -274,7 +274,7 @@ static void IRQ_STEP_changed(void)
 
     /* Latch the step direction and check bounds (0 <= cyl <= 255). */
     drv->step.inward = !(idr_b & m(pin_dir));
-    if (drv->cyl == (drv->step.inward ? 255 : 0))
+    if (drv->cyl == (drv->step.inward ? ff_cfg.max_cyl : 0))
         return;
 
     /* Valid step request for this drive: start the step operation. */

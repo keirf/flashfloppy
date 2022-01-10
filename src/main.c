@@ -991,6 +991,10 @@ static void read_ff_cfg(void)
             ff_cfg.write_protect = !strcmp(opts.arg, "yes");
             break;
 
+        case FFCFG_max_cyl:
+            ff_cfg.max_cyl = strtol(opts.arg, NULL, 10);
+            break;
+
         case FFCFG_side_select_glitch_filter:
             ff_cfg.side_select_glitch_filter = strtol(opts.arg, NULL, 10);
             break;
@@ -1283,6 +1287,10 @@ static void process_ff_cfg_opts(const struct ff_cfg *old)
         || (ff_cfg.pin02 != old->pin02)
         || (ff_cfg.pin34 != old->pin34))
         floppy_set_fintf_mode();
+
+    /* max-cyl: Inform the floppy subsystem. */
+    if (ff_cfg.max_cyl != old->max_cyl)
+        floppy_set_max_cyl();
 
     /* ejected-on-startup: Set the ejected state appropriately. */
     if (ff_cfg.ejected_on_startup)

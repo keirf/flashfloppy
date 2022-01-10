@@ -280,6 +280,7 @@ struct track_info {
 };
 void floppy_get_track(struct track_info *ti);
 void floppy_set_fintf_mode(void);
+void floppy_set_max_cyl(void);
 static inline unsigned int im_nphys_cyls(struct image *im)
 {
     return min_t(unsigned int, im->nr_cyls * (im->step?:1), 255);
