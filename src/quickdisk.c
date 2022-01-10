@@ -100,6 +100,11 @@ void floppy_set_fintf_mode(void)
     /* Quick Disk interface is static. */
 }
 
+void floppy_set_max_cyl(void)
+{
+    /* Quick Disk has no STEP signal. */
+}
+
 static void drive_configure_output_pin(unsigned int pin)
 {
     if (pin >= 16) {

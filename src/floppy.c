@@ -276,6 +276,15 @@ void floppy_set_fintf_mode(void)
            pin34_inverted ? "not-" : "", outp_name[pin34] ?: "?");
 }
 
+void floppy_set_max_cyl(void)
+{
+    struct drive *drv = &drive;
+    IRQ_global_disable();
+    if (drv->cyl > ff_cfg.max_cyl)
+        drv->cyl = ff_cfg.max_cyl;
+    IRQ_global_enable();
+}
+
 static void drive_configure_output_pin(unsigned int pin)
 {
     if (pin >= 16) {
