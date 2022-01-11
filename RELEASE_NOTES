@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v4.4a - 11 January 2022
+ - DSK: Async I/OI fixes
+ - IMG.CFG: New option step= allows to specify double-step operation
+ - FF.CFG: New  option max-cyl= allows limiting head-step range
+
 ** v4.3a - 14 December 2021
  - QuickDisk: Ported to new async I/O framework
  - Various I/O bug fixes
