@@ -4,7 +4,7 @@
 ************************************
 
 ** v4.4a - 11 January 2022
- - DSK: Async I/OI fixes
+ - DSK: Async I/O fixes
  - IMG.CFG: New option step= allows to specify double-step operation
  - FF.CFG: New  option max-cyl= allows limiting head-step range
 
