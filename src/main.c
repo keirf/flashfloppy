@@ -271,9 +271,10 @@ static void lcd_write_track_info(bool_t force)
     if (force || (ti.cyl != lcd_ti.cyl)
         || ((ti.side != lcd_ti.side) && ti.sel)
         || (ti.writing != lcd_ti.writing)) {
-        snprintf(msg, sizeof(msg), "%c T:%02u.%u",
+        snprintf(msg, sizeof(msg), "%c T:%02u.%X",
                  (cfg.slot.attributes & AM_RDO) ? '*' : ti.writing ? 'W' : ' ',
-                 ti.cyl, ti.side);
+                 ti.cyl + ff_cfg.display_track_offset,
+                 (ff_cfg.display_side_numbers >> (ti.side ? 0 : 4)) & 0x0f);
         lcd_write(wp_column, 1, -1, msg);
         if (ff_cfg.display_on_activity != DISPON_no)
             lcd_on();
@@ -1227,6 +1228,22 @@ static void read_ff_cfg(void)
                 !strcmp(opts.arg, "no") ? DISPON_no
                 : !strcmp(opts.arg, "sel") ? DISPON_sel
                 : DISPON_yes;
+            break;
+
+        case FFCFG_display_side_numbers:
+            ff_cfg.display_side_numbers = strtol(opts.arg, NULL, 16);
+            if ((ff_cfg.display_side_numbers != 0x01) &&
+                (ff_cfg.display_side_numbers != 0x10) &&
+                (ff_cfg.display_side_numbers != 0x12) &&
+                (ff_cfg.display_side_numbers != 0x21) &&
+                (ff_cfg.display_side_numbers != 0xAB) &&
+                (ff_cfg.display_side_numbers != 0xBA))
+                ff_cfg.display_side_numbers = 0x01;
+            break;
+
+        case FFCFG_display_track_offset:
+            ff_cfg.display_track_offset = strtol(opts.arg, NULL, 10);
+            if (ff_cfg.display_track_offset != 1) ff_cfg.display_track_offset = 0;
             break;
 
         case FFCFG_display_scroll_rate:

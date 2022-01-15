@@ -45,6 +45,8 @@ struct packed ff_cfg {
 #define DISPON_yes 1
 #define DISPON_sel 2
     uint8_t display_on_activity;
+    uint8_t display_side_numbers;
+    uint8_t display_track_offset;
     uint16_t display_scroll_rate;
 #define FONT_6x13 7
 #define FONT_8x16 8
