@@ -178,6 +178,7 @@ void board_init(void)
 
             has_kc30_header = TRUE;
             pa_skip &= ~(1<<10); /* PA10 is not used as serial rx */
+            pb_skip |= 1<<1; /* PB1 is a floppy input (WGATE) */
 
         } else {
 
