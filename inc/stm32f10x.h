@@ -123,6 +123,12 @@ void gpio_configure_pin(GPIO gpio, unsigned int pin, unsigned int mode);
     ((gpio)->bsrr = (uint32_t)(mask) << ((level) ? 0 : 16))
 #define gpio_read_pin(gpio, pin) (((gpio)->idr >> (pin)) & 1)
 
+/* EXTI */
+void _exti_route(unsigned int px, unsigned int pin);
+#define exti_route_pa(pin) _exti_route(0, pin)
+#define exti_route_pb(pin) _exti_route(1, pin)
+#define exti_route_pc(pin) _exti_route(2, pin)
+
 /* FPEC */
 void fpec_init(void);
 void fpec_page_erase(uint32_t flash_address);

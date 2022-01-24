@@ -82,8 +82,6 @@ bool_t floppy_ribbon_is_reversed(void)
 
 static void board_floppy_init(void)
 {
-    uint32_t pins;
-
     /* PA1 (STEP) triggers IRQ via TIM2 Channel 2, since EXTI is used for 
      * WGATE on PB1. */
     tim2->ccmr1 = TIM_CCMR1_CC2S(TIM_CCS_INPUT_TI1);
@@ -104,10 +102,10 @@ static void board_floppy_init(void)
     gpio_configure_pin(gpiob, pin_side,  GPI_bus);
 
     /* PA[15:12], PC[11:10], PB[9:1], PA[0] */
-    afio->exticr4 = 0x0000;
-    afio->exticr3 = 0x2211;
-    afio->exticr2 = 0x1111;
-    afio->exticr1 = 0x1110;
+    afio->exticr[4-1] = 0x0000;
+    afio->exticr[3-1] = 0x2211;
+    afio->exticr[2-1] = 0x1111;
+    afio->exticr[1-1] = 0x1110;
 
     if (gotek_enhanced()) {
         gpio_configure_pin(gpioa, pin_sel1,  GPI_bus);
@@ -117,13 +115,12 @@ static void board_floppy_init(void)
          * It is safe enough to pull down even if connected direct to 5v, 
          * will only sink ~0.15mA via the weak internal pulldown. */
         gpio_configure_pin(gpiob, pin_motor, GPI_pull_down);
-        afio->exticr4 = 0x1011; /* Motor = PB15 */
+        exti_route_pb(15); /* Motor = PB15 */
     }
 
-    pins = m(pin_wgate) | m(pin_side) | m(pin_sel0);
-    exti->rtsr = pins | m(pin_motor) | FULL_ROTARY_MASK;
-    exti->ftsr = pins | m(pin_motor) | m(pin_chgrst) | FULL_ROTARY_MASK;
-    exti->imr = pins;
+    exti->rtsr = 0xffff;
+    exti->ftsr = 0xffff;
+    exti->imr = m(pin_wgate) | m(pin_side) | m(pin_sel0);
 }
 
 /* Fast speculative entry point for SELA-changed IRQ. We assume SELA has 
@@ -377,16 +374,17 @@ static void IRQ_MOTOR_CHGRST(void)
 {
     struct drive *drv = &drive;
     bool_t changed = drv->motor.changed;
-    uint32_t rot_mask, pr = exti->pr;
+    uint32_t rot_mask = board_rotary_exti_mask, pr = exti->pr;
 
-    rot_mask = board_get_rotary_mask();
     drv->motor.changed = FALSE;
-    exti->pr = pr & (m(pin_motor) | m(pin_chgrst) | rot_mask);
+    exti->pr = pr & 0xfc00; /* Latch and clear PR[15:10] */
 
-    if ((pr & m(pin_motor)) || changed)
+    if (((pr & m(pin_motor)) && (ff_cfg.motor_delay != MOTOR_ignore))
+        || changed)
         IRQ_MOTOR(drv);
 
-    if ((pr & m(pin_chgrst)) || changed)
+    if ((pr & m(pin_chgrst))
+        || changed)
         IRQ_CHGRST(drv);
 
     if (pr & rot_mask)
@@ -404,11 +402,15 @@ static void motor_chgrst_insert(struct drive *drv)
 {
     uint32_t imr = exti->imr;
 
-    if (ff_cfg.motor_delay != MOTOR_ignore)
+    if (ff_cfg.motor_delay != MOTOR_ignore) {
+        _exti_route(gotek_enhanced()?0/*PA*/:1/*PB*/, pin_motor);
         imr |= m(pin_motor);
+    }
 
-    if (ff_cfg.chgrst == CHGRST_pa14)
+    if (ff_cfg.chgrst == CHGRST_pa14) {
+        exti_route_pa(pin_chgrst);
         imr |= m(pin_chgrst);
+    }
 
     exti->imr = imr;
     motor_chgrst_update_status(drv);
@@ -416,7 +418,15 @@ static void motor_chgrst_insert(struct drive *drv)
 
 static void motor_chgrst_eject(struct drive *drv)
 {
-    exti->imr &= ~(m(pin_motor) | m(pin_chgrst));
+    uint32_t imr = exti->imr;
+
+    if (ff_cfg.motor_delay != MOTOR_ignore)
+        imr &= ~m(pin_motor);
+
+    if (ff_cfg.chgrst == CHGRST_pa14)
+        imr &= ~m(pin_chgrst);
+
+    exti->imr = imr;
     motor_chgrst_update_status(drv);
 }
 

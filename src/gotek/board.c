@@ -107,11 +107,32 @@ unsigned int board_get_rotary(void)
     return x&3;
 }
 
-unsigned int board_get_rotary_mask(void)
+uint32_t board_rotary_exti_mask;
+void board_setup_rotary_exti(void)
 {
-    if (is_48pin_mcu)
-        return (ff_cfg.chgrst != CHGRST_pa14) ? m(14) | m(13) : 0;
-    return m(11) | m(10); /* PC10,11 */
+    uint32_t m = 0;
+    if (has_kc30_header) {
+        if (ff_cfg.motor_delay == MOTOR_ignore) {
+            exti_route_pa(6);
+            exti_route_pa(15);
+            m |= m(6) | m(15);
+        }
+    } else if (is_48pin_mcu) {
+        if (ff_cfg.chgrst != CHGRST_pa14) {
+            exti_route_pa(6);
+            exti_route_pa(15);
+            m |= m(13) | m(14);
+        }
+    }
+    if (!is_32pin_mcu && !is_48pin_mcu) {
+        exti_route_pc(10);
+        exti_route_pc(11);
+        m |= m(10) | m(11);
+    }
+    board_rotary_exti_mask = m;
+    exti->rtsr |= m;
+    exti->ftsr |= m;
+    exti->imr |= m;
 }
 
 bool_t board_jc_strapped(void)

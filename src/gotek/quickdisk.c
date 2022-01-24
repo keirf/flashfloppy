@@ -67,8 +67,6 @@ bool_t floppy_ribbon_is_reversed(void)
 
 static void board_floppy_init(void)
 {
-    uint32_t pins;
-
     /* PA1 (RESET) triggers IRQ via TIM2 Channel 2, since EXTI is used for 
      * WGATE on PB1. */
     tim2->ccmr1 = TIM_CCMR1_CC2S(TIM_CCS_INPUT_TI1);
@@ -83,15 +81,14 @@ static void board_floppy_init(void)
     }
 
     /* PA[15:14], PB[13:12], PC[11:10], PB[9:1], PA[0] */
-    afio->exticr4 = 0x0011;
-    afio->exticr3 = 0x2211;
-    afio->exticr2 = 0x1111;
-    afio->exticr1 = 0x1110;
+    afio->exticr[4-1] = 0x0011;
+    afio->exticr[3-1] = 0x2211;
+    afio->exticr[2-1] = 0x1111;
+    afio->exticr[1-1] = 0x1110;
     
-    pins = m(pin_wgate) | m(pin_motor);
-    exti->rtsr = pins | FULL_ROTARY_MASK;
-    exti->ftsr = pins | FULL_ROTARY_MASK;
-    exti->imr = pins;
+    exti->rtsr = 0xffff;
+    exti->ftsr = 0xffff;
+    exti->imr = m(pin_wgate) | m(pin_motor);
 }
 
 static void IRQ_WGATE_changed(void)
@@ -190,7 +187,7 @@ static void IRQ_RESET_changed(void)
 
 static void _IRQ_rotary(void)
 {
-    exti->pr = FULL_ROTARY_MASK;
+    exti->pr = 0xfc00; /* Clear PR[15:10] */
     IRQ_rotary();
 }
 

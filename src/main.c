@@ -483,12 +483,10 @@ void IRQ_rotary(void)
 
 static void set_rotary_exti(void)
 {
-    uint32_t imr;
-
-    imr = exti->imr & ~FULL_ROTARY_MASK;
+    exti->imr &= ~board_rotary_exti_mask;
+    board_rotary_exti_mask = 0;
     if ((ff_cfg.rotary & ROT_typemask) == ROT_full)
-        imr |= board_get_rotary_mask();
-    exti->imr = imr;
+        board_setup_rotary_exti();
 }
 
 static void button_timer_fn(void *unused)

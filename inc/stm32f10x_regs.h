@@ -297,10 +297,7 @@ struct gpio {
 struct afio {
     uint32_t evcr;       /* 00: Event control */
     uint32_t mapr;       /* 04: AF remap and debug I/O configuration */
-    uint32_t exticr1;    /* 08: External interrupt configuration #1 */
-    uint32_t exticr2;    /* 0C: External interrupt configuration #2 */
-    uint32_t exticr3;    /* 10: External interrupt configuration #3 */
-    uint32_t exticr4;    /* 14: External interrupt configuration #4 */
+    uint32_t exticr[4];  /* 08-14: External interrupt configuration #1-4 */
     uint32_t rsvd;       /* 18: - */
     uint32_t mapr2;      /* 1C: AF remap and debug I/O configuration #2 */
 };

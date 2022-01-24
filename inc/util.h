@@ -163,8 +163,8 @@ extern uint8_t board_id;
 #define BRDREV_Gotek_sd_card  0x1
 #define gotek_enhanced() (board_id != BRDREV_Gotek_standard)
 
-#define FULL_ROTARY_MASK (m(14) | m(13) | m(11) | m(10))
-unsigned int board_get_rotary_mask(void);
+extern uint32_t board_rotary_exti_mask;
+void board_setup_rotary_exti(void);
 unsigned int board_get_rotary(void);
 unsigned int board_get_buttons(void);
 #define B_LEFT 1

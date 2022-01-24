@@ -253,6 +253,17 @@ void gpio_configure_pin(GPIO gpio, unsigned int pin, unsigned int mode)
     }
 }
 
+void _exti_route(unsigned int px, unsigned int pin)
+{
+    unsigned int n = pin >> 2;
+    unsigned int s = (pin & 3) << 2;
+    uint32_t exticr = afio->exticr[n];
+    ASSERT(!in_exception()); /* no races please */
+    exticr &= ~(0xf << s);
+    exticr |= px << s;
+    afio->exticr[n] = exticr;
+}
+
 void system_reset(void)
 {
     console_sync();
