@@ -1279,8 +1279,9 @@ static void read_ff_cfg(void)
 
 static void process_ff_cfg_opts(const struct ff_cfg *old)
 {
-    if (ff_cfg.rotary != old->rotary)
-        set_rotary_exti();
+    /* rotary, chgrst, motor-delay: Inform the rotary-encoder subsystem. 
+     * It is harmless to notify unconditionally. */
+    set_rotary_exti();
 
     /* interface, pin02, pin34: Inform the floppy subsystem. */
     if ((ff_cfg.interface != old->interface)

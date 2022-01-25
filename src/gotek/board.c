@@ -111,23 +111,26 @@ uint32_t board_rotary_exti_mask;
 void board_setup_rotary_exti(void)
 {
     uint32_t m = 0;
+    if (is_48pin_mcu) {
+        /* Alternative location at PA13, PA14. */
+        if (ff_cfg.chgrst != CHGRST_pa14) {
+            exti_route_pa(13);
+            exti_route_pa(14);
+            m |= m(13) | m(14);
+        }
+    } else if (!is_32pin_mcu) {
+        /* Original rotary header at PC10, PC11. */
+        exti_route_pc(10);
+        exti_route_pc(11);
+        m |= m(10) | m(11);
+    }
     if (has_kc30_header) {
+        /* KC30 rotary pins PA6, PA15. */
         if (ff_cfg.motor_delay == MOTOR_ignore) {
             exti_route_pa(6);
             exti_route_pa(15);
             m |= m(6) | m(15);
         }
-    } else if (is_48pin_mcu) {
-        if (ff_cfg.chgrst != CHGRST_pa14) {
-            exti_route_pa(6);
-            exti_route_pa(15);
-            m |= m(13) | m(14);
-        }
-    }
-    if (!is_32pin_mcu && !is_48pin_mcu) {
-        exti_route_pc(10);
-        exti_route_pc(11);
-        m |= m(10) | m(11);
     }
     board_rotary_exti_mask = m;
     exti->rtsr |= m;

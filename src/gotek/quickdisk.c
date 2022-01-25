@@ -48,10 +48,10 @@ void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
 #define motor_irq  6
 #define wgate_irq 23
 void IRQ_6(void) __attribute__((alias("IRQ_MOTOR_changed"))); /* EXTI0 */
-void IRQ_7(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI1 */
-void IRQ_23(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI9_5 */
+void IRQ_7(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI1 */
+void IRQ_23(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI9_5 */
 void IRQ_28(void) __attribute__((alias("IRQ_RESET_changed"))); /* TMR2 */
-void IRQ_40(void) __attribute__((alias("_IRQ_rotary"))); /* EXTI15_10 */
+void IRQ_40(void) __attribute__((alias("IRQ_rotary_changed"))); /* EXTI15_10 */
 static const struct exti_irq exti_irqs[] = {
     /* MOTOR */ { 6, TIMER_IRQ_PRI, 0 }, 
     /* WGATE */ { 7, FLOPPY_IRQ_WGATE_PRI, 0 },
@@ -91,11 +91,8 @@ static void board_floppy_init(void)
     exti->imr = m(pin_wgate) | m(pin_motor);
 }
 
-static void IRQ_WGATE_changed(void)
+static void IRQ_WGATE(void)
 {
-    /* Clear WGATE-changed flag. */
-    exti->pr = m(pin_wgate);
-
     /* If WRPROT line is asserted then we ignore WGATE. */
     if (read_pin(wrprot))
         return;
@@ -113,6 +110,20 @@ static void IRQ_WGATE_changed(void)
         rdata_stop();
         wdata_start();
     }
+}
+
+static void IRQ_WGATE_rotary(void)
+{
+    uint32_t rot_mask = board_rotary_exti_mask, pr = exti->pr;
+
+    /* Latch and clear PR[9:5] and PR[1]. */
+    exti->pr = pr & 0x03e2;
+
+    if (pr & m(pin_wgate))
+        IRQ_WGATE();
+
+    if (pr & rot_mask)
+        IRQ_rotary();
 }
 
 static void _IRQ_MOTOR_RESET_changed(unsigned int gpioa_idr)
@@ -185,9 +196,11 @@ static void IRQ_RESET_changed(void)
     } while ((gpioa_idr ^ gpioa_idr2) & m(pin_reset));
 }
 
-static void _IRQ_rotary(void)
+static void IRQ_rotary_changed(void)
 {
-    exti->pr = 0xfc00; /* Clear PR[15:10] */
+    /* Clear PR[15:10] */
+    exti->pr = 0xfc00;
+
     IRQ_rotary();
 }
 
