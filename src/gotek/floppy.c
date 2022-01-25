@@ -48,11 +48,11 @@ void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
 
 /* EXTI IRQs. */
 void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI0 */
-void IRQ_7(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI1 */
+void IRQ_7(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI1 */
 void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
-void IRQ_23(void) __attribute__((alias("IRQ_WGATE_changed"))); /* EXTI9_5 */
+void IRQ_23(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI9_5 */
 void IRQ_28(void) __attribute__((alias("IRQ_STEP_changed"))); /* TMR2 */
-void IRQ_40(void) __attribute__((alias("IRQ_MOTOR_CHGRST"))); /* EXTI15_10 */
+void IRQ_40(void) __attribute__((alias("IRQ_MOTOR_CHGRST_rotary"))); /* EXTI15_10 */
 #define MOTOR_CHGRST_IRQ 40
 static const struct exti_irq exti_irqs[] = {
     /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
@@ -316,12 +316,9 @@ static void IRQ_SIDE_changed(void)
         rdata_stop();
 }
 
-static void IRQ_WGATE_changed(void)
+static void IRQ_WGATE(void)
 {
     struct drive *drv = &drive;
-
-    /* Clear WGATE-changed flag. */
-    exti->pr = m(pin_wgate);
 
     /* If WRPROT line is asserted then we ignore WGATE. */
     if (drv->outp & m(outp_wrprot))
@@ -334,6 +331,20 @@ static void IRQ_WGATE_changed(void)
         rdata_stop();
         wdata_start();
     }
+}
+
+static void IRQ_WGATE_rotary(void)
+{
+    uint32_t rot_mask = board_rotary_exti_mask, pr = exti->pr;
+
+    /* Latch and clear PR[9:5] and PR[1]. */
+    exti->pr = pr & 0x03e2;
+
+    if (pr & m(pin_wgate))
+        IRQ_WGATE();
+
+    if (pr & rot_mask)
+        IRQ_rotary();
 }
 
 static void IRQ_MOTOR(struct drive *drv)
@@ -369,14 +380,16 @@ static void IRQ_CHGRST(struct drive *drv)
     }
 }
 
-static void IRQ_MOTOR_CHGRST(void)
+static void IRQ_MOTOR_CHGRST_rotary(void)
 {
     struct drive *drv = &drive;
     bool_t changed = drv->motor.changed;
     uint32_t rot_mask = board_rotary_exti_mask, pr = exti->pr;
 
     drv->motor.changed = FALSE;
-    exti->pr = pr & 0xfc00; /* Latch and clear PR[15:10] */
+
+    /* Latch and clear PR[15:10] */
+    exti->pr = pr & 0xfc00;
 
     if (((pr & m(pin_motor)) && (ff_cfg.motor_delay != MOTOR_ignore))
         || changed)
