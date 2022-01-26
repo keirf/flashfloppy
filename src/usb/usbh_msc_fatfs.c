@@ -17,41 +17,47 @@ static bool_t msc_device_connected;
 extern USB_OTG_CORE_HANDLE USB_OTG_Core;
 USBH_HOST USB_Host;
 
+#if 1
+#define TRC_FUNC() printk("> %s\n", __FUNCTION__)
+#else
+#define TRC_FUNC() ((void)0)
+#endif
+
 static void USBH_USR_Init(void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
 }
 
 static void USBH_USR_DeInit(void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
     msc_device_connected = FALSE;
 }
 
 static void USBH_USR_DeviceAttached(void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
 }
 
 static void USBH_USR_ResetDevice(void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
 }
 
 static void USBH_USR_DeviceDisconnected (void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
     msc_device_connected = FALSE;
 }
 
 static void USBH_USR_OverCurrentDetected (void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
 }
 
 static void USBH_USR_DeviceSpeedDetected(uint8_t DeviceSpeed)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
     printk("> Device speed: %s\n",
            (DeviceSpeed == HPRT0_PRTSPD_HIGH_SPEED) ? "High" :
            (DeviceSpeed == HPRT0_PRTSPD_FULL_SPEED) ? "Full" :
@@ -61,14 +67,14 @@ static void USBH_USR_DeviceSpeedDetected(uint8_t DeviceSpeed)
 static void USBH_USR_DeviceDescAvailable(void *DeviceDesc)
 {
     USBH_DevDesc_TypeDef *hs = DeviceDesc;
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
     printk(" VID : %04X\n", hs->idVendor);
     printk(" PID : %04X\n", hs->idProduct);
 }
 
 static void USBH_USR_DeviceAddressAssigned(void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
 }
 
 static void USBH_USR_ConfigurationDescAvailable(
@@ -78,7 +84,7 @@ static void USBH_USR_ConfigurationDescAvailable(
 {
     USBH_InterfaceDesc_TypeDef *id = itfDesc;
 
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
     printk("> Class connected: %02x (%s)\n",
            id->bInterfaceClass,
            (id->bInterfaceClass == 0x08) ? "MSC" :
@@ -102,12 +108,12 @@ static void USBH_USR_SerialNumString(void *SerialNumString)
 
 static void USBH_USR_EnumerationDone(void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
 }
 
 static USBH_USR_Status USBH_USR_UserInput(void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
     return USBH_USR_RESP_OK;
 }
 
@@ -120,12 +126,12 @@ static int USBH_USR_UserApplication(void)
 
 static void USBH_USR_DeviceNotSupported(void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
 }
 
 static void USBH_USR_UnrecoveredError (void)
 {
-    printk("> %s\n", __FUNCTION__);
+    TRC_FUNC();
     msc_device_connected = FALSE;
 }
 
