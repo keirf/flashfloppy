@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.30 - 26 January 2022
+ - IMG.CFG: New option step= allows to specify double-step operation
+ - FF.CFG: New option max-cyl= allows limiting head-step range
+ - SFRKC30 Gotek Models: Improved rotary support on new "KC30" header
+
 ** v3.29 - 2 October 2021
  - Support new Gotek board SFRKC30.AT2 using AT32F415KBU7-4 (QFN32)
  - Support LQFP64 AT32F415RxT7 chips on existing "Enhanced Gotek" boards
