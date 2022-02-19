@@ -37,5 +37,7 @@ flash_cfg.o: ff_cfg_defaults.h
 ff_cfg_defaults.h: $(ROOT)/examples/FF.CFG
 	$(PYTHON) $(ROOT)/scripts/mk_config.py $< $@
 
+main.o flash_cfg.o: ff_cfg_defaults.h
+
 clean::
 	rm -f ff_cfg_defaults.h
