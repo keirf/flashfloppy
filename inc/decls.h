@@ -16,8 +16,15 @@
 #include <limits.h>
 
 #include "types.h"
-#include "stm32f10x_regs.h"
-#include "stm32f10x.h"
+#include "mcu/common_regs.h"
+#include "mcu/common.h"
+#if MCU == STM32F105
+#include "mcu/stm32f105_regs.h"
+#include "mcu/stm32f105.h"
+#elif MCU == AT32F435
+#include "mcu/at32f435_regs.h"
+#include "mcu/at32f435.h"
+#endif
 #include "intrinsics.h"
 
 #include "time.h"

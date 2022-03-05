@@ -1,7 +1,7 @@
 RPATH = ../src
 
 OBJS += fw_update.o
-OBJS += fpec.o
+OBJS += fpec_$(mcu).o
 
 OBJS += build_info.o
 OBJS += cancellation.o
@@ -11,8 +11,8 @@ OBJS += fs.o
 OBJS += sd_spi.o
 OBJS += spi.o
 OBJS += string.o
-OBJS += stm32f10x.o
 OBJS += thread.o
+OBJS += cortex.o mcu_$(mcu).o
 OBJS += time.o
 OBJS += timer.o
 OBJS += util.o

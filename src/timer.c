@@ -9,13 +9,23 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#if MCU == STM32F105
 /* TIM4: IRQ 30. */
 void IRQ_30(void) __attribute__((alias("IRQ_timer")));
 #define TIMER_IRQ 30
 #define tim tim4
+#define tim_bits 16
+#define TIM_CR1_MCUBITS 0
+#elif MCU == AT32F435
+void IRQ_50(void) __attribute__((alias("IRQ_timer")));
+#define TIMER_IRQ 50
+#define tim tim5 /* 32-bit timer */
+#define tim_bits 32
+#define TIM_CR1_MCUBITS TIM_CR1_PMEN
+#endif
 
 /* IRQ only on counter overflow, one-time enable. */
-#define TIM_CR1 (TIM_CR1_URS | TIM_CR1_OPM)
+#define TIM_CR1 (TIM_CR1_URS | TIM_CR1_OPM | TIM_CR1_MCUBITS)
 
 /* Empirically-determined offset applied to timer deadlines to counteract the
  * latency incurred by reprogram_timer() and IRQ_timer(). */
@@ -28,7 +38,7 @@ static struct timer *head;
 static void reprogram_timer(int32_t delta)
 {
     tim->cr1 = TIM_CR1;
-    if (delta < 0x10000) {
+    if ((tim_bits == 32) || (delta < 0x10000)) {
         /* Fine-grained deadline (sub-microsecond accurate) */
         tim->psc = SYSCLK_MHZ/TIME_MHZ-1;
         tim->arr = (delta <= SLACK_TICKS) ? 1 : delta-SLACK_TICKS;

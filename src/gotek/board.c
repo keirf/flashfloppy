@@ -152,7 +152,7 @@ bool_t board_jc_strapped(void)
 
 void board_init(void)
 {
-    uint16_t pa_skip, pb_skip;
+    uint16_t pa_skip, pb_skip, pc_skip;
     uint8_t id;
 
     /* PA0-1,8 (floppy inputs), PA2 (speaker). */
@@ -172,7 +172,8 @@ void board_init(void)
     gpio_configure_pin(gpioa, 12, GPI_pull_down);
 
     /* Pull up all PCx pins. */
-    gpio_pull_up_pins(gpioc, ~0x0000);
+    pc_skip = 0x0000;
+    gpio_pull_up_pins(gpioc, ~pc_skip);
 
     /* Wait for ID to stabilise at PC[15:12]. */
     delay_us(100);
@@ -212,11 +213,13 @@ void board_init(void)
             /* If PF7 is floating then we may be running on a board with the
              * optional rotary-encoder header (SFRKC30). On earlier boards
              * PF6=VSS and PF7=VDD, hence we take care here. */
+#if MCU == STM32F105 /* AT32F435 needs new PCB */
             rcc->apb2enr |= RCC_APB2ENR_IOPFEN;
             gpio_configure_pin(gpiof, 7, GPI_pull_down);
             delay_us(100);
             has_kc30_header = (gpio_read_pin(gpiof, 7) == LOW);
             gpio_configure_pin(gpiof, 7, GPI_floating);
+#endif
 
         }
 

@@ -13,8 +13,23 @@ FLAGS  = -g -Os -nostdlib -std=gnu99 -iquote $(ROOT)/inc
 FLAGS += -Wall -Werror -Wno-format -Wdeclaration-after-statement
 FLAGS += -Wstrict-prototypes -Wredundant-decls -Wnested-externs
 FLAGS += -fno-common -fno-exceptions -fno-strict-aliasing
-FLAGS += -mlittle-endian -mthumb -mcpu=cortex-m3 -mfloat-abi=soft
+FLAGS += -mlittle-endian -mthumb -mfloat-abi=soft
 FLAGS += -Wno-unused-value -ffunction-sections
+
+## STM32F105
+ifeq ($(mcu),stm32f105)
+FLAGS += -mcpu=cortex-m3 -DSTM32F105=1 -DMCU=1
+stm32f105=y
+ifeq ($(bootloader),y)
+# Debug bootloader doesn't fit in 32kB
+override debug=n
+endif
+
+## AT32F435
+else ifeq ($(mcu),at32f435)
+FLAGS += -mcpu=cortex-m4 -DAT32F435=4 -DMCU=4
+at32f435=y
+endif
 
 ifneq ($(debug),y)
 FLAGS += -DNDEBUG

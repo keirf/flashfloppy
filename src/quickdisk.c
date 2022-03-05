@@ -134,9 +134,6 @@ void floppy_init(void)
     drive_configure_output_pin(pin_28);
     drive_configure_output_pin(pin_34);
 
-    gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
-    gpio_configure_pin(gpio_data, pin_rdata, GPO_rdata);
-
     write_pin(media,  HIGH);
     write_pin(wrprot, HIGH);
     write_pin(ready,  HIGH);

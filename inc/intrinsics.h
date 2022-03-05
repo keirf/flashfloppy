@@ -74,6 +74,14 @@ struct exception_frame {
  * confirmed on Cortex-M3. */
 #define IRQ_restore(oldpri) write_special(basepri, (oldpri))
 
+#define __DEFINE_IRQ(nr, name) \
+void IRQ_##nr (void) __attribute__((alias(name)))
+#define _DEFINE_IRQ(nr, name) __DEFINE_IRQ(nr, name)
+#define DEFINE_IRQ(nr, name) _DEFINE_IRQ(nr, name)
+
+/* Cortex initialisation */
+void cortex_init(void);
+
 static inline uint16_t _rev16(uint16_t x)
 {
     uint16_t result;

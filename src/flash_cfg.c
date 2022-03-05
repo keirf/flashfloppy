@@ -29,7 +29,11 @@ union cfg_slot {
     uint16_t words[SLOTW_NR];
 };
 
+#if MCU == STM32F105
 #define SLOT_BASE (union cfg_slot *)(0x8020000 - FLASH_PAGE_SIZE)
+#elif MCU == AT32F435
+#define SLOT_BASE (union cfg_slot *)(0x8040000 - FLASH_PAGE_SIZE)
+#endif
 #define SLOT_NR   (FLASH_PAGE_SIZE / sizeof(union cfg_slot))
 
 #define slot_is_blank(_slot) ((_slot)->words[0] == 0xffff)

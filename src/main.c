@@ -2818,6 +2818,8 @@ static void factory_reset(void)
 
 static void update_firmware(void)
 {
+#if MCU == STM32F105
+
     /* Power up the backup-register interface and allow writes. */
     rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
     pwr->cr |= PWR_CR_DBP;
@@ -2826,7 +2828,12 @@ static void update_firmware(void)
     bkp->dr1[0] = 0xdead;
     bkp->dr1[1] = 0xbeef;
 
-    /* Reset everything (except backup registers). */
+#elif MCU == AT32F435
+
+    _reset_flag = RESET_FLAG_BOOTLOADER;
+
+#endif
+
     system_reset();
 }
 
