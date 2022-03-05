@@ -38,20 +38,20 @@ dist:
 	mkdir -p flashfloppy-$(VER)/alt/io-test
 	mkdir -p flashfloppy-$(VER)/alt/quickdisk/logfile
 	$(MAKE) clean
-	$(MAKE) gotek
+	$(MAKE) mcu=stm32f105 gotek
 	cp -a FF_Gotek-$(VER).dfu flashfloppy-$(VER)/
 	cp -a FF_Gotek-$(VER).upd flashfloppy-$(VER)/
 	cp -a FF_Gotek-$(VER).hex flashfloppy-$(VER)/
 	cp -a FF_Gotek-Bootloader-$(VER).upd flashfloppy-$(VER)/alt/bootloader/
 	cp -a FF_Gotek-IO-Test-$(VER).upd flashfloppy-$(VER)/alt/io-test/
 	$(MAKE) clean
-	$(MAKE) debug=n logfile=y -f $(ROOT)/Rules.mk upd
+	$(MAKE) mcu=stm32f105 debug=n logfile=y -f $(ROOT)/Rules.mk upd
 	mv FF.upd flashfloppy-$(VER)/alt/logfile/FF_Gotek-Logfile-$(VER).upd
 	$(MAKE) clean
-	$(MAKE) quickdisk=y -f $(ROOT)/Rules.mk upd
+	$(MAKE) mcu=stm32f105 quickdisk=y -f $(ROOT)/Rules.mk upd
 	mv FF.upd flashfloppy-$(VER)/alt/quickdisk/FF_Gotek-QuickDisk-$(VER).upd
 	$(MAKE) clean
-	$(MAKE) quickdisk=y debug=n logfile=y -f $(ROOT)/Rules.mk upd
+	$(MAKE) mcu=stm32f105 quickdisk=y debug=n logfile=y -f $(ROOT)/Rules.mk upd
 	mv FF.upd flashfloppy-$(VER)/alt/quickdisk/logfile/FF_Gotek-QuickDisk-Logfile-$(VER).upd
 	python3 scripts/mk_qd.py --window=6.5 flashfloppy-$(VER)/alt/quickdisk/Blank.qd
 	$(MAKE) clean
@@ -81,7 +81,7 @@ upd:
 
 all:
 	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
-	$(MAKE) bootloader=y logfile=n debug=n -C bootloader \
+	$(MAKE) bootloader=y logfile=n -C bootloader \
 		-f $(ROOT)/Rules.mk \
 		Bootloader.elf Bootloader.bin Bootloader.hex
 	$(MAKE) logfile=n -C bl_update -f $(ROOT)/Rules.mk \
@@ -99,15 +99,16 @@ endif
 
 BAUD=115200
 DEV=/dev/ttyUSB0
+STM32FLASH=stm32flash
 
 ocd: gotek
 	python3 scripts/openocd/flash.py `pwd`/FF_Gotek-$(VER).hex
 
 flash: gotek
-	sudo stm32flash -b $(BAUD) -w FF_Gotek-$(VER).hex $(DEV)
+	sudo $(STM32FLASH) -b $(BAUD) -w FF_Gotek-$(VER).hex $(DEV)
 
 start:
-	sudo stm32flash -b $(BAUD) -g 0 $(DEV)
+	sudo $(STM32FLASH) -b $(BAUD) -g 0 $(DEV)
 
 serial:
 	sudo miniterm.py $(DEV) 3000000

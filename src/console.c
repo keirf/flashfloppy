@@ -1,7 +1,7 @@
 /*
  * console.c
  * 
- * printf-style interface to USART1.
+ * printf-style interface to USART.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -12,10 +12,25 @@
 #define BAUD 3000000 /* 3Mbaud */
 
 #define USART1_IRQ 37
+#define USART3_IRQ 39
+
+#if 1
+#define usart usart1
+#define USART_IRQ USART1_IRQ
+#define usart_gpio gpioa
+#define usart_tx_pin 9
+#define usart_rx_pin 10
+#else
+#define usart usart3
+#define USART_IRQ USART3_IRQ
+#define usart_gpio gpioc
+#define usart_tx_pin 10
+#define usart_rx_pin 11
+#endif
 
 /* Normally flush to serial is asynchronously executed in a low-pri IRQ. */
-void IRQ_44(void) __attribute__((alias("SOFTIRQ_console")));
-#define CONSOLE_SOFTIRQ 44
+#define CONSOLE_SOFTIRQ SOFTIRQ_1
+DEFINE_IRQ(CONSOLE_SOFTIRQ, "SOFTIRQ_console");
 
 /* We stage serial output in a ring buffer. */
 static char ring[2048];
@@ -32,9 +47,9 @@ static void flush_ring_to_serial(void)
     barrier();
 
     while (c != p) {
-        while (!(usart1->sr & USART_SR_TXE))
+        while (!(usart->sr & USART_SR_TXE))
             cpu_relax();
-        usart1->dr = ring[MASK(c++)];
+        usart->dr = ring[MASK(c++)];
     }
 
     barrier();
@@ -114,16 +129,27 @@ void console_sync(void)
 void console_init(void)
 {
     /* Turn on the clocks. */
+#if USART_IRQ == USART1_IRQ
     rcc->apb2enr |= RCC_APB2ENR_USART1EN;
+#else
+    rcc->apb1enr |= RCC_APB1ENR_USART3EN;
+#endif
 
-    /* Enable TX pin (PA9) for USART output, RX pin (PA10) as input. */
-    gpio_configure_pin(gpioa, 9, AFO_pushpull(_10MHz));
-    gpio_configure_pin(gpioa, 10, GPI_pull_up);
+    /* Enable TX pin for USART output, RX pin as input. */
+#if MCU == STM32F105
+    gpio_configure_pin(usart_gpio, usart_tx_pin, AFO_pushpull(_10MHz));
+    gpio_configure_pin(usart_gpio, usart_rx_pin, GPI_pull_up);
+#elif MCU == AT32F435
+    gpio_set_af(usart_gpio, usart_tx_pin, 7);
+    gpio_set_af(usart_gpio, usart_rx_pin, 7);
+    gpio_configure_pin(usart_gpio, usart_tx_pin, AFO_pushpull(_10MHz));
+    gpio_configure_pin(usart_gpio, usart_rx_pin, AFI(PUPD_up));
+#endif
 
     /* BAUD, 8n1. */
-    usart1->brr = SYSCLK / BAUD;
-    usart1->cr1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;
-    usart1->cr3 = 0;
+    usart->brr = (APB2_MHZ * 1000000) / BAUD;
+    usart->cr1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;
+    usart->cr3 = 0;
 
     IRQx_set_prio(CONSOLE_SOFTIRQ, CONSOLE_IRQ_PRI);
     IRQx_enable(CONSOLE_SOFTIRQ);
@@ -139,10 +165,10 @@ void console_crash_on_input(void)
         return;
     }
 
-    (void)usart1->dr; /* clear UART_SR_RXNE */
-    usart1->cr1 |= USART_CR1_RXNEIE;
-    IRQx_set_prio(USART1_IRQ, RESET_IRQ_PRI);
-    IRQx_enable(USART1_IRQ);
+    (void)usart->dr; /* clear UART_SR_RXNE */
+    usart->cr1 |= USART_CR1_RXNEIE;
+    IRQx_set_prio(USART_IRQ, RESET_IRQ_PRI);
+    IRQx_enable(USART_IRQ);
 }
 
 /*

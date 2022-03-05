@@ -34,15 +34,15 @@ static uint8_t pin_26 = 6; /* PB6 */
 #define tim_wdata   (tim1)
 #define dma_wdata   (dma1->ch[2-1])
 #define dma_wdata_ch 2
-#define dma_wdata_irq 12
-void IRQ_12(void) __attribute__((alias("IRQ_wdata_dma")));
+#define dma_wdata_irq DMA1_CH2_IRQ
+DEFINE_IRQ(dma_wdata_irq, "IRQ_wdata_dma");
 
 #define pin_rdata   7      /*  RD: Positive pulse signal */
 #define tim_rdata   (tim3)
 #define dma_rdata   (dma1->ch[3-1])
 #define dma_rdata_ch 3
-#define dma_rdata_irq 13
-void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
+#define dma_rdata_irq DMA1_CH3_IRQ
+DEFINE_IRQ(dma_rdata_irq, "IRQ_rdata_dma");
 
 /* EXTI IRQs. */
 #define motor_irq  6
@@ -67,6 +67,30 @@ bool_t floppy_ribbon_is_reversed(void)
 
 static void board_floppy_init(void)
 {
+#if MCU == STM32F105
+
+    gpio_configure_pin(gpioa, pin_reset, GPI_bus);
+    gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
+    gpio_configure_pin(gpio_data, pin_rdata, GPO_rdata);
+
+#elif MCU == AT32F435
+
+#define afio syscfg
+
+    gpio_set_af(gpioa, pin_reset, 1);
+    gpio_configure_pin(gpioa, pin_reset, AFI(PUPD_none));
+
+    gpio_set_af(gpio_data, pin_wdata, 1);
+    gpio_configure_pin(gpio_data, pin_wdata, AFI(PUPD_none));
+
+    gpio_set_af(gpio_data, pin_rdata, 2);
+    gpio_configure_pin(gpio_data, pin_rdata, GPO_rdata);
+
+    dmamux1->cctrl[dma_wdata_ch-1] = DMAMUX_CCTRL_REQSEL(DMAMUX_REQ_TIM1_CH1);
+    dmamux1->cctrl[dma_rdata_ch-1] = DMAMUX_CCTRL_REQSEL(DMAMUX_REQ_TIM3_OVF);
+
+#endif
+
     /* PA1 (RESET) triggers IRQ via TIM2 Channel 2, since EXTI is used for 
      * WGATE on PB1. */
     tim2->ccmr1 = TIM_CCMR1_CC2S(TIM_CCS_INPUT_TI1);
@@ -79,6 +103,9 @@ static void board_floppy_init(void)
         pin_26 = 16 + 13; /* PA13 */
         pin_wgate = 1; /* PB1 */
     }
+
+    gpio_configure_pin(gpioa, pin_motor, GPI_bus);
+    gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
 
     /* PA[15:14], PB[13:12], PC[11:10], PB[9:1], PA[0] */
     afio->exticr[4-1] = 0x0011;

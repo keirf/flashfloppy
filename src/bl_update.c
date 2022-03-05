@@ -20,8 +20,13 @@
  */
 
 /* Reflash the main bootloader (first 32kB). */
+#if MCU == STM32F105
 #define FIRMWARE_START 0x08000000
 #define FIRMWARE_END   0x08008000
+#elif MCU == AT32F435
+#define FIRMWARE_START 0x08000000
+#define FIRMWARE_END   0x0800c000
+#endif
 
 /* The update payload. */
 extern char update_start[], update_end[];

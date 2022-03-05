@@ -36,15 +36,15 @@ static uint8_t pin_26 = 6; /* PB6 */
 #define tim_wdata   (tim1)
 #define dma_wdata   (dma1->ch[2-1])
 #define dma_wdata_ch 2
-#define dma_wdata_irq 12
-void IRQ_12(void) __attribute__((alias("IRQ_wdata_dma")));
+#define dma_wdata_irq DMA1_CH2_IRQ
+DEFINE_IRQ(dma_wdata_irq, "IRQ_wdata_dma");
 
 #define pin_rdata   7
 #define tim_rdata   (tim3)
 #define dma_rdata   (dma1->ch[3-1])
 #define dma_rdata_ch 3
-#define dma_rdata_irq 13
-void IRQ_13(void) __attribute__((alias("IRQ_rdata_dma")));
+#define dma_rdata_irq DMA1_CH3_IRQ
+DEFINE_IRQ(dma_rdata_irq, "IRQ_rdata_dma");
 
 /* EXTI IRQs. */
 void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI0 */
@@ -62,6 +62,12 @@ static const struct exti_irq exti_irqs[] = {
     /* WGATE */ { 23, FLOPPY_IRQ_WGATE_PRI, 0 },
     /* MTR/CHGRST */ { 40, TIMER_IRQ_PRI, 0 }
 };
+
+/* Subset of output pins which are active (O_TRUE). */
+extern uint32_t gpio_out_active;
+
+/* GPIO register to either assert or deassert active output pins. */
+extern uint32_t gpiob_setreset;
 
 bool_t floppy_ribbon_is_reversed(void)
 {
@@ -82,6 +88,37 @@ bool_t floppy_ribbon_is_reversed(void)
 
 static void board_floppy_init(void)
 {
+#if MCU == STM32F105
+
+#define change_pin_mode(gpio, pin, mode)                \
+    gpio->crl = (gpio->crl & ~(0xfu<<((pin)<<2)))       \
+        | (((mode)&0xfu)<<((pin)<<2))
+
+    gpio_configure_pin(gpioa, pin_step, GPI_bus);
+    gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
+    gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
+
+#elif MCU == AT32F435
+
+#define change_pin_mode(gpio, pin, mode)                \
+    gpio->moder = (gpio->moder & ~(0x3u<<((pin)<<1)))   \
+        | (((mode)&0x3u)<<((pin)<<1));
+#define afio syscfg
+
+    gpio_set_af(gpioa, pin_step, 1);
+    gpio_configure_pin(gpioa, pin_step, AFI(PUPD_none));
+
+    gpio_set_af(gpio_data, pin_wdata, 1);
+    gpio_configure_pin(gpio_data, pin_wdata, AFI(PUPD_none));
+
+    gpio_set_af(gpio_data, pin_rdata, 2);
+    gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
+
+    dmamux1->cctrl[dma_wdata_ch-1] = DMAMUX_CCTRL_REQSEL(DMAMUX_REQ_TIM1_CH1);
+    dmamux1->cctrl[dma_rdata_ch-1] = DMAMUX_CCTRL_REQSEL(DMAMUX_REQ_TIM3_OVF);
+
+#endif
+
     /* PA1 (STEP) triggers IRQ via TIM2 Channel 2, since EXTI is used for 
      * WGATE on PB1. */
     tim2->ccmr1 = TIM_CCMR1_CC2S(TIM_CCS_INPUT_TI1);
@@ -96,7 +133,6 @@ static void board_floppy_init(void)
     }
 
     gpio_configure_pin(gpiob, pin_dir,   GPI_bus);
-    gpio_configure_pin(gpioa, pin_step,  GPI_bus);
     gpio_configure_pin(gpioa, pin_sel0,  GPI_bus);
     gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
     gpio_configure_pin(gpiob, pin_side,  GPI_bus);
@@ -121,6 +157,8 @@ static void board_floppy_init(void)
     exti->rtsr = 0xffff;
     exti->ftsr = 0xffff;
     exti->imr = m(pin_wgate) | m(pin_side) | m(pin_sel0);
+
+    gpiob_setreset = (uint32_t)&gpiob->bsrr;
 }
 
 /* Fast speculative entry point for SELA-changed IRQ. We assume SELA has 
@@ -140,15 +178,9 @@ void IRQ_SELA_changed(void) {
         "    b.n  _IRQ_SELA_changed\n" /* branch to the main ISR entry point */
         "    nop\n"
         "gpio_out_active: .word 0\n"
-        "gpiob_setreset:  .word 0x40010c10\n" /* gpiob->b[s]rr */
+        "gpiob_setreset:  .word 0\n" /* gpiob->b[s]rr */
         );
 }
-
-/* Subset of output pins which are active (O_TRUE). */
-extern uint32_t gpio_out_active;
-
-/* GPIO register to either assert or deassert active output pins. */
-extern uint32_t gpiob_setreset;
 
 static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
     __attribute__((used)) __attribute__((section(".ramfuncs")));
@@ -181,8 +213,7 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
         gpioa->brr = _gpio_out_active >> 16;
         /* Set pin_rdata as timer output (AFO_bus). */
         if (dma_rd && (dma_rd->state == DMA_active))
-            gpio_data->crl = (gpio_data->crl & ~(0xfu<<(pin_rdata<<2)))
-                | ((AFO_bus&0xfu)<<(pin_rdata<<2));
+            change_pin_mode(gpio_data, pin_rdata, AFO_bus);
         /* Let main code know it can drive the bus until further notice. */
         drive.sel = 1;
     } else {
@@ -192,17 +223,16 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
         gpioa->bsrr = _gpio_out_active >> 16;
         /* Set pin_rdata as quiescent (GPO_bus). */
         if (dma_rd && (dma_rd->state == DMA_active))
-            gpio_data->crl = (gpio_data->crl & ~(0xfu<<(pin_rdata<<2)))
-                | ((GPO_bus&0xfu)<<(pin_rdata<<2));
+            change_pin_mode(gpio_data, pin_rdata, GPO_bus);
         /* Tell main code to leave the bus alone. */
         drive.sel = 0;
     }
 
     /* Set up the speculative fast path for the next interrupt. */
     if (drive.sel)
-        gpiob_setreset &= ~4; /* gpiob->bsrr */
+        gpiob_setreset = (uint32_t)&gpiob->bsrr;
     else
-        gpiob_setreset |= 4; /* gpiob->brr */
+        gpiob_setreset = (uint32_t)&gpiob->brr;
 }
 
 /* Update the SELA handler. Used for switching in the Amiga HD-ID "magic". 

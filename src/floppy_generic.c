@@ -142,7 +142,7 @@ static void floppy_mount(struct slot *slot)
     FSIZE_t fastseek_sz;
     DWORD *cltbl;
     FRESULT fr;
-    int max_ring_kb = (ram_kb >= 64) ? 32 : 8;
+    int max_ring_kb = (ram_kb >= 128) ? 64 : (ram_kb >= 64) ? 32 : 8;
 
     do {
 

@@ -20,8 +20,9 @@
 static void chgrst_timer(void *_drv);
 static void drive_step_timer(void *_drv);
 static void motor_spinup_timer(void *_drv);
-void IRQ_43(void) __attribute__((alias("IRQ_soft")));
-#define FLOPPY_SOFTIRQ 43
+
+#define FLOPPY_SOFTIRQ SOFTIRQ_0
+DEFINE_IRQ(FLOPPY_SOFTIRQ, "IRQ_soft");
 
 /* Index-pulse timer functions. */
 static void index_assert(void *);   /* index.timer */
@@ -299,9 +300,6 @@ void floppy_init(void)
     drive_configure_output_pin(pin_26);
     drive_configure_output_pin(pin_28);
     drive_configure_output_pin(pin_34);
-
-    gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
-    gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
     drive_change_output(drv, outp_dskchg, TRUE);
     drive_change_output(drv, outp_wrprot, TRUE);

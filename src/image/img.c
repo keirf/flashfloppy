@@ -1697,7 +1697,7 @@ static void raw_seek_track(
     im->img.sec_info = &im->img.sec_info_base[trk->sec_off];
 
     trk->rpm = trk->rpm ?: 300;
-    im->stk_per_rev = (stk_ms(200) * 300) / trk->rpm;
+    im->stk_per_rev = ((uint32_t)stk_ms(200) * 300) / trk->rpm;
 
     if (trk->nr_sectors != 0) {
         /* Create logical sector map in rotational order. */

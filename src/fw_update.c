@@ -32,9 +32,14 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-/* Main bootloader: flashes the main firmware (last 96kB of Flash). */
+/* Main bootloader: flashes the main firmware. */
+#if MCU == STM32F105
 #define FIRMWARE_START 0x08008000
 #define FIRMWARE_END   (0x08020000 - FLASH_PAGE_SIZE)
+#elif MCU == AT32F435
+#define FIRMWARE_START 0x0800c000
+#define FIRMWARE_END   (0x08040000 - FLASH_PAGE_SIZE)
+#endif
 #define FILE_PATTERN   "ff_gotek*.upd"
 
 int EXC_reset(void) __attribute__((alias("main")));
@@ -87,6 +92,8 @@ static bool_t fw_update_requested(void)
 {
     bool_t requested;
 
+#if MCU == STM32F105
+
     /* Power up the backup-register interface and allow writes. */
     rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
     pwr->cr |= PWR_CR_DBP;
@@ -97,6 +104,14 @@ static bool_t fw_update_requested(void)
     /* Clean up backup registers and peripheral clocks. */
     bkp->dr1[0] = bkp->dr1[1] = 0;
     rcc->apb1enr = 0;
+
+#elif MCU == AT32F435
+
+    /* Check-and-clear a magic value poked into SRAM1 by the main firmware. */
+    requested = (_reset_flag == RESET_FLAG_BOOTLOADER);
+    _reset_flag = 0;
+
+#endif
 
     return requested;
 }

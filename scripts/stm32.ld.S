@@ -5,8 +5,6 @@ MEMORY
   FLASH (rx)      : ORIGIN = FLASH_BASE, LENGTH = FLASH_LEN
   RAM (rwx)       : ORIGIN = RAM_BASE, LENGTH = RAM_LEN
 }
-REGION_ALIAS("RO", FLASH);
-REGION_ALIAS("RW", RAM);
 
 SECTIONS
 {
@@ -24,7 +22,14 @@ SECTIONS
     KEEP (*(.fini))
     . = ALIGN(4);
     _etext = .;
-  } >RO
+  } >FLASH
+
+#if MCU == AT32F435
+  .flags : {
+    _reset_flag = .;
+    . = . + 4;
+  } >RAM
+#endif
 
   .data : AT (_etext) {
     . = ALIGN(4);
@@ -35,7 +40,7 @@ SECTIONS
     . = ALIGN(4);
     _edat = .;
     _ldat = LOADADDR(.data);
-  } >RW
+  } >RAM
 
   .bss : {
     . = ALIGN(8);
@@ -50,7 +55,7 @@ SECTIONS
     *(.bss*)
     . = ALIGN(4);
     _ebss = .;
-  } >RW
+  } >RAM
 
   /DISCARD/ : {
     *(.eh_frame)
