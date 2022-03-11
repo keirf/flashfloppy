@@ -46,35 +46,70 @@ out: FORCE
 	rsync -a --include="*/" --exclude="*" src/ out/$(mcu)/$(level)/$(target)
 
 target: FORCE out
-	$(MAKE) -C out/$(mcu)/$(level)/$(target) -f $(ROOT)/Rules.mk target.bin target.hex target.upd target.dfu $(mcu)=y $(level)=y $(target)=y
+	$(MAKE) -C out/$(mcu)/$(level)/$(target) -f $(ROOT)/Rules.mk target.bin target.hex target.dfu $(mcu)=y $(level)=y $(target)=y
 
 HXC_FF_URL := https://www.github.com/keirf/flashfloppy-hxc-file-selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
 HXC_FF_VER := v9-FF
 
+_legacy_dist: FORCE
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/FF_Gotek-$(VER).upd \
+	  out/$(mcu)/$(level)/floppy/target.bin & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/alt/bootloader/FF_Gotek-bootloader-$(VER).upd \
+	  out/$(mcu)/$(level)/bl_update/target.bin & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/alt/io-test/FF_Gotek-io-test-$(VER).upd \
+	  out/$(mcu)/$(level)/io_test/target.bin & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/alt/logfile/FF_Gotek-logfile-$(VER).upd \
+	  out/$(mcu)/logfile/floppy/target.bin & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/alt/quickdisk/FF_Gotek-quickdisk-$(VER).upd \
+	  out/$(mcu)/$(level)/quickdisk/target.bin & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/alt/quickdisk/logfile/FF_Gotek-quickdisk-logfile-$(VER).upd \
+	  out/$(mcu)/logfile/quickdisk/target.bin & \
+	wait
+
+_dist: FORCE
+	cd out/$(mcu)/$(level)/floppy; \
+	  cp -a target.dfu $(t)/dfu/flashfloppy-$(mcu)-$(VER).dfu; \
+	  cp -a target.hex $(t)/hex/flashfloppy-$(mcu)-$(VER).hex
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/flashfloppy-$(VER).upd \
+	  out/$(mcu)/$(level)/floppy/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/bootloader/flashfloppy-bootloader-$(VER).upd \
+	  out/$(mcu)/$(level)/bl_update/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/io-test/flashfloppy-io-test-$(VER).upd \
+	  out/$(mcu)/$(level)/io_test/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/logfile/flashfloppy-logfile-$(VER).upd \
+	  out/$(mcu)/logfile/floppy/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/quickdisk/flashfloppy-quickdisk-$(VER).upd \
+	  out/$(mcu)/$(level)/quickdisk/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/quickdisk/logfile/flashfloppy-quickdisk-logfile-$(VER).upd \
+	  out/$(mcu)/logfile/quickdisk/target.bin $(mcu) & \
+	wait
+
 dist: level := prod
-dist: mcu := stm32f105
 dist: t := $(ROOT)/out/flashfloppy-$(VER)
 dist: FORCE all
 	rm -rf out/flashfloppy-*
+	mkdir -p $(t)/hex
+	mkdir -p $(t)/dfu
 	mkdir -p $(t)/alt/bootloader
 	mkdir -p $(t)/alt/logfile
 	mkdir -p $(t)/alt/io-test
 	mkdir -p $(t)/alt/quickdisk/logfile
-	cd out/$(mcu)/$(level)/floppy; \
-	  cp -a target.dfu $(t)/FF_Gotek-$(VER).dfu; \
-	  cp -a target.upd $(t)/FF_Gotek-$(VER).upd; \
-	  cp -a target.hex $(t)/FF_Gotek-$(VER).hex
-	cd out/$(mcu)/$(level)/bootloader; \
-	  cp -a target.upd $(t)/alt/bootloader/FF_Gotek-Bootloader-$(VER).upd
-	cd out/$(mcu)/$(level)/io_test; \
-	  cp -a target.upd $(t)/alt/io-test/FF_Gotek-IO-Test-$(VER).upd
-	cd out/$(mcu)/logfile/floppy; \
-	  cp -a target.upd $(t)/alt/logfile/FF_Gotek-Logfile-$(VER).upd
-	cd out/$(mcu)/$(level)/quickdisk; \
-	  cp -a target.upd $(t)/alt/quickdisk/FF_Gotek-QuickDisk-$(VER).upd
-	cd out/$(mcu)/logfile/quickdisk; \
-	  cp -a target.upd $(t)/alt/quickdisk/logfile/FF_Gotek-QuickDisk-Logfile-$(VER).upd
+	$(MAKE) _legacy_dist mcu=stm32f105 level=$(level) t=$(t)
+	$(MAKE) _dist mcu=stm32f105 level=$(level) t=$(t)
+	$(MAKE) _dist mcu=at32f435 level=$(level) t=$(t)
 	$(PYTHON) scripts/mk_qd.py --window=6.5 $(t)/alt/quickdisk/Blank.qd
 	cp -a COPYING $(t)/
 	cp -a README.md $(t)/

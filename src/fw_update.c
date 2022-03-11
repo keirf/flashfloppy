@@ -46,12 +46,15 @@ int EXC_reset(void) __attribute__((alias("main")));
 
 static uint8_t USBH_Cfg_Rx_Buffer[512];
 
+/* File buffer. */
+static uint8_t buf[2048];
+
 /* FatFS */
 static FATFS fatfs;
 
 /* Shared state. regarding update progress/failure. */
 static bool_t old_firmware_erased;
-static enum {
+static enum fail_code {
     FC_no_file = 1, /* no update file */
     FC_multiple_files, /* multiple update files */
     FC_bad_file, /* bad signature or size */
@@ -137,71 +140,69 @@ static void msg_display(const char *p)
     }
 }
 
-int update(void *unused)
+static enum fail_code find_update_file(
+    char *file_name, size_t file_name_size, const char *file_pattern)
 {
-    /* FatFS state, local to this function, but off stack. */
-    static FIL file;
     static DIR dp;
     static FILINFO fno;
-    static char update_fname[FF_MAX_LFN+1];
-
-    /* Our file buffer. Again, off stack. */
-    static uint8_t buf[2048];
-
-    uint32_t p;
-    uint16_t footer[2], crc;
-    UINT i, nr;
-    FIL *fp = &file;
-
     /* Find the update file, confirming that it exists and there is no 
      * ambiguity (ie. we don't allow multiple update files). */
-    F_findfirst(&dp, &fno, "", FILE_PATTERN);
+    F_findfirst(&dp, &fno, "", file_pattern);
     if (*fno.fname == '\0') {
-        fail_code = FC_no_file;
-        goto fail;
+        return FC_no_file;
     }
-    snprintf(update_fname, sizeof(update_fname), "%s", fno.fname);
-    printk("Found update \"%s\"\n", update_fname);
+    snprintf(file_name, file_name_size, "%s", fno.fname);
+    printk("Found update \"%s\"\n", file_name);
     F_findnext(&dp, &fno);
     if (*fno.fname != '\0') {
         printk("** Error: found another file \"%s\"\n", fno.fname);
-        fail_code = FC_multiple_files;
-        goto fail;
+        return FC_multiple_files;
     }
     F_closedir(&dp);
+    return 0;
+}
 
-    /* Open and sanity-check the file. */
-    msg_display(" RD");
-    F_open(fp, update_fname, FA_READ);
-    /* Check size. */
-    fail_code = ((f_size(fp) < 1024)
-                 || (f_size(fp) > (FIRMWARE_END-FIRMWARE_START))
-                 || (f_size(fp) & 3))
-        ? FC_bad_file : 0;
-    printk("%u bytes: %s\n", f_size(fp), fail_code ? "BAD" : "OK");
-    if (fail_code)
-        goto fail;
-    /* Check signature in footer. */
-    F_lseek(fp, f_size(fp) - sizeof(footer));
-    F_read(fp, footer, sizeof(footer), NULL);
-    if (be16toh(footer[0]) != 0x4659/* "FY" */) {
-        fail_code = FC_bad_file;
-        goto fail;
+static uint16_t file_crc(FIL *fp, UINT off, UINT sz)
+{
+    uint16_t crc;
+    UINT todo, nr;
+
+    crc = 0xffff;
+    F_lseek(fp, off);
+    for (todo = sz; todo != 0; todo -= nr) {
+        nr = min_t(UINT, sizeof(buf), todo);
+        F_read(fp, buf, nr, NULL);
+        crc = crc16_ccitt(buf, nr, crc);
     }
+
+    return crc;
+}
+
+static enum fail_code erase_and_program(FIL *fp, UINT off, UINT sz)
+{
+    uint32_t p;
+    uint16_t footer[2];
+    UINT todo, nr;
+
+    /* Check size. */
+    fail_code = ((sz < 1024)
+                 || (sz > (FIRMWARE_END-FIRMWARE_START))
+                 || (sz & 3))
+        ? FC_bad_file : 0;
+    printk("%u bytes: %s\n", sz, fail_code ? "BAD" : "OK");
+    if (fail_code)
+        return fail_code;
+
+    /* Check signature in footer. */
+    F_lseek(fp, off + sz - sizeof(footer));
+    F_read(fp, footer, sizeof(footer), NULL);
+    if (be16toh(footer[0]) != 0x4659/* "FY" */)
+        return FC_bad_file;
 
     /* Check the CRC-CCITT. */
     msg_display("CRC");
-    crc = 0xffff;
-    F_lseek(fp, 0);
-    for (i = 0; !f_eof(fp); i++) {
-        nr = min_t(UINT, sizeof(buf), f_size(fp) - f_tell(fp));
-        F_read(&file, buf, nr, NULL);
-        crc = crc16_ccitt(buf, nr, crc);
-    }
-    if (crc != 0) {
-        fail_code = FC_bad_crc;
-        goto fail;
-    }
+    if (file_crc(fp, off, sz) != 0)
+        return FC_bad_crc;
 
     /* Erase the old firmware. */
     msg_display("CLR");
@@ -211,32 +212,116 @@ int update(void *unused)
 
     /* Program the new firmware. */
     msg_display("PRG");
-    crc = 0xffff;
-    F_lseek(fp, 0);
+    F_lseek(fp, off);
     p = FIRMWARE_START;
-    for (i = 0; !f_eof(fp); i++) {
-        nr = min_t(UINT, sizeof(buf), f_size(fp) - f_tell(fp));
-        F_read(&file, buf, nr, NULL);
+    for (todo = sz; todo != 0; todo -= nr) {
+        nr = min_t(UINT, sizeof(buf), todo);
+        F_read(fp, buf, nr, NULL);
         fpec_write(buf, nr, p);
         if (memcmp((void *)p, buf, nr) != 0) {
             /* Byte-by-byte verify failed. */
-            fail_code = FC_bad_prg;
-            goto fail;
+            return FC_bad_prg;
         }
         p += nr;
     }
 
     /* Verify the new firmware (CRC-CCITT). */
-    p = FIRMWARE_START;
-    crc = crc16_ccitt((void *)p, f_size(fp), 0xffff);
-    if (crc) {
+    if (crc16_ccitt((void *)FIRMWARE_START, sz, 0xffff) != 0) {
         /* CRC verify failed. */
-        fail_code = FC_bad_prg;
-        goto fail;
+        return FC_bad_prg;
     }
 
-    /* All done! */
-    fail_code = 0;
+    return 0;
+}
+
+static enum fail_code find_new_update_entry(FIL *fp, UINT *p_off, UINT *p_sz)
+{
+    struct {
+        char sig[4];
+        uint32_t off;
+        uint32_t nr;
+    } header;
+
+    struct {
+        uint8_t model;
+        uint8_t pad[3];
+        uint32_t off;
+        uint32_t len;
+    } entry;
+
+    uint32_t i;
+
+    F_lseek(fp, 0);
+    F_read(fp, &header, sizeof(header), NULL);
+    if (strncmp(header.sig, "FFUP", 4))
+        return FC_bad_file;
+
+    if (file_crc(fp, 0, header.off + header.nr*12 + 4) != 0)
+        return FC_bad_crc;
+
+    F_lseek(fp, header.off);
+    for (i = 0; i < header.nr; i++) {
+        F_read(fp, &entry, sizeof(entry), NULL);
+        if (entry.model == MCU) {
+            *p_off = entry.off;
+            *p_sz = entry.len;
+            return 0;
+        }
+    }
+
+    return FC_bad_file;
+}
+
+static enum fail_code find_update_entry(FIL *fp, UINT *p_off, UINT *p_sz)
+{
+    uint16_t footer[2];
+
+    *p_off = *p_sz = 0;
+
+    F_lseek(fp, f_size(fp) - sizeof(footer));
+    F_read(fp, footer, sizeof(footer), NULL);
+    switch (be16toh(footer[0])) {
+#if MCU == STM32F105
+    case 0x4659/* "FY" */:
+        *p_off = 0;
+        *p_sz = f_size(fp);
+        return 0;
+#endif
+    case 0x4646/* "FF" */:
+        return find_new_update_entry(fp, p_off, p_sz);
+    }
+
+    return FC_bad_file;
+}
+
+int update(void *unused)
+{
+    /* FatFS state, local to this function, but off stack. */
+    static FIL file;
+    static char update_fname[FF_MAX_LFN+1];
+
+    FIL *fp = &file;
+    UINT off, sz;
+
+    fail_code = find_update_file(update_fname, sizeof(update_fname),
+                                 "flashfloppy-*.upd");
+#if MCU == STM32F105
+    if (fail_code == FC_no_file)
+        fail_code = find_update_file(update_fname, sizeof(update_fname),
+                                     "ff_gotek*.upd");
+#endif
+    if (fail_code)
+        goto fail;
+
+    /* Open and sanity-check the file. */
+    msg_display(" RD");
+    F_open(fp, update_fname, FA_READ);
+
+    fail_code = find_update_entry(fp, &off, &sz);
+    if (fail_code)
+        goto fail;
+
+    fail_code = erase_and_program(fp, off, sz);
 
 fail:
     canary_check();
