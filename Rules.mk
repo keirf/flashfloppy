@@ -97,9 +97,6 @@ endif
 	$(OBJCOPY) -O binary $< $@
 	chmod a-x $@
 
-%.upd: %.bin
-	$(PYTHON) $(ROOT)/scripts/mk_update.py $< $@
-
 %.dfu: %.hex
 	$(PYTHON) $(ROOT)/scripts/dfu-convert.py -i $< $@
 
