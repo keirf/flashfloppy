@@ -1,15 +1,5 @@
-*.[oa]
-.*.d
 *~
-*.ld
-*.elf
-*.bin
-*.hex
 *.orig
 *.rej
-*.rld
-*.upd
-*.dfu
-/flashfloppy-*
-/index.html
-/HxC_Compat*
+/out
+/ext

@@ -1,6 +1,5 @@
 OBJS += arena.o
 OBJS += build_info.o
-OBJS += cache.o
 OBJS += cancellation.o
 OBJS += config.o
 OBJS += crc.o
@@ -9,7 +8,6 @@ OBJS += vectors.o
 OBJS += fpec_$(mcu).o
 OBJS += fs.o
 OBJS += fs_async.o
-OBJS += main.o
 OBJS += ring_io.o
 OBJS += sd_spi.o
 OBJS += spi.o
@@ -20,11 +18,31 @@ OBJS += time.o
 OBJS += timer.o
 OBJS += util.o
 OBJS += volume.o
+OBJS-$(debug) += console.o
+OBJS-$(logfile) += logfile.o
+
+ifeq ($(bl_update),y)
+
+OBJS += bl_update.o
+SUBDIRS += display gotek
+
+else ifeq ($(io_test),y)
+
+OBJS += io_test.o
+SUBDIRS += display gotek
+
+else ifeq ($(bootloader),y)
+
+OBJS += fw_update.o
+SUBDIRS += display fatfs gotek usb
+
+else
+
+OBJS += main.o
+OBJS += cache.o
 
 OBJS-$(floppy) += floppy.o
 OBJS-$(quickdisk) += quickdisk.o
-OBJS-$(debug) += console.o
-OBJS-$(logfile) += logfile.o
 
 SUBDIRS += display
 SUBDIRS += fatfs
@@ -32,15 +50,13 @@ SUBDIRS += image
 SUBDIRS += gotek
 SUBDIRS += usb
 
-.PHONY: build_info.c
-build_info.o: CFLAGS += -DFW_VER="\"$(FW_VER)\""
+endif
 
-flash_cfg.o: ff_cfg_defaults.h
+.PHONY: $(RPATH)/build_info.c
+build_info.o: CFLAGS += -DFW_VER="\"$(FW_VER)\""
 
 ff_cfg_defaults.h: $(ROOT)/examples/FF.CFG
 	$(PYTHON) $(ROOT)/scripts/mk_config.py $< $@
 
 main.o flash_cfg.o: ff_cfg_defaults.h
-
-clean::
-	rm -f ff_cfg_defaults.h
+main.o flash_cfg.o: CFLAGS += -iquote .

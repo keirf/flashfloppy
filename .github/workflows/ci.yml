@@ -25,7 +25,7 @@ jobs:
         export VER=${{ steps.vars.outputs.sha_short }}
         make -j4 dist VER=$VER
         mkdir -p _cidist
-        rm flashfloppy-$VER.zip
+        mv out/flashfloppy-$VER .
         rm flashfloppy-$VER/RELEASE_NOTES
         git rev-parse HEAD >flashfloppy-$VER/COMMIT
         zip -r flashfloppy-$VER.zip flashfloppy-$VER
@@ -34,8 +34,8 @@ jobs:
     - name: Build debug dist
       run: |
         export VER=${{ steps.vars.outputs.sha_short }}-debug
-        env debug=y make -j4 dist VER=$VER
-        rm flashfloppy-$VER.zip
+        make -j4 dist VER=$VER level=debug
+        mv out/flashfloppy-$VER .
         rm flashfloppy-$VER/RELEASE_NOTES
         git rev-parse HEAD >flashfloppy-$VER/COMMIT
         echo debug >>flashfloppy-$VER/COMMIT

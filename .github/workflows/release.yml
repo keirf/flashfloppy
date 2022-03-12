@@ -29,6 +29,7 @@ jobs:
       run: |
         export VER=${{ steps.vars.outputs.ref }}
         make -j4 dist VER=$VER
+        mv out/flashfloppy-$VER.zip .
 
     - name: Create Release
       id: create_release

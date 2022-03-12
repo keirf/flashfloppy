@@ -19,34 +19,31 @@ FLAGS += -Wno-unused-value -ffunction-sections
 ## STM32F105
 ifeq ($(mcu),stm32f105)
 FLAGS += -mcpu=cortex-m3 -DSTM32F105=1 -DMCU=1
-stm32f105=y
 ifeq ($(bootloader),y)
 # Debug bootloader doesn't fit in 32kB
 override debug=n
+override logfile=n
 endif
 
 ## AT32F435
 else ifeq ($(mcu),at32f435)
 FLAGS += -mcpu=cortex-m4 -DAT32F435=4 -DMCU=4
-at32f435=y
 endif
 
 ifneq ($(debug),y)
 FLAGS += -DNDEBUG
 endif
 
-# Following options are mutually exclusive
 ifeq ($(bootloader),y)
 FLAGS += -DBOOTLOADER=1
-else ifeq ($(logfile),y)
+endif
+
+ifeq ($(logfile),y)
 FLAGS += -DLOGFILE=1
 endif
 
 ifeq ($(quickdisk),y)
 FLAGS += -DQUICKDISK=1
-floppy=n
-else
-floppy=y
 endif
 
 FLAGS += -MMD -MF .$(@F).d
@@ -58,12 +55,11 @@ CFLAGS += $(CFLAGS-y) $(FLAGS) -include decls.h
 AFLAGS += $(AFLAGS-y) $(FLAGS) -D__ASSEMBLY__
 LDFLAGS += $(LDFLAGS-y) $(FLAGS) -Wl,--gc-sections
 
-RULES_MK := y
-
-include Makefile
+RPATH := $(shell $(PYTHON) $(ROOT)/scripts/rpath.py $(ROOT) $(CURDIR))
+include $(RPATH)/Makefile
 
 SUBDIRS += $(SUBDIRS-y)
-OBJS += $(OBJS-y) $(patsubst %,%/build.o,$(SUBDIRS))
+OBJS += $(OBJS-y) $(OBJS-^n) $(patsubst %,%/build.o,$(SUBDIRS))
 
 # Force execution of pattern rules (for which PHONY cannot be directly used).
 .PHONY: FORCE
@@ -79,19 +75,11 @@ build.o: $(OBJS)
 %/build.o: FORCE
 	$(MAKE) -f $(ROOT)/Rules.mk -C $* build.o
 
-%.o: %.c Makefile
-	@echo CC $@
-	$(CC) $(CFLAGS) -c $< -o $@
-
-%.o: %.S Makefile
-	@echo AS $@
-	$(CC) $(AFLAGS) -c $< -o $@
-
-%.ld: %.ld.S Makefile
+%.ld: $(RPATH)/%.ld.S $(RPATH)/Makefile
 	@echo CPP $@
 	$(CC) -P -E $(AFLAGS) $< -o $@
 
-%.elf: $(OBJS) %.ld Makefile
+%.elf: $(OBJS) %.ld $(RPATH)/Makefile
 	@echo LD $@
 	$(CC) $(LDFLAGS) -T$(*F).ld $(OBJS) -o $@
 	chmod a-x $@
@@ -100,23 +88,28 @@ build.o: $(OBJS)
 	@echo OBJCOPY $@
 	$(OBJCOPY) -O ihex $< $@
 	chmod a-x $@
+ifneq ($(bootloader),y)
+	srec_cat ../bootloader/target.hex -Intel $@ -Intel -o $@ -Intel
+endif
 
 %.bin: %.elf
 	@echo OBJCOPY $@
 	$(OBJCOPY) -O binary $< $@
 	chmod a-x $@
 
-%.o: $(RPATH)/%.c Makefile
+%.upd: %.bin
+	@echo OBJCOPY $@
+	$(PYTHON) $(ROOT)/scripts/mk_update.py $< $@
+
+%.dfu: %.hex
+	$(PYTHON) $(ROOT)/scripts/dfu-convert.py -i $< $@
+
+%.o: $(RPATH)/%.c $(RPATH)/Makefile
 	@echo CC $@
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.o: $(RPATH)/%.S Makefile
+%.o: $(RPATH)/%.S $(RPATH)/Makefile
 	@echo AS $@
 	$(CC) $(AFLAGS) -c $< -o $@
-
-clean:: $(addprefix _clean_,$(SUBDIRS) $(SUBDIRS-n) $(SUBDIRS-))
-	rm -f *.orig *.rej *~ *.o *.elf *.hex *.bin *.ld $(DEPS)
-_clean_%: FORCE
-	$(MAKE) -f $(ROOT)/Rules.mk -C $* clean
 
 -include $(DEPS)
