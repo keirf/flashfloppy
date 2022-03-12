@@ -35,7 +35,7 @@ asm (
 "    .align 4\n"
 "    .global update_start, update_end\n"
 "update_start:\n"
-"    .incbin \"../bootloader/Bootloader.bin\"\n"
+"    .incbin \"../bootloader/target.bin\"\n"
 "update_end:\n"
 "    .previous\n"
     );

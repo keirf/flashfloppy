@@ -4,111 +4,104 @@ export FW_VER := 3.30
 PROJ := FlashFloppy
 VER := v$(FW_VER)
 
-SUBDIRS += src bootloader bl_update io_test
+PYTHON := python3
 
-.PHONY: all upd clean flash start serial gotek
-
-ifneq ($(RULES_MK),y)
-
-.DEFAULT_GOAL := gotek
 export ROOT := $(CURDIR)
 
-all:
-	$(MAKE) -f $(ROOT)/Rules.mk all
+.PHONY: FORCE
 
-clean:
-	rm -f *.hex *.upd *.dfu *.html
-	$(MAKE) -f $(ROOT)/Rules.mk $@
+.DEFAULT_GOAL := all
 
-gotek: all
-	mv FF.dfu FF_Gotek-$(VER).dfu
-	mv FF.upd FF_Gotek-$(VER).upd
-	mv FF.hex FF_Gotek-$(VER).hex
-	mv BL.upd FF_Gotek-Bootloader-$(VER).upd
-	mv IOT.upd FF_Gotek-IO-Test-$(VER).upd
+prod-%: FORCE
+	$(eval export mcu := $*)
+	$(MAKE) target target=bootloader level=prod
+	$(MAKE) target target=floppy level=prod
+	$(MAKE) target target=quickdisk level=prod
+	$(MAKE) target target=bl_update level=prod
+	$(MAKE) target target=io_test level=prod
+
+debug-%: FORCE
+	$(eval export mcu := $*)
+	$(MAKE) target target=bootloader level=debug
+	$(MAKE) target target=floppy level=debug
+	$(MAKE) target target=quickdisk level=debug
+	$(MAKE) target target=bl_update level=debug
+	$(MAKE) target target=io_test level=debug
+
+logfile-%: FORCE
+	$(eval export mcu := $*)
+	$(MAKE) target target=bootloader level=logfile
+	$(MAKE) target target=floppy level=logfile
+	$(MAKE) target target=quickdisk level=logfile
+
+all-%: FORCE prod-% debug-% logfile-% ;
+
+all: FORCE all-stm32f105 all-at32f435 ;
+
+clean: FORCE
+	rm -rf out
+
+mrproper: FORCE clean
+	rm -rf ext
+
+out: FORCE
+	mkdir -p out/$(mcu)/$(level)/$(target)
+	rsync -a --include="*/" --exclude="*" src/ out/$(mcu)/$(level)/$(target)
+
+target: FORCE out
+	$(MAKE) -C out/$(mcu)/$(level)/$(target) -f $(ROOT)/Rules.mk target.bin target.hex target.upd target.dfu $(mcu)=y $(level)=y $(target)=y
 
 HXC_FF_URL := https://www.github.com/keirf/flashfloppy-hxc-file-selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
 HXC_FF_VER := v9-FF
 
-dist:
-	rm -rf flashfloppy-*
-	mkdir -p flashfloppy-$(VER)/alt/bootloader
-	mkdir -p flashfloppy-$(VER)/alt/logfile
-	mkdir -p flashfloppy-$(VER)/alt/io-test
-	mkdir -p flashfloppy-$(VER)/alt/quickdisk/logfile
-	$(MAKE) clean
-	$(MAKE) mcu=stm32f105 gotek
-	cp -a FF_Gotek-$(VER).dfu flashfloppy-$(VER)/
-	cp -a FF_Gotek-$(VER).upd flashfloppy-$(VER)/
-	cp -a FF_Gotek-$(VER).hex flashfloppy-$(VER)/
-	cp -a FF_Gotek-Bootloader-$(VER).upd flashfloppy-$(VER)/alt/bootloader/
-	cp -a FF_Gotek-IO-Test-$(VER).upd flashfloppy-$(VER)/alt/io-test/
-	$(MAKE) clean
-	$(MAKE) mcu=stm32f105 debug=n logfile=y -f $(ROOT)/Rules.mk upd
-	mv FF.upd flashfloppy-$(VER)/alt/logfile/FF_Gotek-Logfile-$(VER).upd
-	$(MAKE) clean
-	$(MAKE) mcu=stm32f105 quickdisk=y -f $(ROOT)/Rules.mk upd
-	mv FF.upd flashfloppy-$(VER)/alt/quickdisk/FF_Gotek-QuickDisk-$(VER).upd
-	$(MAKE) clean
-	$(MAKE) mcu=stm32f105 quickdisk=y debug=n logfile=y -f $(ROOT)/Rules.mk upd
-	mv FF.upd flashfloppy-$(VER)/alt/quickdisk/logfile/FF_Gotek-QuickDisk-Logfile-$(VER).upd
-	python3 scripts/mk_qd.py --window=6.5 flashfloppy-$(VER)/alt/quickdisk/Blank.qd
-	$(MAKE) clean
-	cp -a COPYING flashfloppy-$(VER)/
-	cp -a README.md flashfloppy-$(VER)/
-	cp -a RELEASE_NOTES flashfloppy-$(VER)/
-	cp -a examples flashfloppy-$(VER)/
-	[ -e HxC_Compat_Mode-$(HXC_FF_VER).zip ] || \
-	wget -q --show-progress $(HXC_FF_URL)/$(HXC_FF_VER)/HxC_Compat_Mode-$(HXC_FF_VER).zip
-	rm -rf index.html
-	unzip -q HxC_Compat_Mode-$(HXC_FF_VER).zip
-	mv HxC_Compat_Mode flashfloppy-$(VER)
-	mkdir -p flashfloppy-$(VER)/scripts
-	cp -a scripts/edsk* flashfloppy-$(VER)/scripts/
-	cp -a scripts/mk_hfe.py flashfloppy-$(VER)/scripts/
-	zip -r flashfloppy-$(VER).zip flashfloppy-$(VER)
-
-mrproper: clean
-	rm -rf flashfloppy-*
-	rm -rf HxC_Compat_Mode-$(HXC_FF_VER).zip
-
-else
-
-upd:
-	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
-	$(PYTHON) ./scripts/mk_update.py src/$(PROJ).bin FF.upd
-
-all:
-	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
-	$(MAKE) bootloader=y logfile=n -C bootloader \
-		-f $(ROOT)/Rules.mk \
-		Bootloader.elf Bootloader.bin Bootloader.hex
-	$(MAKE) logfile=n -C bl_update -f $(ROOT)/Rules.mk \
-		BL_Update.elf BL_Update.bin BL_Update.hex
-	$(MAKE) logfile=n -C io_test -f $(ROOT)/Rules.mk \
-		IO_Test.elf IO_Test.bin IO_Test.hex
-	srec_cat bootloader/Bootloader.hex -Intel src/$(PROJ).hex -Intel \
-	-o FF.hex -Intel
-	$(PYTHON) ./scripts/mk_update.py src/$(PROJ).bin FF.upd
-	$(PYTHON) ./scripts/mk_update.py bl_update/BL_Update.bin BL.upd
-	$(PYTHON) ./scripts/mk_update.py io_test/IO_Test.bin IOT.upd
-	$(PYTHON) ./scripts/dfu-convert.py -i FF.hex FF.dfu
-
-endif
+dist: level := prod
+dist: FORCE all
+	rm -rf out/flashfloppy-*
+	$(eval t := out/flashfloppy-$(VER))
+	mkdir -p $(t)/alt/bootloader
+	mkdir -p $(t)/alt/logfile
+	mkdir -p $(t)/alt/io-test
+	mkdir -p $(t)/alt/quickdisk/logfile
+	$(eval s := out/$(mcu)/$(level)/floppy)
+	cp -a $(s)/target.dfu $(t)/FF_Gotek-$(VER).dfu
+	cp -a $(s)/target.upd $(t)/FF_Gotek-$(VER).upd
+	cp -a $(s)/target.hex $(t)/FF_Gotek-$(VER).hex
+	$(eval s := out/$(mcu)/$(level)/bootloader)
+	cp -a $(s)/target.upd $(t)/alt/bootloader/FF_Gotek-Bootloader-$(VER).upd
+	$(eval s := out/$(mcu)/$(level)/io_test)
+	cp -a $(s)/target.upd $(t)/alt/io-test/FF_Gotek-IO-Test-$(VER).upd
+	$(eval s := out/$(mcu)/logfile/floppy)
+	cp -a $(s)/target.upd $(t)/alt/logfile/FF_Gotek-Logfile-$(VER).upd
+	$(eval s := out/$(mcu)/$(level)/quickdisk)
+	cp -a $(s)/target.upd $(t)/alt/quickdisk/FF_Gotek-QuickDisk-$(VER).upd
+	$(eval s := out/$(mcu)/logfile/quickdisk)
+	cp -a $(s)/target.upd $(t)/alt/quickdisk/logfile/FF_Gotek-QuickDisk-Logfile-$(VER).upd
+	$(PYTHON) scripts/mk_qd.py --window=6.5 $(t)/alt/quickdisk/Blank.qd
+	cp -a COPYING $(t)/
+	cp -a README.md $(t)/
+	cp -a RELEASE_NOTES $(t)/
+	cp -a examples $(t)/
+	[ -e ext/HxC_Compat_Mode-$(HXC_FF_VER).zip ] || \
+	(mkdir -p ext ; cd ext ; wget -q --show-progress $(HXC_FF_URL)/$(HXC_FF_VER)/HxC_Compat_Mode-$(HXC_FF_VER).zip ; rm -rf index.html)
+	(cd $(t) && unzip -q ../../ext/HxC_Compat_Mode-$(HXC_FF_VER).zip)
+	mkdir -p $(t)/scripts
+	cp -a scripts/edsk* $(t)/scripts/
+	cp -a scripts/mk_hfe.py $(t)/scripts/
+	(cd out && zip -r flashfloppy-$(VER).zip flashfloppy-$(VER))
 
 BAUD=115200
 DEV=/dev/ttyUSB0
 STM32FLASH=stm32flash
 
-ocd: gotek
-	python3 scripts/openocd/flash.py `pwd`/FF_Gotek-$(VER).hex
+ocd: FORCE all
+	$(PYTHON) scripts/openocd/flash.py $(target)/target.hex
 
-flash: gotek
-	sudo $(STM32FLASH) -b $(BAUD) -w FF_Gotek-$(VER).hex $(DEV)
+flash: FORCE all
+	sudo $(STM32FLASH) -b $(BAUD) -w $(target)/target.hex $(DEV)
 
-start:
+start: FORCE
 	sudo $(STM32FLASH) -b $(BAUD) -g 0 $(DEV)
 
-serial:
+serial: FORCE
 	sudo miniterm.py $(DEV) 3000000

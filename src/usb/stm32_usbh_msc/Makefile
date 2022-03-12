@@ -9,4 +9,4 @@ OBJS += usbh_msc_core.o
 OBJS += usbh_msc_scsi.o
 OBJS += usbh_stdreq.o
 
-CFLAGS += -Iinc/ -include usbh_conf.h
+CFLAGS += -I$(RPATH)/inc/ -include usbh_conf.h
