@@ -174,7 +174,7 @@ void IRQ_SELA_changed(void) {
         "    ldr  r0, [pc, #8]\n"  /* r0 = gpio_out_active */
         "    ldr  r1, [pc, #12]\n" /* r1 = &gpiob->b[s]rr */
         "    uxth r2, r0\n"        /* r2 = (uint16_t)gpio_out_active */
-        "    str  r0, [r1, #0]\n"  /* gpiob->b[s]rr = gpio_out_active */
+        "    str  r2, [r1, #0]\n"  /* gpiob->b[s]rr = gpio_out_active */
         "    b.n  _IRQ_SELA_changed\n" /* branch to the main ISR entry point */
         "    nop\n"
         "gpio_out_active: .word 0\n"
