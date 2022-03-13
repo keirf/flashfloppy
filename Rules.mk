@@ -55,8 +55,8 @@ CFLAGS += $(CFLAGS-y) $(FLAGS) -include decls.h
 AFLAGS += $(AFLAGS-y) $(FLAGS) -D__ASSEMBLY__
 LDFLAGS += $(LDFLAGS-y) $(FLAGS) -Wl,--gc-sections
 
-RPATH := $(shell $(PYTHON) $(ROOT)/scripts/rpath.py $(ROOT) $(CURDIR))
-include $(RPATH)/Makefile
+SRCDIR := $(shell $(PYTHON) $(ROOT)/scripts/srcdir.py $(CURDIR))
+include $(SRCDIR)/Makefile
 
 SUBDIRS += $(SUBDIRS-y)
 OBJS += $(OBJS-y) $(OBJS-^n) $(patsubst %,%/build.o,$(SUBDIRS))
@@ -75,11 +75,11 @@ build.o: $(OBJS)
 %/build.o: FORCE
 	$(MAKE) -f $(ROOT)/Rules.mk -C $* build.o
 
-%.ld: $(RPATH)/%.ld.S $(RPATH)/Makefile
+%.ld: $(SRCDIR)/%.ld.S $(SRCDIR)/Makefile
 	@echo CPP $@
 	$(CC) -P -E $(AFLAGS) $< -o $@
 
-%.elf: $(OBJS) %.ld $(RPATH)/Makefile
+%.elf: $(OBJS) %.ld $(SRCDIR)/Makefile
 	@echo LD $@
 	$(CC) $(LDFLAGS) -T$(*F).ld $(OBJS) -o $@
 	chmod a-x $@
@@ -104,11 +104,11 @@ endif
 %.dfu: %.hex
 	$(PYTHON) $(ROOT)/scripts/dfu-convert.py -i $< $@
 
-%.o: $(RPATH)/%.c $(RPATH)/Makefile
+%.o: $(SRCDIR)/%.c $(SRCDIR)/Makefile
 	@echo CC $@
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.o: $(RPATH)/%.S $(RPATH)/Makefile
+%.o: $(SRCDIR)/%.S $(SRCDIR)/Makefile
 	@echo AS $@
 	$(CC) $(AFLAGS) -c $< -o $@
 
