@@ -52,7 +52,7 @@ SUBDIRS += usb
 
 endif
 
-.PHONY: $(RPATH)/build_info.c
+.PHONY: $(SRCDIR)/build_info.c
 build_info.o: CFLAGS += -DFW_VER="\"$(FW_VER)\""
 
 ff_cfg_defaults.h: $(ROOT)/examples/FF.CFG
