@@ -167,13 +167,13 @@ static void board_floppy_init(void)
  * Note that the entirety of the SELA handler is in SRAM (.data) -- not only 
  * is this faster to execute, but allows us to co-locate gpio_out_active for 
  * even faster access in the time-critical speculative entry point. */
-__attribute__((naked)) __attribute__((section(".ramfuncs")))
+__attribute__((naked)) __attribute__((section(".ramfuncs"))) aligned(4)
 void IRQ_SELA_changed(void) {
     asm (
         ".global gpio_out_active, gpiob_setreset\n"
         "    ldr  r0, [pc, #8]\n"  /* r0 = gpio_out_active */
         "    ldr  r1, [pc, #12]\n" /* r1 = &gpiob->b[s]rr */
-        "    uxth r2,r0\n"         /* r2 = (uint16_t)gpio_out_active */
+        "    uxth r2, r0\n"        /* r2 = (uint16_t)gpio_out_active */
         "    str  r2, [r1, #0]\n"  /* gpiob->b[s]rr = gpio_out_active */
         "    b.n  _IRQ_SELA_changed\n" /* branch to the main ISR entry point */
         "    nop\n"
@@ -191,7 +191,7 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
 static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
 {
     /* If deasserting the bus, toggle pin 34 for next time we take the bus. */
-    if (!(_gpiob_setreset & 4))
+    if ((uint8_t)_gpiob_setreset == (uint8_t)(uint32_t)&gpiob->bsrr)
         gpio_out_active ^= m(pin_34);
 
     /* Continue to the main SELA-changed IRQ entry point. */
@@ -230,9 +230,9 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
 
     /* Set up the speculative fast path for the next interrupt. */
     if (drive.sel)
-        gpiob_setreset = (uint32_t)&gpiob->bsrr;
+        *(uint8_t *)&gpiob_setreset = (uint8_t)(uint32_t)&gpiob->bsrr;
     else
-        gpiob_setreset = (uint32_t)&gpiob->brr;
+        *(uint8_t *)&gpiob_setreset = (uint8_t)(uint32_t)&gpiob->brr;
 }
 
 /* Update the SELA handler. Used for switching in the Amiga HD-ID "magic". 
