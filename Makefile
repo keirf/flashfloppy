@@ -54,27 +54,27 @@ HXC_FF_VER := v9-FF
 
 dist: level := prod
 dist: mcu := stm32f105
+dist: t := $(ROOT)/out/flashfloppy-$(VER)
 dist: FORCE all
 	rm -rf out/flashfloppy-*
-	$(eval t := out/flashfloppy-$(VER))
 	mkdir -p $(t)/alt/bootloader
 	mkdir -p $(t)/alt/logfile
 	mkdir -p $(t)/alt/io-test
 	mkdir -p $(t)/alt/quickdisk/logfile
-	$(eval s := out/$(mcu)/$(level)/floppy)
-	cp -a $(s)/target.dfu $(t)/FF_Gotek-$(VER).dfu
-	cp -a $(s)/target.upd $(t)/FF_Gotek-$(VER).upd
-	cp -a $(s)/target.hex $(t)/FF_Gotek-$(VER).hex
-	$(eval s := out/$(mcu)/$(level)/bootloader)
-	cp -a $(s)/target.upd $(t)/alt/bootloader/FF_Gotek-Bootloader-$(VER).upd
-	$(eval s := out/$(mcu)/$(level)/io_test)
-	cp -a $(s)/target.upd $(t)/alt/io-test/FF_Gotek-IO-Test-$(VER).upd
-	$(eval s := out/$(mcu)/logfile/floppy)
-	cp -a $(s)/target.upd $(t)/alt/logfile/FF_Gotek-Logfile-$(VER).upd
-	$(eval s := out/$(mcu)/$(level)/quickdisk)
-	cp -a $(s)/target.upd $(t)/alt/quickdisk/FF_Gotek-QuickDisk-$(VER).upd
-	$(eval s := out/$(mcu)/logfile/quickdisk)
-	cp -a $(s)/target.upd $(t)/alt/quickdisk/logfile/FF_Gotek-QuickDisk-Logfile-$(VER).upd
+	cd out/$(mcu)/$(level)/floppy; \
+	  cp -a target.dfu $(t)/FF_Gotek-$(VER).dfu; \
+	  cp -a target.upd $(t)/FF_Gotek-$(VER).upd; \
+	  cp -a target.hex $(t)/FF_Gotek-$(VER).hex
+	cd out/$(mcu)/$(level)/bootloader; \
+	  cp -a target.upd $(t)/alt/bootloader/FF_Gotek-Bootloader-$(VER).upd
+	cd out/$(mcu)/$(level)/io_test; \
+	  cp -a target.upd $(t)/alt/io-test/FF_Gotek-IO-Test-$(VER).upd
+	cd out/$(mcu)/logfile/floppy; \
+	  cp -a target.upd $(t)/alt/logfile/FF_Gotek-Logfile-$(VER).upd
+	cd out/$(mcu)/$(level)/quickdisk; \
+	  cp -a target.upd $(t)/alt/quickdisk/FF_Gotek-QuickDisk-$(VER).upd
+	cd out/$(mcu)/logfile/quickdisk; \
+	  cp -a target.upd $(t)/alt/quickdisk/logfile/FF_Gotek-QuickDisk-Logfile-$(VER).upd
 	$(PYTHON) scripts/mk_qd.py --window=6.5 $(t)/alt/quickdisk/Blank.qd
 	cp -a COPYING $(t)/
 	cp -a README.md $(t)/
@@ -86,7 +86,7 @@ dist: FORCE all
 	mkdir -p $(t)/scripts
 	cp -a scripts/edsk* $(t)/scripts/
 	cp -a scripts/mk_hfe.py $(t)/scripts/
-	(cd out && zip -r flashfloppy-$(VER).zip flashfloppy-$(VER))
+	cd out && zip -r flashfloppy-$(VER).zip flashfloppy-$(VER)
 
 BAUD=115200
 DEV=/dev/ttyUSB0
