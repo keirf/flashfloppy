@@ -92,16 +92,17 @@ dist: FORCE all
 
 BAUD=115200
 DEV=/dev/ttyUSB0
+SUDO=sudo
 STM32FLASH=stm32flash
 
 ocd: FORCE all
 	$(PYTHON) scripts/openocd/flash.py $(target)/target.hex
 
 flash: FORCE all
-	sudo $(STM32FLASH) -b $(BAUD) -w $(target)/target.hex $(DEV)
+	$(SUDO) $(STM32FLASH) -b $(BAUD) -w $(target)/target.hex $(DEV)
 
 start: FORCE
-	sudo $(STM32FLASH) -b $(BAUD) -g 0 $(DEV)
+	$(SUDO) $(STM32FLASH) -b $(BAUD) -g 0 $(DEV)
 
 serial: FORCE
-	sudo miniterm.py $(DEV) 3000000
+	$(SUDO) miniterm.py $(DEV) 3000000
