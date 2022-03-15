@@ -98,7 +98,6 @@ endif
 	chmod a-x $@
 
 %.upd: %.bin
-	@echo OBJCOPY $@
 	$(PYTHON) $(ROOT)/scripts/mk_update.py $< $@
 
 %.dfu: %.hex

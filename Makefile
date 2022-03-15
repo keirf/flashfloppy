@@ -13,26 +13,23 @@ export ROOT := $(CURDIR)
 .DEFAULT_GOAL := all
 
 prod-%: FORCE
-	$(eval export mcu := $*)
-	$(MAKE) target target=bootloader level=prod
-	$(MAKE) target target=floppy level=prod
-	$(MAKE) target target=quickdisk level=prod
-	$(MAKE) target target=bl_update level=prod
-	$(MAKE) target target=io_test level=prod
+	$(MAKE) target mcu=$* target=bootloader level=prod
+	$(MAKE) target mcu=$* target=floppy level=prod
+	$(MAKE) target mcu=$* target=quickdisk level=prod
+	$(MAKE) target mcu=$* target=bl_update level=prod
+	$(MAKE) target mcu=$* target=io_test level=prod
 
 debug-%: FORCE
-	$(eval export mcu := $*)
-	$(MAKE) target target=bootloader level=debug
-	$(MAKE) target target=floppy level=debug
-	$(MAKE) target target=quickdisk level=debug
-	$(MAKE) target target=bl_update level=debug
-	$(MAKE) target target=io_test level=debug
+	$(MAKE) target mcu=$* target=bootloader level=debug
+	$(MAKE) target mcu=$* target=floppy level=debug
+	$(MAKE) target mcu=$* target=quickdisk level=debug
+	$(MAKE) target mcu=$* target=bl_update level=debug
+	$(MAKE) target mcu=$* target=io_test level=debug
 
 logfile-%: FORCE
-	$(eval export mcu := $*)
-	$(MAKE) target target=bootloader level=logfile
-	$(MAKE) target target=floppy level=logfile
-	$(MAKE) target target=quickdisk level=logfile
+	$(MAKE) target mcu=$* target=bootloader level=logfile
+	$(MAKE) target mcu=$* target=floppy level=logfile
+	$(MAKE) target mcu=$* target=quickdisk level=logfile
 
 all-%: FORCE prod-% debug-% logfile-% ;
 
@@ -56,6 +53,7 @@ HXC_FF_URL := $(HXC_FF_URL)/releases/download
 HXC_FF_VER := v9-FF
 
 dist: level := prod
+dist: mcu := stm32f105
 dist: FORCE all
 	rm -rf out/flashfloppy-*
 	$(eval t := out/flashfloppy-$(VER))
