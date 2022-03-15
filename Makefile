@@ -98,11 +98,11 @@ STM32FLASH=stm32flash
 ocd: FORCE all
 	$(PYTHON) scripts/openocd/flash.py $(target)/target.hex
 
-flash: gotek
+flash: FORCE all
 	$(SUDO) $(STM32FLASH) -b $(BAUD) -w $(target)/target.hex $(DEV)
 
-start:
+start: FORCE
 	$(SUDO) $(STM32FLASH) -b $(BAUD) -g 0 $(DEV)
 
-serial:
+serial: FORCE
 	$(SUDO) miniterm.py $(DEV) 3000000
