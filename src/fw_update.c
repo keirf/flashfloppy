@@ -407,7 +407,7 @@ int main(void)
     console_init();
     board_init();
 
-    printk("\n** FF Update Bootloader v%s for Gotek\n", fw_ver);
+    printk("\n** FF Update Bootloader %s for Gotek\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
 
@@ -426,8 +426,7 @@ int main(void)
     case DT_LCD_OLED:
         snprintf(msg, sizeof(msg), "FF Update Flash");
         lcd_write(0, 0, 0, msg);
-        lcd_write(0, 1, 0, "v");
-        lcd_write(1, 1, 0, fw_ver);
+        lcd_write(0, 1, 0, fw_ver);
         lcd_sync();
         break;
     }

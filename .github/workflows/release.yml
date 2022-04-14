@@ -15,7 +15,7 @@ jobs:
     - name: Set environment variables
       id: vars
       run: |
-        echo "::set-output name=ref::$(echo ${{ github.ref }} | sed -e's#.*/##')"
+        echo "::set-output name=ver::$(echo ${{ github.ref }} | sed -e's#.*/v##')"
 
     - name: Dependency packages (apt)
       run: |
@@ -27,7 +27,7 @@ jobs:
 
     - name: Build release
       run: |
-        export VER=${{ steps.vars.outputs.ref }}
+        export VER=${{ steps.vars.outputs.ver }}
         make -j4 dist VER=$VER
         mv out/flashfloppy-$VER.zip .
 
@@ -38,7 +38,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.ref }}
-        release_name: ${{ steps.vars.outputs.ref }}
+        release_name: ${{ steps.vars.outputs.ver }}
         body: "[**Release Notes:**](https://github.com/keirf/flashfloppy/blob/master/RELEASE_NOTES)"
         draft: false
         prerelease: false
@@ -50,6 +50,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: flashfloppy-${{ steps.vars.outputs.ref }}.zip
-        asset_name: flashfloppy-${{ steps.vars.outputs.ref }}.zip
+        asset_path: flashfloppy-${{ steps.vars.outputs.ver }}.zip
+        asset_name: flashfloppy-${{ steps.vars.outputs.ver }}.zip
         asset_content_type: application/zip

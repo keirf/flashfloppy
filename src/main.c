@@ -2951,8 +2951,7 @@ static void banner(void)
         lcd_clear();
         display_mode = DM_banner; /* double height row 0 */
         lcd_write(0, 0, 0, "FlashFloppy");
-        lcd_write(0, 1, 0, "v");
-        lcd_write(1, 1, 0, fw_ver);
+        lcd_write(0, 1, 0, fw_ver);
 #if defined(LOGFILE)
         lcd_write(10, 1, 0, "[Log]");
 #elif defined(QUICKDISK)
@@ -3084,7 +3083,7 @@ int main(void)
     console_crash_on_input();
     delay_ms(200); /* 5v settle */
 
-    printk("\n** FlashFloppy v%s for Gotek\n", fw_ver);
+    printk("\n** FlashFloppy %s for Gotek\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
 
