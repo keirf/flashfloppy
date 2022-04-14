@@ -104,7 +104,7 @@ int main(void)
     board_init();
     delay_ms(200); /* 5v settle */
 
-    printk("\n** FF Update Firmware for Gotek\n", fw_ver);
+    printk("\n** FF Update Firmware %s for Gotek\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FlashFloppy\n\n");
 

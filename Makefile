@@ -1,8 +1,8 @@
 
 export FW_VER := 4.4a
 
-PROJ := FlashFloppy
-VER := v$(FW_VER)
+PROJ := flashfloppy
+VER := $(FW_VER)
 
 PYTHON := python3
 
@@ -52,55 +52,56 @@ HXC_FF_URL := https://www.github.com/keirf/flashfloppy-hxc-file-selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
 HXC_FF_VER := v9-FF
 
+_legacy_dist: PROJ := FF_Gotek
 _legacy_dist: FORCE
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
-	  $(t)/FF_Gotek-$(VER).upd \
+	  $(t)/$(PROJ)-$(VER).upd \
 	  out/$(mcu)/$(level)/floppy/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
-	  $(t)/alt/bootloader/FF_Gotek-bootloader-$(VER).upd \
+	  $(t)/alt/bootloader/$(PROJ)-bootloader-$(VER).upd \
 	  out/$(mcu)/$(level)/bl_update/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
-	  $(t)/alt/io-test/FF_Gotek-io-test-$(VER).upd \
+	  $(t)/alt/io-test/$(PROJ)-io-test-$(VER).upd \
 	  out/$(mcu)/$(level)/io_test/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
-	  $(t)/alt/logfile/FF_Gotek-logfile-$(VER).upd \
+	  $(t)/alt/logfile/$(PROJ)-logfile-$(VER).upd \
 	  out/$(mcu)/logfile/floppy/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
-	  $(t)/alt/quickdisk/FF_Gotek-quickdisk-$(VER).upd \
+	  $(t)/alt/quickdisk/$(PROJ)-quickdisk-$(VER).upd \
 	  out/$(mcu)/$(level)/quickdisk/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
-	  $(t)/alt/quickdisk/logfile/FF_Gotek-quickdisk-logfile-$(VER).upd \
+	  $(t)/alt/quickdisk/logfile/$(PROJ)-quickdisk-logfile-$(VER).upd \
 	  out/$(mcu)/logfile/quickdisk/target.bin & \
 	wait
 
 _dist: FORCE
 	cd out/$(mcu)/$(level)/floppy; \
-	  cp -a target.dfu $(t)/dfu/flashfloppy-$(mcu)-$(VER).dfu; \
-	  cp -a target.hex $(t)/hex/flashfloppy-$(mcu)-$(VER).hex
+	  cp -a target.dfu $(t)/dfu/$(PROJ)-$(mcu)-$(VER).dfu; \
+	  cp -a target.hex $(t)/hex/$(PROJ)-$(mcu)-$(VER).hex
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
-	  $(t)/flashfloppy-$(VER).upd \
+	  $(t)/$(PROJ)-$(VER).upd \
 	  out/$(mcu)/$(level)/floppy/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
-	  $(t)/alt/bootloader/flashfloppy-bootloader-$(VER).upd \
+	  $(t)/alt/bootloader/$(PROJ)-bootloader-$(VER).upd \
 	  out/$(mcu)/$(level)/bl_update/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
-	  $(t)/alt/io-test/flashfloppy-io-test-$(VER).upd \
+	  $(t)/alt/io-test/$(PROJ)-io-test-$(VER).upd \
 	  out/$(mcu)/$(level)/io_test/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
-	  $(t)/alt/logfile/flashfloppy-logfile-$(VER).upd \
+	  $(t)/alt/logfile/$(PROJ)-logfile-$(VER).upd \
 	  out/$(mcu)/logfile/floppy/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
-	  $(t)/alt/quickdisk/flashfloppy-quickdisk-$(VER).upd \
+	  $(t)/alt/quickdisk/$(PROJ)-quickdisk-$(VER).upd \
 	  out/$(mcu)/$(level)/quickdisk/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
-	  $(t)/alt/quickdisk/logfile/flashfloppy-quickdisk-logfile-$(VER).upd \
+	  $(t)/alt/quickdisk/logfile/$(PROJ)-quickdisk-logfile-$(VER).upd \
 	  out/$(mcu)/logfile/quickdisk/target.bin $(mcu) & \
 	wait
 
 dist: level := prod
-dist: t := $(ROOT)/out/flashfloppy-$(VER)
+dist: t := $(ROOT)/out/$(PROJ)-$(VER)
 dist: FORCE all
-	rm -rf out/flashfloppy-*
+	rm -rf out/$(PROJ)-*
 	mkdir -p $(t)/hex
 	mkdir -p $(t)/dfu
 	mkdir -p $(t)/alt/bootloader
@@ -121,7 +122,7 @@ dist: FORCE all
 	mkdir -p $(t)/scripts
 	cp -a scripts/edsk* $(t)/scripts/
 	cp -a scripts/mk_hfe.py $(t)/scripts/
-	cd out && zip -r flashfloppy-$(VER).zip flashfloppy-$(VER)
+	cd out && zip -r $(PROJ)-$(VER).zip $(PROJ)-$(VER)
 
 BAUD=115200
 DEV=/dev/ttyUSB0

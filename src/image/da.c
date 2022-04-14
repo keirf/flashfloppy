@@ -124,7 +124,7 @@ static bool_t da_open(struct image *im)
 
     snprintf(dass->sig, sizeof(dass->sig), "%s", DA_SIG);
     snprintf(dass->fw_ver, sizeof(dass->fw_ver),
-             version_override ? "%s" : "FF-v%s",
+             version_override ? "%s" : "FF-%s",
              version_override ? ff_cfg.da_report_version : fw_ver);
     dass->current_index = get_slot_nr();
     return TRUE;
