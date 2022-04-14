@@ -1,8 +1,8 @@
 
-export FW_VER := 3.30
-
 PROJ := flashfloppy
-VER := $(FW_VER)
+VER := $(shell git rev-parse --short HEAD)
+
+export FW_VER := $(VER)
 
 PYTHON := python3
 
