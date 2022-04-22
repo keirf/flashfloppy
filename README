@@ -1,0 +1,70 @@
+FlashFloppy
+===========
+Keir Fraser <keir.xen@gmail.com>
+https://github.com/keirf/flashfloppy
+
+This distribution contains FlashFloppy custom firmware for Gotek and
+Gotek-compatible hardware.
+
+FlashFloppy documentation and downloads:
+  https://github.com/keirf/flashfloppy/wiki/
+
+Supported Microcontrollers
+--------------------------
+FlashFloppy supports two types of STM32-like microcontroller:
+ STM32F105 (and the compatible AT32F415)
+   - 72MHz Cortex-M3, 128kB Flash, 64kB RAM (AT32F415: 32kB RAM)
+ AT32F435
+   - 288MHz Cortex-M4, 256kB Flash, 384kB RAM
+
+If you want to know which type of MCU you have, you can open your Gotek and
+read the writing on the square chip on your Gotek PCB.
+
+Firmware Programming
+--------------------
+If programming a factory-fresh Gotek running factory firmware, you will need
+to program a HEX or DFU firmware file as explained in the wiki, linked above.
+These files are located in the hex/ and dfu/ folders respectively.
+
+Firmware Update
+---------------
+Once FlashFloppy has been flashed to a device (using a HEX or DFU file),
+further updates can be made via an Update file on a USB drive, as described
+in the wiki.
+
+To support older versions of the FlashFloppy bootloader, two types of
+Update file are included in the distribution, distinguishable by name:
+ FF_Gotek-*.upd: Legacy Update file
+    - All STM32F105/AT32F415 devices
+ flashfloppy-*.upd: Universal Update file
+    - All AT32F435 devices
+    - STM32F105/AT32F415 devices running a recent FlashFloppy bootloader
+
+Each update format will only work with a device (and FlashFloppy bootloader)
+that supports it. If you are unsure which to use, it is okay to copy both
+Update file types to your USB drive: the bootloader will correctly load just
+one of the Update file types that it supports.
+
+Alternatively try one Update file at a time, and switch to the other type if
+you see error E01 on the Gotek display.
+
+Alternative Firmwares
+---------------------
+In the alt/ folder you will find (pairs of) Update files implementing
+alternative firmwares. Most users can ignore these, and use only the
+Update files in the root of the distribution.
+
+The alternative firmwares include:
+ * alt/bootloader: Updates your Gotek bootloader
+   - WARNING: Proceed with caution. Read the Firmware Update page on the wiki.
+ * alt/io-test: Test your Gotek I/O pins if you suspect a hardware fault
+ * alt/quickdisk: QuickDisk emulation (see the wiki)
+   - If you don't know what QuickDisk is, you don't need this firmware.
+ * alt/logile: Firmware with debug logging to FFLOG.TXT on the USB drive
+   - Useful only for fault finding. Not for general use.
+
+Redistribution
+--------------
+Source code, and all binary releases, are freely redistributable in
+any form. Please see the the COPYING file included in this
+distribution.

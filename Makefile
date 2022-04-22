@@ -113,7 +113,7 @@ dist: FORCE all
 	$(MAKE) _dist mcu=at32f435 level=$(level) t=$(t)
 	$(PYTHON) scripts/mk_qd.py --window=6.5 $(t)/alt/quickdisk/Blank.qd
 	cp -a COPYING $(t)/
-	cp -a README.md $(t)/
+	cp -a README $(t)/
 	cp -a RELEASE_NOTES $(t)/
 	cp -a examples $(t)/
 	[ -e ext/HxC_Compat_Mode-$(HXC_FF_VER).zip ] || \
