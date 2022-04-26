@@ -97,7 +97,7 @@ struct nvic {
     uint32_t ispr[32]; /* 100: Interrupt set-pending */
     uint32_t icpr[32]; /* 180: Interrupt clear-pending */
     uint32_t iabr[64]; /* 200: Interrupt active */
-    uint8_t ipr[80];   /* 300: Interrupt priority */
+    uint8_t ipr[100];  /* 300: Interrupt priority */
 };
 
 #define NVIC_BASE 0xe000e100
