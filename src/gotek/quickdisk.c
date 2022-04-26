@@ -153,6 +153,18 @@ static void IRQ_WGATE_rotary(void)
         IRQ_rotary();
 }
 
+static bool_t qd_roland_mode(void)
+{
+    if (board_jc_strapped())
+        return TRUE;
+
+    /* FF.CFG alternative to setting the physical JC strap. */
+    if (ff_cfg.interface == FINTF_IBMPC)
+        return TRUE;
+
+    return FALSE;
+}
+
 static void _IRQ_MOTOR_RESET_changed(unsigned int gpioa_idr)
 {
     const unsigned int mask = m(pin_reset) | m(pin_motor);
@@ -181,8 +193,8 @@ static void _IRQ_MOTOR_RESET_changed(unsigned int gpioa_idr)
 
         if (/* RESET immediately clears READY */
             (off & m(pin_reset))
-            /* !MOTOR immediately clears READY iff Jumper JC is strapped */
-            || ((off & m(pin_motor)) && board_jc_strapped())) {
+            /* !MOTOR immediately clears READY iff Roland mode is selected */
+            || ((off & m(pin_motor)) && qd_roland_mode())) {
             write_pin(ready, HIGH);
         }
 
