@@ -910,6 +910,15 @@ fail:
     return FALSE;
 }
 
+static void oled_init_fast_mode(void)
+{
+    /* Disable I2C (currently in Standard Mode). */
+    i2c->cr1 = 0;
+
+    /* Fast Mode (400kHz). */
+    i2c->timingr = I2C_TIMING_400k;
+}
+
 static void oled_init(void)
 {
     static const uint8_t init_cmds[] = {
@@ -933,11 +942,8 @@ static void oled_init(void)
     uint8_t dynamic_cmds[7], *dc;
     uint8_t *p = buffer;
 
-    /* Disable I2C (currently in Standard Mode). */
-    i2c->cr1 = 0;
-
-    /* Fast Mode (400kHz). */
-    i2c->timingr = I2C_TIMING_400k;
+    if (!(ff_cfg.display_type & DISPLAY_slow))
+        oled_init_fast_mode();
 
     if ((oled_model == OLED_unknown) && !oled_probe_model())
         goto fail;

@@ -1176,6 +1176,8 @@ static void read_ff_cfg(void)
                         ff_cfg.display_type |= DISPLAY_inverse;
                     } else if (!strcmp(p, "ztech")) {
                         ff_cfg.display_type |= DISPLAY_ztech;
+                    } else if (!strcmp(p, "slow")) {
+                        ff_cfg.display_type |= DISPLAY_slow;
                     }
                 }
             }
