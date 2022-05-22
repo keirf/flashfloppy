@@ -159,6 +159,7 @@ struct directaccess {
     uint8_t write_cnt;
     uint8_t sync_state;
     bool_t read_op_started;
+    bool_t lba_set;
 };
 
 #define MAX_CUSTOM_PULSES 34 /* 33+1 for minor track misalignment */

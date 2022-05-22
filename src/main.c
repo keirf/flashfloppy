@@ -83,6 +83,12 @@ void flashfloppy_fill_fileinfo(FIL *fp);
 } while(0)
 #endif
 
+bool_t lba_within_fat_volume(uint32_t lba)
+{
+    /* Also disallows access to the boot/bpb sector of the mounted volume. */
+    return (lba > fatfs.volbase) && (lba <= fatfs.volend);
+}
+
 static bool_t slot_valid(unsigned int i)
 {
     if (i > cfg.max_slot_nr)

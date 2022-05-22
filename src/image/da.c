@@ -609,6 +609,7 @@ static void process_wdata(
             dass->nr_sec = dac->param[5] ?: (im->sync == SYNC_fm) ? 4 : 8;
             printk("D-A LBA %08x, nr=%u\n", dass->lba_base, dass->nr_sec);
             dass->last_cmd_status = 0; /* ok */
+            im->da.lba_set = TRUE;
             break;
         case CMD_SET_CYL:
             printk("D-A Cyl A=%u B=%u\n", dac->param[0], dac->param[1]);
@@ -640,9 +641,20 @@ static void process_wdata(
             break;
         }
     } else if (dass->lba_base != ~0u) {
+        uint32_t lba = dass->lba_base + sect - 1;
+        if (!im->da.lba_set) {
+            printk("Write %08x+%u... ", dass->lba_base, sect-1);
+            printk("before LBA set\n");
+            return;
+        }
+        if (!lba_within_fat_volume(lba)) {
+            printk("Write %08x+%u... ", dass->lba_base, sect-1);
+            printk("out of bounds\n");
+            return;
+        }
         /* All good: write out to mass storage. */
         dass->write_cnt++;
-        im->da.write_offsets[wb->prod % wb->len] = dass->lba_base+sect-1;
+        im->da.write_offsets[wb->prod % wb->len] = lba;
         wb->prod++;
     }
 }
