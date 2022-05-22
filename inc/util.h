@@ -19,6 +19,8 @@ struct slot {
 };
 void fatfs_from_slot(FIL *file, const struct slot *slot, BYTE mode);
 
+bool_t lba_within_fat_volume(uint32_t lba);
+
 void filename_extension(const char *filename, char *extension, size_t size);
 
 /* Fast memset/memcpy: Pointers must be word-aligned, count must be a non-zero 

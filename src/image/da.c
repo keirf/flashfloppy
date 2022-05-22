@@ -497,6 +497,7 @@ static void process_wdata(struct image *im, unsigned int sect, uint16_t crc)
             dass->nr_sec = dac->param[5] ?: (im->sync == SYNC_fm) ? 4 : 8;
             printk("D-A LBA %08x, nr=%u\n", dass->lba_base, dass->nr_sec);
             dass->last_cmd_status = 0; /* ok */
+            im->da.lba_set = TRUE;
             break;
         case CMD_SET_CYL:
             printk("D-A Cyl A=%u B=%u\n", dac->param[0], dac->param[1]);
@@ -528,11 +529,20 @@ static void process_wdata(struct image *im, unsigned int sect, uint16_t crc)
             break;
         }
     } else if (dass->lba_base != ~0u) {
+        uint32_t lba = dass->lba_base + sect - 1;
+        printk("Write %08x+%u... ", dass->lba_base, sect-1);
+        if (!im->da.lba_set) {
+            printk("before LBA set\n");
+            return;
+        }
+        if (!lba_within_fat_volume(lba)) {
+            printk("out of bounds\n");
+            return;
+        }
         /* All good: write out to mass storage. */
         dass->write_cnt++;
-        printk("Write %08x+%u... ", dass->lba_base, sect-1);
         t = time_now();
-        if (disk_write(0, wrbuf, dass->lba_base+sect-1, 1) != RES_OK)
+        if (disk_write(0, wrbuf, lba, 1) != RES_OK)
             F_die(FR_DISK_ERR);
         printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
     }

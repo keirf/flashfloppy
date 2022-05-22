@@ -132,6 +132,7 @@ struct directaccess {
     int32_t decode_pos;
     uint16_t trk_sec;
     uint16_t idx_sz, idam_sz, dam_sz;
+    bool_t lba_set;
 };
 
 struct image_buf {
