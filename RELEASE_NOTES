@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.31 - 23 May 2022
+ - Fix Gotek drive detection with Amiga Kickstart ROM v3.2.1
+ - QD: FF.CFG alternative to JC jumper (no JC on SFRKC30.AT2 model)
+   - Place "interface=ibmpc" in FF.CFG
+ - OLED: New "-slow" modifier to slow down I2C bus for glitchy displays
+ - AUTOBOOT: Disallow writes to MBR, which can trash the USB drive
+
 ** v3.30 - 26 January 2022
  - IMG.CFG: New option step= allows to specify double-step operation
  - FF.CFG: New option max-cyl= allows limiting head-step range
