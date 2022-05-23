@@ -38,7 +38,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.ref }}
-        release_name: ${{ steps.vars.outputs.ver }}
+        release_name: FlashFloppy ${{ steps.vars.outputs.ver }}
         body: "[**Release Notes:**](https://github.com/keirf/flashfloppy/blob/master/RELEASE_NOTES)"
         draft: false
         prerelease: false
