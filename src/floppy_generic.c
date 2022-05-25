@@ -99,6 +99,7 @@ struct exti_irq {
 
 #if defined(QUICKDISK)
 #include "gotek/quickdisk.c"
+#define dma_rd_set_active(x) ((void)(x))
 #else
 #include "gotek/floppy.c"
 #endif
@@ -470,6 +471,7 @@ static void rdata_stop(void)
 
     /* Ok we're now stopping DMA activity. */
     dma_rd->state = DMA_stopping;
+    dma_rd_set_active(FALSE);
 
     /* If DMA was not yet active, don't need to touch peripherals. */
     if (prev_state != DMA_active)
@@ -498,6 +500,7 @@ static void rdata_start(void)
         goto out;
 
     dma_rd->state = DMA_active;
+    dma_rd_set_active(TRUE);
 
     /* Start timer. */
     tim_rdata->egr = TIM_EGR_UG;
