@@ -66,8 +66,17 @@ static const struct exti_irq exti_irqs[] = {
 /* Subset of output pins which are active (O_TRUE). */
 extern uint32_t gpio_out_active;
 
+/* Abuse gpio_out_active:PA11 to indicate that read DMA is active. This is 
+ * safe because PA11 is configured for USB, so GPIO level has no effect. 
+ * This saves some memory loads in the critical SELA IRQ handler. */
+#define GPIO_OUT_DMA_RD_ACTIVE (16+11)
+
 /* GPIO register to either assert or deassert active output pins. */
 extern uint32_t gpiob_setreset;
+
+/* This bitband address is used to atomically update GPIO_OUT_DMA_RD_ACTIVE */
+static volatile uint32_t *p_dma_rd_active;
+#define dma_rd_set_active(x) (*p_dma_rd_active = (x))
 
 bool_t floppy_ribbon_is_reversed(void)
 {
@@ -86,8 +95,16 @@ bool_t floppy_ribbon_is_reversed(void)
     return FALSE;
 }
 
+static uint32_t *get_bitband(void *ram_addr, unsigned int bit)
+{
+    uint32_t byte = (uint32_t)ram_addr - 0x20000000u;
+    return (uint32_t *)(0x22000000u + (byte * 32) + (bit * 4));
+}
+
 static void board_floppy_init(void)
 {
+    p_dma_rd_active = get_bitband(&gpio_out_active, GPIO_OUT_DMA_RD_ACTIVE);
+
 #if MCU == STM32F105
 
 #define change_pin_mode(gpio, pin, mode)                \
@@ -183,9 +200,11 @@ void IRQ_SELA_changed(void) {
 }
 
 static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
-    __attribute__((used)) __attribute__((section(".ramfuncs")));
+    __attribute__((used)) __attribute__((section(".ramfuncs")))
+    __attribute__((optimize("Ofast")));
 static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
-    __attribute__((used)) __attribute__((section(".ramfuncs")));
+    __attribute__((used)) __attribute__((section(".ramfuncs")))
+    __attribute__((optimize("Ofast")));
 
 /* Intermediate SELA-changed handler for generating the Amiga HD RDY signal. */
 static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
@@ -203,36 +222,30 @@ static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
  * speculative entry point for the next interrupt. */
 static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
 {
-    /* Clear SELA-changed flag. */
+    /* Latch SELA. */
     exti->pr = m(pin_sel0);
+    drive.sel = !(gpioa->idr & m(pin_sel0));
 
-    if (!(gpioa->idr & m(pin_sel0))) {
+    if (drive.sel) {
         /* SELA is asserted (this drive is selected). 
          * Immediately re-enable all our asserted outputs. */
         gpiob->brr = _gpio_out_active & 0xffff;
         gpioa->brr = _gpio_out_active >> 16;
         /* Set pin_rdata as timer output (AFO_bus). */
-        if (dma_rd && (dma_rd->state == DMA_active))
+        if (_gpio_out_active & m(GPIO_OUT_DMA_RD_ACTIVE))
             change_pin_mode(gpio_data, pin_rdata, AFO_bus);
-        /* Let main code know it can drive the bus until further notice. */
-        drive.sel = 1;
+        /* Speculate that, on next interrupt, SELA is deasserted. */
+        *(uint8_t *)&gpiob_setreset = (uint8_t)(uint32_t)&gpiob->bsrr;
     } else {
         /* SELA is deasserted (this drive is not selected).
          * Relinquish the bus by disabling all our asserted outputs. */
         gpiob->bsrr = _gpio_out_active & 0xffff;
         gpioa->bsrr = _gpio_out_active >> 16;
         /* Set pin_rdata as quiescent (GPO_bus). */
-        if (dma_rd && (dma_rd->state == DMA_active))
-            change_pin_mode(gpio_data, pin_rdata, GPO_bus);
-        /* Tell main code to leave the bus alone. */
-        drive.sel = 0;
-    }
-
-    /* Set up the speculative fast path for the next interrupt. */
-    if (drive.sel)
-        *(uint8_t *)&gpiob_setreset = (uint8_t)(uint32_t)&gpiob->bsrr;
-    else
+        change_pin_mode(gpio_data, pin_rdata, GPO_bus);
+        /* Speculate that, on next interrupt, SELA is asserted. */
         *(uint8_t *)&gpiob_setreset = (uint8_t)(uint32_t)&gpiob->brr;
+    }
 }
 
 /* Update the SELA handler. Used for switching in the Amiga HD-ID "magic". 
