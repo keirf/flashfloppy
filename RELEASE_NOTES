@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.32 - 28 May 2022
+ - Fix 'oled-font=8x16' option (broken in release 3.31)
+ - Improve drive-select ISR performance
+   - Fixes issues with fast Amiga accelerators
+
 ** v3.31 - 23 May 2022
  - Fix Gotek drive detection with Amiga Kickstart ROM v3.2.1
  - QD: FF.CFG alternative to JC jumper (no JC on SFRKC30.AT2 model)
