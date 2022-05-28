@@ -200,8 +200,7 @@ void IRQ_SELA_changed(void) {
 }
 
 static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
-    __attribute__((used)) __attribute__((section(".ramfuncs")))
-    __attribute__((optimize("Ofast")));
+    __attribute__((used)) __attribute__((section(".ramfuncs")));
 static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
     __attribute__((used)) __attribute__((section(".ramfuncs")))
     __attribute__((optimize("Ofast")));
