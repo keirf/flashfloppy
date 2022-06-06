@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-bool_t is_artery_mcu;
+bool_t is_artery_mcu = TRUE;
 unsigned int flash_page_size = FLASH_PAGE_SIZE;
 unsigned int ram_kb = 384;
 
@@ -61,6 +61,7 @@ static void peripheral_init(void)
 {
     /* Enable basic GPIO clocks, DTCM RAM, DMA, and EXTICR. */
     rcc->ahb1enr |= (RCC_AHB1ENR_DMA1EN |
+                     RCC_AHB1ENR_GPIOHEN |
                      RCC_AHB1ENR_GPIOCEN |
                      RCC_AHB1ENR_GPIOBEN | 
                      RCC_AHB1ENR_GPIOAEN);
