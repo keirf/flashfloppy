@@ -56,7 +56,7 @@ void speaker_pulse(void)
     now = time_now();
     pulse.state = STATE_active;
     pulse.start = now;
-    timer_set(&pulse.timer, now + volume*volume*3);
+    timer_set(&pulse.timer, now + volume*volume*(TIME_MHZ/3));
 }
 
 /*
