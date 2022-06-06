@@ -13,18 +13,18 @@
  *  Alternative rotary location at PA13, PA14
  *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
  * 
- * SFRKC30AT4, SFRKC30.AT4, SFRKC30.AT4.7
+ * SFRKC30AT4, SFRKC30.AT4, SFRKC30.AT4.7 (KC30 Rev 1)
  *  LQFP64 designs with original rotary header and "KC30" rotary header.
  *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
  *  Rotary:  PC10, PC11
  *  KC30: PF6 = Select, PA6/PA15 = Rotary
  * 
- * SFRKC30AT3
+ * SFRKC30AT3 (KC30 Rev 1)
  *  LQFP48 design similar to SFRC922AT3 but with the "KC30" rotary header.
  *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
  *  KC30: PF6 = Select, PA6/PA15 = Rotary
  * 
- * SFRKC30.AT2
+ * SFRKC30.AT2 (KC30 Rev 1)
  *  QFN32 design with various pin changes and features missing:
  *  Missing:
  *   * Original rotary header
@@ -40,6 +40,10 @@
  * Future QFN32:
  *  Agreed that JC will be implemented at PA9.
  * 
+ * SFRKC30.AT4.35 (KC30 Rev 2)
+ *  As SFRKC30.AT4 except PC15 is tied HIGH for identification.
+ *  MOTOR (pin 16) is optionally jumpered to PB12 with 1k pullup to 5v.
+ * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
  * This is free and unencumbered software released into the public domain.
@@ -48,7 +52,7 @@
 
 bool_t is_32pin_mcu;
 static bool_t is_48pin_mcu;
-static bool_t has_kc30_header;
+uint8_t has_kc30_header;
 
 /* Pull up currently unused and possibly-floating pins. */
 static void gpio_pull_up_pins(GPIO gpio, uint16_t mask)
@@ -201,7 +205,9 @@ void board_init(void)
 
         if (is_32pin_mcu) {
 
-            has_kc30_header = TRUE;
+            /* The sole QFN32 board is a KC30 Rev 1 design. */
+            has_kc30_header = 1;
+
             pa_skip &= ~(1<<10); /* PA10 is not used as serial rx */
             pb_skip |= 1<<1; /* PB1 is a floppy input (WGATE) */
 
@@ -210,16 +216,32 @@ void board_init(void)
             /* 48-pin package has PC12 permanently LOW. */
             is_48pin_mcu = !(id & 1);
 
-            /* If PF7 is floating then we may be running on a board with the
-             * optional rotary-encoder header (SFRKC30). On earlier boards
-             * PF6=VSS and PF7=VDD, hence we take care here. */
-#if MCU == STM32F105 /* AT32F435 needs new PCB */
-            rcc->apb2enr |= RCC_APB2ENR_IOPFEN;
-            gpio_configure_pin(gpiof, 7, GPI_pull_down);
+            /* Check for KC30 Rev 2. */
+            gpio_configure_pin(gpioc, 15, GPI_pull_down);
             delay_us(100);
-            has_kc30_header = (gpio_read_pin(gpiof, 7) == LOW);
-            gpio_configure_pin(gpiof, 7, GPI_floating);
+
+            if (gpio_read_pin(gpioc, 15) == HIGH) {
+
+                /* KC30 Rev 2. */
+                has_kc30_header = 2;
+                pb_skip |= 1<<12; /* PB12 is a floppy input (MOTOR) */
+
+            } else {
+
+                /* If PF7 is floating then we are running on a board with the
+                 * optional rotary-encoder header (SFRKC30 Rev 1). On earlier
+                 * boards PF6=VSS and PF7=VDD, hence we take care here. */
+#if MCU == STM32F105 /* Only AT32F415 has the PF7 pin. */
+                rcc->apb2enr |= RCC_APB2ENR_IOPFEN;
+                gpio_configure_pin(gpiof, 7, GPI_pull_down);
+                delay_us(100);
+                if (gpio_read_pin(gpiof, 7) == LOW) {
+                    /* KC30 Rev 1. */
+                    has_kc30_header = 1;
+                }
+                gpio_configure_pin(gpiof, 7, GPI_floating);
 #endif
+            }
 
         }
 

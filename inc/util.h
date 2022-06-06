@@ -158,6 +158,7 @@ void IRQ_rotary(void);
 enum { DM_normal=0, DM_banner, DM_menu };
 extern uint8_t display_mode;
 extern uint8_t board_id;
+extern uint8_t has_kc30_header;
 
 /* Gotek board revisions */
 #define BRDREV_Gotek_standard 0xf
