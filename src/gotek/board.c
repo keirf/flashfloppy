@@ -17,12 +17,12 @@
  *  LQFP64 designs with original rotary header and "KC30" rotary header.
  *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
  *  Rotary:  PC10, PC11
- *  KC30: PF6 = Select, PA6/PA15 = Rotary
+ *  KC30: PF6/PH2 = Select, PA6/PA15 = Rotary
  * 
  * SFRKC30AT3 (KC30 Rev 1)
  *  LQFP48 design similar to SFRC922AT3 but with the "KC30" rotary header.
  *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
- *  KC30: PF6 = Select, PA6/PA15 = Rotary
+ *  KC30: PF6/PH2 = Select, PA6/PA15 = Rotary
  * 
  * SFRKC30.AT2 (KC30 Rev 1)
  *  QFN32 design with various pin changes and features missing:
@@ -54,6 +54,14 @@ bool_t is_32pin_mcu;
 static bool_t is_48pin_mcu;
 uint8_t has_kc30_header;
 
+#if MCU == STM32F105
+#define kc30_sel_gpio gpiof
+#define kc30_sel_pin  6
+#elif MCU == AT32F435
+#define kc30_sel_gpio gpioh
+#define kc30_sel_pin  2
+#endif
+
 /* Pull up currently unused and possibly-floating pins. */
 static void gpio_pull_up_pins(GPIO gpio, uint16_t mask)
 {
@@ -79,10 +87,10 @@ unsigned int board_get_buttons(void)
     x = ~x & 7;
     if (has_kc30_header) {
         /* KC30 Select pin, Artery models only: 
-         *  PF6 = Select; except QFN32: PA10 = Select. */
+         *  PF6/PH2 = Select; except QFN32: PA10 = Select. */
         unsigned int kc30 = (is_32pin_mcu
                              ? gpioa->idr >> (10-2)  /* PA10 */
-                             : gpiof->idr >> (6-2)); /* PF6 */
+                             : kc30_sel_gpio->idr >> (kc30_sel_pin-2));
         x |= ~kc30 & 4;
     }
     /* SLR -> SRL */
@@ -246,7 +254,7 @@ void board_init(void)
         }
 
         if (has_kc30_header)
-            gpio_configure_pin(gpiof, 6, GPI_pull_up);
+            gpio_configure_pin(kc30_sel_gpio, kc30_sel_pin, GPI_pull_up);
 
     } else {
 
