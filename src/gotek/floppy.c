@@ -20,7 +20,7 @@
 #define pin_sel1    3 /* PA3 */
 static uint8_t pin_wgate = 9; /* PB9 */
 #define pin_side    4 /* PB4 */
-#define pin_motor  15 /* PA15 or PB15 */
+static uint8_t pin_motor = 15; /* PA15 or PB15 */
 #define pin_chgrst 14 /* PA14 if CHGRST_pa14 */
 
 /* Output pins. PBx = 0-15, PAx = 16-31. */
@@ -154,8 +154,8 @@ static void board_floppy_init(void)
     gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
     gpio_configure_pin(gpiob, pin_side,  GPI_bus);
 
-    /* PA[15:12], PC[11:10], PB[9:1], PA[0] */
-    afio->exticr[4-1] = 0x0000;
+    /* PA[15:13], PB[12], PC[11:10], PB[9:1], PA[0] */
+    afio->exticr[4-1] = 0x0001;
     afio->exticr[3-1] = 0x2211;
     afio->exticr[2-1] = 0x1111;
     afio->exticr[1-1] = 0x1110;
@@ -163,6 +163,8 @@ static void board_floppy_init(void)
     if (gotek_enhanced()) {
         gpio_configure_pin(gpioa, pin_sel1,  GPI_bus);
         gpio_configure_pin(gpioa, pin_motor, GPI_bus);
+    } else if (has_kc30_header == 2) {
+        pin_motor = 12; /* PB12 */
     } else {
         /* This gives us "motor always on" if the pin is not connected. 
          * It is safe enough to pull down even if connected direct to 5v, 
