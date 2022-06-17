@@ -78,6 +78,25 @@ _dist: FORCE
 	cd out/$(mcu)/$(level)/floppy; \
 	  cp -a target.dfu $(t)/dfu/$(PROJ)-$(mcu)-$(VER).dfu; \
 	  cp -a target.hex $(t)/hex/$(PROJ)-$(mcu)-$(VER).hex
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/$(PROJ)-$(VER).upd \
+	  out/$(mcu)/$(level)/floppy/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/bootloader/$(PROJ)-bootloader-$(VER).upd \
+	  out/$(mcu)/$(level)/bl_update/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/io-test/$(PROJ)-io-test-$(VER).upd \
+	  out/$(mcu)/$(level)/io_test/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/logfile/$(PROJ)-logfile-$(VER).upd \
+	  out/$(mcu)/logfile/floppy/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/quickdisk/$(PROJ)-quickdisk-$(VER).upd \
+	  out/$(mcu)/$(level)/quickdisk/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/quickdisk/logfile/$(PROJ)-quickdisk-logfile-$(VER).upd \
+	  out/$(mcu)/logfile/quickdisk/target.bin $(mcu) & \
+	wait
 
 dist: level := prod
 dist: t := $(ROOT)/out/$(PROJ)-$(VER)
@@ -91,9 +110,10 @@ dist: FORCE all
 	mkdir -p $(t)/alt/quickdisk/logfile
 	$(MAKE) _legacy_dist mcu=stm32f105 level=$(level) t=$(t)
 	$(MAKE) _dist mcu=stm32f105 level=$(level) t=$(t)
+	$(MAKE) _dist mcu=at32f435 level=$(level) t=$(t)
 	$(PYTHON) scripts/mk_qd.py --window=6.5 $(t)/alt/quickdisk/Blank.qd
 	cp -a COPYING $(t)/
-	cp -a README.md $(t)/
+	cp -a README $(t)/
 	cp -a RELEASE_NOTES $(t)/
 	cp -a examples $(t)/
 	[ -e ext/HxC_Compat_Mode-$(HXC_FF_VER).zip ] || \
