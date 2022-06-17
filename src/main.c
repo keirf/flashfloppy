@@ -3124,9 +3124,9 @@ int main(void)
     console_crash_on_input();
     delay_ms(200); /* 5v settle */
 
-    printk("\n** FlashFloppy %s for Gotek\n", fw_ver);
+    printk("\n** FlashFloppy %s\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
-    printk("** https://github.com/keirf/FlashFloppy\n\n");
+    printk("** github:keirf/flashfloppy\n\n");
 
     printk("Build: %s %s\n", build_date, build_time);
     printk("Board: %s\n", board_name[board_id]);
