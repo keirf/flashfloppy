@@ -407,9 +407,9 @@ int main(void)
     console_init();
     board_init();
 
-    printk("\n** FF Update Bootloader %s for Gotek\n", fw_ver);
+    printk("\n** FF Update Bootloader %s\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
-    printk("** https://github.com/keirf/FlashFloppy\n\n");
+    printk("** github:keirf/flashfloppy\n\n");
 
     if (!update_requested && !buttons_pressed())
         reset_to_main_fw();
