@@ -2945,32 +2945,52 @@ out:
     display_mode = DM_normal;
 }
 
-static void banner(void)
+static void noinline banner(void)
 {
+    char msg[2][25];
+
     switch (display_type) {
+
     case DT_LED_7SEG:
+#if MCU == STM32F105
+#define sep_ch "-"
+#elif MCU == AT32F435
+#define sep_ch "z"
+#endif
         led_7seg_write_string(
 #if defined(LOGFILE)
             "LOG"
 #elif defined(QUICKDISK)
-            (led_7seg_nr_digits() == 3) ? "Q-D" : "QD"
+            (led_7seg_nr_digits() == 3) ? "Q"sep_ch"D" : "QD"
 #else
-            (led_7seg_nr_digits() == 3) ? "F-F" : "FF"
+            (led_7seg_nr_digits() == 3) ? "F"sep_ch"F" : "FF"
 #endif
             );
+#undef sep_ch
         break;
+
     case DT_LCD_OLED:
         lcd_clear();
         display_mode = DM_banner; /* double height row 0 */
+#if MCU == STM32F105
         lcd_write(0, 0, 0, "FlashFloppy");
-        lcd_write(0, 1, 0, fw_ver);
-#if defined(LOGFILE)
-        lcd_write(10, 1, 0, "[Log]");
-#elif defined(QUICKDISK)
-        lcd_write(10, 1, 0, "[QD]");
+#elif MCU == AT32F435
+        lcd_write(0, 0, 0, "FlashFloppy+");
 #endif
+        snprintf(msg[0], sizeof(msg[0]), "%s%s", fw_ver,
+#if defined(LOGFILE)
+                 " Log"
+#elif defined(QUICKDISK)
+                 " QD"
+#else
+                 ""
+#endif
+            );
+        snprintf(msg[1], sizeof(msg[1]), "%9s %dkB", msg[0], ram_kb);
+        lcd_write(0, 1, 0, msg[1]);
         lcd_on();
         break;
+
     }
 }
 
@@ -3013,6 +3033,15 @@ static void maybe_show_version(void)
         continue;
     if (nb)
         return;
+
+    led_7seg_write_string("RAN");
+    delay_ms(1000);
+
+    led_7seg_write_decimal(ram_kb);
+    delay_ms(1000);
+
+    led_7seg_write_string("UER");
+    delay_ms(1000);
 
     /* Iterate through the dotted sections of the version number. */
     for (p = fw_ver; p != NULL; p = np ? np+1 : NULL) {
