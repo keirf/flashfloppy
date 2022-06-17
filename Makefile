@@ -76,8 +76,8 @@ _legacy_dist: FORCE
 
 _dist: FORCE
 	cd out/$(mcu)/$(level)/floppy; \
-	  cp -a target.dfu $(t)/dfu/$(PROJ)-$(mcu)-$(VER).dfu; \
-	  cp -a target.hex $(t)/hex/$(PROJ)-$(mcu)-$(VER).hex
+	  cp -a target.dfu $(t)/dfu/$(PROJ)-$(n)-$(VER).dfu; \
+	  cp -a target.hex $(t)/hex/$(PROJ)-$(n)-$(VER).hex
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/$(PROJ)-$(VER).upd \
 	  out/$(mcu)/$(level)/floppy/target.bin $(mcu) & \
@@ -109,8 +109,8 @@ dist: FORCE all
 	mkdir -p $(t)/alt/io-test
 	mkdir -p $(t)/alt/quickdisk/logfile
 	$(MAKE) _legacy_dist mcu=stm32f105 level=$(level) t=$(t)
-	$(MAKE) _dist mcu=stm32f105 level=$(level) t=$(t)
-	$(MAKE) _dist mcu=at32f435 level=$(level) t=$(t)
+	$(MAKE) _dist mcu=stm32f105 n=stm105-at415 level=$(level) t=$(t)
+	$(MAKE) _dist mcu=at32f435 n=at435 level=$(level) t=$(t)
 	$(PYTHON) scripts/mk_qd.py --window=6.5 $(t)/alt/quickdisk/Blank.qd
 	cp -a COPYING $(t)/
 	cp -a README $(t)/
