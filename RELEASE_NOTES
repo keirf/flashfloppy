@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.33 - 20 June 2022
+ - Support new board SFRKC30.AT4.35
+ - Support new chip AT32F435 (288MHz M4, 256kB+ Flash, 384kB SRAM)
+ - New UPD file format and explanatory README: Please read!
+
 ** v3.32 - 28 May 2022
  - Fix 'oled-font=8x16' option (broken in release 3.31)
  - Improve drive-select ISR performance
