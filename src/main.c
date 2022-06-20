@@ -593,6 +593,7 @@ static void button_timer_fn(void *unused)
     b |= rb;
     rb = 0;
 
+    if (0) {
     switch (display_type) {
     case DT_LCD_OLED:
         b = lcd_handle_backlight(b);
@@ -600,7 +601,7 @@ static void button_timer_fn(void *unused)
     case DT_LED_7SEG:
         b = led_handle_display(b);
         break;
-    }
+    }}
 
     /* Latch final button state and reset the timer. */
     buttons = b;
@@ -3097,6 +3098,8 @@ static void handle_errors(FRESULT fres)
         system_reset();
 }
 
+void tone(int hz, int ms);
+int floppy_test(void);
 int main(void)
 {
     static const char * const board_name[] = {
@@ -3106,6 +3109,7 @@ int main(void)
     };
 
     FRESULT fres;
+    int i = 888, b;
 
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
@@ -3120,14 +3124,14 @@ int main(void)
     console_crash_on_input();
     delay_ms(200); /* 5v settle */
 
-    printk("\n** FlashFloppy %s\n", fw_ver);
+    printk("\n** 435 Test %s\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** github:keirf/flashfloppy\n\n");
 
     printk("Build: %s %s\n", build_date, build_time);
     printk("Board: %s\n", board_name[board_id]);
 
-    speaker_init();
+//    speaker_init();
 
     flash_ff_cfg_read();
 
@@ -3135,26 +3139,79 @@ int main(void)
 
     display_init();
 
-    while (floppy_ribbon_is_reversed()) {
-        printk("** Error: Ribbon cable upside down?\n");
-        switch (display_type) {
-        case DT_LED_7SEG:
-            led_7seg_write_string("RIB");
-            break;
-        case DT_LCD_OLED:
-            lcd_write(0, 0, -1, "Ribbon Cable May");
-            lcd_write(0, 1, -1, "Be Upside Down? ");
-            lcd_on();
-            break;
-        }
-    }
-
     usbh_msc_init();
 
     rotary = board_get_rotary();
     set_rotary_exti();
     timer_init(&button_timer, button_timer_fn, NULL);
     timer_set(&button_timer, time_now());
+
+    switch (display_type) {
+    case DT_LED_7SEG:
+        led_7seg_write_string("PIN");
+        break;
+    case DT_LCD_OLED:
+        lcd_write(0, 0, -1, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        lcd_write(0, 1, -1, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        lcd_write(0, 3, -1, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        lcd_write(7, 0, 0, "  PIN  ");
+        lcd_on();
+        break;
+    }    
+
+    tone(2000, 200);
+    if (floppy_test() == 0) {
+        tone(4000, 200);
+    } else {
+        switch (display_type) {
+        case DT_LED_7SEG:
+            led_7seg_write_string("ERR");
+            break;
+        case DT_LCD_OLED:
+            lcd_write(9, 0, 0, "ERR");
+            break;
+        }    
+        tone(50, 1000);
+        for (;;);
+    }
+
+    switch (display_type) {
+    case DT_LED_7SEG:
+        led_7seg_write_string("USB");
+        break;
+    case DT_LCD_OLED:
+        lcd_write(9, 0, 0, "USB");
+        break;
+    }    
+
+    arena_init();
+    usbh_msc_buffer_set(arena_alloc(512));
+    while ((f_mount(&fatfs, "", 1) != FR_OK))
+        usbh_msc_process();
+
+    tone(6000, 200);
+
+    for (;;) {
+
+        switch (display_type) {
+        case DT_LED_7SEG:
+            led_7seg_write_decimal(i);
+            break;
+        case DT_LCD_OLED: {
+            char msg[6];
+            snprintf(msg, sizeof(msg), "%d", i);
+            lcd_write(9, 0, 0, msg);
+            break;
+        }    }
+        while (!(b = buttons));
+        tone(4000, 50);
+        if (b & B_LEFT) i--;
+        if (b & B_RIGHT) i++;
+        if (b & B_SELECT) i += 100;
+        if (i > 999) i -= 1000;
+        if (i < 0) i += 1000;
+        while (buttons) ;
+    }
 
     for (;;) {
 

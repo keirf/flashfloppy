@@ -551,7 +551,7 @@ bool_t lcd_init(void)
             : ((a&~1) == OLED_ADDR);
 
         if (is_oled_display) {
-            oled_height = (ff_cfg.display_type & DISPLAY_oled_64) ? 64 : 32;
+            oled_height = 64;//(ff_cfg.display_type & DISPLAY_oled_64) ? 64 : 32;
             lcd_columns = (ff_cfg.oled_font == FONT_8x16) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrower) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
@@ -963,7 +963,7 @@ static void oled_init(void)
     p += oled_queue_cmds(p, dynamic_cmds, dc - dynamic_cmds);
 
     /* Display is right-way-up, or rotated. */
-    cmds = (ff_cfg.display_type & DISPLAY_rotate) ? rot_cmds : norot_cmds;
+    cmds = 1 ? rot_cmds : norot_cmds; //(ff_cfg.display_type & DISPLAY_rotate) ? rot_cmds : norot_cmds;
     p += oled_queue_cmds(p, cmds, sizeof(rot_cmds));
 
     /* Start off the I2C transaction. */

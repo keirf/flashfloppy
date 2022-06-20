@@ -291,20 +291,21 @@ void floppy_init(void)
 
     board_floppy_init();
 
+    if (0) {
     timer_init(&drv->step.timer, drive_step_timer, drv);
     timer_init(&drv->motor.timer, motor_spinup_timer, drv);
     timer_init(&drv->chgrst_timer, chgrst_timer, drv);
-
+    }
     drive_configure_output_pin(pin_02);
     drive_configure_output_pin(pin_08);
     drive_configure_output_pin(pin_26);
     drive_configure_output_pin(pin_28);
     drive_configure_output_pin(pin_34);
 
+    if (0) {
     drive_change_output(drv, outp_dskchg, TRUE);
     drive_change_output(drv, outp_wrprot, TRUE);
     drive_change_output(drv, outp_trk0,   TRUE);
-
     floppy_init_irqs();
 
     IRQx_set_prio(FLOPPY_SOFTIRQ, FLOPPY_SOFTIRQ_PRI);
@@ -314,6 +315,64 @@ void floppy_init(void)
     timer_init(&index.timer_deassert, index_deassert, NULL);
 
     motor_chgrst_eject(drv);
+    }
+}
+
+void tone(int hz, int ms)
+{
+    int us_delay = 1000000 / hz;
+    int h = us_delay / 4;
+    int l = us_delay - h;
+    int n = (ms*1000) / us_delay;
+    while (n--) {
+        gpio_write_pin(gpiob, pin_28, O_TRUE);
+        delay_us(h);
+        gpio_write_pin(gpiob, pin_28, O_FALSE);
+        delay_us(l);
+    }
+}
+
+static unsigned int get_inputs(void)
+{
+    unsigned int x = 0;
+    x |= !gpio_read_pin(gpiob, 4); /* 32(16), side */
+    x <<= 1;
+    x |= !gpio_read_pin(gpiob, 9); /* 24(12), wgate */
+    x <<= 1;
+    x |= !gpio_read_pin(gpioa, 8); /* 22(11), wdata */
+    x <<= 1;
+    x |= !gpio_read_pin(gpioa, 1); /* 20(10), step */
+    x <<= 1;
+    x |= !gpio_read_pin(gpiob, 0); /* 18(9), dir */
+    x <<= 1;
+    x |= !gpio_read_pin(gpioa, 0); /* 10(5), sela */
+    return x;
+}
+
+int floppy_test(void)
+{
+    int pins[] = { pin_02, pin_08, pin_26, pin_28, pin_rdata+16, pin_34 };
+    int i, j;
+
+    for (j = 0; j < 10; j++) {
+    for (i = 0; i < ARRAY_SIZE(pins); i++) {
+        int pin = pins[i];
+        GPIO _gp = (pin < 16) ? gpiob : gpioa;
+        pin &= 15;
+        gpio_write_pin(_gp, pin, O_TRUE);
+        delay_ms(1);
+        if (get_inputs() != m(i))
+            goto error;
+        gpio_write_pin(_gp, pin, O_FALSE);
+        delay_ms(1);
+        if (get_inputs() != 0)
+            goto error;
+    }}
+
+    return 0;
+
+error:
+    return -1;
 }
 
 void floppy_insert(unsigned int unit, struct slot *slot)

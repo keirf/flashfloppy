@@ -15,21 +15,14 @@ export ROOT := $(CURDIR)
 prod-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=prod
 	$(MAKE) target mcu=$* target=floppy level=prod
-	$(MAKE) target mcu=$* target=quickdisk level=prod
-	$(MAKE) target mcu=$* target=bl_update level=prod
-	$(MAKE) target mcu=$* target=io_test level=prod
 
 debug-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=debug
 	$(MAKE) target mcu=$* target=floppy level=debug
-	$(MAKE) target mcu=$* target=quickdisk level=debug
-	$(MAKE) target mcu=$* target=bl_update level=debug
-	$(MAKE) target mcu=$* target=io_test level=debug
 
 logfile-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=logfile
 	$(MAKE) target mcu=$* target=floppy level=logfile
-	$(MAKE) target mcu=$* target=quickdisk level=logfile
 
 all-%: FORCE prod-% debug-% logfile-% ;
 

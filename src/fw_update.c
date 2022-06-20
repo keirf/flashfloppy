@@ -436,6 +436,8 @@ int main(void)
     usbh_msc_init();
     usbh_msc_buffer_set(USBH_Cfg_Rx_Buffer);
 
+    for (;;); /* XXX */
+
     /* Wait for buttons to be pressed. */
     wait_buttons(LOW);
 
