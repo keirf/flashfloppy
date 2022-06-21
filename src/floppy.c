@@ -361,8 +361,10 @@ int floppy_test(void)
         pin &= 15;
         gpio_write_pin(_gp, pin, O_TRUE);
         delay_ms(1);
-        if (get_inputs() != m(i))
+        if (get_inputs() != m(i)) {
+            gpio_write_pin(_gp, pin, O_FALSE);
             goto error;
+        }
         gpio_write_pin(_gp, pin, O_FALSE);
         delay_ms(1);
         if (get_inputs() != 0)

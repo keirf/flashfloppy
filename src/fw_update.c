@@ -84,13 +84,6 @@ static void reset_to_main_fw(void)
     system_reset();
 }
 
-static bool_t main_fw_requested(void)
-{
-    bool_t req = (*(volatile uint32_t *)_ebss == MAIN_FW_KEY);
-    *(volatile uint32_t *)_ebss = 0;
-    return req;
-}
-
 static bool_t fw_update_requested(void)
 {
     bool_t requested;
@@ -384,11 +377,11 @@ int main(void)
 
     update_requested = fw_update_requested();
 
-    if (main_fw_requested() && !update_requested) {
+    if (1) {//main_fw_requested() && !update_requested) {
         /* Check for, and jump to, the main firmware. */
         uint32_t sp = *(uint32_t *)FIRMWARE_START;
         uint32_t pc = *(uint32_t *)(FIRMWARE_START + 4);
-        if (sp != ~0u) { /* only if firmware is apparently not erased */
+        if (1) {//sp != ~0u) { /* only if firmware is apparently not erased */
             asm volatile (
                 "mov sp,%0 ; blx %1"
                 :: "r" (sp), "r" (pc));

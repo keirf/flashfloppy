@@ -3098,6 +3098,59 @@ static void handle_errors(FRESULT fres)
         system_reset();
 }
 
+static void pstr(const char *s)
+{
+    switch (display_type) {
+    case DT_LED_7SEG:
+        led_7seg_write_string(s);
+        break;
+    case DT_LCD_OLED:
+        lcd_write(9, 0, 0, s);
+        break;
+    }    
+}
+
+static int test_jp(void)
+{
+    gpio_configure_pin(gpioa, 5, GPI_pull_up); /* JA */
+    gpio_configure_pin(gpioa, 2, GPI_pull_up); /* JB */
+    gpio_configure_pin(gpiob, 1, GPI_pull_up); /* JC */
+    delay_ms(1);
+    if (!gpio_read_pin(gpioa, 5) ||
+        !gpio_read_pin(gpioa, 2) ||
+        !gpio_read_pin(gpiob, 1))
+        goto error;
+
+    gpio_configure_pin(gpioa, 5, GPO_pushpull(_2MHz, LOW));
+    delay_ms(1);
+    if (!gpio_read_pin(gpioa, 2) ||
+        !gpio_read_pin(gpiob, 1))
+        goto error;
+    gpio_configure_pin(gpioa, 5, GPI_pull_up); /* JA */
+
+    gpio_configure_pin(gpioa, 2, GPO_pushpull(_2MHz, LOW));
+    delay_ms(1);
+    if (!gpio_read_pin(gpioa, 5) ||
+        !gpio_read_pin(gpiob, 1))
+        goto error;
+    gpio_configure_pin(gpioa, 2, GPI_pull_up); /* JB */
+
+    gpio_configure_pin(gpiob, 1, GPO_pushpull(_2MHz, LOW));
+    delay_ms(1);
+    if (!gpio_read_pin(gpioa, 5) ||
+        !gpio_read_pin(gpioa, 2))
+        goto error;
+    gpio_configure_pin(gpiob, 1, GPI_pull_up); /* JA */
+
+    return 0;
+
+error:
+    gpio_configure_pin(gpioa, 5, GPI_pull_up); /* JA */
+    gpio_configure_pin(gpioa, 2, GPI_pull_up); /* JB */
+    gpio_configure_pin(gpiob, 1, GPI_pull_up); /* JC */
+    return -1;
+}
+
 void tone(int hz, int ms);
 int floppy_test(void);
 int main(void)
@@ -3160,29 +3213,20 @@ int main(void)
     }    
 
     tone(2000, 200);
-    if (floppy_test() == 0) {
-        tone(4000, 200);
-    } else {
-        switch (display_type) {
-        case DT_LED_7SEG:
-            led_7seg_write_string("ERR");
-            break;
-        case DT_LCD_OLED:
-            lcd_write(9, 0, 0, "ERR");
-            break;
-        }    
+    if (floppy_test() != 0) {
         tone(50, 1000);
         for (;;);
     }
 
-    switch (display_type) {
-    case DT_LED_7SEG:
-        led_7seg_write_string("USB");
-        break;
-    case DT_LCD_OLED:
-        lcd_write(9, 0, 0, "USB");
-        break;
-    }    
+    tone(3000, 200);
+    pstr("JP ");
+    if (test_jp() != 0) {
+        tone(50, 1000);
+        for (;;);
+    }
+
+    tone(4000, 200);
+    pstr("USB");
 
     arena_init();
     usbh_msc_buffer_set(arena_alloc(512));
@@ -3190,7 +3234,6 @@ int main(void)
         usbh_msc_process();
 
     tone(6000, 200);
-
     for (;;) {
 
         switch (display_type) {
