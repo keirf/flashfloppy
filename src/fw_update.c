@@ -378,7 +378,7 @@ int main(void)
     bool_t update_requested;
 
     /* Relocate DATA. Initialise BSS. */
-    if (_sdat != _ldat)
+    if (&_sdat[0] != &_ldat[0])
         memcpy(_sdat, _ldat, _edat-_sdat);
     memset(_sbss, 0, _ebss-_sbss);
 
