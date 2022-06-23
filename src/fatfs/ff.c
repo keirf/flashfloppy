@@ -3748,6 +3748,8 @@ FRESULT f_open (
 
 	if (!fp) return FR_INVALID_OBJECT;
 
+	dj.obj.attr = 0; /* FlashFloppy: avoid uninitialised assignment warn */
+
 	/* Get logical drive number */
 	mode &= FF_FS_READONLY ? FA_READ : FA_READ | FA_WRITE | FA_CREATE_ALWAYS | FA_CREATE_NEW | FA_OPEN_ALWAYS | FA_OPEN_APPEND;
 	res = mount_volume(&path, &fs, mode);
