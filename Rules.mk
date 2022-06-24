@@ -88,6 +88,7 @@ build.o: $(OBJS)
 	@echo OBJCOPY $@
 	$(OBJCOPY) -O ihex $< $@
 	chmod a-x $@
+	$(PYTHON) $(ROOT)/scripts/check_hex.py $@ $(mcu)
 ifneq ($(bootloader),y)
 	srec_cat ../bootloader/target.hex -Intel $@ -Intel -o $@ -Intel
 endif
