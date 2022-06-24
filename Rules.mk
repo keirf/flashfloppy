@@ -20,10 +20,10 @@ FLAGS += -Wno-unused-value -ffunction-sections
 ifeq ($(mcu),stm32f105)
 FLAGS += -mcpu=cortex-m3 -DSTM32F105=1 -DMCU=1
 ifeq ($(bootloader),y)
-# Debug bootloader doesn't fit in 32kB
-override debug=n
 override logfile=n
 endif
+# Debug builds don't fit in available Flash. FIXME for main firmware.
+override debug=n
 
 ## AT32F435
 else ifeq ($(mcu),at32f435)
