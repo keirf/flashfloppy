@@ -143,7 +143,7 @@ static void board_floppy_init(void)
     tim2->dier = TIM_DIER_CC2IE;
     tim2->cr1 = TIM_CR1_CEN;
 
-    if (is_32pin_mcu) {
+    if (mcu_package == MCU_QFN32) {
         pin_02 = 16 + 14; /* PA14 */
         pin_26 = 16 + 13; /* PA13 */
         pin_wgate = 1; /* PB1 */

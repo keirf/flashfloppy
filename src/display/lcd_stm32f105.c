@@ -512,7 +512,7 @@ bool_t lcd_init(void)
     in_osd = OSD_no;
     osd_buttons_rx = 0;
 
-    if (is_32pin_mcu) {
+    if (mcu_package == MCU_QFN32) {
         i2c = i2c1;
         i2c_cfg = &i2c1_cfg;
     } else {

@@ -50,8 +50,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-bool_t is_32pin_mcu;
-static bool_t is_48pin_mcu;
+uint8_t mcu_package;
 uint8_t has_kc30_header;
 
 #if MCU == STM32F105
@@ -82,13 +81,13 @@ unsigned int board_get_buttons(void)
         ? gpioa->idr >> 3 : -1;
     /* Earlier Gotek revisions (all of which are LQFP64): 
      *  PC6 = Select, PC7 = Left, PC8 = Right. */
-    if (!is_48pin_mcu && !is_32pin_mcu)
+    if (mcu_package == MCU_LQFP64)
         x &= _rbit32(gpioc->idr) >> 23;
     x = ~x & 7;
     if (has_kc30_header) {
         /* KC30 Select pin, Artery models only: 
          *  PF6/PH2 = Select; except QFN32: PA10 = Select. */
-        unsigned int kc30 = (is_32pin_mcu
+        unsigned int kc30 = (mcu_package == MCU_QFN32
                              ? gpioa->idr >> (10-2)  /* PA10 */
                              : kc30_sel_gpio->idr >> (kc30_sel_pin-2));
         x |= ~kc30 & 4;
@@ -100,15 +99,13 @@ unsigned int board_get_buttons(void)
 unsigned int board_get_rotary(void)
 {
     unsigned int x = 3;
-    if (!is_32pin_mcu) {
-        if (ff_cfg.chgrst != CHGRST_pa14) {
-            /* Alternative location at PA13, PA14. */
-            x &= gpioa->idr >> 13;
-        }
-        if (!is_48pin_mcu) {
-            /* Original rotary header at PC10, PC11. */
-            x &= gpioc->idr >> 10;
-        }
+    if ((mcu_package != MCU_QFN32) && (ff_cfg.chgrst != CHGRST_pa14)) {
+        /* Alternative location at PA13, PA14. */
+        x &= gpioa->idr >> 13;
+    }
+    if (mcu_package == MCU_LQFP64) {
+        /* Original rotary header at PC10, PC11. */
+        x &= gpioc->idr >> 10;
     }
     if (has_kc30_header) {
         /* KC30 rotary pins PA6, PA15. */
@@ -123,19 +120,17 @@ uint32_t board_rotary_exti_mask;
 void board_setup_rotary_exti(void)
 {
     uint32_t m = 0;
-    if (!is_32pin_mcu) {
-        if (ff_cfg.chgrst != CHGRST_pa14) {
-            /* Alternative location at PA13, PA14. */
-            exti_route_pa(13);
-            exti_route_pa(14);
-            m |= m(13) | m(14);
-        }
-        if (!is_48pin_mcu) {
-            /* Original rotary header at PC10, PC11. */
-            exti_route_pc(10);
-            exti_route_pc(11);
-            m |= m(10) | m(11);
-        }
+    if ((mcu_package != MCU_QFN32) && (ff_cfg.chgrst != CHGRST_pa14)) {
+        /* Alternative location at PA13, PA14. */
+        exti_route_pa(13);
+        exti_route_pa(14);
+        m |= m(13) | m(14);
+    }
+    if (mcu_package == MCU_LQFP64) {
+        /* Original rotary header at PC10, PC11. */
+        exti_route_pc(10);
+        exti_route_pc(11);
+        m |= m(10) | m(11);
     }
     if (has_kc30_header) {
         /* KC30 rotary pins PA6, PA15. */
@@ -153,7 +148,7 @@ void board_setup_rotary_exti(void)
 
 bool_t board_jc_strapped(void)
 {
-    if (is_32pin_mcu) {
+    if (mcu_package == MCU_QFN32) {
 #if !defined(NDEBUG)
         return FALSE; /* PA9 is used for serial tx */
 #else
@@ -196,7 +191,7 @@ void board_init(void)
         switch (dbg->mcu_idcode & 0xfff) {
         case 0x1c6: /* AT32F415KBU7-4 */
         case 0x242: /* AT32F415KCU7-4 */
-            is_32pin_mcu = TRUE;
+            mcu_package = MCU_QFN32;
             id = 0xf;
             break;
         }
@@ -212,7 +207,7 @@ void board_init(void)
          * MCU). */
         board_id = BRDREV_Gotek_standard;
 
-        if (is_32pin_mcu) {
+        if (mcu_package == MCU_QFN32) {
 
             /* The sole QFN32 board is a KC30 Rev 1 design. */
             has_kc30_header = 1;
@@ -223,7 +218,8 @@ void board_init(void)
         } else {
 
             /* 48-pin package has PC12 permanently LOW. */
-            is_48pin_mcu = !(id & 1);
+            if (!(id & 1))
+                mcu_package = MCU_LQFP48;
 
             /* Check for KC30 Rev 2. */
             gpio_configure_pin(gpioc, 15, GPI_pull_down);
