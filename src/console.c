@@ -159,7 +159,7 @@ void console_init(void)
  * any serial input to cause a crash dump of the stuck context. */
 void console_crash_on_input(void)
 {
-    if (is_32pin_mcu) {
+    if (mcu_package == MCU_QFN32) {
         /* Unavailable: PA10 is reassigned from SER_RX to K4 (rotary select 
          * on the KC30 header). */
         return;

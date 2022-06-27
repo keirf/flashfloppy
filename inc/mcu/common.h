@@ -100,7 +100,8 @@ void fpec_write(const void *data, unsigned int size, uint32_t flash_address);
 extern unsigned int flash_page_size;
 extern unsigned int ram_kb;
 
-extern bool_t is_32pin_mcu;
+extern uint8_t mcu_package;
+enum { MCU_LQFP64=0, MCU_LQFP48, MCU_QFN32 };
 
 /*
  * Local variables:

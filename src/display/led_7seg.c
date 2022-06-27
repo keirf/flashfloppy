@@ -261,7 +261,7 @@ void led_7seg_write_decimal(unsigned int val)
 
 void led_7seg_init(void)
 {
-    if (is_32pin_mcu) {
+    if (mcu_package == MCU_QFN32) {
         DAT_PIN = 6; /* PB6 */
         CLK_PIN = 7; /* PB7 */
     }
