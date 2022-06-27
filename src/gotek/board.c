@@ -99,16 +99,16 @@ unsigned int board_get_buttons(void)
 
 unsigned int board_get_rotary(void)
 {
-    unsigned int x;
-    if (is_32pin_mcu) {
-        /* No original rotary header. No alternative location. */
-        x = 3;
-    } else if (is_48pin_mcu) {
-        /* No original rotary header. Alternative location at PA13, PA14. */
-        x = (ff_cfg.chgrst != CHGRST_pa14) ? gpioa->idr >> 13 : 3;
-    } else {
-        /* Original rotary header at PC10, PC11. */
-        x = gpioc->idr >> 10;
+    unsigned int x = 3;
+    if (!is_32pin_mcu) {
+        if (ff_cfg.chgrst != CHGRST_pa14) {
+            /* Alternative location at PA13, PA14. */
+            x &= gpioa->idr >> 13;
+        }
+        if (!is_48pin_mcu) {
+            /* Original rotary header at PC10, PC11. */
+            x &= gpioc->idr >> 10;
+        }
     }
     if (has_kc30_header) {
         /* KC30 rotary pins PA6, PA15. */
@@ -116,25 +116,26 @@ unsigned int board_get_rotary(void)
         kc30 = ((kc30>>6)&1) | ((kc30>>(15-1))&2);
         x &= kc30;
     }
-    return x&3;
+    return x;
 }
 
 uint32_t board_rotary_exti_mask;
 void board_setup_rotary_exti(void)
 {
     uint32_t m = 0;
-    if (is_48pin_mcu) {
-        /* Alternative location at PA13, PA14. */
+    if (!is_32pin_mcu) {
         if (ff_cfg.chgrst != CHGRST_pa14) {
+            /* Alternative location at PA13, PA14. */
             exti_route_pa(13);
             exti_route_pa(14);
             m |= m(13) | m(14);
         }
-    } else if (!is_32pin_mcu) {
-        /* Original rotary header at PC10, PC11. */
-        exti_route_pc(10);
-        exti_route_pc(11);
-        m |= m(10) | m(11);
+        if (!is_48pin_mcu) {
+            /* Original rotary header at PC10, PC11. */
+            exti_route_pc(10);
+            exti_route_pc(11);
+            m |= m(10) | m(11);
+        }
     }
     if (has_kc30_header) {
         /* KC30 rotary pins PA6, PA15. */
