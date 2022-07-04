@@ -91,7 +91,6 @@ unsigned int board_get_buttons(void)
                              : kc30_sel_gpio->idr >> (kc30_sel_pin-2));
         x |= ~kc30 & 4;
     }
-    /* SLR -> SRL */
     return x;
 }
 
