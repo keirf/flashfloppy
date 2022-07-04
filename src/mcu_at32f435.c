@@ -15,9 +15,15 @@ unsigned int ram_kb = 384;
 
 static void clock_init(void)
 {
+    /* Enable PWR interface so we can set the LDO boost. */
+    rcc->apb1enr |= RCC_APB1ENR_PWREN;
+
     /* Bootloader leaves MISC1 set up for USB clocked from HICK. 
      * Clear MISC1 register to its reset value. */
     rcc->misc1 = 0;
+
+    /* 288MHz requires LDO voltage boost. */
+    pwr->ldoov = PWR_LDOOV_1V3;
 
     flash->divr = FLASH_DIVR_DIV_3;
 
