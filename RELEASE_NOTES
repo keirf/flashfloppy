@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.34 - 4 July 2022
+ - AT32F435: Fix startup to MCU spec (LDO voltage, Flash clock divisor)
+ - AT32F435: Cache HFE and QD image data, since there is plenty of RAM
+ - Allow rotary encoder on pins PA13/PA14 on any board except QFN32 MCU
+ - io-test: Fix io-test alt firmware for modern Gotek boards
+
 ** v3.33 - 20 June 2022
  - Support new board SFRKC30.AT4.35
  - Support new chip AT32F435 (288MHz M4, 256kB+ Flash, 384kB SRAM)
