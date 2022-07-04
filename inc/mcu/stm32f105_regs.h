@@ -9,6 +9,16 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+/* Power control */
+struct pwr {
+    uint32_t cr;       /* 00: Power control */
+    uint32_t csr;      /* 04: Power control/status */
+};
+
+#define PWR_CR_DBP           (1u<< 8)
+
+#define PWR_BASE 0x40007000
+
 /* Flash memory interface */
 struct flash {
     uint32_t acr;      /* 00: Flash access control */

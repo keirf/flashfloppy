@@ -9,6 +9,18 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+/* Power control */
+struct pwr {
+    uint32_t cr;       /* 00: Power control */
+    uint32_t csr;      /* 04: Power control/status */
+    uint32_t rsvd[2];
+    uint32_t ldoov;    /* 10: LDO output voltage */
+};
+
+#define PWR_LDOOV_1V3  (1u<<0)
+
+#define PWR_BASE 0x40007000
+
 /* Flash memory interface */
 struct flash_bank {
     uint32_t sr;       /* +00: Flash status */
@@ -30,7 +42,8 @@ struct flash {
     uint32_t rsvd4;    /* 48: - */
     struct flash_bank bank2;
     uint32_t contr;    /* 58: Continue read */
-    uint32_t divr;     /* 5C: Divider */
+    uint32_t rsvd5;    /* 5C: - */
+    uint32_t divr;     /* 60: Divider */
 };
 
 #define FLASH_SR_EOP         (1u<< 5)

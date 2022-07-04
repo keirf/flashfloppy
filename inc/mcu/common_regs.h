@@ -109,16 +109,6 @@ struct dbg {
 
 #define DBG_BASE 0xe0042000
 
-/* Power control */
-struct pwr {
-    uint32_t cr;       /* 00: Power control */
-    uint32_t csr;      /* 04: Power control/status */
-};
-
-#define PWR_CR_DBP           (1u<< 8)
-
-#define PWR_BASE 0x40007000
-
 /* Backup */
 struct bkp {
     uint32_t _0[1];    /* 00: - */
