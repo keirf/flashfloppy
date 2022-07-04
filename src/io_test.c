@@ -20,6 +20,8 @@ uint8_t board_id;
 #define DOWN  0x40
 #define UP    0x00
 
+#define INVALID 0xff
+
 static GPIO gpio(uint8_t x)
 {
     switch (x&0x30) {
@@ -42,14 +44,15 @@ static uint8_t inputs[] = {
     GPIOA |  8 | DOWN, /* 22: Write Data */
     GPIOB |  9 | DOWN, /* 24: Write Gate */
     GPIOB |  4 | DOWN, /* 32: Side Select */
-
+};
+#if 0 /* Buttons and encoder are handled via board.c */
     /* Buttons and encoder inputs are switch-to-ground. So we pull them up. */
     GPIOC |  8 | UP   , /* Button: Down/Left */
     GPIOC |  7 | UP   , /* Button: Up/Right */
     GPIOC |  6 | UP   , /* Button: Select (Jumper JA) */
     GPIOC | 10 | UP   , /* Rotary CLK (J7-1) */
     GPIOC | 11 | UP   , /* Rotary DAT (J7-2) */
-};
+#endif
 
 static uint8_t outputs[] = {
     GPIOB |  7        , /*  2: Disk Change/Density */
@@ -66,11 +69,23 @@ static void io_test(bool_t assert)
 
     uint8_t d[3] = { 0 };
     char p[20], *q = p;
-    int i;
+    int i, b;
 
+    /* 0-7 */
     for (i = 0; i < ARRAY_SIZE(inputs); i++) {
         uint8_t x = inputs[i];
-        if (gpio_read_pin(gpio(x), x&15)) {
+        if ((x != INVALID) && gpio_read_pin(gpio(x), x&15)) {
+            *q++ = char_map[i];
+            d[i/7] |= 1 << (i%7);
+        } else {
+            *q++ = ' ';
+        }
+    }
+
+    /* 8-12 */
+    b = (~board_get_buttons() & 7) | (board_get_rotary() << 3);
+    for (; i < 13; i++) {
+        if (b & (1<<(i-8))) {
             *q++ = char_map[i];
             d[i/7] |= 1 << (i%7);
         } else {
@@ -134,12 +149,26 @@ int main(void)
     display_init();
     display_setting(TRUE);
 
-    /* Standard Gotek: optional motor signal is PB15. */
-    if (!gotek_enhanced())
-        inputs[2] |= GPIOB;
+    if (mcu_package == MCU_QFN32) {
+        inputs[6] = GPIOB | 1 | DOWN; /* wgate */
+        outputs[0] = GPIOA | 14; /* pin_02, dskchg/den */
+        outputs[2] = GPIOA | 13; /* pin_26, trk00 */
+    }
+
+    if (!gotek_enhanced()) {
+        inputs[1] = INVALID; /* no SELB */
+        if (has_kc30_header == 2) {
+            inputs[2] = GPIOB | 12 | DOWN;
+        } else {
+            /* Standard Gotek: optional motor signal is PB15. */
+            inputs[2] = GPIOB | 15 | DOWN;
+        }
+    }
 
     for (i = 0; i < ARRAY_SIZE(inputs); i++) {
         uint8_t x = inputs[i];
+        if (x == INVALID)
+            continue;
         gpio_configure_pin(gpio(x), x&15,
                            (x&DOWN) ? GPI_pull_down : GPI_pull_up);
     }
