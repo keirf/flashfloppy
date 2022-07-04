@@ -529,10 +529,10 @@ static void button_timer_fn(void *unused)
         x >>= 1;
     }
 
-    if (_b[!twobutton_reverse] == 0)
+    if (_b[twobutton_reverse] == 0)
         b |= twobutton_rotary ? B_LEFT|B_RIGHT : B_LEFT;
 
-    if (_b[twobutton_reverse] == 0)
+    if (_b[!twobutton_reverse] == 0)
         b |= twobutton_rotary ? B_SELECT : B_RIGHT;
 
     if (_b[2] == 0)

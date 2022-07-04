@@ -5,40 +5,39 @@
  * 
  * SFRC922, SFRC922C, SFRC922D et al
  *  Original LQFP64 designs, using STM or AT chips.
- *  Buttons: PC6 = Select, PC7 = Left, PC7 = Right
+ *  Buttons: PC6 = Select, PC7 = Right, PC8 = Left
  *  Rotary:  PC10, PC11
  * 
  * SFRC922AT3
  *  LQFP48 design, missing rotary header.
  *  Alternative rotary location at PA13, PA14
- *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
+ *  Buttons: PA5 = Select, PA4 = Right, PA3 = Left
  * 
  * SFRKC30AT4, SFRKC30.AT4, SFRKC30.AT4.7 (KC30 Rev 1)
  *  LQFP64 designs with original rotary header and "KC30" rotary header.
- *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
+ *  Buttons: PA5 = Select, PA4 = Right, PA3 = Left
  *  Rotary:  PC10, PC11
  *  KC30: PF6/PH2 = Select, PA6/PA15 = Rotary
  * 
  * SFRKC30AT3 (KC30 Rev 1)
  *  LQFP48 design similar to SFRC922AT3 but with the "KC30" rotary header.
- *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
+ *  Buttons: PA5 = Select, PA4 = Right, PA3 = Left
  *  KC30: PF6/PH2 = Select, PA6/PA15 = Rotary
  * 
  * SFRKC30.AT2 (KC30 Rev 1)
- *  QFN32 design with various pin changes and features missing:
+ *  QFN32 design with various pin changes and features missing. There are
+ *  two versions; the newer version reintroduces jumper position JC.
  *  Missing:
  *   * Original rotary header
- *   * JC jumper position
+ *   * JC jumper position (old version)
  *  Relocated to new MCU pins:
  *   * Display header is moved to PB[7:6] using I2C1 instead of I2C2
  *   * KC30 header SELECT/button pin
  *   * Floppy output pins 2 and 26
  *   * Floppy WGATE input pin
- *  Buttons: PA5 = Select, PA4 = Left, PA3 = Right
+ *   * JC jumper at PA9 (new version)
+ *  Buttons: PA5 = Select, PA4 = Right, PA3 = Left
  *  KC30: PA10 = Select, PA6/PA15 = Rotary
- * 
- * Future QFN32:
- *  Agreed that JC will be implemented at PA9.
  * 
  * SFRKC30.AT4.35 (KC30 Rev 2)
  *  As SFRKC30.AT4 except PC15 is tied HIGH for identification.
@@ -75,12 +74,12 @@ static void gpio_pull_up_pins(GPIO gpio, uint16_t mask)
 unsigned int board_get_buttons(void)
 {
     /* All recent Gotek revisions, regardless of MCU model or package: 
-     *  PA5 = Select, PA4 = Left, PA3 = Right. 
+     *  PA5 = Select, PA4 = Right, PA3 = Left. 
      * Note: "Enhanced Gotek" design uses these pins so must skip them here. */
     unsigned int x = (board_id == BRDREV_Gotek_standard)
         ? gpioa->idr >> 3 : -1;
     /* Earlier Gotek revisions (all of which are LQFP64): 
-     *  PC6 = Select, PC7 = Left, PC8 = Right. */
+     *  PC6 = Select, PC7 = Right, PC8 = Left. */
     if (mcu_package == MCU_LQFP64)
         x &= _rbit32(gpioc->idr) >> 23;
     x = ~x & 7;
@@ -93,7 +92,7 @@ unsigned int board_get_buttons(void)
         x |= ~kc30 & 4;
     }
     /* SLR -> SRL */
-    return (x&4) | ((x&1)<<1) | ((x&2)>>1);
+    return x;
 }
 
 unsigned int board_get_rotary(void)
