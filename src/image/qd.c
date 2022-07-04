@@ -40,7 +40,8 @@ static bool_t qd_open(struct image *im)
     ASSERT(8*512 <= im->bufs.read_data.len);
     volume_cache_init(im->bufs.read_data.p + 8*512,
                       im->bufs.read_data.p + im->bufs.read_data.len);
-    volume_cache_metadata_only(&im->fp);
+    if (im->bufs.read_data.len < (64*1024))
+        volume_cache_metadata_only(&im->fp);
 
     /* There is only one track: Seek to it. */
     qd_seek_track(im, 0);
