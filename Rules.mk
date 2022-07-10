@@ -74,7 +74,7 @@ build.o: $(OBJS)
 
 %/build.o: FORCE
 	+mkdir -p $*
-	$(MAKE) VPATH=$(VPATH)/$* -f $(ROOT)/Rules.mk -C $* build.o
+	$(MAKE) -f $(ROOT)/Rules.mk -C $* build.o
 
 %.ld: $(SRCDIR)/%.ld.S $(SRCDIR)/Makefile
 	@echo CPP $@

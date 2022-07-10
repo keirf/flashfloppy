@@ -45,7 +45,7 @@ out: FORCE
 	+mkdir -p out/$(mcu)/$(level)/$(target)
 
 target: FORCE out
-	$(MAKE) VPATH=$(ROOT)/src -C out/$(mcu)/$(level)/$(target) -f $(ROOT)/Rules.mk target.bin target.hex target.dfu $(mcu)=y $(level)=y $(target)=y
+	$(MAKE) -C out/$(mcu)/$(level)/$(target) -f $(ROOT)/Rules.mk target.bin target.hex target.dfu $(mcu)=y $(level)=y $(target)=y
 
 HXC_FF_URL := https://www.github.com/keirf/flashfloppy-hxc-file-selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
