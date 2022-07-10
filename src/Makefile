@@ -52,6 +52,10 @@ endif
 .PHONY: $(SRCDIR)/build_info.c
 build_info.o: CFLAGS += -DFW_VER="\"$(FW_VER)\""
 
+# Avoid infinite loops due to GCC noticing code that can be replaced by a call
+# to a standard library function... within our implementation of that function.
+util.o: CFLAGS += -fno-tree-loop-distribute-patterns
+
 ff_cfg_defaults.h: $(ROOT)/examples/FF.CFG
 	$(PYTHON) $(ROOT)/scripts/mk_config.py $< $@
 
