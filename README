@@ -27,7 +27,7 @@ to program a HEX or DFU firmware file as explained in the wiki, linked above.
 These files are located in the hex/ and dfu/ folders respectively, and you
 must use the correct file for your microcontroller:
  STM32F105, AT32F415
-   - Use file "dfu/flashfloppy-stm105-at415-<ver>.dfu" (or .hex equivalent)
+   - Use file "dfu/flashfloppy-at415-st105-<ver>.dfu" (or .hex equivalent)
  AT32F435
    - Use file "dfu/flashfloppy-at435-<ver>.dfu" (or .hex equivalent)
 

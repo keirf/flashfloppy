@@ -108,7 +108,7 @@ dist: FORCE all
 	mkdir -p $(t)/alt/io-test
 	mkdir -p $(t)/alt/quickdisk/logfile
 	$(MAKE) _legacy_dist mcu=stm32f105 level=$(level) t=$(t)
-	$(MAKE) _dist mcu=stm32f105 n=stm105-at415 level=$(level) t=$(t)
+	$(MAKE) _dist mcu=stm32f105 n=at415-st105 level=$(level) t=$(t)
 	$(MAKE) _dist mcu=at32f435 n=at435 level=$(level) t=$(t)
 	$(PYTHON) scripts/mk_qd.py --window=6.5 $(t)/alt/quickdisk/Blank.qd
 	cp -a COPYING $(t)/
