@@ -3,6 +3,9 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v4.6a - 29 July 2022
+ - AUTOBOOT / HxC Mode: Fix "Error ... LBA Change test failed!"
+
 ** v4.5a - 29 July 2022
  - Contains fixes up to v3.34 from v3 stable release series
  - Supports AT32F435 MCU and SFRKC430.AT4.35 PCB
