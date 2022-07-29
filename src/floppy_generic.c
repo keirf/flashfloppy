@@ -241,6 +241,8 @@ static void floppy_mount(struct slot *slot)
             if (in_da_mode(im, cyl)) {
                 volume_cache_destroy(); /* Clean up after other image format. */
                 image_open(im, slot, cltbl, TRUE);
+                /* Remove write-protect when driven into D-A mode. */
+                drive_change_output(drv, outp_wrprot, FALSE);
             }
         }
 #endif
