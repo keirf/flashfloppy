@@ -60,7 +60,8 @@ static const struct exti_irq exti_irqs[] = {
     /* WGATE */ {  7, FLOPPY_IRQ_WGATE_PRI, 0 },
     /* SIDE */ { 10, TIMER_IRQ_PRI, 0 }, 
     /* WGATE */ { 23, FLOPPY_IRQ_WGATE_PRI, 0 },
-    /* MTR/CHGRST */ { 40, TIMER_IRQ_PRI, 0 }
+    /* MTR/CHGRST */ { 40, TIMER_IRQ_PRI, 0 },
+    { 0, 0, 0 }
 };
 
 /* Subset of output pins which are active (O_TRUE). */

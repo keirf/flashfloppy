@@ -57,7 +57,8 @@ static const struct exti_irq exti_irqs[] = {
     /* WGATE */ { 7, FLOPPY_IRQ_WGATE_PRI, 0 },
     /* WGATE */ { 23, FLOPPY_IRQ_WGATE_PRI, 0 },
     /* RESET */ { 28, TIMER_IRQ_PRI, 0 },
-    /* Rotary */ { 40, TIMER_IRQ_PRI, 0 }
+    /* Rotary */ { 40, TIMER_IRQ_PRI, 0 },
+    { 0, 0, 0 }
 };
 
 bool_t floppy_ribbon_is_reversed(void)

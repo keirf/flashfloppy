@@ -285,7 +285,16 @@ static void drive_configure_output_pin(unsigned int pin)
 
 void floppy_init(void)
 {
+    const struct exti_irq *irqs;
     struct drive *drv = &drive;
+
+    irqs = exti_irqs;
+    if (ff_cfg.ungated) {
+        /* Skip initialisation of SELA IRQ. We ignore SELA and permanently
+         * enable drive select. */
+        irqs += 1;
+        drv->sel = 1;
+    }
 
     floppy_set_fintf_mode();
 
@@ -305,7 +314,7 @@ void floppy_init(void)
     drive_change_output(drv, outp_wrprot, TRUE);
     drive_change_output(drv, outp_trk0,   TRUE);
 
-    floppy_init_irqs();
+    floppy_init_irqs(irqs);
 
     IRQx_set_prio(FLOPPY_SOFTIRQ, FLOPPY_SOFTIRQ_PRI);
     IRQx_enable(FLOPPY_SOFTIRQ);

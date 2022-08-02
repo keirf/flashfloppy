@@ -138,7 +138,7 @@ void floppy_init(void)
     write_pin(wrprot, HIGH);
     write_pin(ready,  HIGH);
 
-    floppy_init_irqs();
+    floppy_init_irqs(exti_irqs);
 
     timer_init(&index.timer, index_assert, NULL);
 }

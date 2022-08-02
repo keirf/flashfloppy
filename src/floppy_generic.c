@@ -97,14 +97,13 @@ struct exti_irq {
 #include "gotek/floppy.c"
 #endif
 
-/* Initialise IRQs according to statically-defined exti_irqs[]. */
-static void floppy_init_irqs(void)
+/* Initialise the specified list of IRQs. */
+static void floppy_init_irqs(const struct exti_irq *irqs)
 {
     const struct exti_irq *e;
-    unsigned int i;
 
     /* Configure physical interface interrupts. */
-    for (i = 0, e = exti_irqs; i < ARRAY_SIZE(exti_irqs); i++, e++) {
+    for (e = irqs; e->irq != 0; e++) {
         IRQx_set_prio(e->irq, e->pri);
         if (e->pr_mask != 0) {
             /* Do not trigger an initial interrupt on this line. Clear EXTI_PR
@@ -120,7 +119,7 @@ static void floppy_init_irqs(void)
     }
 
     /* Enable physical interface interrupts. */
-    for (i = 0, e = exti_irqs; i < ARRAY_SIZE(exti_irqs); i++, e++) {
+    for (e = irqs; e->irq != 0; e++) {
         IRQx_enable(e->irq);
     }
 }

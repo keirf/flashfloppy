@@ -1038,6 +1038,10 @@ static void read_ff_cfg(void)
                 : CHGRST_step;
             break;
 
+        case FFCFG_ungated:
+            ff_cfg.ungated = !strcmp(opts.arg, "yes");
+            break;
+
             /* STARTUP / INITIALISATION */
 
         case FFCFG_ejected_on_startup:
@@ -1304,9 +1308,11 @@ static void process_ff_cfg_opts(const struct ff_cfg *old)
         cfg.ejected = TRUE;
 
     /* oled-font, display-type: Reinitialise the display subsystem. */
+    /* ungated: Reinitialise the floppy subsystem. */
     if ((ff_cfg.oled_font != old->oled_font)
         || (ff_cfg.oled_contrast != old->oled_contrast)
-        || (ff_cfg.display_type != old->display_type))
+        || (ff_cfg.display_type != old->display_type)
+        || (ff_cfg.ungated != old->ungated))
         system_reset(); /* hit it with a hammer */
 }
 
