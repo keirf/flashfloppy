@@ -39,7 +39,8 @@ static bool_t adf_open(struct image *im)
     im->nr_sides = 2;
     im->adf.nr_secs = 11;
     im->tracklen_bc = DD_TRACKLEN_BC;
-    im->ticks_per_cell = (sysclk_stk(im->stk_per_rev) * 16u) / im->tracklen_bc;
+    im->ticks_per_cell = ((sampleclk_stk(im->stk_per_rev) * 16u)
+                          / im->tracklen_bc);
 
     im->nr_cyls = f_size(&im->fp) / (2 * 11 * 512);
 
@@ -66,7 +67,7 @@ static void adf_setup_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
-    uint32_t decode_off, sector, sys_ticks = start_pos ? *start_pos : 0;
+    uint32_t decode_off, sector, start_ticks = start_pos ? *start_pos : 0;
 
     if ((im->cur_track ^ track) & ~1) {
         /* New cylinder: Refresh the sector maps (ordered by sector #). */
@@ -78,7 +79,7 @@ static void adf_setup_track(
     im->adf.trk_off = track * im->adf.nr_secs * 512;
     im->cur_track = track;
 
-    im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
+    im->cur_bc = (start_ticks * 16) / im->ticks_per_cell;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;

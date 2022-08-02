@@ -102,7 +102,7 @@ static bool_t hfe_open(struct image *im)
     im->nr_cyls = dhdr.nr_tracks;
     im->step = im->hfe.double_step ? 2 : 1;
     im->nr_sides = dhdr.nr_sides;
-    im->write_bc_ticks = sysclk_us(500) / bitrate;
+    im->write_bc_ticks = sampleclk_us(500) / bitrate;
     im->ticks_per_cell = im->write_bc_ticks * 16;
     im->sync = SYNC_none;
 
@@ -128,7 +128,7 @@ static void hfe_seek_track(struct image *im, uint16_t track)
     im->hfe.trk_off = le16toh(thdr.offset);
     im->hfe.trk_len = le16toh(thdr.len) / 2;
     im->tracklen_bc = im->hfe.trk_len * 8;
-    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
+    im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
 
     im->cur_track = track;
 }
@@ -138,7 +138,7 @@ static void hfe_setup_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
-    uint32_t sys_ticks;
+    uint32_t start_ticks;
     uint8_t cyl = track >> (im->hfe.double_step ? 2 : 1);
     uint8_t side = track & (im->nr_sides - 1);
 
@@ -146,28 +146,28 @@ static void hfe_setup_track(
     if (track != im->cur_track)
         hfe_seek_track(im, track);
 
-    sys_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
-    im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
+    start_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
+    im->cur_bc = (start_ticks * 16) / im->ticks_per_cell;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
 
-    sys_ticks = im->cur_ticks / 16;
+    start_ticks = im->cur_ticks / 16;
 
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
 
     /* Aggressively batch our reads at HD data rate, as that can be faster 
      * than some USB drives will serve up a single block.*/
-    im->hfe.batch_secs = (im->write_bc_ticks > sysclk_ns(1500)) ? 2 : 8;
+    im->hfe.batch_secs = (im->write_bc_ticks > sampleclk_ns(1500)) ? 2 : 8;
 
     if (start_pos) {
         /* Read mode. */
         im->hfe.trk_pos = (im->cur_bc/8) & ~255;
         image_read_track(im);
         bc->cons = im->cur_bc & 2047;
-        *start_pos = sys_ticks;
+        *start_pos = start_ticks;
     } else {
         /* Write mode. */
         im->hfe.trk_pos = im->cur_bc / 8;
@@ -260,7 +260,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             case OP_bitrate:
                 x = _rbit32(bc_b[(bc_c/8+1) & bc_mask]) >> 24;
                 im->ticks_per_cell = ticks_per_cell = 
-                    (sysclk_us(2) * 16 * x) / 72;
+                    (sampleclk_us(2) * 16 * x) / 72;
                 bc_c += 2*8;
                 im->cur_bc += 2*8;
                 y = 8;

@@ -116,7 +116,7 @@ static bool_t try_handler(struct image *im, struct slot *slot,
 
     /* Sensible defaults. */
     im->sync = SYNC_mfm;
-    im->write_bc_ticks = sysclk_us(2);
+    im->write_bc_ticks = sampleclk_us(2);
     im->stk_per_rev = stk_ms(200);
 
     im->disk_handler = im->track_handler = handler;

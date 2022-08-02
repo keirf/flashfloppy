@@ -1808,7 +1808,7 @@ static void raw_setup_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
-    uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
+    uint32_t decode_off, start_ticks = start_pos ? *start_pos : 0;
     uint8_t cyl = track/(2*im->step), side = track & (im->nr_sides - 1);
 
     track = cyl*2 + side;
@@ -1817,7 +1817,7 @@ static void raw_setup_track(
 
     im->img.write_sector = -1;
 
-    im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
+    im->cur_bc = (start_ticks * 16) / im->ticks_per_cell;
     im->cur_bc &= ~15;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
@@ -1832,7 +1832,7 @@ static void raw_setup_track(
     if (start_pos) {
         image_read_track(im);
         bc->cons = decode_off * 16;
-        *start_pos = sys_ticks;
+        *start_pos = start_ticks;
     }
 }
 
@@ -2344,11 +2344,11 @@ static void mfm_prep_track(struct image *im)
     im->tracklen_bc = max_t(uint32_t, im->tracklen_bc, tracklen);
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
 
-    im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
+    im->ticks_per_cell = ((sampleclk_stk(im->stk_per_rev) * 16u)
                           / im->tracklen_bc);
     im->img.gap_4 = (im->tracklen_bc - tracklen) / 16;
 
-    im->write_bc_ticks = sysclk_us(500) / trk->data_rate;
+    im->write_bc_ticks = sampleclk_us(500) / trk->data_rate;
 
     im->sync = SYNC_mfm;
 
@@ -2562,11 +2562,11 @@ static void fm_prep_track(struct image *im)
     im->tracklen_bc = max_t(uint32_t, im->tracklen_bc, tracklen);
     im->tracklen_bc = (im->tracklen_bc + 31) & ~31;
 
-    im->ticks_per_cell = ((sysclk_stk(im->stk_per_rev) * 16u)
+    im->ticks_per_cell = ((sampleclk_stk(im->stk_per_rev) * 16u)
                           / im->tracklen_bc);
     im->img.gap_4 = (im->tracklen_bc - tracklen) / 16;
 
-    im->write_bc_ticks = sysclk_us(500) / trk->data_rate;
+    im->write_bc_ticks = sampleclk_us(500) / trk->data_rate;
 
     im->sync = SYNC_fm;
 

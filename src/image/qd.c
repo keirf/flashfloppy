@@ -33,7 +33,7 @@ static bool_t qd_open(struct image *im)
     im->qd.tb = 1;
     im->nr_cyls = 1;
     im->nr_sides = 1;
-    im->write_bc_ticks = sysclk_us(4) + 66; /* 4.917us */
+    im->write_bc_ticks = sampleclk_us(4) + 66; /* 4.917us */
     im->ticks_per_cell = im->write_bc_ticks;
     im->sync = SYNC_none;
 
@@ -65,7 +65,7 @@ static void qd_seek_track(struct image *im, uint16_t track)
     im->qd.win_end = le32toh(thdr.win_end) * im->write_bc_ticks;
 
     im->tracklen_bc = im->qd.trk_len * 8;
-    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
+    im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
 
     im->cur_track = track;
 }
@@ -75,16 +75,16 @@ static void qd_setup_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
-    uint32_t sys_ticks;
+    uint32_t start_ticks;
 
-    sys_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
-    im->cur_bc = sys_ticks / im->ticks_per_cell;
+    start_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
+    im->cur_bc = start_ticks / im->ticks_per_cell;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
 
-    sys_ticks = im->cur_ticks;
+    start_ticks = im->cur_ticks;
 
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
@@ -94,7 +94,7 @@ static void qd_setup_track(
         im->qd.trk_pos = (im->cur_bc/8) & ~511;
         image_read_track(im);
         bc->cons = im->cur_bc & 4095;
-        *start_pos = sys_ticks;
+        *start_pos = start_ticks;
     } else {
         /* Write mode. */
         im->qd.trk_pos = im->cur_bc / 8;

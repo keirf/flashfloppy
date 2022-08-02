@@ -21,7 +21,7 @@ static void dummy_setup_track(
 {
     im->cur_track = track;
     im->cur_ticks = (start_pos ? *start_pos : 0) * 16;
-    im->tracklen_ticks = sysclk_stk(im->stk_per_rev) * 16;
+    im->tracklen_ticks = sampleclk_stk(im->stk_per_rev) * 16;
     im->ticks_since_flux = 0;
 }
 
