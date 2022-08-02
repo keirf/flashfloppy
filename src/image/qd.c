@@ -61,8 +61,10 @@ static void qd_seek_track(struct image *im, uint16_t track)
     im->qd.trk_len = le32toh(thdr.len);
 
     /* Read/write window limits in STK ticks from data start. */
-    im->qd.win_start = le32toh(thdr.win_start) * im->write_bc_ticks;
-    im->qd.win_end = le32toh(thdr.win_end) * im->write_bc_ticks;
+    im->qd.win_start = (le32toh(thdr.win_start) * im->write_bc_ticks
+                        * ((8 * STK_MHZ) / SAMPLECLK_MHZ));
+    im->qd.win_end = (le32toh(thdr.win_end) * im->write_bc_ticks
+                      * ((8 * STK_MHZ) / SAMPLECLK_MHZ));
 
     im->tracklen_bc = im->qd.trk_len * 8;
     im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
