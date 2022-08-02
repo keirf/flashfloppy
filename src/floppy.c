@@ -347,7 +347,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     floppy_mount(slot);
     im = image;
 
-    if (im->write_bc_ticks < sysclk_ns(1500))
+    if (im->write_bc_ticks < sampleclk_ns(1500))
         drive_change_output(drv, outp_hden, TRUE);
 
     timer_dma_init();
@@ -437,8 +437,7 @@ static void floppy_sync_flux(void)
 
         /* If we crossed the index mark while filling the DMA buffer then we
          * need to set up the index pulse (usually done by IRQ_rdata_dma). */
-        if (image_ticks_since_index(drv->image)
-            < (sync_pos*(SYSCLK_MHZ/STK_MHZ))) {
+        if (image_ticks_since_index(drv->image) < sampleclk_stk(sync_pos)) {
 
             /* Sum all flux timings in the DMA buffer. */
             const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
@@ -450,7 +449,7 @@ static void floppy_sync_flux(void)
             ticks -= image_ticks_since_index(drv->image);
 
             /* Calculate deadline for index timer. */
-            ticks /= SYSCLK_MHZ/TIME_MHZ;
+            ticks /= SAMPLECLK_MHZ/TIME_MHZ;
             timer_set(&index.timer, time_now() + ticks);
         }
 
@@ -509,10 +508,10 @@ static bool_t dma_rd_handle(struct drive *drv)
              * to re-read the config file since D-A can change it. */
             return TRUE;
         }
-        read_start_pos *= SYSCLK_MHZ/STK_MHZ;
+        read_start_pos *= SAMPLECLK_MHZ/STK_MHZ;
         image_setup_track(im, track, &read_start_pos);
         prefetch_start_time = time_now();
-        read_start_pos /= SYSCLK_MHZ/STK_MHZ;
+        read_start_pos /= SAMPLECLK_MHZ/STK_MHZ;
         sync_pos = read_start_pos;
         if (!drv->index_suppressed) {
             /* Set the deadline to match existing index timing. */

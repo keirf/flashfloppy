@@ -156,7 +156,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
 
     timer_dma_init();
     thread_start(&drive.io_thread, _thread1_stacktop, io_thread_main, NULL);
-    tim_rdata->ccr2 = sysclk_ns(1500); /* RD: 1.5us positive pulses */
+    tim_rdata->ccr2 = sampleclk_ns(1500); /* RD: 1.5us positive pulses */
 
     /* Drive is ready. Set output signals appropriately. */
     write_pin(media, LOW);
@@ -256,7 +256,7 @@ static bool_t dma_rd_handle(struct drive *drv)
     case DMA_inactive: {
         time_t read_start_pos = window.paused ? window.pause_pos : 0;
         read_start_pos %= drv->image->stk_per_rev;
-        read_start_pos *= SYSCLK_MHZ/STK_MHZ;
+        read_start_pos *= SAMPLECLK_MHZ/STK_MHZ;
         image_setup_track(drv->image, 0, &read_start_pos);
         /* Change state /then/ check for race against step or side change. */
         dma_rd->state = DMA_starting;

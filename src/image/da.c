@@ -143,12 +143,12 @@ static void da_seek_track(struct image *im, uint16_t track)
     case DA_SD_FM_CYL:
         dass->nr_sec = 4;
         im->sync = SYNC_fm;
-        im->write_bc_ticks = sysclk_us(4);
+        im->write_bc_ticks = sampleclk_us(4);
         break;
     default:
         dass->nr_sec = 8;
         im->sync = SYNC_mfm;
-        im->write_bc_ticks = sysclk_us(2);
+        im->write_bc_ticks = sampleclk_us(2);
         break;
     }
 
@@ -160,7 +160,7 @@ static void da_setup_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
-    uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
+    uint32_t decode_off, start_ticks = start_pos ? *start_pos : 0;
     unsigned int nsec;
 
     da_seek_track(im, track);
@@ -185,11 +185,11 @@ static void da_setup_track(
     im->tracklen_bc += im->da.idx_sz;
     im->tracklen_bc *= 16;
 
-    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
+    im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
 
     im->da.trk_sec = 0;
 
-    im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
+    im->cur_bc = (start_ticks * 16) / im->ticks_per_cell;
     im->cur_bc &= ~15;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
@@ -222,7 +222,7 @@ static void da_setup_track(
 
     if (start_pos) {
         im->da.trash_bc = decode_off * 16;
-        *start_pos = sys_ticks;
+        *start_pos = start_ticks;
     }
 }
 

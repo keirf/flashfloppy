@@ -291,17 +291,17 @@ static void timer_dma_init(void)
     IRQx_enable(dma_wdata_irq);
 
     /* RDATA Timer setup:
-     * The counter is incremented at full SYSCLK rate. 
+     * The counter is incremented at SAMPLECLK rate. 
      *  
      * Ch.2 (RDATA) is in PWM mode 1. It outputs O_TRUE for 400ns and then 
      * O_FALSE until the counter reloads. By changing the ARR via DMA we alter
      * the time between (fixed-width) O_TRUE pulses, mimicking floppy drive 
      * timings. */
-    tim_rdata->psc = 0;
+    tim_rdata->psc = (SYSCLK_MHZ/SAMPLECLK_MHZ) - 1;
     tim_rdata->ccmr1 = (TIM_CCMR1_CC2S(TIM_CCS_OUTPUT) |
                         TIM_CCMR1_OC2M(TIM_OCM_PWM1));
     tim_rdata->ccer = TIM_CCER_CC2E | ((O_TRUE==0) ? TIM_CCER_CC2P : 0);
-    tim_rdata->ccr2 = sysclk_ns(400);
+    tim_rdata->ccr2 = sampleclk_ns(400);
     tim_rdata->dier = TIM_DIER_UDE;
     tim_rdata->cr2 = 0;
 
@@ -320,13 +320,13 @@ static void timer_dma_init(void)
                      DMA_CCR_EN);
 
     /* WDATA Timer setup: 
-     * The counter runs from 0x0000-0xFFFF inclusive at full SYSCLK rate.
+     * The counter runs from 0x0000-0xFFFF inclusive at SAMPLECLK rate.
      *  
      * Ch.1 (WDATA) is in Input Capture mode, sampling on every clock and with
      * no input prescaling or filtering. Samples are captured on the falling 
      * edge of the input (CCxP=1). DMA is used to copy the sample into a ring
      * buffer for batch processing in the DMA-completion ISR. */
-    tim_wdata->psc = 0;
+    tim_wdata->psc = (SYSCLK_MHZ/SAMPLECLK_MHZ) - 1;
     tim_wdata->arr = 0xffff;
     tim_wdata->ccmr1 = TIM_CCMR1_CC1S(TIM_CCS_INPUT_TI1);
     tim_wdata->dier = TIM_DIER_CC1DE;
@@ -447,10 +447,10 @@ static void wdata_start(void)
     tim_wdata->ccer = TIM_CCER_CC1E | TIM_CCER_CC1P;
     tim_wdata->cr1 = TIM_CR1_CEN;
 
-    /* Find rotational start position of the write, in SYSCLK ticks. */
+    /* Find rotational start position of the write, in SAMPLECLK ticks. */
     start_pos = max_t(int32_t, 0, time_diff(index.prev_time, time_now()));
     start_pos %= drive.image->stk_per_rev;
-    start_pos *= SYSCLK_MHZ / STK_MHZ;
+    start_pos *= SAMPLECLK_MHZ / STK_MHZ;
     write = get_write(image, image->wr_prod);
     write->start = start_pos;
     write->track = drive_calc_track(&drive);
@@ -659,7 +659,7 @@ static void IRQ_rdata_dma(void)
         oldpri = IRQ_save(TIMER_IRQ_PRI);
         for (i = 0; i < drv->image->index_pulses_len; i++)
             index.custom_pulses[i] = (drv->image->index_pulses[i]>>4)
-                / (SYSCLK_MHZ/TIME_MHZ);
+                / (SAMPLECLK_MHZ/TIME_MHZ);
         index.custom_pulses_len = drv->image->index_pulses_len;
         index.custom_pulses_ver = drv->image->index_pulses_ver;
 
@@ -699,7 +699,7 @@ static void IRQ_rdata_dma(void)
     /* Subtract current flux offset beyond the index. */
     ticks -= image_ticks_since_index(drv->image);
     /* Calculate deadline for index timer. */
-    ticks /= SYSCLK_MHZ/TIME_MHZ;
+    ticks /= SAMPLECLK_MHZ/TIME_MHZ;
     timer_set(&index.timer, now + ticks);
 }
 

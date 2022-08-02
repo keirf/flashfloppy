@@ -202,7 +202,7 @@ out:
     im->dsk.gap4 = (im->tracklen_bc - tracklen) / 16;
 
     /* Calculate ticks per revolution */
-    im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
+    im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
 }
 
 static uint32_t calc_start_pos(struct image *im)
@@ -270,7 +270,7 @@ static void dsk_setup_track(
 {
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
-    uint32_t decode_off, sys_ticks = start_pos ? *start_pos : 0;
+    uint32_t decode_off, start_ticks = start_pos ? *start_pos : 0;
     uint8_t cyl = track/2, side = track & (im->nr_sides - 1);
 
     track = cyl*2 + side;
@@ -279,7 +279,7 @@ static void dsk_setup_track(
 
     im->dsk.write_sector = -1;
 
-    im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
+    im->cur_bc = (start_ticks * 16) / im->ticks_per_cell;
     im->cur_bc &= ~15;
     if (im->cur_bc >= im->tracklen_bc)
         im->cur_bc = 0;
@@ -293,7 +293,7 @@ static void dsk_setup_track(
         decode_off = calc_start_pos(im);
 
         im->dsk.trash_bc = decode_off * 16;
-        *start_pos = sys_ticks;
+        *start_pos = start_ticks;
     } else {
         im->dsk.decode_pos = 0;
     }

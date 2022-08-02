@@ -9,6 +9,13 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#define SAMPLECLK_MHZ 72
+#define sampleclk_ns(x) (((x) * SAMPLECLK_MHZ) / 1000)
+#define sampleclk_us(x) ((x) * SAMPLECLK_MHZ)
+#define sampleclk_ms(x) ((x) * SAMPLECLK_MHZ * 1000)
+#define sampleclk_stk(x) ((x) * (SAMPLECLK_MHZ / STK_MHZ))
+#define stk_sampleclk(x) ((x) / (SAMPLECLK_MHZ / STK_MHZ))
+
 #ifdef QUICKDISK
 #define is_quickdisk TRUE
 #else
@@ -196,7 +203,7 @@ struct image {
 
     /* Info about current track. */
     uint16_t cur_track;
-    uint16_t write_bc_ticks; /* Nr SYSCLK ticks per bitcell in write stream */
+    uint16_t write_bc_ticks; /* SAMPLECLK ticks per bitcell in write stream */
     uint32_t ticks_per_cell; /* Nr 'ticks' per bitcell in read stream. */
     uint32_t tracklen_bc, cur_bc; /* Track length and cursor, in bitcells */
     uint32_t tracklen_ticks; /* Timing of previous revolution, in 'ticks' */
@@ -256,7 +263,7 @@ bool_t image_in_da_mode(struct image *im);
 void image_extend(struct image *im);
 
 /* Seek to given track and start reading track data at specified rotational
- * position (specified as number of SYSCLK ticks past the index mark).
+ * position (specified as number of SAMPLECLK ticks past the index mark).
  * 
  * If start_pos is NULL then the caller is in write mode and thus is not
  * interested in fetching data from a particular rotational position. */
@@ -278,7 +285,7 @@ bool_t image_write_track(struct image *im);
  * processing may be interrupted, like before floppy_cancel(). */
 void image_sync(struct image *im);
 
-/* Rotational position of last-generated flux (SYSCLK ticks past index). */
+/* Rotational position of last-generated flux (SAMPLECLK ticks past index). */
 uint32_t image_ticks_since_index(struct image *im);
 
 /* MFM conversion. */

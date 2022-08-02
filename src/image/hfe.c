@@ -109,7 +109,7 @@ static bool_t hfe_open(struct image *im)
     im->nr_cyls = dhdr.nr_tracks;
     im->step = im->hfe.double_step ? 2 : 1;
     im->nr_sides = dhdr.nr_sides;
-    im->write_bc_ticks = sysclk_us(500) / bitrate;
+    im->write_bc_ticks = sampleclk_us(500) / bitrate;
     im->ticks_per_cell = im->write_bc_ticks * 16;
     im->sync = SYNC_none;
 
@@ -146,14 +146,14 @@ static void hfe_seek_track(struct image *im, uint16_t track, bool_t async)
      * previous track's value if the track byte lengths are close. */
     if (!(im->hfe.is_v3 && im->stk_per_rev
             && absdiff_t(uint16_t, old_len, im->hfe.trk_len) < 256))
-        im->stk_per_rev = stk_sysclk(im->tracklen_bc * im->write_bc_ticks);
+        im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
 
     ring_io_init(&im->hfe.ring_io, &im->fp, &im->bufs.read_data,
             (LBA_t)trk_off * 512, ~0, (im->hfe.trk_len*2 + 511) / 512);
     /* Aggressively batch our reads at HD data rate, as that can be faster
      * than some USB drives will serve up a single block.*/
     im->hfe.ring_io.batch_secs =
-        (im->write_bc_ticks > sysclk_ns(1500)) ? 4 : 8;
+        (im->write_bc_ticks > sampleclk_ns(1500)) ? 4 : 8;
     im->hfe.ring_io.trailing_secs = MAX_BC_SECS;
 }
 
@@ -161,7 +161,7 @@ static void hfe_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos)
 {
     struct image_buf *bc = &im->bufs.read_bc;
-    uint32_t sys_ticks, opcode_adj_bc = 0;
+    uint32_t start_ticks, opcode_adj_bc = 0;
     uint8_t cyl = track >> (im->hfe.double_step ? 2 : 1);
     uint8_t side = track & (im->nr_sides - 1);
     int i;
@@ -185,8 +185,8 @@ static void hfe_setup_track(
             && ff_cfg.write_drain != WDRAIN_realtime)
         ring_io_sync(&im->hfe.ring_io);
 
-    sys_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
-    im->cur_bc = (sys_ticks * 16) / im->ticks_per_cell;
+    start_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
+    im->cur_bc = (start_ticks * 16) / im->ticks_per_cell;
     if (im->hfe.is_v3 && im->tracklen_ticks > 0
         && im->tracklen_ticks < im->tracklen_bc * im->ticks_per_cell) {
 
@@ -216,7 +216,7 @@ static void hfe_setup_track(
     /* Must be careful to exclude opcode_adj_bc from tick calculations. */
     im->cur_bc += opcode_adj_bc;
 
-    sys_ticks = im->cur_ticks / 16;
+    start_ticks = im->cur_ticks / 16;
 
     bc->prod = bc->cons = 0;
 
@@ -231,7 +231,7 @@ static void hfe_setup_track(
         /* Consumer may be ahead of producer, but only until the first read
          * completes. */
         bc->cons = im->cur_bc % (256*8);
-        *start_pos = sys_ticks;
+        *start_pos = start_ticks;
     } else {
         uint32_t pos = im->cur_bc / 8 / 256 * 512
                      + im->cur_bc / 8 % 256
@@ -299,7 +299,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             ASSERT(im->cur_bc == im->tracklen_bc);
             im->tracklen_ticks = im->cur_ticks;
             im->cur_bc = im->cur_ticks = 0;
-            im->stk_per_rev = stk_sysclk(im->tracklen_ticks / 16);
+            im->stk_per_rev = stk_sampleclk(im->tracklen_ticks / 16);
             /* Skip tail of current 256-byte block. */
             bc_c = (bc_c + 256*8-1) & ~(256*8-1);
             if (im->index_pulses_len != im->hfe.next_index_pulses_pos) {
@@ -335,7 +335,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             case OP_bitrate:
                 x = _rbit32(bc_b[(bc_c/8+1) & bc_mask]) >> 24;
                 im->ticks_per_cell = ticks_per_cell = 
-                    (sysclk_us(2) * 16 * x) / 72;
+                    (sampleclk_us(2) * 16 * x) / 72;
                 im->write_bc_ticks = ticks_per_cell / 16;
                 bc_c += 2*8;
                 im->cur_bc += 2*8;
