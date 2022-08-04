@@ -3,6 +3,9 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.35 - 4 August 2022
+ - AT32F435: Fix Quick Disk firmware
+
 ** v3.34 - 4 July 2022
  - AT32F435: Fix startup to MCU spec (LDO voltage, Flash clock divisor)
  - AT32F435: Cache HFE and QD image data, since there is plenty of RAM
