@@ -915,6 +915,30 @@ static uint8_t parse_pin_str(const char *s)
     return pin;
 }
 
+static uint16_t parse_display_order(const char *p)
+{
+    int sh = 0;
+    uint16_t order = 0;
+
+    if (!strcmp(p, "default"))
+        return DORD_default;
+
+    while (p != NULL) {
+        order |= ((p[0]-'0')&7) << sh;
+        if (p[1] == 'd')
+            order |= DORD_double << sh;
+        sh += DORD_shift;
+        if ((p = strchr(p, ',')) == NULL)
+            break;
+        p++;
+    }
+
+    if (sh < 16)
+        order |= 0x7777 << sh;
+
+    return order;
+}
+
 static void read_ff_cfg(void)
 {
     enum {
@@ -1200,26 +1224,13 @@ static void read_ff_cfg(void)
             ff_cfg.oled_contrast = strtol(opts.arg, NULL, 10);
             break;
 
-        case FFCFG_display_order: {
-            char *p = opts.arg;
-            int sh = 0;
-            ff_cfg.display_order = DORD_default;
-            if (!strcmp(p, "default"))
-                break;
-            ff_cfg.display_order = 0;
-            while (p != NULL) {
-                ff_cfg.display_order |= ((p[0]-'0')&7) << sh;
-                if (p[1] == 'd')
-                    ff_cfg.display_order |= DORD_double << sh;
-                sh += DORD_shift;
-                if ((p = strchr(p, ',')) == NULL)
-                    break;
-                p++;
-            }
-            if (sh < 16)
-                ff_cfg.display_order |= 0x7777 << sh;
+        case FFCFG_display_order:
+            ff_cfg.display_order = parse_display_order(opts.arg);
             break;
-        }
+
+        case FFCFG_osd_display_order:
+            ff_cfg.osd_display_order = parse_display_order(opts.arg);
+            break;
 
         case FFCFG_display_off_secs:
             ff_cfg.display_off_secs = strtol(opts.arg, NULL, 10);

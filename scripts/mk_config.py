@@ -46,7 +46,7 @@ def main(argv):
                     else:
                         opts += ['DISPLAY_' + x]
                 val = '|'.join(opts)
-            elif opt == "display-order":
+            elif opt == "display-order" or opt == "osd-display-order":
                 if val == "default":
                     val = "DORD_" + val
                 else:
