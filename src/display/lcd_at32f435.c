@@ -219,20 +219,39 @@ static unsigned int osd_prep_buffer(void)
     uint16_t order = menu_mode ? 0x7903 : 0x7183;
     char *p;
     uint8_t *q = buffer;
-    unsigned int row;
+    unsigned int row, rows, heights;
+    int i;
 
     if (++in_osd == OSD_read) {
         memset(buffer, 0x11, sizeof(struct i2c_osd_info));
         return sizeof(struct i2c_osd_info);
     }
 
+    if ((ff_cfg.osd_display_order != DORD_default)
+        && (display_mode == DM_normal))
+        order = ff_cfg.osd_display_order;
+
+    heights = rows = 0;
+    for (i = 3; i >= 0; i--) {
+        /* Iterate over rows, bottom to top. */
+        row = order >> (i<<2);
+        /* Skip all trailing empty rows. */
+        if ((rows == 0) && ((row&7) == 7))
+            continue;
+        /* Count this row and check if it is double height. */
+        rows++;
+        heights <<= 1;
+        if (row & 8)
+            heights |= 1;
+    }
+
     *q++ = OSD_BACKLIGHT | !!_bl;
     *q++ = OSD_COLUMNS | lcd_columns;
-    *q++ = OSD_ROWS | 3;
-    *q++ = OSD_HEIGHTS | (menu_mode ? 4 : 2);
+    *q++ = OSD_ROWS | rows;
+    *q++ = OSD_HEIGHTS | heights;
     *q++ = OSD_BUTTONS | osd_buttons_tx;
     *q++ = OSD_DATA;
-    for (row = 0; row < 3; row++) {
+    for (row = 0; row < rows; row++) {
         p = text[(order >> (row * DORD_shift)) & DORD_row];
         memcpy(q, p, lcd_columns);
         q += lcd_columns;
