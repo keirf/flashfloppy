@@ -144,6 +144,19 @@ void board_setup_rotary_exti(void)
     exti->imr |= m;
 }
 
+void board_jc_set_mode(unsigned int mode)
+{
+    if (mcu_package == MCU_QFN32) {
+#if !defined(NDEBUG)
+        /* PA9 is used for serial tx */
+#else
+        gpio_configure_pin(gpioa, 9, mode);
+#endif
+    } else {
+        gpio_configure_pin(gpiob, 1, mode);
+    }
+}
+
 bool_t board_jc_strapped(void)
 {
     if (mcu_package == MCU_QFN32) {

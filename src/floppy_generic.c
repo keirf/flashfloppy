@@ -51,6 +51,7 @@ static struct drive {
     bool_t writing;
     bool_t sel;
     bool_t index_suppressed; /* disable IDX while writing to USB stick */
+    bool_t amiga_pin34;
     uint8_t outp;
     volatile bool_t inserted;
     struct timer chgrst_timer;

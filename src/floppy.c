@@ -35,6 +35,8 @@ static time_t prefetch_start_time;
 static uint32_t max_prefetch_us;
 
 struct drive;
+static always_inline void drive_change_pin(
+    struct drive *drv, uint8_t pin, bool_t assert);
 static always_inline void drive_change_output(
     struct drive *drv, uint8_t outp, bool_t assert);
 
@@ -131,13 +133,20 @@ static void drive_change_output(
 
 static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
 {
-    /* Only for the Amiga interface, with hacked RDY (pin 34) signal. */
-    if (fintf_mode != FINTF_AMIGA)
+    /* JC and pin 34 are overridden only for the Amiga interface. */
+    if (fintf_mode != FINTF_AMIGA) {
+        drv->amiga_pin34 = FALSE;
+        board_jc_set_mode(GPI_pull_up);
         return;
+    }
 
+    /* JC and HDEN are set according to Amiga density. */
+    board_jc_set_mode(GPO_opendrain(_2MHz, amiga_hd_id));
     drive_change_output(drv, outp_hden, amiga_hd_id);
 
-    if (pin34 != outp_unused)
+    /* If pin 34 is explicitly configured, we do not mess with it. */
+    drv->amiga_pin34 = (pin34 == outp_unused);
+    if (!drv->amiga_pin34)
         return;
 
     IRQ_global_disable();
@@ -152,7 +161,8 @@ static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
      * the HD-ID sequence 101010... with the host poll loop. It turns out that
      * starting with pin 34 asserted when the HD image is mounted seems to
      * generally work! */
-    drive_change_pin(&drive, pin_34, TRUE);
+    if (ff_cfg.motor_delay == MOTOR_ignore)
+        drive_change_pin(&drive, pin_34, TRUE);
 }
 
 void floppy_cancel(void)
@@ -673,6 +683,10 @@ static void motor_spinup_timer(void *_drv)
     struct drive *drv = _drv;
 
     drv->motor.on = TRUE;
+    if (drv->amiga_pin34) {
+        IRQ_global_disable();
+        drive_change_pin(drv, pin_34, TRUE);
+    }
     drive_change_output(drv, outp_rdy, TRUE);
 }
 
