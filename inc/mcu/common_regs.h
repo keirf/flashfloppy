@@ -323,6 +323,17 @@ struct spi {
     uint32_t i2spr;   /* 20: I2S prescaler */
 };
 
+#define SPI_BR_DIV2       0
+#define SPI_BR_DIV4       1
+#define SPI_BR_DIV8       2
+#define SPI_BR_DIV16      3
+#define SPI_BR_DIV32      4
+#define SPI_BR_DIV64      5
+#define SPI_BR_DIV128     6
+#define SPI_BR_DIV256     7
+#define SPI_BR_DIV512     8
+#define SPI_BR_DIV1024    9
+
 #define SPI_CR1_BIDIMODE  (1u<<15)
 #define SPI_CR1_BIDIOE    (1u<<14)
 #define SPI_CR1_CRCEN     (1u<<13)
@@ -333,15 +344,6 @@ struct spi {
 #define SPI_CR1_SSI       (1u<< 8)
 #define SPI_CR1_LSBFIRST  (1u<< 7)
 #define SPI_CR1_SPE       (1u<< 6)
-#define SPI_CR1_BR_DIV2   (0u<< 3)
-#define SPI_CR1_BR_DIV4   (1u<< 3)
-#define SPI_CR1_BR_DIV8   (2u<< 3)
-#define SPI_CR1_BR_DIV16  (3u<< 3)
-#define SPI_CR1_BR_DIV32  (4u<< 3)
-#define SPI_CR1_BR_DIV64  (5u<< 3)
-#define SPI_CR1_BR_DIV128 (6u<< 3)
-#define SPI_CR1_BR_DIV256 (7u<< 3)
-#define SPI_CR1_BR_MASK   (7u<< 3)
 #define SPI_CR1_MSTR      (1u<< 2)
 #define SPI_CR1_CPOL      (1u<< 1)
 #define SPI_CR1_CPHA      (1u<< 0)
