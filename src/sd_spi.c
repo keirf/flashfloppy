@@ -9,16 +9,16 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if 1
-/* We can now switch to Default Speed (25MHz). Closest we can get is 36Mhz/2 = 
- * 18MHz. */
-#define DEFAULT_SPEED_DIV SPI_CR1_BR_DIV2 /* 18MHz */
-#define SPI_PIN_SPEED _50MHz
-#else
-/* Best speed I can reliably achieve right now is 9Mbit/s. */
-#define DEFAULT_SPEED_DIV SPI_CR1_BR_DIV4 /* 9MHz */
-#define SPI_PIN_SPEED _10MHz
+#if MCU == STM32F105
+/* Default Speed (25MHz). Closest we can get is 36Mhz/2 = 18MHz. */
+#define INIT_SPEED_DIV    SPI_BR_DIV128 /* ~281kHz (<400kHz) */
+#define DEFAULT_SPEED_DIV SPI_BR_DIV2   /* 18MHz */
+#elif MCU == AT32F435
+/* Default Speed (25MHz). Closest we can get is 144Mhz/8 = 18MHz. */
+#define INIT_SPEED_DIV    SPI_BR_DIV512 /* ~281kHz (<400kHz) */
+#define DEFAULT_SPEED_DIV SPI_BR_DIV8   /* 18MHz */
 #endif
+#define SPI_PIN_SPEED _50MHz
 
 #if 0
 #define TRC(f, a...) printk("SD: " f, ## a)
@@ -66,13 +66,13 @@ static void spi_release(void)
 
 static uint8_t wait_ready(void)
 {
-    stk_time_t start = stk_now();
+    time_t start = time_now();
     uint8_t res;
 
     /* Wait 500ms for card to be ready. */
     do {
         res = spi_recv8(spi);
-    } while ((res != 0xff) && (stk_timesince(start) < stk_ms(500)));
+    } while ((res != 0xff) && (time_since(start) < time_ms(500)));
 
     return res;
 }
@@ -172,13 +172,13 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg)
 static bool_t datablock_recv(BYTE *buff, uint16_t bytes)
 {
     uint8_t token, _crc[2];
-    uint32_t start = stk_now();
     uint16_t todo, w, crc;
+    time_t start = time_now();
 
     /* Wait 100ms for data to be ready. */
     do {
         token = spi_recv8(spi);
-    } while ((token == 0xff) && (stk_timesince(start) < stk_ms(100)));
+    } while ((token == 0xff) && (time_since(start) < time_ms(100)));
     if (token != 0xfe) /* valid data token? */
         return FALSE;
 
@@ -270,9 +270,18 @@ static bool_t sd_inserted(void)
     return gpio_read_pin(gpioc, 9);
 }
 
+static void sd_spi_set_cr(uint32_t cr1, uint32_t br)
+{
+    /* BR is called MDIV in AT32F435 documentation, and is extended by one
+     * bit which resides in CR2. */
+    spi->cr2 = (br & 8) << (8 - 3);    /* CR2[8]   := MDIV[3] */
+    spi->cr1 = cr1 | ((br & 7) << 3);  /* CR1[5:4] := MDIV[2:0] */
+}
+
 static DSTATUS sd_disk_initialize(BYTE pdrv)
 {
-    uint32_t start, cr1;
+    time_t start;
+    uint32_t cr1;
     uint16_t rcv;
     uint8_t i;
 
@@ -288,16 +297,24 @@ static DSTATUS sd_disk_initialize(BYTE pdrv)
 
     /* Enable external I/O pins. */
     gpio_configure_pin(gpiob, PIN_CS, GPO_pushpull(SPI_PIN_SPEED, HIGH));
+#if MCU == STM32F105
     gpio_configure_pin(gpiob, 13, AFO_pushpull(SPI_PIN_SPEED)); /* CK */
     gpio_configure_pin(gpiob, 14, GPI_pull_up); /* MISO */
     gpio_configure_pin(gpiob, 15, AFO_pushpull(SPI_PIN_SPEED)); /* MOSI */
+#elif MCU == AT32F435
+    gpio_set_af(gpiob, 13, 5);
+    gpio_configure_pin(gpiob, 13, AFO_pushpull(SPI_PIN_SPEED)); /* CK */
+    gpio_set_af(gpiob, 14, 5);
+    gpio_configure_pin(gpiob, 14, AFI(PUPD_up)); /* MISO */
+    gpio_set_af(gpiob, 15, 5);
+    gpio_configure_pin(gpiob, 15, AFO_pushpull(SPI_PIN_SPEED)); /* MOSI */
+#endif
 
     /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
-    spi->cr2 = 0;
     cr1 = (SPI_CR1_MSTR | /* master */
            SPI_CR1_SSM | SPI_CR1_SSI | /* software NSS */
            SPI_CR1_SPE);
-    spi->cr1 = cr1 | SPI_CR1_BR_DIV128; /* ~281kHz (<400kHz) */
+    sd_spi_set_cr(cr1, INIT_SPEED_DIV);
 
     /* Drain SPI I/O. */
     spi_quiesce(spi);
@@ -328,9 +345,9 @@ static DSTATUS sd_disk_initialize(BYTE pdrv)
         }
 
         /* Request SDHC/SDXC and start card initialisation. */
-        start = stk_now();
+        start = time_now();
         while (send_cmd(ACMD(41), 1u<<30)) {
-            if (stk_timesince(start) >= stk_ms(1000))
+            if (time_since(start) >= time_ms(1000))
                 goto out; /* initialisation timeout */
         }
 
@@ -359,9 +376,9 @@ static DSTATUS sd_disk_initialize(BYTE pdrv)
         }
 
         /* Wait for card initialisation. */
-        start = stk_now();
+        start = time_now();
         while (send_cmd(cmd, 0)) {
-            if (stk_timesince(start) >= stk_ms(1000))
+            if (time_since(start) >= time_ms(1000))
                 goto out; /* initialisation timeout */
         }
 
@@ -379,7 +396,7 @@ out:
 
     if (!(status & STA_NOINIT)) {
         delay_us(10); /* XXX small delay here stops SPI getting stuck?? */
-        spi->cr1 = cr1 | DEFAULT_SPEED_DIV;
+        sd_spi_set_cr(cr1, DEFAULT_SPEED_DIV);
         printk("SD Card configured\n");
         dump_cid_info();
     } else {
