@@ -121,7 +121,7 @@ void floppy_init(void)
     floppy_set_fintf_mode();
 
     printk("Interface: QuickDisk, JC=%s\n",
-           board_jc_strapped() ? "On (Roland)" : "Off");
+           qd_roland_mode() ? "On (Roland)" : "Off");
     
     board_floppy_init();
 
