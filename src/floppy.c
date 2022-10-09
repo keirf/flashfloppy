@@ -154,14 +154,19 @@ static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
      * every time the drive is selected. */
     update_SELA_irq(amiga_hd_id);
 
-    /* DD-ID: !!HACK!! We permanently assert pin 34, even when no disk is
-     * inserted. Properly we should only do this when MTR is asserted. */
-    /* HD ID: !!HACK!! Without knowledge of MTR signal we cannot synchronise
-     * the HD-ID sequence 101010... with the host poll loop. It turns out that
-     * starting with pin 34 asserted when the HD image is mounted seems to
-     * generally work! */
-    if (ff_cfg.motor_delay == MOTOR_ignore)
+    if (ff_cfg.motor_delay == MOTOR_ignore) {
+        /* Best-effort pin 34 handling:
+         * DD-ID: We permanently assert pin 34, even when no disk is inserted. 
+         *  Properly we should only do this when MTR is asserted.
+         * HD-ID: Without knowledge of MTR signal we cannot synchronise the 
+         *  HD-ID sequence 101010... with the host poll loop. It turns out that
+         *  starting with pin 34 asserted when the HD image is mounted seems to
+         *  generally work! (But see GitHub issue #354) */
         drive_change_pin(&drive, pin_34, TRUE);
+    } else {
+        /* Do nothing here. Pin 34 will be updated by IRQ_MOTOR() via
+         * motor_chgrst_{insert,eject}(). */
+    }
 }
 
 void floppy_cancel(void)
