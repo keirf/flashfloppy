@@ -630,11 +630,7 @@ bool_t lcd_init(void)
             lcd_rows = 4;
         } else {
             lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
-            lcd_columns = max_t(uint8_t, lcd_columns, 16);
-            lcd_columns = min_t(uint8_t, lcd_columns, 40);
             lcd_rows = (ff_cfg.display_type >> _DISPLAY_lcd_rows) & 7;
-            lcd_rows = max_t(uint8_t, lcd_rows, 2);
-            lcd_rows = min_t(uint8_t, lcd_rows, 4);
         }
 
         if (a != 0) {
@@ -643,9 +639,13 @@ bool_t lcd_init(void)
             i2c_addr = a;
         } else {
             is_oled_display = FALSE;
-            if (ff_cfg.display_type == DISPLAY_auto)
-                lcd_columns = 40;
+            lcd_columns = ff_cfg.osd_columns;
         }
+
+        lcd_columns = max_t(uint8_t, lcd_columns, 16);
+        lcd_columns = min_t(uint8_t, lcd_columns, 40);
+        lcd_rows = max_t(uint8_t, lcd_rows, 2);
+        lcd_rows = min_t(uint8_t, lcd_rows, 4);
 
         lcd_clear();
 
