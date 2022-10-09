@@ -1232,6 +1232,10 @@ static void read_ff_cfg(void)
             ff_cfg.osd_display_order = parse_display_order(opts.arg);
             break;
 
+        case FFCFG_osd_columns:
+            ff_cfg.osd_columns = strtol(opts.arg, NULL, 10);
+            break;
+
         case FFCFG_display_off_secs:
             ff_cfg.display_off_secs = strtol(opts.arg, NULL, 10);
             cfg.ffcfg_has_display_off_secs = TRUE;
