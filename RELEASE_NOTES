@@ -3,6 +3,13 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.36 - 10 October 2022
+ - AT32F435: Fix SD card handling on boards which support it
+ - FF.CFG, OSD: New options osd-columns= and osd-display-order=
+ - Amiga: Improved pin 34 ID/RDY emulation
+   - Requires AT32F435 MCU and MOR jumper strap
+   - Requires FF.CFG options: interface=amiga, motor-delay=500
+
 ** v3.35 - 4 August 2022
  - AT32F435: Fix Quick Disk firmware
 
