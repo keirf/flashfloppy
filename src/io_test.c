@@ -123,6 +123,53 @@ static void display_setting(bool_t on)
     }
 }
 
+/* 32-bit sequence of length 2^32-1 (all 32-bit values except zero). */
+static inline always_inline uint32_t lfsr(uint32_t x)
+{
+    return (x & 1) ? (x>>1) ^ 0x80000062 : (x>>1);
+}
+
+static void fatal(uint32_t *p, uint32_t exp, uint32_t saw)
+{
+    char msg[32];
+    snprintf(msg, sizeof(msg), "%p", p);
+    lcd_write(0, 0, -1, msg);
+    snprintf(msg, sizeof(msg), "%08x %08x", exp, saw);
+    lcd_write(0, 1, -1, msg);
+    for (;;);
+}
+
+static void memory_test(void)
+{
+    uint32_t *s = (uint32_t *)_ebss;
+    uint32_t *e = (uint32_t *)((char *)0x20000000 + ram_kb*1024);
+    uint32_t *p;
+    uint32_t _r = 0x12341234, r;
+    char msg[32];
+    unsigned int i;
+
+    snprintf(msg, sizeof(msg), "%08x %08x", s, e);
+    lcd_write(0, 1, -1, msg);
+
+    for (i = 0;;i++) {
+        snprintf(msg, sizeof(msg), "%06d %08x", i, _r);
+        lcd_write(0, 0, -1, msg);
+        r = _r;
+        for (p = s; p < e; p++) {
+            *p = r;
+            r = lfsr(r);
+        }
+        delay_ms(10);
+        r = _r;
+        for (p = s; p < e; p++) {
+            if (*p != r)
+                fatal(p, r, *p);
+            r = lfsr(r);
+        }
+        _r = r;
+    }
+}
+
 int main(void)
 {
     bool_t assert = FALSE;
@@ -148,6 +195,9 @@ int main(void)
     flash_ff_cfg_read();
     display_init();
     display_setting(TRUE);
+
+    memory_test();
+
 
     if (mcu_package == MCU_QFN32) {
         inputs[6] = GPIOB | 1 | DOWN; /* wgate */
