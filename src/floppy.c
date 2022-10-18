@@ -167,6 +167,7 @@ static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
     } else {
         /* Do nothing here. Pin 34 will be updated by IRQ_MOTOR() via
          * motor_chgrst_{insert,eject}(). */
+        IRQ_global_enable();
     }
 }
 
