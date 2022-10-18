@@ -165,7 +165,7 @@ static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
         drive_change_pin(&drive, pin_34, TRUE);
     } else {
         /* Do nothing here. Pin 34 will be updated by IRQ_MOTOR() via
-         * motor_chgrst_{insert,eject}(). */
+         * motor_chgrst_update_status(). */
         IRQ_global_enable();
     }
 }
@@ -204,7 +204,7 @@ void floppy_cancel(void)
     index.fake_fired = FALSE;
     barrier(); /* /then/ cancel index.timer_deassert */
     timer_cancel(&index.timer_deassert);
-    motor_chgrst_eject(drv);
+    motor_chgrst_update_status(drv);
 
     /* Set outputs for empty drive. */
     barrier();
@@ -329,7 +329,7 @@ void floppy_init(void)
     timer_init(&index.timer, index_assert, NULL);
     timer_init(&index.timer_deassert, index_deassert, NULL);
 
-    motor_chgrst_eject(drv);
+    motor_chgrst_setup_exti();
 }
 
 void floppy_insert(unsigned int unit, struct slot *slot)
@@ -354,7 +354,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
         drive_change_output(drv, outp_wrprot, FALSE);
     barrier();
     drv->inserted = TRUE;
-    motor_chgrst_insert(drv); /* update RDY + motor state */
+    motor_chgrst_update_status(drv); /* update RDY + motor state */
     if (ff_cfg.chgrst <= CHGRST_delay(15))
         timer_set(&drv->chgrst_timer, time_now() + ff_cfg.chgrst*time_ms(500));
 }

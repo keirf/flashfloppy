@@ -298,6 +298,9 @@ static inline bool_t in_da_mode(struct image *im, unsigned int cyl)
     return cyl >= max_t(unsigned int, DA_FIRST_CYL, im_nphys_cyls(im));
 }
 
+extern uint32_t motor_chgrst_exti_mask;
+void motor_chgrst_setup_exti(void);
+
 /*
  * Local variables:
  * mode: C

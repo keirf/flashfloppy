@@ -1300,15 +1300,27 @@ static void read_ff_cfg(void)
 
 static void process_ff_cfg_opts(const struct ff_cfg *old)
 {
+    /* chgrst, motor-delay: Reset EXTI handlers. */
+    if ((ff_cfg.motor_delay != old->motor_delay)
+        || (ff_cfg.chgrst != old->chgrst)) {
+        exti->imr &= ~motor_chgrst_exti_mask;
+        motor_chgrst_exti_mask = 0;
+    }
+
     /* rotary, chgrst, motor-delay: Inform the rotary-encoder subsystem. 
-     * It is harmless to notify unconditionally. */
+     * It is harmless to reset rotary EXTI handlers unconditionally. */
     set_rotary_exti();
 
-    /* interface, pin02, pin34: Inform the floppy subsystem. */
+    /* interface, pin02, pin34, chgrst, motor-delay: Inform the floppy
+     * subsystem.  */
     if ((ff_cfg.interface != old->interface)
         || (ff_cfg.pin02 != old->pin02)
-        || (ff_cfg.pin34 != old->pin34))
+        || (ff_cfg.pin34 != old->pin34)
+        || (ff_cfg.motor_delay != old->motor_delay)
+        || (ff_cfg.chgrst != old->chgrst)) {
         floppy_set_fintf_mode();
+        motor_chgrst_setup_exti();
+    }
 
     /* max-cyl: Inform the floppy subsystem. */
     if (ff_cfg.max_cyl != old->max_cyl)

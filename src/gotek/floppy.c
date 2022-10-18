@@ -460,36 +460,25 @@ static void motor_chgrst_update_status(struct drive *drv)
     IRQx_set_pending(MOTOR_CHGRST_IRQ);
 }
 
-static void motor_chgrst_insert(struct drive *drv)
+uint32_t motor_chgrst_exti_mask;
+void motor_chgrst_setup_exti(void)
 {
-    uint32_t imr = exti->imr;
+    uint32_t m = 0;
 
     if (ff_cfg.motor_delay != MOTOR_ignore) {
         _exti_route(gotek_enhanced()?0/*PA*/:1/*PB*/, pin_motor);
-        imr |= m(pin_motor);
+        m |= m(pin_motor);
     }
 
     if (ff_cfg.chgrst == CHGRST_pa14) {
         exti_route_pa(pin_chgrst);
-        imr |= m(pin_chgrst);
+        m |= m(pin_chgrst);
     }
 
-    exti->imr = imr;
-    motor_chgrst_update_status(drv);
-}
+    motor_chgrst_exti_mask = m;
+    exti->imr |= m;
 
-static void motor_chgrst_eject(struct drive *drv)
-{
-    uint32_t imr = exti->imr;
-
-    if (ff_cfg.motor_delay != MOTOR_ignore)
-        imr &= ~m(pin_motor);
-
-    if (ff_cfg.chgrst == CHGRST_pa14)
-        imr &= ~m(pin_chgrst);
-
-    exti->imr = imr;
-    motor_chgrst_update_status(drv);
+    motor_chgrst_update_status(&drive);
 }
 
 /*

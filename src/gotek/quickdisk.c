@@ -243,6 +243,12 @@ static void IRQ_rotary_changed(void)
     IRQ_rotary();
 }
 
+uint32_t motor_chgrst_exti_mask;
+void motor_chgrst_setup_exti(void)
+{
+    /* Quick Disk does not have configurable MOTOR and CHGRST. */
+}
+
 /*
  * Local variables:
  * mode: C
