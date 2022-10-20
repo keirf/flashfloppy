@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.37 - 20 October 2022
+ - Amiga: Fix firmware crash when mounting read-only disk image
+   - Since v3.36 when interface=amiga and motor-delay= is configured
+ - Amiga: Respect MOTOR when motor-delay= is configured and disk ejected
+   - Previously the MOTOR signal was ignored when no disk inserted
+
 ** v3.36 - 10 October 2022
  - AT32F435: Fix SD card handling on boards which support it
  - FF.CFG, OSD: New options osd-columns= and osd-display-order=
