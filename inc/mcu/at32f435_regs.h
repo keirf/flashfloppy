@@ -236,9 +236,9 @@ struct gpio {
     uint32_t hdrv;    /* 3C: Huge current control */
 };
 
-/* 0-1: MODE, 2: OTYPE, 3-4:ODRV, 5-6:PUPD, 7:OUTPUT_LEVEL */
+/* 0-1: MODE, 2: OTYPE, 3-5:ODRV+HDRV, 6-7:PUPD, 8:OUTPUT_LEVEL */
 #define GPI_analog    0x3u
-#define GPI(pupd)     (0x0u|((pupd)<<5))
+#define GPI(pupd)     (0x0u|((pupd)<<6))
 #define PUPD_none     0
 #define PUPD_up       1
 #define PUPD_down     2
@@ -246,14 +246,14 @@ struct gpio {
 #define GPI_pull_down GPI(PUPD_down)
 #define GPI_pull_up   GPI(PUPD_up)
 
-#define GPO_pushpull(speed,level)  (0x1u|((speed)<<3)|((level)<<7))
-#define GPO_opendrain(speed,level) (0x5u|((speed)<<3)|((level)<<7))
-#define AFI(pupd)                  (0x2u|((pupd)<<5))
+#define GPO_pushpull(speed,level)  (0x1u|((speed)<<3)|((level)<<8))
+#define GPO_opendrain(speed,level) (0x5u|((speed)<<3)|((level)<<8))
+#define AFI(pupd)                  (0x2u|((pupd)<<6))
 #define AFO_pushpull(speed)        (0x2u|((speed)<<3))
 #define AFO_opendrain(speed)       (0x6u|((speed)<<3))
 #define _2MHz 0
-#define _10MHz 0
-#define _50MHz 0
+#define _10MHz 2
+#define _50MHz 1
 #define LOW  0
 #define HIGH 1
 

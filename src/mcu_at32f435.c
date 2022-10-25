@@ -98,10 +98,12 @@ void stm32_init(void)
 
 void gpio_configure_pin(GPIO gpio, unsigned int pin, unsigned int mode)
 {
-    gpio_write_pin(gpio, pin, mode >> 7);
+    gpio_write_pin(gpio, pin, mode >> 8);
     gpio->moder = (gpio->moder & ~(3<<(pin<<1))) | ((mode&3)<<(pin<<1));
     mode >>= 2;
     gpio->otyper = (gpio->otyper & ~(1<<pin)) | ((mode&1)<<pin);
+    mode >>= 1;
+    gpio->hdrv = (gpio->hdrv & ~(1<<pin)) | ((mode&1)<<pin);
     mode >>= 1;
     gpio->odrvr = (gpio->odrvr & ~(3<<(pin<<1))) | ((mode&3)<<(pin<<1));
     mode >>= 2;
