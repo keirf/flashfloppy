@@ -15,7 +15,7 @@ jobs:
     - name: Set environment variables
       id: vars
       run: |
-        echo "::set-output name=ver::$(echo ${{ github.ref }} | sed -e's#.*/v##')"
+        echo "ver=$(echo ${{ github.ref }} | sed -e's#.*/v##')" >> $GITHUB_OUTPUT
 
     - name: Dependency packages (apt)
       run: |
