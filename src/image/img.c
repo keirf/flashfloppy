@@ -165,6 +165,9 @@ const static struct raw_type {
     { 8, _S(2), _IAM, 116, 1, 3, 1, 0, 0, 0, _C(80), _R(360) }, /* HD 360RPM */
     { 8, _S(2), _IAM, 57, 1, 2, 1, 0, 0, 0, _C(80), _R(360) }, /* DD 360RPM */
     { 0 }
+}, sf7_type[] = {
+    { 16, _S(1), _IAM, 42, 1, 1, 1, 0, 0, 0, _C(40), _R(300) }, /* 160kB */
+    { 0 }
 }, uknc_type[] = {
     { 10, _S(2), 0, 38, 1, 2, 1, 0, 0, 0, _C(80), _R(300) },
     { 0 }
@@ -724,6 +727,11 @@ static bool_t d81_open(struct image *im)
 {
     im->img.layout = LAYOUT_sides_swapped;
     return raw_type_open(im, d81_type);
+}
+
+static bool_t sf7_open(struct image *im)
+{
+    return raw_type_open(im, sf7_type);
 }
 
 static bool_t st_open(struct image *im)
@@ -1518,6 +1526,14 @@ const struct image_handler d81_image_handler = {
     .write_track = raw_write_track,
     .sync = raw_sync,
     .async = TRUE,
+};
+
+const struct image_handler sf7_image_handler = {
+    .open = sf7_open,
+    .setup_track = raw_setup_track,
+    .read_track = raw_read_track,
+    .rdata_flux = bc_rdata_flux,
+    .write_track = raw_write_track,
 };
 
 const struct image_handler st_image_handler = {
