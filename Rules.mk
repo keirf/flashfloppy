@@ -24,6 +24,7 @@ override logfile=n
 endif
 # Debug builds don't fit in available Flash. FIXME for main firmware.
 override debug=n
+override logfile=n
 
 ## AT32F435
 else ifeq ($(mcu),at32f435)
