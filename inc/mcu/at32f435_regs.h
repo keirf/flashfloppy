@@ -250,6 +250,7 @@ struct gpio {
 #define GPO_opendrain(speed,level) (0x5u|((speed)<<3)|((level)<<7))
 #define AFI(pupd)                  (0x2u|((pupd)<<5))
 #define AFO_pushpull(speed)        (0x2u|((speed)<<3))
+#define _AFO_pushpull(speed,level) (0x2u|((speed)<<3)|((level)<<7))
 #define AFO_opendrain(speed)       (0x6u|((speed)<<3))
 #define _2MHz 0
 #define _10MHz 0

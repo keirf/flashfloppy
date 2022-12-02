@@ -165,6 +165,7 @@ struct gpio {
 #define GPO_pushpull(speed,level)  (0x0u|(speed)|((level)<<4))
 #define GPO_opendrain(speed,level) (0x4u|(speed)|((level)<<4))
 #define AFO_pushpull(speed)        (0x8u|(speed))
+#define _AFO_pushpull(speed,level) (0x8u|(speed)|((level)<<4))
 #define AFO_opendrain(speed)       (0xcu|(speed))
 #define _2MHz  2
 #define _10MHz 1

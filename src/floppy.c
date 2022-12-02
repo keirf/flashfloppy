@@ -11,7 +11,7 @@
 
 #define GPI_bus GPI_floating
 #define GPO_bus GPO_pushpull(_2MHz,O_FALSE)
-#define AFO_bus (AFO_pushpull(_2MHz) | (O_FALSE<<4))
+#define AFO_bus _AFO_pushpull(_2MHz,O_FALSE)
 
 #define GPO_rdata GPO_bus
 #define AFO_rdata AFO_bus

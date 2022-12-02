@@ -12,7 +12,7 @@
 #define GPI_bus GPI_floating
 #define GPO_bus GPO_pushpull(_2MHz, HIGH)
 #define GPO_rdata GPO_pushpull(_2MHz, LOW)
-#define AFO_rdata (AFO_pushpull(_2MHz) | (LOW<<4))
+#define AFO_rdata _AFO_pushpull(_2MHz,LOW)
 
 /* READY-window state machine and timer handling. */
 static struct window {
