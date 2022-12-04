@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.38 - 4 December 2022
+ - AT32F435: Fix RDATA release on drive deassert
+ - SF7: Support Sega SF-7000 *.SF7 images
+
 ** v3.37 - 20 October 2022
  - Amiga: Fix firmware crash when mounting read-only disk image
    - Since v3.36 when interface=amiga and motor-delay= is configured
