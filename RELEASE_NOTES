@@ -3,6 +3,9 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v4.7a - 4 December 2022
+ - Contains fixes up to v3.38 from v3 stable release series
+
 ** v4.6a - 29 July 2022
  - AUTOBOOT / HxC Mode: Fix "Error ... LBA Change test failed!"
 
