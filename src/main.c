@@ -1208,6 +1208,8 @@ static void read_ff_cfg(void)
                         ff_cfg.display_type |= DISPLAY_ztech;
                     } else if (!strcmp(p, "slow")) {
                         ff_cfg.display_type |= DISPLAY_slow;
+                    } else if (!strcmp(p, "hflip")) {
+                        ff_cfg.display_type |= DISPLAY_hflip;
                     }
                 }
             }

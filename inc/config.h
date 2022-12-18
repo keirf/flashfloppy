@@ -102,6 +102,7 @@ struct packed ff_cfg {
 #define DISPLAY_oled_64  (1<<5)
 #define DISPLAY_inverse  (1<<6)
 #define DISPLAY_slow     (1<<7)
+#define DISPLAY_hflip    (1<<8)
 /* Only if DISPLAY_lcd: */
 #define _DISPLAY_lcd_columns 5
 #define DISPLAY_lcd_columns(x) ((x)<<_DISPLAY_lcd_columns)
