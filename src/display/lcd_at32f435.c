@@ -957,7 +957,6 @@ static void oled_init(void)
         0xa0,       /* segment mapping (default) */
         0xc0,       /* com scan direction (default) */
     };
-    const uint8_t *cmds;
     uint8_t dynamic_cmds[7], *dc;
     uint8_t *p = buffer;
 
@@ -981,9 +980,13 @@ static void oled_init(void)
     *dc++ = (oled_height == 64) ? 0x12 : 0x02;
     p += oled_queue_cmds(p, dynamic_cmds, dc - dynamic_cmds);
 
-    /* Display is right-way-up, or rotated. */
-    cmds = (ff_cfg.display_type & DISPLAY_rotate) ? rot_cmds : norot_cmds;
-    p += oled_queue_cmds(p, cmds, sizeof(rot_cmds));
+    /* Display orientation. */
+    dc = dynamic_cmds;
+    memcpy(dc, (ff_cfg.display_type & DISPLAY_rotate) ? rot_cmds : norot_cmds,
+           2);
+    if (ff_cfg.display_type & DISPLAY_hflip)
+        dc[0] ^= 1;
+    p += oled_queue_cmds(p, dc, 2);
 
     /* Start off the I2C transaction. */
     p += oled_start_i2c(p);
