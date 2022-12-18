@@ -239,7 +239,8 @@ found:
 }
 
 static void tag_add_layout(
-    struct image *im, const struct simple_layout *layout, unsigned int trk_idx)
+    struct image *im, const struct simple_layout *layout,
+    const uint8_t *no, unsigned int trk_idx)
 {
     struct raw_sec *sec;
     struct raw_trk *trk;
@@ -264,7 +265,7 @@ static void tag_add_layout(
     sec = &im->img.sec_info_base[trk->sec_off];
     for (i = 0; i < layout->nr_sectors; i++) {
         sec->r = i + layout->base[0];
-        sec->n = layout->no;
+        sec->n = no[i];
         sec++;
     }
 }
@@ -322,13 +323,16 @@ static bool_t tag_open(struct image *im, char *tag)
         FIL file;
         struct slot slot;
         char buf[512];
-    } *heap = (void *)im->bufs.read_data.p;
+        uint8_t no[256];
+    } *heap = (void *)im->bufs.write_bc.p;
     struct opts opts = {
         .file = &heap->file,
         .opts = img_cfg_opts,
         .arg = heap->buf,
         .argmax = sizeof(heap->buf)-1
     };
+
+    ASSERT(sizeof(*heap) <= im->bufs.write_bc.len);
 
     if (!get_img_cfg(&heap->slot))
         return FALSE;
@@ -343,7 +347,7 @@ static bool_t tag_open(struct image *im, char *tag)
             char *p, *q;
             /* New section: Finalise any currently-active section. */
             if (active) {
-                tag_add_layout(im, &t_layout, nr_t);
+                tag_add_layout(im, &t_layout, heap->no, nr_t);
                 finalise_track_map(im);
                 active = 0;
             }
@@ -375,6 +379,7 @@ static bool_t tag_open(struct image *im, char *tag)
                 match = active;
                 reset_all_params(im);
                 d_layout = t_layout = dfl_simple_layout;
+                memset(heap->no, ~0, sizeof(heap->no));
                 nr_t = 0;
             } else {
                 /* Mark ourselves inactive for this section. */
@@ -390,7 +395,7 @@ static bool_t tag_open(struct image *im, char *tag)
         case IMGCFG_tracks: {
             char *p = opts.arg;
             int c_s, c_e, h_s, h_e, c, h;
-            tag_add_layout(im, &t_layout, nr_t);
+            tag_add_layout(im, &t_layout, heap->no, nr_t);
             if (nr_t++ == 0)
                 d_layout = t_layout;
             t_layout = d_layout;
@@ -426,14 +431,24 @@ static bool_t tag_open(struct image *im, char *tag)
         case IMGCFG_step:
             im->step = strtol(opts.arg, NULL, 10);
             break;
-       case IMGCFG_bps: {
-            int no, sz = strtol(opts.arg, NULL, 10);
-            for (no = 0; no < 8; no++)
-                if ((128u<<no) == sz)
-                    break;
-            t_layout.no = no;
+        case IMGCFG_bps: {
+            char *p, *q;
+            int no = ~0, i = 0;
+            for (p = opts.arg; *p != '\0'; p = q) {
+                int sz;
+                for (q = p; *q && *q != ','; q++)
+                    continue;
+                if (*q == ',')
+                    *q++ = '\0';
+                sz = strtol(p, NULL, 10);
+                for (no = 0; no < 8; no++)
+                    if ((128u<<no) == sz)
+                        break;
+                heap->no[i++] = no;
+            }
+            memset(&heap->no[i], no, sizeof(heap->no)-i);
             break;
-        }
+            }
         case IMGCFG_id:
             t_layout.base[0] = strtol(opts.arg, NULL, 0);
             break;
@@ -497,7 +512,7 @@ static bool_t tag_open(struct image *im, char *tag)
     }
 
     if (active) {
-        tag_add_layout(im, &t_layout, nr_t);
+        tag_add_layout(im, &t_layout, heap->no, nr_t);
         finalise_track_map(im);
     }
 
