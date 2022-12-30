@@ -167,6 +167,9 @@ struct packed ff_cfg {
     uint8_t max_cyl;
     uint16_t osd_display_order;
     uint8_t osd_columns;
+#define NOTIFY_volume_mask 15
+#define NOTIFY_slotnr      (1<<4)
+    uint8_t notify_volume;
 };
 
 extern struct ff_cfg ff_cfg;
