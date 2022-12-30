@@ -120,6 +120,8 @@ extern uint8_t display_type;
 /* Speaker. */
 void speaker_init(void);
 void speaker_pulse(void);
+void speaker_notify_insert(unsigned int slotnr);
+void speaker_notify_eject(void);
 
 /* Display: 3-digit 7-segment display */
 void led_7seg_init(void);

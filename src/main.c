@@ -1282,6 +1282,25 @@ static void read_ff_cfg(void)
             break;
         }
 
+        case FFCFG_notify_volume: {
+            char *p, *q;
+            ff_cfg.notify_volume = 0;
+            for (p = opts.arg; *p != '\0'; p = q) {
+                for (q = p; *q && *q != ','; q++)
+                    continue;
+                if (*q == ',')
+                    *q++ = '\0';
+                if (!strcmp(p, "slotnr")) {
+                    ff_cfg.notify_volume |= NOTIFY_slotnr;
+                } else {
+                    ff_cfg.notify_volume &= ~NOTIFY_volume_mask;
+                    ff_cfg.notify_volume |= strtol(p, NULL, 10)
+                        & NOTIFY_volume_mask;
+                }
+            }
+            break;
+        }
+
         case FFCFG_da_report_version:
             memset(ff_cfg.da_report_version, 0,
                    sizeof(ff_cfg.da_report_version));
@@ -2693,8 +2712,10 @@ static int floppy_main(void *unused)
             b = B_SELECT;
         } else {
             floppy_arena_teardown();
+            speaker_notify_insert(cfg.slot_nr);
             fres = F_call_cancellable(run_floppy, &b);
             floppy_cancel();
+            speaker_notify_eject();
             assert_volume_connected();
             if ((b != 0) && (display_type == DT_LCD_OLED)) {
                 /* Immediate visual indication of button press. */

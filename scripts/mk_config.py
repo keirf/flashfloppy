@@ -46,6 +46,15 @@ def main(argv):
                     else:
                         opts += ['DISPLAY_' + x]
                 val = '|'.join(opts)
+            elif opt == "notify-volume":
+                opts = []
+                for x in val.split(","):
+                    vol = re.match("([0-9]+)", x)
+                    if vol:
+                        opts.append(vol.group(1))
+                    else:
+                        opts.append('NOTIFY_' + x)
+                val = '|'.join(opts)
             elif opt == "display-order" or opt == "osd-display-order":
                 if val == "default":
                     val = "DORD_" + val
