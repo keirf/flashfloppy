@@ -130,13 +130,12 @@ void board_setup_rotary_exti(void)
         exti_route_pc(11);
         m |= m(10) | m(11);
     }
-    if (has_kc30_header) {
+    if (((has_kc30_header == 1) && (ff_cfg.motor_delay == MOTOR_ignore))
+        || (has_kc30_header == 2) /* No conflict with motor on PB12 */) {
         /* KC30 rotary pins PA6, PA15. */
-        if (ff_cfg.motor_delay == MOTOR_ignore) {
-            exti_route_pa(6);
-            exti_route_pa(15);
-            m |= m(6) | m(15);
-        }
+        exti_route_pa(6);
+        exti_route_pa(15);
+        m |= m(6) | m(15);
     }
     board_rotary_exti_mask = m;
     exti->rtsr |= m;
