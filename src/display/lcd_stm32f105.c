@@ -74,6 +74,8 @@ const static struct i2c_cfg {
 #define SCL i2c_cfg->scl
 #define SDA i2c_cfg->sda
 
+#define PCLK_MHZ APB1_MHZ
+
 /* I2C error ISR. */
 #define I2C_ERROR_IRQ i2c_cfg->error_irq
 void IRQ_34(void) __attribute__((alias("IRQ_i2c_error")));
@@ -586,9 +588,9 @@ bool_t lcd_init(void)
 
     /* Standard Mode (100kHz) */
     i2c->cr1 = 0;
-    i2c->cr2 = I2C_CR2_FREQ(36);
-    i2c->ccr = I2C_CCR_CCR(180);
-    i2c->trise = 37;
+    i2c->cr2 = I2C_CR2_FREQ(PCLK_MHZ);
+    i2c->ccr = I2C_CCR_CCR(PCLK_MHZ*5);
+    i2c->trise = (PCLK_MHZ <= 62) ? PCLK_MHZ + 1 : 63;
     i2c->cr1 = I2C_CR1_PE;
 
     if (!reinit) {
@@ -1051,9 +1053,9 @@ static void oled_init_fast_mode(void)
     i2c->cr1 = 0;
 
     /* Fast Mode (400kHz). */
-    i2c->cr2 = I2C_CR2_FREQ(36);
-    i2c->ccr = I2C_CCR_FS | I2C_CCR_CCR(30);
-    i2c->trise = 12;
+    i2c->cr2 = I2C_CR2_FREQ(PCLK_MHZ);
+    i2c->ccr = I2C_CCR_FS | I2C_CCR_CCR(PCLK_MHZ*5/6);
+    i2c->trise = PCLK_MHZ*3/10 + 1;
     i2c->cr1 = I2C_CR1_PE;
     i2c->cr2 |= I2C_CR2_ITERREN;
 }

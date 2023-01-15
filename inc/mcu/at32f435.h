@@ -56,9 +56,9 @@ static USB_OTG usb_otg = (struct usb_otg *)USB_OTG_BASE;
 
 /* Clocks */
 #define SYSCLK_MHZ 288
-#define AHB_MHZ (SYSCLK_MHZ / 1)  /* 288MHz */
-#define APB1_MHZ (SYSCLK_MHZ / 2) /* 144MHz */
-#define APB2_MHZ (SYSCLK_MHZ / 2) /* 144MHz */
+#define AHB_MHZ    288
+#define APB1_MHZ   144
+#define APB2_MHZ   144
 
 /* GPIO */
 void gpio_set_af(GPIO gpio, unsigned int pin, unsigned int af);

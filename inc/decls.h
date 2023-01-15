@@ -20,6 +20,7 @@
 #include "mcu/common.h"
 #if MCU == STM32F105
 #include "mcu/stm32f105_regs.h"
+#include "mcu/at32f415_regs.h"
 #include "mcu/stm32f105.h"
 #elif MCU == AT32F435
 #include "mcu/at32f435_regs.h"
