@@ -9,15 +9,9 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if MCU == STM32F105
-/* Default Speed (25MHz). Closest we can get is 36Mhz/2 = 18MHz. */
-#define INIT_SPEED_DIV    SPI_BR_DIV128 /* ~281kHz (<400kHz) */
-#define DEFAULT_SPEED_DIV SPI_BR_DIV2   /* 18MHz */
-#elif MCU == AT32F435
-/* Default Speed (25MHz). Closest we can get is 144Mhz/8 = 18MHz. */
-#define INIT_SPEED_DIV    SPI_BR_DIV512 /* ~281kHz (<400kHz) */
-#define DEFAULT_SPEED_DIV SPI_BR_DIV8   /* 18MHz */
-#endif
+#define PCLK_MHZ APB1_MHZ
+#define INIT_SPEED_KHZ 400
+#define DEFAULT_SPEED_KHZ 25000
 #define SPI_PIN_SPEED _50MHz
 
 #if 0
@@ -274,8 +268,16 @@ static bool_t sd_inserted(void)
     return gpio_read_pin(gpioc, 9);
 }
 
-static void sd_spi_set_cr(uint32_t cr1, uint32_t br)
+static void sd_spi_set_cr(uint32_t cr1, unsigned int max_khz)
 {
+    /* Set the divisor to satisfy maximum communications frequency. */
+    uint32_t br = SPI_BR_DIV2;
+    unsigned int khz = (PCLK_MHZ * 1000) >> 1;
+    while (khz > max_khz) {
+        khz >>= 1;
+        br++;
+    }
+
     /* BR is called MDIV in AT32F435 documentation, and is extended by one
      * bit which resides in CR2. */
     spi->cr2 = (br & 8) << (8 - 3);    /* CR2[8]   := MDIV[3] */
@@ -318,7 +320,7 @@ static DSTATUS sd_disk_initialize(BYTE pdrv)
     cr1 = (SPI_CR1_MSTR | /* master */
            SPI_CR1_SSM | SPI_CR1_SSI | /* software NSS */
            SPI_CR1_SPE);
-    sd_spi_set_cr(cr1, INIT_SPEED_DIV);
+    sd_spi_set_cr(cr1, INIT_SPEED_KHZ);
 
     /* Drain SPI I/O. */
     spi_quiesce(spi);
@@ -400,7 +402,7 @@ out:
 
     if (!(status & STA_NOINIT)) {
         delay_us(10); /* XXX small delay here stops SPI getting stuck?? */
-        sd_spi_set_cr(cr1, DEFAULT_SPEED_DIV);
+        sd_spi_set_cr(cr1, DEFAULT_SPEED_KHZ);
         printk("SD Card configured\n");
         dump_cid_info();
     } else {

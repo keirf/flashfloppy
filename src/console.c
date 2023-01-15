@@ -20,12 +20,14 @@
 #define usart_gpio gpioa
 #define usart_tx_pin 9
 #define usart_rx_pin 10
+#define PCLK (APB2_MHZ * 1000000)
 #else
 #define usart usart3
 #define USART_IRQ USART3_IRQ
 #define usart_gpio gpioc
 #define usart_tx_pin 10
 #define usart_rx_pin 11
+#define PCLK (APB1_MHZ * 1000000)
 #endif
 
 /* Normally flush to serial is asynchronously executed in a low-pri IRQ. */
@@ -147,7 +149,7 @@ void console_init(void)
 #endif
 
     /* BAUD, 8n1. */
-    usart->brr = (APB2_MHZ * 1000000) / BAUD;
+    usart->brr = PCLK / BAUD;
     usart->cr1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;
     usart->cr3 = 0;
 

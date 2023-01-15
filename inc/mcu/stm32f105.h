@@ -50,10 +50,12 @@ static USART usart3 = (struct usart *)USART3_BASE;
 static USB_OTG usb_otg = (struct usb_otg *)USB_OTG_BASE;
 
 /* Clocks */
-#define SYSCLK_MHZ 72
-#define AHB_MHZ (SYSCLK_MHZ / 1)  /* 72MHz */
-#define APB1_MHZ (SYSCLK_MHZ / 2) /* 36MHz */
-#define APB2_MHZ (SYSCLK_MHZ / 1) /* 72MHz */
+extern unsigned int sysclk_mhz;
+extern unsigned int apb1_mhz;
+#define SYSCLK_MHZ sysclk_mhz
+#define AHB_MHZ sysclk_mhz
+#define APB1_MHZ apb1_mhz
+#define APB2_MHZ 72
 
 #define SOFTIRQ_0 43
 #define SOFTIRQ_1 44
