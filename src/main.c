@@ -2819,6 +2819,24 @@ static bool_t main_menu_confirm(const char *op)
     return wait_twobutton_press(b) == B_SELECT;
 }
 
+static void noinline mcu_info(void)
+{
+#if MCU == STM32F105
+    static const char * const mcus[] = {
+        "STM32F105", "AT32F415"
+    };
+    const char * const mcu = mcus[!!is_artery_mcu];
+#elif MCU == AT32F435
+    const static char mcu[] = "AT32F435";
+#endif
+    char msg[20];
+    snprintf(msg, sizeof(msg), "%uMHz, %ukB", SYSCLK_MHZ, ram_kb);
+    lcd_write(0, 0, -1, mcu);
+    lcd_write(0, 1, -1, msg);
+    while (!buttons)
+        continue;
+}
+
 static void factory_reset(void)
 {
     /* Inform user that factory reset is about to occur. */
@@ -2903,7 +2921,7 @@ static void ff_osd_configure(void)
 static void main_menu(void)
 {
     const static char *menu[] = {
-        "**Main Menu**",
+        "MCU Info",
         "Factory Reset",
         "Update Firmware",
         "Configure FF OSD",
@@ -2926,6 +2944,7 @@ static void main_menu(void)
         if (sel >= ARRAY_SIZE(menu))
             sel -= ARRAY_SIZE(menu);
 
+        lcd_write(0, 0, -1, "**Main Menu**");
         lcd_write(0, 1, -1, menu[sel]);
         lcd_on();
 
@@ -2948,6 +2967,9 @@ static void main_menu(void)
             while (buttons)
                 continue;
             switch (sel) {
+            case 0: /* MCU Info */
+                mcu_info();
+                break;
             case 1: /* Factory Reset */
                 if (main_menu_confirm("Reset"))
                     factory_reset();
@@ -2959,7 +2981,7 @@ static void main_menu(void)
             case 3: /* Configure FF OSD */
                 ff_osd_configure();
                 break;
-            case 0: case 4: /* Exit */
+            case 4: /* Exit */
                 goto out;
             }
         }
@@ -3058,6 +3080,12 @@ static void maybe_show_version(void)
         continue;
     if (nb)
         return;
+
+    led_7seg_write_string("CPU");
+    delay_ms(1000);
+
+    led_7seg_write_decimal(SYSCLK_MHZ);
+    delay_ms(1000);
 
     led_7seg_write_string("RAN");
     delay_ms(1000);
