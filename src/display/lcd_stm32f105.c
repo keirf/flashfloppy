@@ -43,7 +43,7 @@ struct packed i2c_osd_info {
 };
 
 /* STM32 I2C peripheral. */
-static volatile struct i2c *i2c = i2c2;
+static volatile struct i2c *i2c;
 
 const static struct i2c_cfg {
     uint8_t en;
