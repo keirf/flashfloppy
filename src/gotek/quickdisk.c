@@ -183,8 +183,8 @@ static void _IRQ_MOTOR_RESET_changed(unsigned int gpioa_idr)
 
     if (!off) {
 
-        /* 2 seconds to spin up the motor. */
-        timer_set(&motor.timer, time_now() + time_ms(2000));
+        /* 1 second to spin up the motor. */
+        timer_set(&motor.timer, time_now() + time_ms(1000));
 
     } else {
 
