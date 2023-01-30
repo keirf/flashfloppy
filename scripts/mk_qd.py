@@ -12,6 +12,8 @@ import sys,struct,argparse
 def main(argv):
   parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  parser.add_argument("--lead-in", type=float, default=0.5,
+                      help="lead-in, seconds")
   parser.add_argument("--window", type=float, default=5.5,
                       help="data window, seconds")
   parser.add_argument("--total", type=float, default=8.0,
@@ -22,10 +24,10 @@ def main(argv):
   bit_ms = 0.004916
   total_bytes = int(args.total * 1000.0 / bit_ms / 8)
   window_bytes = int(args.window * 1000.0 / bit_ms / 8)
-  init_bytes = int(500.0 / bit_ms / 8)
+  init_bytes = int(args.lead_in * 1000.0 / bit_ms / 8)
 
   assert (2*init_bytes + window_bytes) < total_bytes, "Window too large"
-  print("Lead-In: %.2f sec -> %u bytes" % (0.5, init_bytes))
+  print("Lead-In: %.2f sec -> %u bytes" % (args.lead_in, init_bytes))
   print("Window:  %.2f sec -> %u bytes" % (args.window, window_bytes))
   print("TOTAL:   %.2f sec -> %u bytes" % (args.total, total_bytes))
 
