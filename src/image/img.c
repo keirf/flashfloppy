@@ -240,6 +240,7 @@ found:
 
 struct tag_layout {
     struct simple_layout s;
+    uint16_t img_bps;
     uint8_t no[256];
 };
 
@@ -265,6 +266,7 @@ static void tag_add_layout(
     trk->cskew = layout->s.cskew;
     trk->hskew = layout->s.hskew;
     trk->head = layout->s.head;
+    trk->img_bps = layout->img_bps;
 
     sec = &im->img.sec_info_base[trk->sec_off];
     for (i = 0; i < layout->s.nr_sectors; i++) {
@@ -283,6 +285,7 @@ static bool_t tag_open(struct image *im, char *tag)
         IMGCFG_step,
         IMGCFG_secs,
         IMGCFG_bps,
+        IMGCFG_img_bps,
         IMGCFG_id,
         IMGCFG_h,
         IMGCFG_mode,
@@ -306,6 +309,7 @@ static bool_t tag_open(struct image *im, char *tag)
         [IMGCFG_step] = { "step" },
         [IMGCFG_secs] = { "secs" },
         [IMGCFG_bps] = { "bps" },
+        [IMGCFG_img_bps] = { "img_bps" },
         [IMGCFG_id] = { "id" },
         [IMGCFG_h] = { "h" },
         [IMGCFG_mode] = { "mode" },
@@ -383,6 +387,7 @@ static bool_t tag_open(struct image *im, char *tag)
                 match = active;
                 reset_all_params(im);
                 heap->d_layout.s = dfl_simple_layout;
+                heap->d_layout.img_bps = 0;
                 memset(heap->d_layout.no, ~0, sizeof(heap->d_layout.no));
                 heap->t_layout = heap->d_layout;
                 nr_t = 0;
@@ -454,6 +459,9 @@ static bool_t tag_open(struct image *im, char *tag)
             memset(&heap->t_layout.no[i], no, sizeof(heap->t_layout.no)-i);
             break;
             }
+        case IMGCFG_img_bps:
+            heap->t_layout.img_bps = strtol(opts.arg, NULL, 0);
+            break;
         case IMGCFG_id:
             heap->t_layout.s.base[0] = strtol(opts.arg, NULL, 0);
             break;
@@ -1764,6 +1772,8 @@ static inline unsigned int calc_track_len(
         &im->img.trk_info[im->img.trk_map[cyl*im->nr_sides + side]];
     struct raw_sec *sec = &im->img.sec_info_base[trk->sec_off];
     unsigned int off = 0;
+    if (trk->img_bps != 0)
+        return trk->nr_sectors * trk->img_bps;
     for (unsigned int k = 0; k < trk->nr_sectors; k++) {
         off += sec_sz(sec->n);
         sec++;
@@ -2179,6 +2189,8 @@ static bool_t raw_write_track(struct image *im)
 
                 if (im->img.file_sec_offsets) {
                     off = im->img.file_sec_offsets[sec_nr];
+                } else if (trk->img_bps != 0) {
+                    off = sec_nr * trk->img_bps;
                 } else {
                     sec = im->img.sec_info;
                     for (i = off = 0; i < sec_nr; i++)
@@ -2264,7 +2276,7 @@ static void raw_dump_info(struct image *im)
            im->ticks_per_cell, im->write_bc_ticks, trk->has_iam);
     printk(" interleave: %u, cskew %u, hskew %u\n ",
            trk->interleave, trk->cskew, trk->hskew);
-    printk(" file-layout: %x\n", im->img.layout);
+    printk(" file_layout: %x, img_bps: %u\n", im->img.layout, trk->img_bps);
     for (i = 0; i < trk->nr_sectors; i++) {
         struct raw_sec *sec = &im->img.sec_info[im->img.sec_map[i]];
         int hd = trk->head ? trk->head-1 : im->cur_track&1;
@@ -2277,12 +2289,13 @@ static void raw_dump_info(struct image *im)
 static void img_fetch_data(struct image *im)
 {
     struct image_buf *rd = &im->bufs.read_data;
+    struct raw_trk *trk = im->img.trk;
     uint8_t *buf = rd->p;
     struct raw_sec *sec, *s;
     uint8_t sec_i;
     uint16_t off, len;
 
-    if (im->img.trk->nr_sectors == 0)
+    if (trk->nr_sectors == 0)
         return;
 
     sec_i = im->img.sec_map[im->img.trk_sec];
@@ -2290,6 +2303,8 @@ static void img_fetch_data(struct image *im)
 
     if (im->img.file_sec_offsets) {
         off = im->img.file_sec_offsets[sec_i];
+    } else if (trk->img_bps != 0) {
+        off = sec_i * trk->img_bps;
     } else {
         off = 0;
         for (s = im->img.sec_info; s != sec; s++)
@@ -2316,7 +2331,7 @@ static void img_fetch_data(struct image *im)
         im->img.rd_sec_pos++;
     } else {
         im->img.rd_sec_pos = 0;
-        if (++im->img.trk_sec >= im->img.trk->nr_sectors)
+        if (++im->img.trk_sec >= trk->nr_sectors)
             im->img.trk_sec = 0;
     }
 
