@@ -6,6 +6,8 @@
 ![Downloads Badge][downloads-badge]
 ![Version Badge][version-badge]
 
+<img src="https://raw.githubusercontent.com/wiki/keirf/flashfloppy/assets/banner.jpg">
+
 **FlashFloppy** is a floppy-drive emulator for the ubiquitous
 [**Gotek**][Gotek-Compatibility] hardware. Connect to retro machines just
 like a real floppy drive but use disk images on a modern USB stick!
