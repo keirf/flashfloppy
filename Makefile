@@ -127,12 +127,13 @@ BAUD=115200
 DEV=/dev/ttyUSB0
 SUDO=sudo
 STM32FLASH=stm32flash
+T=out/$(target)/target.hex
 
 ocd: FORCE all
-	$(PYTHON) scripts/openocd/flash.py $(target)/target.hex
+	$(PYTHON) scripts/openocd/flash.py $(T)
 
 flash: FORCE all
-	$(SUDO) $(STM32FLASH) -b $(BAUD) -w $(target)/target.hex $(DEV)
+	$(SUDO) $(STM32FLASH) -b $(BAUD) -w $(T) $(DEV)
 
 start: FORCE
 	$(SUDO) $(STM32FLASH) -b $(BAUD) -g 0 $(DEV)
