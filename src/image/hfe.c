@@ -60,13 +60,13 @@ struct track_header {
     uint16_t len;
 };
 
-/* HFEv3 opcodes. The 4-bit codes have their bit ordering reversed. */
+/* HFEv3 opcodes. Bit order is reversed to match raw HFE bit order. */
 enum {
-    OP_nop = 0,     /* 0: no effect */
-    OP_index = 8,   /* 1: index mark */
-    OP_bitrate = 4, /* 2: +1byte: new bitrate */
-    OP_skip = 12,   /* 3: +1byte: skip 0-8 bits in next byte */
-    OP_rand = 2     /* 4: flaky byte */
+    OP_Nop      = 0x0f, /* Nop */
+    OP_Index    = 0x8f, /* Index mark */
+    OP_Bitrate  = 0x4f, /* +1 byte: new bitrate */
+    OP_SkipBits = 0xcf, /* +1 byte: skip 1-7 bits in following byte */
+    OP_Rand     = 0x2f  /* Random byte (or bits, if following OP_skip) */
 };
 
 static void hfe_seek_track(struct image *im, uint16_t track);
@@ -231,12 +231,17 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     uint32_t bc_c = bc->cons, bc_p = bc->prod, bc_mask = bc->len - 1;
     uint32_t ticks = im->ticks_since_flux;
     uint32_t ticks_per_cell = im->ticks_per_cell;
-    uint32_t y = 8, todo = nr;
+    uint32_t y, todo = nr;
     uint8_t x;
     bool_t is_v3 = im->hfe.is_v3;
 
-    while ((uint32_t)(bc_p - bc_c) >= 3*8) {
-        ASSERT(y == 8);
+    for (;;) {
+
+        if ((uint32_t)(bc_p - bc_c) < 3*8) {
+            y = 8;
+            goto out;
+        }
+
         if (im->cur_bc >= im->tracklen_bc) {
             ASSERT(im->cur_bc == im->tracklen_bc);
             im->tracklen_ticks = im->cur_ticks;
@@ -245,42 +250,38 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             bc_c = (bc_c + 256*8-1) & ~(256*8-1);
             continue;
         }
+
         y = bc_c % 8;
-        x = bc_b[(bc_c/8) & bc_mask] >> y;
-        if (is_v3 && (y == 0) && ((x & 0xf) == 0xf)) {
+        x = bc_b[(bc_c/8) & bc_mask];
+        bc_c += 8 - y;
+        im->cur_bc += 8 - y;
+
+        if (is_v3 && ((x & 0xf) == 0xf)) {
             /* V3 byte-aligned opcode processing. */
-            switch (x >> 4) {
-            case OP_nop:
-            case OP_index:
+            switch (x) {
+            case OP_Nop:
+            case OP_Index:
             default:
-                bc_c += 8;
-                im->cur_bc += 8;
-                y = 8;
                 continue;
-            case OP_bitrate:
-                x = _rbit32(bc_b[(bc_c/8+1) & bc_mask]) >> 24;
+            case OP_Bitrate:
+                x = _rbit32(bc_b[(bc_c/8) & bc_mask]) >> 24;
                 im->ticks_per_cell = ticks_per_cell = 
                     (sampleclk_us(2) * 16 * x) / 72;
-                bc_c += 2*8;
-                im->cur_bc += 2*8;
-                y = 8;
-                continue;
-            case OP_skip:
-                x = (_rbit32(bc_b[(bc_c/8+1) & bc_mask]) >> 24) & 7;
-                bc_c += 2*8 + x;
-                im->cur_bc += 2*8 + x;
-                y = x;
-                x = bc_b[(bc_c/8) & bc_mask] >> y;
-                break;
-            case OP_rand:
                 bc_c += 8;
                 im->cur_bc += 8;
+                continue;
+            case OP_SkipBits:
+                x = (_rbit32(bc_b[(bc_c/8) & bc_mask]) >> 24) & 7;
+                bc_c += 8 + x;
+                im->cur_bc += 8 + x;
+                continue;
+            case OP_Rand:
                 x = rand();
                 break;
             }
         }
-        bc_c += 8 - y;
-        im->cur_bc += 8 - y;
+
+        x >>= y;
         im->cur_ticks += (8 - y) * ticks_per_cell;
         while (y < 8) {
             y++;
