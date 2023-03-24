@@ -327,7 +327,7 @@ static unsigned int lcd_prep_buffer(void)
         order = ff_cfg.display_order;
 
     row = (order >> (i2c_row * DORD_shift)) & DORD_row;
-    p = (row < ARRAY_SIZE(text)) ? text[row] : NULL;
+    p = (_bl && row < ARRAY_SIZE(text)) ? text[row] : NULL;
 
     emit8(&q, CMD_SETDDRADDR | row_offs[i2c_row], 0);
     for (i = 0; i < lcd_columns; i++)
