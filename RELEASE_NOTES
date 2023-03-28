@@ -4,7 +4,7 @@
 ************************************
 
 ** v3.39 - 1 March 2023
- - AT32F415: Run this MCU at 144Hz (previously 72MHz).
+ - AT32F415: Run this MCU at 144MHz (previously 72MHz).
  - HFE: Fix HFEv3 support. Support Dungeon Master & Chaos Strikes Back.
  - IMG.CFG: Support mixed sector sizes per track (Ensoniq Mirage etc).
  - IMG.CFG: New option img_bps= allows padding of short sectors in IMG files.
