@@ -115,6 +115,8 @@ dist: FORCE all
 	cp -a README $(t)/
 	cp -a RELEASE_NOTES $(t)/
 	cp -a examples $(t)/
+	# Clive Drive is particularly fussy about QD timings.
+	$(PYTHON) scripts/mk_qd.py --window=6.4 --total=7.5 --round $(t)/examples/Host/Sinclair_ZX_Spectrum/Clive_Drive/CliveDrive_Blank.qd
 	[ -e ext/HxC_Compat_Mode-$(HXC_FF_VER).zip ] || \
 	(mkdir -p ext ; cd ext ; wget -q --show-progress $(HXC_FF_URL)/$(HXC_FF_VER)/HxC_Compat_Mode-$(HXC_FF_VER).zip ; rm -rf index.html)
 	(cd $(t) && unzip -q ../../ext/HxC_Compat_Mode-$(HXC_FF_VER).zip)

@@ -1,0 +1,24 @@
+
+The Clive Drive controller has a 16-pin drive interface. Pins 3-12
+inclusive correspond to the usual 10-pin QD interface. For reference,
+see the Clive Drive schematic at:
+  https://speccy4ever.speccy.org/rom/clive/Clive%20Drive.pdf
+
+Clive Controller                QDD     Gotek
+
+1---------NC
+2---------NC
+3---------WRITE PROTECT (WRPR)  1       28
+4---------WRITE DATA (WRDT)     2       22
+5---------WRITE GATE 1 (WRGT1)  3       24
+6---------MOTOR ON 1 (MTON1)    4       16
+7---------READ DATA (RDDT)      5       30
+8---------READY                 6       34
+9---------MEDIA SENSE (MDST)    7       2
+10--------QD RESET  (QDDRST)    8       20
+11--------VCC +5V               9       +5v
+12--------GND                   10      GND
+13--------MOTOR ON 2 (MTON2)    NC	NC
+14--------WRITE GATE 2 (WRGT2)  NC	NC
+15--------SEL IN (SELIN)        NC	NC
+16--------NC
