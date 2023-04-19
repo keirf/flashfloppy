@@ -24,7 +24,8 @@
 static uint8_t DAT_PIN = 10;
 static uint8_t CLK_PIN = 11;
 
-/* TM1651, 74HC164: Alphanumeric segment arrangements.  */
+/* TM1651, 74HC164: Alphanumeric segment arrangements.
+ * Bit positions 0-6 correspond to conventional segment labels A-G resp. */
 static const uint8_t letters[] = {
     0x77, 0x7c, 0x58, 0x5e, 0x79, 0x71, 0x6f, 0x74, 0x04, /* a-i */
     0x0e, 0x08, 0x38, 0x40, 0x54, 0x5c, 0x73, 0x67, 0x50, /* j-r */
