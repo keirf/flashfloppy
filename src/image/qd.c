@@ -188,6 +188,16 @@ static uint16_t qd_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             }
             x >>= 1;
         }
+
+        /* Subdivide a long flux gap which would overflow the 16-bit timer.
+         * This mishandles long No Flux Areas slightly, by regularly emitting
+         * a flux-reversal pulse every 2^16 ticks. */
+        if (unlikely((ticks >> 16) != 0)) {
+            *tbuf++ = 0xffff;
+            ticks -= 1u << 16;
+            if (!--todo)
+                goto out;
+        }
     }
 
 out:

@@ -294,6 +294,16 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             }
             x >>= 1;
         }
+
+        /* Subdivide a long flux gap which would overflow the 16-bit timer.
+         * This mishandles long No Flux Areas slightly, by regularly emitting
+         * a flux-reversal pulse every 2^16 ticks. */
+        if (unlikely((ticks >> 20) != 0)) {
+            *tbuf++ = 0xffff;
+            ticks -= 1u << 20;
+            if (!--todo)
+                goto out;
+        }
     }
 
 out:
