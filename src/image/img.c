@@ -1367,13 +1367,13 @@ static bool_t xdf_open(struct image *im)
         { /* 3.5 HD */
             /* Cyl 0, head 0:
              * 1-8,129-139 (secs=19, interleave=2)
-             * Sectors 1-8 (Aux FAT): Offsets 0x1800-0x2600 
-             * Sectors 129-139 (Main FAT, Pt.1): Offsets 0x0000-0x1400 */
+             * Sectors 1-8 (Aux FAT): Offsets 0x1800-0x27ff
+             * Sectors 129-139 (Main FAT, Pt.1): Offsets 0x0000-0x15ff */
             /* Cyl 0, head 1:
              * 129-147 (secs=19, interleave=2)
-             * Sector 129 (Main FAT, Pt.2): Offset 0x1600
-             * Sectors 130-143 (RootDir): Offsets 0x2e00-0x4800 
-             * Sectors 144-147 (Data): Offsets 0x5400-0x5a00 */
+             * Sector 129 (Main FAT, Pt.2): Offset 0x1600-0x17ff
+             * Sectors 130-143 (RootDir): Offsets 0x2e00-0x49ff
+             * Sectors 144-147 (Data): Offsets 0x5400-0x5bff */
             /* Cyl N, head 0: 
              * 131(1k), 130(.5k), 132(2k), 134(8k)
              * Cyl N, head 1: Track slip of ~10k bitcells relative to head 0
@@ -1925,9 +1925,9 @@ static int raw_find_first_write_sector(
     int32_t base;
 
     base = write->start / im->ticks_per_cell; /* in data bytes */
-    base -= im->img.track_delay_bc;
+    base -= im->img.track_delay_bc / 16;
     if (base < 0)
-        base += im->tracklen_bc;
+        base += im->tracklen_bc / 16;
 
     /* Convert write offset to sector number (in rotational order). */
     base -= im->img.idx_sz + im->img.idam_sz;
