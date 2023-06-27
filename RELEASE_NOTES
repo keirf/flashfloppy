@@ -6,7 +6,7 @@
 ** v3.40 - 27 June 2023
  - XDF: Fix writes to side 1 of XDF disk images
  - HFE: Better handling of long No Flux Areas
- - QuickDisk: Reduce motor spoinup time to 1 second (previously 2 seconds)
+ - QuickDisk: Reduce motor spinup time to 1 second (previously 2 seconds)
  - LCD: Completely blank display when backlight is off
 
 ** v3.39 - 1 March 2023
