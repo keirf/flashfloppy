@@ -55,10 +55,8 @@ static void progress_write(struct image *im)
     uint16_t idx, cnt;
     LBA_t off;
 
-    ASSERT(im->da.write_offsets != NULL);
-
     thread_yield();
-    if (!F_async_isdone(im->da.write_op))
+    if (!F_async_isdone(im->da.io_op)) /* Possible read op */
         return;
     if (im->da.write_cnt) {
         wb->cons += im->da.write_cnt;
@@ -68,7 +66,7 @@ static void progress_write(struct image *im)
         if (im->da.sync_state == SYNCING)
             im->da.sync_state = SYNCED;
         else if (im->da.sync_state == SYNC_NEEDED) {
-            im->da.write_op = disk_ioctl_async(0, CTRL_SYNC, NULL, NULL);
+            im->da.io_op = disk_ioctl_async(0, CTRL_SYNC, NULL, NULL);
             im->da.sync_state = SYNCING;
         }
         return;
@@ -80,7 +78,7 @@ static void progress_write(struct image *im)
         if (im->da.write_offsets[idx+cnt] != off + cnt)
             break;
     ASSERT(off);
-    im->da.write_op = disk_write_async(0, wb->p + idx*512, off, cnt);
+    im->da.io_op = disk_write_async(0, wb->p + idx*512, off, cnt);
     im->da.write_cnt = cnt;
     im->da.sync_state = SYNC_NEEDED;
 }
@@ -88,30 +86,32 @@ static void progress_write(struct image *im)
 static bool_t da_open(struct image *im)
 {
     struct da_status_sector *dass = &im->da.dass;
-    struct image_buf *rd = &im->bufs.read_data;
+    void *p = im->bufs.read_data.p;
+    uint32_t len = im->bufs.read_data.len;
     int p_used = 0;
     bool_t version_override = (ff_cfg.da_report_version[0] != '\0');
 
     printk("D-A Mode Entered\n");
     im->nr_sides = 1;
 
-    im->da.rd_buf = rd->p + p_used;
+    len -= -(uint32_t)p & 3;
+    p += -(uint32_t)p & 3;
+
+    im->da.rd_buf = p + p_used;
     p_used += SEC_SZ;
     /* 768 bytes for cache overhead. */
-    volume_cache_init(rd->p + p_used, rd->p + p_used + 8*SEC_SZ + 768);
+    volume_cache_init(p + p_used, p + p_used + 8*SEC_SZ + 768);
     p_used += 8*SEC_SZ + 768;
-    im->da.write_buffer.p = rd->p + p_used;
+    im->da.write_buffer.p = p + p_used;
     im->da.write_buffer.len =
-        (rd->len - p_used - 3) / (512 + sizeof(*im->da.write_offsets));
-    im->da.write_offsets = rd->p + p_used;
-    p_used += (im->da.write_buffer.len*sizeof(*im->da.write_offsets) + 3) & ~3;
+        (len - p_used) / (512 + sizeof(*im->da.write_offsets));
+    p_used += im->da.write_buffer.len * sizeof(*im->da.write_offsets);
+    im->da.write_offsets = p + p_used;
     p_used += im->da.write_buffer.len * 512;
-    ASSERT(p_used <= rd->len);
+    ASSERT(p_used <= len);
     ASSERT(im->da.write_buffer.len >= 8);
 
-    im->da.write_buffer.prod = 0;
-    im->da.write_buffer.cons = 0;
-    im->da.write_op = F_async_get_completed_op();
+    im->da.io_op = F_async_get_completed_op();
 
     switch (display_type) {
     case DT_LED_7SEG:
@@ -218,7 +218,6 @@ static void da_setup_track(
 
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
-    im->da.read_op_started = FALSE;
 
     if (start_pos) {
         im->da.trash_bc = decode_off * 16;
@@ -233,6 +232,8 @@ static bool_t da_read_track(struct image *im)
     uint8_t *buf = im->da.rd_buf;
 
     progress_write(im);
+    if (!F_async_isdone(im->da.io_op))
+        return FALSE;
     if (rd->prod == rd->cons) {
         uint8_t sec = im->da.trk_sec;
         if (sec == 0) {
@@ -245,22 +246,15 @@ static bool_t da_read_track(struct image *im)
             if (sec == 1)
                 strcpy((char *)buf, im->slot->name);
         } else {
-            if (!im->da.read_op_started) {
-                if (im->da.sync_state)
-                    return FALSE;
-                im->da.read_op =
-                    disk_read_async(0, buf, dass->lba_base+sec-1, 1);
-                im->da.read_op_started = TRUE;
-            }
-            thread_yield();
-            if (!F_async_isdone(im->da.read_op))
-                return FALSE;
-            im->da.read_op_started = FALSE;
+            im->da.io_op = disk_read_async(0, buf, dass->lba_base+sec-1, 1);
         }
         rd->prod++;
         if (++im->da.trk_sec >= (dass->nr_sec + 1))
             im->da.trk_sec = 0;
     }
+    thread_yield();
+    if (!F_async_isdone(im->da.io_op))
+        return FALSE;
 
     return (im->sync == SYNC_fm) ? fm_read_track(im) : mfm_read_track(im);
 }
@@ -661,13 +655,10 @@ static void process_wdata(
 
 static void da_sync(struct image *im)
 {
-    if (im->da.read_op_started) {
-        F_async_wait(im->da.read_op);
-    }
-    while (im->da.sync_state) {
+    do {
+        F_async_wait(im->da.io_op); /* Possible read op. */
         progress_write(im);
-        F_async_wait(im->da.write_op);
-    }
+    } while (im->da.sync_state);
     printk("D-A Mode Exited\n");
 }
 
