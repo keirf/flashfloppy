@@ -151,10 +151,8 @@ static void floppy_mount(struct slot *slot)
     FSIZE_t fastseek_sz;
     DWORD *cltbl;
     FRESULT fr;
-    bool_t async = TRUE, retry;
 
     do {
-        retry = FALSE;
 
         arena_init();
 
@@ -191,17 +189,10 @@ static void floppy_mount(struct slot *slot)
         /* ~0 avoids sync match within fewer than 32 bits of scan start. */
         im->write_bc_window = ~0;
 
-        if (!async) {
-            /* Large buffer to absorb write latencies at mass-storage layer. */
-            int ring_kb = (ram_kb >= 64) ? 32 : 8;
-            im->bufs.write_bc.len = ring_kb * 1024; /* power of two */
-            im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
-        } else {
-            /* Size at least 4kb so a 512 byte sector (1k bc) can be fully
-             * encoded into the 2kb read_bc, with space to spare. */
-            im->bufs.write_bc.len = 4*1024; /* Power of two. */
-            im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
-        }
+        /* Size at least 4kb so a 512 byte sector (1k bc) can be fully
+         * encoded into the 2kb read_bc, with space to spare. */
+        im->bufs.write_bc.len = 4*1024; /* Power of two. */
+        im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
 
         /* Read BC buffer overlaps the second half of the write BC buffer. This 
          * is because:
@@ -247,11 +238,6 @@ static void floppy_mount(struct slot *slot)
             }
         }
 #endif
-        if (async != im->disk_handler->async) {
-            async = im->disk_handler->async;
-            retry = TRUE;
-            continue;
-        }
         if (!im->disk_handler->write_track || volume_readonly())
             slot->attributes |= AM_RDO;
         if (slot->attributes & AM_RDO) {
@@ -260,7 +246,7 @@ static void floppy_mount(struct slot *slot)
             image_extend(im);
         }
 
-    } while (f_size(&im->fp) != fastseek_sz || retry);
+    } while (f_size(&im->fp) != fastseek_sz);
 
     /* After image is extended at mount time, we permit no further changes 
      * to the file metadata. Clear the dirent info to ensure this. */
@@ -571,10 +557,6 @@ static bool_t dma_wr_handle(struct drive *drv)
 
         /* Align the bitcell consumer index for start of next write. */
         im->bufs.write_bc.cons = (write->bc_end + 31) & ~31;
-
-        /* Sync back to mass storage. */
-        if (!im->track_handler->async)
-            F_sync(&im->fp);
 
         IRQ_global_disable();
         /* Consume the write from the pipeline buffer. */

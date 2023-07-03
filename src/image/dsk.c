@@ -665,7 +665,6 @@ const struct image_handler dsk_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = dsk_write_track,
     .sync = dsk_sync,
-    .async = TRUE,
 };
 
 /*

@@ -1543,7 +1543,6 @@ const struct image_handler img_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler d81_image_handler = {
@@ -1553,7 +1552,6 @@ const struct image_handler d81_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler sf7_image_handler = {
@@ -1571,7 +1569,6 @@ const struct image_handler st_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler adfs_image_handler = {
@@ -1581,7 +1578,6 @@ const struct image_handler adfs_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler atr_image_handler = {
@@ -1591,7 +1587,6 @@ const struct image_handler atr_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler mbd_image_handler = {
@@ -1601,7 +1596,6 @@ const struct image_handler mbd_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler mgt_image_handler = {
@@ -1611,7 +1605,6 @@ const struct image_handler mgt_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler pc98fdi_image_handler = {
@@ -1621,7 +1614,6 @@ const struct image_handler pc98fdi_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler pc98hdm_image_handler = {
@@ -1631,7 +1623,6 @@ const struct image_handler pc98hdm_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler trd_image_handler = {
@@ -1642,7 +1633,6 @@ const struct image_handler trd_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler opd_image_handler = {
@@ -1652,7 +1642,6 @@ const struct image_handler opd_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler ssd_image_handler = {
@@ -1663,7 +1652,6 @@ const struct image_handler ssd_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler dsd_image_handler = {
@@ -1674,7 +1662,6 @@ const struct image_handler dsd_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler sdu_image_handler = {
@@ -1684,7 +1671,6 @@ const struct image_handler sdu_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler jvc_image_handler = {
@@ -1694,7 +1680,6 @@ const struct image_handler jvc_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler vdk_image_handler = {
@@ -1704,7 +1689,6 @@ const struct image_handler vdk_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler ti99_image_handler = {
@@ -1714,7 +1698,6 @@ const struct image_handler ti99_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 const struct image_handler xdf_image_handler = {
@@ -1724,7 +1707,6 @@ const struct image_handler xdf_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
     .sync = raw_sync,
-    .async = TRUE,
 };
 
 

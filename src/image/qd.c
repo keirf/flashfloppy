@@ -267,8 +267,6 @@ const struct image_handler qd_image_handler = {
     .rdata_flux = qd_rdata_flux,
     .write_track = qd_write_track,
     .sync = qd_sync,
-
-    .async = TRUE,
 };
 
 /*

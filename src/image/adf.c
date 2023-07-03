@@ -422,8 +422,6 @@ const struct image_handler adf_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = adf_write_track,
     .sync = adf_sync,
-
-    .async = TRUE,
 };
 
 /*

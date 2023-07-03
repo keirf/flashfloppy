@@ -678,8 +678,6 @@ const struct image_handler da_image_handler = {
     .rdata_flux = bc_rdata_flux,
     .write_track = da_write_track,
     .sync = da_sync,
-
-    .async = TRUE,
 };
 
 /*

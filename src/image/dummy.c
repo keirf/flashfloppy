@@ -62,8 +62,6 @@ const struct image_handler dummy_image_handler = {
     .rdata_flux = dummy_rdata_flux,
     .write_track = dummy_write_track,
     .sync = dummy_sync,
-
-    .async = TRUE,
 };
 
 /*
