@@ -1976,7 +1976,7 @@ static int raw_find_first_write_sector(
 
     /* Convert rotational order to logical order. */
     if (i >= trk->nr_sectors) {
-        printk("IMG Bad Wr.Off: %d\n", base);
+        printk("%s Bad Wr.Off: %d\n", "IMG", base);
         return -2;
     }
     return *sec_map;
@@ -2057,7 +2057,7 @@ static bool_t raw_write_track(struct image *im)
             }
             crc = crc16_ccitt(wrbuf, i, 0xffff);
             if (crc != 0) {
-                printk("IMG IDAM Bad CRC: %04x, %u\n", crc, idam_r);
+                printk("%s IDAM Bad CRC: %04x, %u\n", "IMG", crc, idam_r);
                 im->img.decode_pos = 0;
                 continue;
             }
@@ -2068,7 +2068,7 @@ static bool_t raw_write_track(struct image *im)
                 continue;
             im->img.write_sector = i;
             if (i >= trk->nr_sectors) {
-                printk("IMG IDAM Bad Sector: %02x\n", idam_r);
+                printk("%s IDAM Bad Sector: %02x\n", "IMG", idam_r);
                 im->img.write_sector = -2;
             }
             im->img.decode_data_pos = 0;
@@ -2085,7 +2085,7 @@ static bool_t raw_write_track(struct image *im)
                     im->img.decode_data_pos = 0;
                 }
                 if (sec_nr < 0) {
-                    printk("IMG DAM Unknown\n");
+                    printk("%s DAM Unknown\n", "IMG");
                     im->img.write_sector = -2;
                     im->img.decode_pos = 0;
                     continue;
@@ -2143,8 +2143,8 @@ static bool_t raw_write_track(struct image *im)
             c += 2;
             crc = crc16_ccitt(wrbuf, 2, crc);
             if (crc != 0) {
-                printk("IMG Bad CRC: %04x, %u[%02x]\n",
-                       crc, sec_nr, sec->r);
+                printk("%s Bad CRC: %04x, %u[%02x]\n",
+                       "IMG", crc, sec_nr, sec->r);
             }
             im->img.write_sector = -2;
             im->img.decode_pos = 0;
