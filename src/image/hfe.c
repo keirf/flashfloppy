@@ -69,8 +69,6 @@ enum {
     OP_rand = 2     /* 4: flaky byte */
 };
 
-#define MAX_BC_SECS 8
-
 #define absdiff_t(type,x,y) \
     ({ type __x = (x); type __y = (y); __x < __y ? __y-__x: __x-__y; })
 
@@ -113,6 +111,13 @@ static bool_t hfe_open(struct image *im)
     im->ticks_per_cell = im->write_bc_ticks * 16;
     im->sync = SYNC_none;
 
+    /* Aggressively batch our reads at HD data rate, as that can be faster
+     * than some USB drives will serve up a single block.*/
+    im->hfe.fcache = file_cache_init(&im->fp,
+            (im->write_bc_ticks > sampleclk_ns(1500)) ? 4 : 8,
+            im->bufs.read_data.p,
+            im->bufs.read_data.p + im->bufs.read_data.len);
+
     /* Get an initial value for ticks per revolution. */
     hfe_seek_track(im, 0, FALSE);
     im->cur_track = -1;
@@ -128,17 +133,19 @@ static bool_t hfe_open(struct image *im)
 static void hfe_seek_track(struct image *im, uint16_t track, bool_t async)
 {
     struct track_header thdr;
-    uint16_t trk_off, old_len;
+    uint16_t old_len;
 
     if (async) {
-        F_lseek_async(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
-        F_async_wait(F_read_async(&im->fp, &thdr, sizeof(thdr), NULL));
+        file_cache_io_limit(im->hfe.fcache, 1);
+        file_cache_read(im->hfe.fcache,
+                &thdr, im->hfe.tlut_base*512 + (track/2)*4, sizeof(thdr));
+        file_cache_io_limit(im->hfe.fcache, 0 /* no limit */);
     } else {
         F_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
         F_read(&im->fp, &thdr, sizeof(thdr), NULL);
     }
 
-    trk_off = le16toh(thdr.offset);
+    im->hfe.trk_off = le16toh(thdr.offset);
     old_len = im->hfe.trk_len;
     im->hfe.trk_len = le16toh(thdr.len) / 2;
     im->tracklen_bc = im->hfe.trk_len * 8;
@@ -148,13 +155,8 @@ static void hfe_seek_track(struct image *im, uint16_t track, bool_t async)
             && absdiff_t(uint16_t, old_len, im->hfe.trk_len) < 256))
         im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
 
-    ring_io_init(&im->hfe.ring_io, &im->fp, &im->bufs.read_data,
-            (LBA_t)trk_off * 512, ~0, (im->hfe.trk_len*2 + 511) / 512);
-    /* Aggressively batch our reads at HD data rate, as that can be faster
-     * than some USB drives will serve up a single block.*/
-    im->hfe.ring_io.batch_secs =
-        (im->write_bc_ticks > sampleclk_ns(1500)) ? 4 : 8;
-    im->hfe.ring_io.trailing_secs = MAX_BC_SECS;
+    file_cache_readahead(im->hfe.fcache,
+            (LBA_t)im->hfe.trk_off * 512, im->hfe.trk_len*2, 12*1024);
 }
 
 static void hfe_setup_track(
@@ -168,8 +170,7 @@ static void hfe_setup_track(
 
     track = cyl*2 + side;
     if (track/2 != im->cur_track/2) {
-        ring_io_sync(&im->hfe.ring_io);
-        ring_io_shutdown(&im->hfe.ring_io);
+        file_cache_sync_wait(im->hfe.fcache);
 
         im->cur_track = track;
         hfe_seek_track(im, track, TRUE);
@@ -183,7 +184,7 @@ static void hfe_setup_track(
      * just accept the buffer underrun risk. */
     if ((im->hfe.trk_len*2 + 511) / 512 > im->bufs.read_data.len
             && ff_cfg.write_drain != WDRAIN_realtime)
-        ring_io_sync(&im->hfe.ring_io);
+        file_cache_sync_wait(im->hfe.fcache);
 
     start_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
     im->cur_bc = (start_ticks * 16) / im->ticks_per_cell;
@@ -227,52 +228,47 @@ static void hfe_setup_track(
 
     if (start_pos) {
         /* Read mode. */
-        ring_io_seek(&im->hfe.ring_io, im->cur_bc/8 / 256 * 512, FALSE, FALSE);
+        im->hfe.trk_pos = (im->cur_bc/8) & ~255;
         /* Consumer may be ahead of producer, but only until the first read
          * completes. */
         bc->cons = im->cur_bc % (256*8);
         *start_pos = start_ticks;
     } else {
-        uint32_t pos = im->cur_bc / 8 / 256 * 512
-                     + im->cur_bc / 8 % 256
-                     + (im->cur_track & 1) * 256;
         /* Write mode. */
-        ring_io_seek(&im->hfe.ring_io, pos, TRUE, FALSE);
+        im->hfe.trk_pos = im->cur_bc / 8;
         im->hfe.fresh_seek = TRUE;
     }
 }
 
 static bool_t hfe_read_track(struct image *im)
 {
-    struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
-    uint8_t *buf = rd->p;
     uint8_t *bc_b = bc->p;
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     unsigned int nr_sec;
-
-    ring_io_progress(&im->hfe.ring_io);
-    if (rd->cons >= rd->prod)
-        return FALSE;
 
     /* Fill the raw-bitcell ring buffer. */
     bc_p = bc->prod / 8;
     bc_c = bc->cons / 8;
     bc_len = bc->len;
     bc_mask = bc_len - 1;
-    bc_space = min_t(uint32_t, bc_len, MAX_BC_SECS*256)
-        - (int16_t)(bc_p - bc_c);
+    bc_space = bc_len - (int16_t)(bc_p - bc_c);
 
-    nr_sec = min_t(unsigned int, (rd->prod - rd->cons)/512, bc_space/256);
-    if (nr_sec == 0)
+    nr_sec = bc_space/256;
+    if (nr_sec == 0) {
+        file_cache_progress(im->hfe.fcache);
         return FALSE;
+    }
 
     while (nr_sec--) {
-        uint32_t cons = rd->cons + (im->cur_track&1)*256;
-        memcpy(&bc_b[bc_p & bc_mask],
-               &buf[ring_io_idx(&im->hfe.ring_io, cons)],
-               256);
-        rd->cons += 512;
+        FSIZE_t off = im->hfe.trk_off * 512
+            + im->hfe.trk_pos * 2
+            + (im->cur_track&1)*256;
+        if (!file_cache_try_read(im->hfe.fcache, &bc_b[bc_p & bc_mask], off, 256))
+            break;
+        im->hfe.trk_pos += 256;
+        if (im->hfe.trk_pos >= im->hfe.trk_len)
+            im->hfe.trk_pos = 0;
         bc_p += 256;
     }
 
@@ -385,8 +381,7 @@ static bool_t hfe_write_track(struct image *im)
     uint8_t *buf = wr->p;
     uint8_t b;
     unsigned int bufmask = wr->len - 1;
-    uint8_t *w;
-    struct image_buf *rd = &im->bufs.read_data;
+    uint8_t *w, *wrbuf;
     uint32_t i, space, c = wr->cons / 8, p = wr->prod / 8;
     bool_t is_v3 = im->hfe.is_v3;
 
@@ -399,42 +394,35 @@ static bool_t hfe_write_track(struct image *im)
 
     for (;;) {
 
-        uint32_t pos = ring_io_pos(&im->hfe.ring_io, rd->cons);
+        uint32_t foff, off = im->hfe.trk_pos;
         UINT nr;
-
-        if (pos / 512 * 256 + pos % 256 >= im->hfe.trk_len) {
-            ASSERT(pos / 512 * 256 + pos % 256 == im->hfe.trk_len);
-            ring_io_flush(&im->hfe.ring_io);
-            rd->cons += 512 - pos%256;
-            continue;
-        }
 
         /* All bytes remaining in the raw-bitcell buffer. */
         nr = space = (p - c) & bufmask;
         /* Limit to end of current 256-byte HFE block. */
-        nr = min_t(UINT, nr, 256 - (pos & 255));
+        nr = min_t(UINT, nr, 256 - (off & 255));
         /* Limit to end of HFE track. */
-        nr = min_t(UINT, nr, im->hfe.trk_len - pos / 512 * 256 - pos % 256);
+        nr = min_t(UINT, nr, im->hfe.trk_len - off);
 
         /* Bail if no bytes to write. */
         if (nr == 0)
             break;
 
-        /* It should be quite rare to wait on the read, as that'd be like a
-         * buffer underrun during normal reading. */
-        if (rd->cons + nr > rd->prod) {
+        foff = im->hfe.trk_off * 512 + ((off & ~255) << 1);
+        if ((wrbuf = file_cache_peek_write(im->hfe.fcache, foff)) == NULL) {
             flush = FALSE;
             break;
         }
+        w = wrbuf
+            + (im->cur_track & 1) * 256
+            + (off & 255);
 
-        /* Encode into the sector buffer for later write-out. */
-        w = rd->p + ring_io_idx(&im->hfe.ring_io, rd->cons);
         i = 0;
 
-        if (im->hfe.fresh_seek && is_v3 && (pos & 255) >= 1) {
+        if (im->hfe.fresh_seek && is_v3 && (off & 255) >= 1) {
             /* Avoid writing in the middle of an opcode. */
             char b = *(w-1);
-            if ((pos & 255) >= 2)
+            if ((off & 255) >= 2)
                 if ((*(w-2) & 0xf) == 0xf && (*(w-2) >> 4) == OP_skip) {
                     w++;
                     i++;
@@ -493,16 +481,15 @@ static bool_t hfe_write_track(struct image *im)
             *w++ = b;
         }
 
-        /* Stay aligned to track side. */
-        if (rd->cons / 256 != (rd->cons + i) / 256)
-            rd->cons += 256;
-        rd->cons += i; /* i may be larger than nr due to opcodes. */
+        im->hfe.trk_pos += i; /* i may be larger than nr due to opcodes. */
+        if (im->hfe.trk_pos >= im->hfe.trk_len)
+            im->hfe.trk_pos = 0;
     }
 
     if (flush)
-        ring_io_flush(&im->hfe.ring_io);
+        file_cache_sync(im->hfe.fcache);
     else
-        ring_io_progress(&im->hfe.ring_io);
+        file_cache_progress(im->hfe.fcache);
 
     wr->cons = c * 8;
 
@@ -511,8 +498,8 @@ static bool_t hfe_write_track(struct image *im)
 
 static void hfe_sync(struct image *im)
 {
-    ring_io_sync(&im->hfe.ring_io);
-    ring_io_shutdown(&im->hfe.ring_io);
+    file_cache_sync_wait(im->hfe.fcache);
+    file_cache_shutdown(im->hfe.fcache);
 }
 
 const struct image_handler hfe_image_handler = {

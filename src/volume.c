@@ -23,8 +23,9 @@ static void *metadata_addr;
 #if !defined(BOOTLOADER)
 void volume_cache_init(void *start, void *end)
 {
+    unsigned int entry_cnt;
     volume_cache_destroy();
-    cache = cache_init(start, end, SECSZ);
+    cache = cache_init(start, end, SECSZ, &entry_cnt);
     interrupt = FALSE;
     inprogress = FALSE;
 }

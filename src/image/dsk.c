@@ -103,10 +103,10 @@ static bool_t dsk_open(struct image *im)
      * length and thus the period between index pulses. */
     im->ticks_per_cell = im->write_bc_ticks * 16;
 
+    im->dsk.fcache = file_cache_init(&im->fp, 2,
+            im->bufs.write_data.p + 512 + max_t(unsigned int, BATCH_SIZE, 512),
+            im->bufs.write_data.p + im->bufs.write_data.len);
     im->cur_track = ~0;
-
-    im->dsk.track_data.p = im->bufs.write_data.p + 512 + BATCH_SIZE;
-    im->dsk.track_data.len = im->bufs.write_data.len - 512 - BATCH_SIZE;
 
     return TRUE;
 }
@@ -118,10 +118,9 @@ static void dsk_seek_track(
     struct tib *tib = tib_p(im);
     unsigned int i, nr;
     uint32_t tracklen;
-    uint32_t trk_off, trk_len;
+    uint32_t trk_len;
 
-    ring_io_sync(&im->dsk.ring_io);
-    ring_io_shutdown(&im->dsk.ring_io);
+    file_cache_sync_wait(im->dsk.fcache);
     im->cur_track = track;
 
     if (cyl >= im->nr_cyls) {
@@ -141,13 +140,12 @@ static void dsk_seek_track(
             im->dsk.trk_off += dib->track_szs[i] * 256;
         trk_len = dib->track_szs[nr] * 256;
     } else {
+        im->dsk.trk_off += nr * le16toh(dib->track_sz);
         trk_len = le16toh(dib->track_sz);
-        im->dsk.trk_off += nr * trk_len;
     }
 
     /* Read the Track Info Block and Sector Info Blocks. */
-    F_lseek_async(&im->fp, im->dsk.trk_off);
-    F_async_wait(F_read_async(&im->fp, tib, 256, NULL));
+    file_cache_read(im->dsk.fcache, tib, im->dsk.trk_off, 256);
     im->dsk.trk_off += 256;
     if (strncmp(tib->sig, "Track-Info", 10) || !tib->nr_secs)
         goto unformatted;
@@ -166,15 +164,7 @@ static void dsk_seek_track(
             ? le16toh(tib->sib[i].actual_length)
             : 128 << min_t(unsigned, tib->sec_sz, 8);
 
-    /* Align to 512-byte boundary for ring_io. */
-    trk_off = im->dsk.trk_off;
-    trk_len += trk_off % 512;
-    trk_off -= trk_off % 512;
-    trk_len = (trk_len + 511) & ~511;
-
-    ring_io_init(&im->dsk.ring_io, &im->fp, &im->dsk.track_data, trk_off, ~0,
-            trk_len / 512);
-    im->dsk.ring_io.batch_secs = 2;
+    file_cache_readahead(im->dsk.fcache, im->dsk.trk_off, trk_len, 6*1024);
 
 out:
     im->dsk.idx_sz = GAP_4A;
@@ -312,7 +302,6 @@ static bool_t dsk_read_track(struct image *im)
 
     if (tib->nr_secs && (rd->prod == rd->cons)) {
         uint16_t off = 0, len;
-        uint32_t idx;
         bool_t partial = FALSE;
         for (i = 0; i < im->dsk.trk_pos; i++)
             off += tib->sib[i].actual_length;
@@ -327,10 +316,7 @@ static bool_t dsk_read_track(struct image *im)
             len = BATCH_SIZE;
             partial = TRUE;
         }
-        off += im->dsk.trk_off % 512;
-        ring_io_seek(&im->dsk.ring_io, off, FALSE, FALSE);
-        ring_io_progress(&im->dsk.ring_io);
-        if (im->dsk.track_data.cons + len > im->dsk.track_data.prod)
+        if (!file_cache_try_read(im->dsk.fcache, buf, im->dsk.trk_off + off, len))
             return FALSE;
 
         if (partial) {
@@ -342,12 +328,9 @@ static bool_t dsk_read_track(struct image *im)
                 im->dsk.rev++;
             }
         }
-        idx = ring_io_idx(&im->dsk.ring_io, im->dsk.track_data.cons);
-        memcpy_fast(buf, im->dsk.track_data.p + idx, len);
         rd->prod++;
     }
-    if (tib->nr_secs)
-        ring_io_progress(&im->dsk.ring_io);
+    file_cache_progress(im->dsk.fcache);
 
     /* Generate some MFM if there is space in the raw-bitcell ring buffer. */
     bc_p = bc->prod / 16; /* MFM words */
@@ -515,8 +498,8 @@ static bool_t dsk_write_track(struct image *im)
     unsigned int bufmask = (wr->len / 2) - 1;
     uint8_t *wrbuf = (uint8_t *)im->bufs.write_data.p + 512; /* skip DIB/TIB */
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    struct image_buf *td = &im->dsk.track_data;
     unsigned int i;
+    uint16_t crc = im->dsk.crc;
 
     /* If we are processing final data then use the end index, rounded up. */
     barrier();
@@ -544,7 +527,6 @@ static bool_t dsk_write_track(struct image *im)
                 im->dsk.decode_pos = 2;
         } else if (im->dsk.decode_pos == 1) {
             /* ID record, shy address mark */
-            uint16_t crc;
             if (p - c < 4 + 2)
                 break;
             for (i = 0; i < 3; i++)
@@ -592,41 +574,34 @@ static bool_t dsk_write_track(struct image *im)
 
             if (!im->dsk.decode_data_pos) {
                 unsigned int off;
-                if (p - c < 4) /* Will we able to increment decode_data_pos? */
-                    break;
-                im->dsk.crc = MFM_DAM_CRC;
+                crc = MFM_DAM_CRC;
 
-                printk("Write %d[%02x]/%u\n",
-                       sec_nr, tib->sib[sec_nr].r, tib->nr_secs);
+                /* Sectors less than 512 bytes require read-then-write, so
+                 * benefit from readahead. Larger sectors don't need readahead
+                 * and can benefit from faster write throughput. */
+                if (sec_sz >= 512)
+                    file_cache_readahead(im->img.fcache, 0, 0, 0);
 
                 for (i = off = 0; i < sec_nr; i++)
                     off += tib->sib[i].actual_length;
-                off += im->dsk.trk_off % 512;
-                ring_io_seek(&im->dsk.ring_io, off, TRUE, FALSE);
+                im->dsk.trk_pos = off;
             }
 
             if (im->dsk.decode_data_pos < sec_sz) {
                 unsigned int nr;
-                uint32_t idx = ring_io_idx(&im->dsk.ring_io, td->cons);
+                unsigned int off = im->dsk.trk_off+im->dsk.trk_pos;
                 nr = sec_sz - im->dsk.decode_data_pos;
-                nr = min_t(unsigned int, nr,
-                        ring_io_idxend(&im->dsk.ring_io) - idx);
+                nr = min_t(unsigned int, nr, 512 - (off & 511));
+                if (nr >= 512 && (p - c) < 512)
+                    break;
                 nr = min_t(unsigned int, nr, p - c);
 
-                /* It should be quite rare to wait on the read, as that'd be
-                 * like a buffer underrun during normal reading. */
-                if (td->cons + nr > td->prod) {
-                    flush = FALSE;
-                    break;
-                }
-
-                mfm_ring_to_bin(buf, bufmask, c, td->p + idx, nr);
+                mfm_ring_to_bin(buf, bufmask, c, wrbuf, nr);
                 c += nr;
-                im->dsk.crc = crc16_ccitt(td->p + idx, nr, im->dsk.crc);
-                td->cons += nr;
+                crc = crc16_ccitt(wrbuf, nr, crc);
+                file_cache_write(im->dsk.fcache, wrbuf, off, nr);
+                im->dsk.trk_pos += nr;
                 im->dsk.decode_data_pos += nr;
-                if (im->dsk.decode_data_pos == sec_sz)
-                    ring_io_flush(&im->dsk.ring_io);
             }
 
             if (im->dsk.decode_data_pos < sec_sz)
@@ -634,28 +609,33 @@ static bool_t dsk_write_track(struct image *im)
 
             if (p - c < 2)
                 break;
+            printk("Write %d[%02x]/%u\n",
+                    sec_nr, tib->sib[sec_nr].r, tib->nr_secs);
             mfm_ring_to_bin(buf, bufmask, c, wrbuf, 2);
             c += 2;
-            im->dsk.crc = crc16_ccitt(wrbuf, 2, im->dsk.crc);
-            if (im->dsk.crc != 0) {
+            crc = crc16_ccitt(wrbuf, 2, crc);
+            if (crc != 0) {
                 printk("DSK Bad CRC: %04x, %d[%02x]\n",
-                       im->dsk.crc, sec_nr, tib->sib[sec_nr].r);
+                       crc, sec_nr, tib->sib[sec_nr].r);
             }
             im->dsk.write_sector = -2;
             im->dsk.decode_pos = 0;
         }
     }
 
-    if (tib->nr_secs)
-        ring_io_progress(&im->dsk.ring_io);
+    if (flush)
+        file_cache_sync(im->dsk.fcache);
+    else
+        file_cache_progress(im->dsk.fcache);
+    im->dsk.crc = crc;
     wr->cons = c * 16;
     return flush;
 }
 
 static void dsk_sync(struct image *im)
 {
-    ring_io_sync(&im->dsk.ring_io);
-    ring_io_shutdown(&im->dsk.ring_io);
+    file_cache_sync_wait(im->dsk.fcache);
+    file_cache_shutdown(im->dsk.fcache);
 }
 
 const struct image_handler dsk_image_handler = {

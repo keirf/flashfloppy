@@ -41,7 +41,7 @@ static inline void list_remove(struct list_head *ent)
     ent->prev->next = ent->next;
 }
 
-static inline bool_t list_is_empty(struct list_head *head)
+static inline bool_t list_is_empty(const struct list_head *head)
 {
     return head->next == head;
 }

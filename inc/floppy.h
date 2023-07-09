@@ -46,19 +46,9 @@ struct image_buf {
     uint32_t prod, cons;
 };
 
-struct image_bufs {
-    /* Buffering for bitcells being written to disk. */
-    struct image_buf write_bc;
-    /* Buffering for bitcells we generate from read_data. */
-    struct image_buf read_bc;
-    /* Staging area for writeout to mass storage. */
-    struct image_buf write_data;
-    /* Read buffer for track data to be used for generating flux pattern. */
-    struct image_buf read_data;
-};
-
 struct adf_image {
-    struct ring_io ring_io;
+    struct file_cache *fcache;
+    uint32_t trk_off;
     uint32_t sec_idx;
     int32_t decode_pos;
     uint32_t pre_idx_gap_bc;
@@ -66,26 +56,22 @@ struct adf_image {
     uint32_t written_secs;
     uint16_t trash_bc; /* Number of bitcells to throw away. */
     uint8_t sec_map[2][22];
-    struct image_buf write_buffer;
-    uint16_t *write_offsets; /* File offset of each 512 byte buffer segment */
-    FOP write_op;
-    uint8_t write_cnt;
-    uint8_t sync_state;
-    bool_t ring_io_inited;
 };
 
 struct hfe_image {
-    struct ring_io ring_io;
+    struct file_cache *fcache;
     uint16_t tlut_base;
-    uint16_t trk_len;
+    uint16_t trk_off;
+    uint16_t trk_pos, trk_len;
     bool_t is_v3, double_step, fresh_seek;
     uint8_t next_index_pulses_pos;
 };
 
 struct qd_image {
-    struct ring_io ring_io;
+    struct file_cache *fcache;
     uint16_t tb;
-    uint32_t trk_len;
+    uint32_t trk_off;
+    uint32_t trk_pos, trk_len;
     uint32_t win_start, win_end;
 };
 
@@ -108,6 +94,7 @@ struct raw_trk {
 };
 
 struct img_image {
+    struct file_cache *fcache;
     uint32_t trk_off, base_off;
     /* Length on-disk that encompases all track data. May contain other data
      * (e.g., the other side of the cylinder). */
@@ -127,18 +114,14 @@ struct img_image {
     /* Delay start of track this many bitcells past index. */
     uint32_t track_delay_bc;
     uint16_t gap_4;
-    uint8_t shadow;
     uint16_t trash_bc; /* Number of bitcells to throw away. */
     uint32_t idx_sz, idam_sz;
     uint16_t dam_sz_pre, dam_sz_post;
     void *heap_bottom;
-    struct image_buf track_data;
-    struct ring_io ring_io;
 };
 
 struct dsk_image {
-    struct ring_io ring_io;
-    struct image_buf track_data;
+    struct file_cache *fcache;
     uint32_t trk_off;
     uint16_t trk_pos;
     uint16_t rd_sec_pos;
@@ -166,6 +149,17 @@ struct directaccess {
     uint8_t write_cnt;
     uint8_t sync_state;
     bool_t lba_set;
+};
+
+struct image_bufs {
+    /* Buffering for bitcells being written to disk. */
+    struct image_buf write_bc;
+    /* Buffering for bitcells we generate from read_data. */
+    struct image_buf read_bc;
+    /* Staging area for writeout to mass storage. */
+    struct image_buf write_data;
+    /* Read buffer for track data to be used for generating flux pattern. */
+    struct image_buf read_data;
 };
 
 #define MAX_CUSTOM_PULSES 34 /* 33+1 for minor track misalignment */

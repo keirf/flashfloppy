@@ -20,8 +20,6 @@ struct track_header {
     uint32_t win_end;   /* Byte offset of read/write window end */
 };
 
-#define MAX_BC_SECS 4
-
 static void qd_seek_track(struct image *im, uint16_t track);
 
 static bool_t qd_open(struct image *im)
@@ -39,6 +37,10 @@ static bool_t qd_open(struct image *im)
     im->ticks_per_cell = im->write_bc_ticks;
     im->sync = SYNC_none;
 
+    im->qd.fcache = file_cache_init(&im->fp, 2,
+            im->bufs.read_data.p,
+            im->bufs.read_data.p + im->bufs.read_data.len);
+
     /* There is only one track: Seek to it. */
     qd_seek_track(im, 0);
 
@@ -48,13 +50,12 @@ static bool_t qd_open(struct image *im)
 static void qd_seek_track(struct image *im, uint16_t track)
 {
     struct track_header thdr;
-    uint32_t trk_off;
 
     F_lseek(&im->fp, im->qd.tb*512 + (track/2)*16);
     F_read(&im->fp, &thdr, sizeof(thdr), NULL);
 
     /* Byte offset and length of track data. */
-    trk_off = le32toh(thdr.offset);
+    im->qd.trk_off = le32toh(thdr.offset);
     im->qd.trk_len = le32toh(thdr.len);
 
     /* Read/write window limits in STK ticks from data start. */
@@ -65,10 +66,6 @@ static void qd_seek_track(struct image *im, uint16_t track)
 
     im->tracklen_bc = im->qd.trk_len * 8;
     im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
-
-    ring_io_init(&im->qd.ring_io, &im->fp, &im->bufs.read_data,
-            trk_off, ~0, (im->qd.trk_len+511) / 512);
-    im->qd.ring_io.trailing_secs = MAX_BC_SECS;
 
     im->cur_track = track;
 }
@@ -90,51 +87,49 @@ static void qd_setup_track(
 
     bc->prod = bc->cons = 0;
 
+    file_cache_readahead(im->qd.fcache,
+            im->qd.trk_off, im->qd.trk_len, 12*1024);
     if (start_pos) {
         /* Read mode. */
-        im->qd.ring_io.batch_secs = 2;
-        ring_io_seek(&im->qd.ring_io, (im->cur_bc/8) & ~511, FALSE, FALSE);
+        im->qd.trk_pos = (im->cur_bc/8) & ~511;
         /* Consumer may be ahead of producer, but only until the first read
          * completes. */
         bc->cons = im->cur_bc & 4095;
         *start_pos = start_ticks;
     } else {
         /* Write mode. */
-        im->qd.ring_io.batch_secs = 8;
-        ring_io_seek(&im->qd.ring_io, im->cur_bc/8, TRUE, FALSE);
+        im->qd.trk_pos = im->cur_bc / 8;
     }
 }
 
 static bool_t qd_read_track(struct image *im)
 {
-    struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
-    uint8_t *buf = rd->p;
     uint8_t *bc_b = bc->p;
     uint32_t bc_len, bc_mask, bc_space, bc_p, bc_c;
     unsigned int nr_sec;
-
-    ring_io_progress(&im->qd.ring_io);
-    if (rd->cons >= rd->prod)
-        return FALSE;
 
     /* Fill the raw-bitcell ring buffer. */
     bc_p = bc->prod / 8;
     bc_c = bc->cons / 8;
     bc_len = bc->len;
     bc_mask = bc_len - 1;
-    bc_space = min_t(uint32_t, bc_len, MAX_BC_SECS*512)
-        - (uint16_t)(bc_p - bc_c);
+    bc_space = bc_len - (uint16_t)(bc_p - bc_c);
 
-    nr_sec = min_t(unsigned int, (rd->prod - rd->cons)/512, bc_space/512);
-    if (nr_sec == 0)
+    nr_sec = bc_space/512;
+    if (nr_sec == 0) {
+        file_cache_progress(im->qd.fcache);
         return FALSE;
+    }
 
     while (nr_sec--) {
-        memcpy(&bc_b[bc_p & bc_mask],
-               &buf[ring_io_idx(&im->qd.ring_io, rd->cons)],
-               512);
-        rd->cons += 512;
+        if (!file_cache_try_read(im->qd.fcache,
+                    &bc_b[bc_p & bc_mask], im->qd.trk_off + im->qd.trk_pos,
+                    512))
+            break;
+        im->qd.trk_pos += 512;
+        if (im->qd.trk_pos >= im->qd.trk_len)
+            im->qd.trk_pos = 0;
         bc_p += 512;
     }
 
@@ -198,7 +193,6 @@ static bool_t qd_write_track(struct image *im)
     uint8_t *buf = wr->p;
     unsigned int bufmask = wr->len - 1;
     uint8_t *w;
-    struct image_buf *rd = &im->bufs.read_data;
     uint32_t i, space, c = wr->cons / 8, p = wr->prod / 8;
 
     /* If we are processing final data then use the end index, rounded to
@@ -210,44 +204,40 @@ static bool_t qd_write_track(struct image *im)
 
     for (;;) {
 
-        uint32_t pos = ring_io_pos(&im->qd.ring_io, rd->cons);
+        uint32_t off = im->qd.trk_pos;
         UINT nr;
 
         /* All bytes remaining in the raw-bitcell buffer. */
         nr = space = (p - c) & bufmask;
         /* Limit to end of current 512-byte QD block. */
-        nr = min_t(UINT, nr, 512 - (pos & 511));
+        nr = min_t(UINT, nr, 512 - (off & 511));
         /* Limit to end of QD track. */
-        nr = min_t(UINT, nr, im->qd.trk_len - pos);
+        nr = min_t(UINT, nr, im->qd.trk_len - off);
 
         /* Bail if no bytes to write. */
         if (nr == 0)
             break;
 
-        /* It should be quite rare to wait on the read, as that'd be like a
-         * buffer underrun during normal reading. */
-        if (rd->cons + nr > rd->prod) {
+        /* Encode into the sector buffer for later write-out. */
+        if ((w = file_cache_peek_write(im->qd.fcache, off & ~511)) == NULL) {
             flush = FALSE;
             break;
         }
-
-        /* Encode into the sector buffer for later write-out. */
-        w = rd->p + ring_io_idx(&im->qd.ring_io, rd->cons);
+        w += off & 511;
         for (i = 0; i < nr; i++)
             *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
 
-        rd->cons += nr;
-        if (pos + nr >= im->qd.trk_len) {
-            ASSERT(pos + nr == im->qd.trk_len);
-            ring_io_flush(&im->qd.ring_io);
-            rd->cons += 512 - pos%512;
+        im->qd.trk_pos += nr;
+        if (im->qd.trk_pos >= im->qd.trk_len) {
+            ASSERT(im->qd.trk_pos == im->qd.trk_len);
+            im->qd.trk_pos = 0;
         }
     }
 
     if (flush)
-        ring_io_flush(&im->qd.ring_io);
+        file_cache_sync(im->qd.fcache);
     else
-        ring_io_progress(&im->qd.ring_io);
+        file_cache_progress(im->qd.fcache);
 
     wr->cons = c * 8;
 
@@ -256,8 +246,8 @@ static bool_t qd_write_track(struct image *im)
 
 static void qd_sync(struct image *im)
 {
-    ring_io_sync(&im->qd.ring_io);
-    ring_io_shutdown(&im->qd.ring_io);
+    file_cache_sync_wait(im->qd.fcache);
+    file_cache_shutdown(im->qd.fcache);
 }
 
 const struct image_handler qd_image_handler = {

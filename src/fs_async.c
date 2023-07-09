@@ -89,10 +89,7 @@ static FOP enqueue(f_op_func func, FIL *fp, union op_args *args) {
     bool_t printed = FALSE;
     while (f_async_queue.prod - f_async_queue.cons >= OPS_LEN) {
         if (!printed) {
-            printk("async queue full; blocking on I/O\n");
-            printk("0: %x 1: %x\n",
-                    f_async_queue.ops[OPS_MASK(f_async_queue.prod-1)].func,
-                    f_async_queue.ops[OPS_MASK(f_async_queue.prod-2)].func);
+            printk("async queue full; blocking\n");
             printed = TRUE;
         }
         thread_yield();
@@ -134,7 +131,7 @@ static void do_read(struct op *op) {
     F_read(op->fp, op->args.read.buff, op->args.read.btr, op->args.read.br);
     duration = time_since(start);
     if (duration > time_us(9000))
-        printk("Lengthy read. %d bytes took %d us\n", op->args.read.btr,
+        printk("Lengthy %s. %d bytes took %dus\n", "read", op->args.read.btr,
                 duration / TIME_MHZ);
 }
 
@@ -148,7 +145,7 @@ static void do_write(struct op *op) {
     F_write(op->fp, op->args.write.buff, op->args.write.btw, op->args.write.bw);
     duration = time_since(start);
     if (duration > time_us(9000))
-        printk("Lengthy write. %d bytes took %d us\n", op->args.write.btw,
+        printk("Lengthy %s. %d bytes took %dus\n", "write", op->args.write.btw,
                 duration / TIME_MHZ);
 }
 
@@ -182,7 +179,7 @@ static void do_disk_write(struct op *op) {
     if (disk_write((uintptr_t) op->fp, op->args.disk_write.buff,
             op->args.disk_write.sector, op->args.disk_write.count) != RES_OK)
         F_die(FR_DISK_ERR);
-    printk("Disk write %08x (size 0x%x): %u us\n",
+    printk("Disk write %08x[%2d]: %dus\n",
             op->args.disk_write.sector,
             op->args.disk_write.count,
             time_since(start) / TIME_MHZ);
