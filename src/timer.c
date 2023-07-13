@@ -47,7 +47,7 @@ static void reprogram_timer(int32_t delta)
          * fine-grained deadline. */
         tim->psc = sysclk_us(100)-1;
         tim->arr = min_t(uint32_t, 0xffffu,
-                         delta/time_us(100)-50); /* 5ms early */
+                         delta/time_us(100)-10); /* 1ms early */
     }
     tim->egr = TIM_EGR_UG; /* update CNT, PSC, ARR */
     tim->sr = 0; /* dummy write, gives hardware time to process EGR.UG=1 */
