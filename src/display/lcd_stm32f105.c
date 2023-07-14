@@ -715,11 +715,8 @@ bool_t lcd_init(void)
     i2c->cr2 |= I2C_CR2_DMAEN;
     dma_start(p - buffer);
     
-    /* Wait for DMA engine to initialise RAM, then turn on backlight. */
-    if (!reinit) {
-        lcd_sync();
+    if (!reinit)
         lcd_backlight(TRUE);
-    }
 
     return TRUE;
 

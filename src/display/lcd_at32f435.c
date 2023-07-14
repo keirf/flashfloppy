@@ -650,11 +650,8 @@ bool_t lcd_init(void)
     emit8(&p, CMD_DISPLAYCTL | 4, 0); /* display on */
     dma_start(p - buffer);
     
-    /* Wait for DMA engine to initialise RAM, then turn on backlight. */
-    if (!reinit) {
-        lcd_sync();
+    if (!reinit)
         lcd_backlight(TRUE);
-    }
 
     return TRUE;
 
