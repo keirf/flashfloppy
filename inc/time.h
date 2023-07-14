@@ -14,6 +14,7 @@ typedef uint32_t time_t;
 #define TIME_MHZ STK_MHZ
 #define time_us(x) stk_us(x)
 #define time_ms(x) stk_ms(x)
+#define time_stk(x) (x)
 #define time_sysclk(x) stk_sysclk(x)
 #define sysclk_time(x) sysclk_stk(x)
 
