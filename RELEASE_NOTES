@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.41 - 14 July 2023
+ - AT32F415: Fix timer handling since clock speed increase (v3.39).
+ - LCD: Faster power-on initialisation. Don't wait for display to clear.
+
 ** v3.40 - 27 June 2023
  - XDF: Fix writes to side 1 of XDF disk images
  - HFE: Better handling of long No Flux Areas
