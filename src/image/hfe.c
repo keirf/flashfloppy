@@ -179,6 +179,13 @@ static void hfe_setup_track(
     } else {
         /* Write mode. */
         im->hfe.trk_pos = im->cur_bc / 8;
+        if (im->hfe.is_v3) {
+            /* Provide context to the write to avoid corrupting an opcode. */
+            if ((im->hfe.trk_pos & 255) == 0 && im->hfe.trk_pos != 0)
+                im->hfe.trk_pos--;
+            else if ((im->hfe.trk_pos & 255) == 1)
+                im->hfe.trk_pos = (im->hfe.trk_pos+1) % im->hfe.trk_len;
+        }
         im->hfe.write.start = im->hfe.trk_pos;
         im->hfe.write.wrapped = FALSE;
         im->hfe.write_batch.len = 0;
@@ -273,6 +280,7 @@ static uint16_t hfe_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
                 x = _rbit32(bc_b[(bc_c/8) & bc_mask]) >> 24;
                 im->ticks_per_cell = ticks_per_cell = 
                     (sampleclk_us(2) * 16 * x) / 72;
+                im->write_bc_ticks = ticks_per_cell / 16;
                 bc_c += 8;
                 im->cur_bc += 8;
                 continue;
@@ -333,6 +341,7 @@ static bool_t hfe_write_track(struct image *im)
     unsigned int bufmask = wr->len - 1;
     uint8_t *w, *wrbuf = im->bufs.write_data.p;
     uint32_t i, space, c = wr->cons / 8, p = wr->prod / 8;
+    bool_t is_v3 = im->hfe.is_v3;
     bool_t writeback = FALSE;
     time_t t;
 
@@ -384,11 +393,62 @@ static bool_t hfe_write_track(struct image *im)
             + (im->cur_track & 1) * 256
             + batch_off - im->hfe.write_batch.off
             + (off & 255);
-        for (i = 0; i < nr; i++)
-            *w++ = _rbit32(buf[c++ & bufmask]) >> 24;
+
+        i = 0;
+
+        if (is_v3 && off == im->hfe.write.start && off != 0) {
+            /* Avoid starting write in the middle of an opcode. */
+            if (w[-2] == OP_SkipBits) {
+                i++;
+            } else {
+                switch (w[-1]) {
+                case OP_SkipBits:
+                    i += 2;
+                    break;
+                case OP_Bitrate:
+                    i++;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+
+        while (i < nr) {
+            if (is_v3 && (w[i] & 0xf) == 0xf) {
+                switch (w[i]) {
+                case OP_SkipBits:
+                    /* Keep the write byte-aligned. This changes the length of
+                     * the track by 8+skip bitcells, but overwriting OP_SkipBits
+                     * should be rare. */
+                    w[i++] = OP_Nop;
+                    continue;
+
+                case OP_Bitrate:
+                    /* Assume bitrate does not change significantly for the
+                     * entire track, and write_bc_ticks already adjusted when
+                     * reading. */
+                    i += 2;
+                    continue;
+
+                case OP_Nop:
+                case OP_Index:
+                default:
+                    /* Preserve opcode. But making sure not to write past end of
+                     * buffer. */
+                    i++;
+                    continue;
+
+                case OP_Rand:
+                    /* Replace with data. */
+                    break;
+                }
+            }
+            w[i++] = _rbit32(buf[c++ & bufmask]) >> 24;
+        }
         im->hfe.write_batch.dirty = TRUE;
 
-        im->hfe.trk_pos += nr;
+        im->hfe.trk_pos += i; /* i may be larger than nr due to opcodes. */
         if (im->hfe.trk_pos >= im->hfe.trk_len) {
             ASSERT(im->hfe.trk_pos == im->hfe.trk_len);
             im->hfe.trk_pos = 0;
