@@ -271,15 +271,17 @@ static void dsk_setup_track(
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
 
-    decode_off = calc_start_pos(im);
-
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
 
     if (start_pos) {
+        decode_off = calc_start_pos(im);
+
         image_read_track(im);
         bc->cons = decode_off * 16;
         *start_pos = start_ticks;
+    } else {
+        im->dsk.decode_pos = 0;
     }
 }
 
@@ -481,10 +483,9 @@ static bool_t dsk_write_track(struct image *im)
     unsigned int bufmask = (wr->len / 2) - 1;
     uint8_t *wrbuf = (uint8_t *)im->bufs.write_data.p + 512; /* skip DIB/TIB */
     uint32_t c = wr->cons / 16, p = wr->prod / 16;
-    unsigned int i;
+    unsigned int i, off;
     time_t t;
-    uint16_t crc, off;
-    uint8_t x;
+    uint16_t crc = im->dsk.crc;
 
     /* If we are processing final data then use the end index, rounded up. */
     barrier();
@@ -494,77 +495,103 @@ static bool_t dsk_write_track(struct image *im)
 
     while ((int16_t)(p - c) > 128) {
 
-        uint32_t sc = c;
+        if (im->dsk.decode_pos == 0) {
 
-        if (be16toh(buf[c++ & bufmask]) != 0x4489)
-            continue;
-        if ((x = mfmtobin(buf[c & bufmask])) == 0xa1)
-            continue;
-        c++;
+            uint8_t x;
 
-        switch (x) {
+            if (be16toh(buf[c++ & bufmask]) != 0x4489)
+                continue;
+            if ((x = mfmtobin(buf[c & bufmask])) == 0xa1)
+                continue;
+            c++;
 
-        case 0xfe: /* IDAM */
-            for (i = 0; i < 3; i++)
-                wrbuf[i] = 0xa1;
-            wrbuf[i++] = x;
-            for (; i < 10; i++)
-                wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
-            crc = crc16_ccitt(wrbuf, i, 0xffff);
-            if (crc != 0) {
-                log("IDAM Bad CRC: %04x, %02x\n", crc, wrbuf[6]);
+            switch (x) {
+
+            case 0xfe: /* IDAM */
+                for (i = 0; i < 3; i++)
+                    wrbuf[i] = 0xa1;
+                wrbuf[i++] = x;
+                for (; i < 10; i++)
+                    wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+                crc = crc16_ccitt(wrbuf, i, 0xffff);
+                if (crc != 0) {
+                    log("IDAM Bad CRC: %04x, %02x\n", crc, wrbuf[6]);
+                    break;
+                }
+                /* Convert logical sector number -> rotational number. */
+                for (i = 0; i < tib->nr_secs; i++)
+                    if (wrbuf[6] == tib->sib[i].r)
+                        break;
+                im->dsk.write_sector = i;
+                if (im->dsk.write_sector >= tib->nr_secs) {
+                    log("IDAM Bad Sector: %02x\n", wrbuf[6]);
+                    im->dsk.write_sector = -2;
+                }
+                break;
+
+            case 0xfb: /* DAM */
+                im->dsk.decode_pos = 1;
+                im->dsk.decode_data_pos = 0;
                 break;
             }
-            /* Convert logical sector number -> rotational number. */
-            for (i = 0; i < tib->nr_secs; i++)
-                if (wrbuf[6] == tib->sib[i].r)
-                    break;
-            im->dsk.write_sector = i;
-            if (im->dsk.write_sector >= tib->nr_secs) {
-                log("IDAM Bad Sector: %02x\n", wrbuf[6]);
-                im->dsk.write_sector = -2;
-            }
-            break;
 
-        case 0xfb: /* DAM */ {
-            unsigned int nr, todo, sec_sz;
+        } else {
+
+            /* Data record, shy address mark */
+            unsigned int sec_sz;
             int sec_nr = im->dsk.write_sector;
 
+            ASSERT(im->dsk.decode_pos == 1);
+
             if (sec_nr < 0) {
-                if (sec_nr == -1)
+                if (sec_nr == -1) {
                     sec_nr = dsk_find_first_write_sector(im, write, tib);
+                    im->dsk.write_sector = sec_nr;
+                }
                 if (sec_nr < 0) {
                     log("DAM Unknown\n");
-                    goto dam_out;
+                    goto data_complete;
                 }
             }
 
             sec_sz = data_sz(&tib->sib[sec_nr]);
-            if ((int16_t)(p - c) < (sec_sz + 2)) {
-                c = sc;
-                goto out;
-            }
-
-            crc = MFM_DAM_CRC;
-
-            log("Write %u[%02x]/%u... ",
-                sec_nr, tib->sib[sec_nr].r, tib->nr_secs);
-            t = time_now();
 
             for (i = off = 0; i < sec_nr; i++)
                 off += tib->sib[i].actual_length;
-            F_lseek(&im->fp, im->dsk.trk_off + off);
+            off += im->dsk.trk_off;
+            off += im->dsk.decode_data_pos;
 
-            for (todo = sec_sz; todo != 0; todo -= nr) {
-                nr = min_t(unsigned int, todo, CHUNK_SIZE);
+            if (im->dsk.decode_data_pos < sec_sz) {
+                unsigned int nr = sec_sz - im->dsk.decode_data_pos;
+                nr = min_t(unsigned int, nr, CHUNK_SIZE - (off & 511));
+                if ((int16_t)(p - c) < nr)
+                    break;
+
+                if (!im->dsk.decode_data_pos) {
+                    crc = MFM_DAM_CRC;
+                    log("Write %d[%02x]/%u...",
+                            sec_nr, tib->sib[sec_nr].r, tib->nr_secs);
+                    F_lseek(&im->fp, off);
+                }
+
+                t = time_now();
                 mfm_ring_to_bin(buf, bufmask, c, wrbuf, nr);
                 c += nr;
                 crc = crc16_ccitt(wrbuf, nr, crc);
                 F_write(&im->fp, wrbuf, nr, NULL);
+                printk(" %u us", time_diff(t, time_now()) / TIME_MHZ);
+                im->dsk.decode_data_pos += nr;
+                if (im->dsk.decode_data_pos < sec_sz)
+                    printk("...");
+                else
+                    printk("\n");
             }
 
-            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
+            if (im->dsk.decode_data_pos < sec_sz)
+                continue;
 
+            if ((int16_t)(p - c) < 2)
+                break;
             mfm_ring_to_bin(buf, bufmask, c, wrbuf, 2);
             c += 2;
             crc = crc16_ccitt(wrbuf, 2, crc);
@@ -573,15 +600,14 @@ static bool_t dsk_write_track(struct image *im)
                     crc, sec_nr, tib->sib[sec_nr].r);
             }
 
-            dam_out:
+        data_complete:
             im->dsk.write_sector = -2;
-            break;
-        }
+            im->dsk.decode_pos = 0;
 
         }
     }
 
-out:
+    im->dsk.crc = crc;
     wr->cons = c * 16;
     return flush;
 }

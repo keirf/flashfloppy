@@ -1876,15 +1876,17 @@ static void raw_setup_track(
     im->cur_ticks = im->cur_bc * im->ticks_per_cell;
     im->ticks_since_flux = 0;
 
-    decode_off = calc_start_pos(im);
-
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
 
     if (start_pos) {
+        decode_off = calc_start_pos(im);
+
         image_read_track(im);
         bc->cons = decode_off * 16;
         *start_pos = start_ticks;
+    } else {
+        im->img.decode_pos = 0;
     }
 }
 
@@ -1963,8 +1965,8 @@ static bool_t raw_write_track(struct image *im)
     struct raw_sec *sec;
     unsigned int i, off;
     time_t t;
-    uint16_t crc;
-    uint8_t idam_r, x;
+    uint16_t crc = im->img.crc;
+    uint8_t idam_r;
 
     /* If we are processing final data then use the end index, rounded up. */
     barrier();
@@ -1974,110 +1976,137 @@ static bool_t raw_write_track(struct image *im)
 
     while ((int16_t)(p - c) > 128) {
 
-        uint32_t sc = c;
+        if (im->img.decode_pos == 0) {
 
-        if (im->sync == SYNC_fm) {
+            uint8_t x;
 
-            uint16_t sync;
-            if (buf[c++ & bufmask] != 0xaaaa)
-                continue;
-            sync = buf[c & bufmask];
-            if (mfmtobin(sync >> 1) != FM_SYNC_CLK)
-                continue;
-            x = mfmtobin(sync);
-            c++;
-
-        } else { /* MFM */
-
-            if (be16toh(buf[c++ & bufmask]) != 0x4489)
-                continue;
-            if ((x = mfmtobin(buf[c & bufmask])) == 0xa1)
-                continue;
-            c++;
-
-        }
-
-        switch (x) {
-
-        case 0xfe: /* IDAM */
             if (im->sync == SYNC_fm) {
-                wrbuf[0] = x;
-                for (i = 1; i < 7; i++)
-                    wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
-                idam_r = wrbuf[3];
+
+                uint16_t sync;
+                if (buf[c++ & bufmask] != 0xaaaa)
+                    continue;
+                sync = buf[c & bufmask];
+                if (mfmtobin(sync >> 1) != FM_SYNC_CLK)
+                    continue;
+                x = mfmtobin(sync);
+                c++;
+
             } else { /* MFM */
-                for (i = 0; i < 3; i++)
-                    wrbuf[i] = 0xa1;
-                wrbuf[i++] = x;
-                for (; i < 10; i++)
-                    wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
-                idam_r = wrbuf[6];
+
+                if (be16toh(buf[c++ & bufmask]) != 0x4489)
+                    continue;
+                if ((x = mfmtobin(buf[c & bufmask])) == 0xa1)
+                    continue;
+                c++;
+
             }
-            crc = crc16_ccitt(wrbuf, i, 0xffff);
-            if (crc != 0) {
-                log("IDAM Bad CRC: %04x, %u\n", crc, idam_r);
+
+            switch (x) {
+
+            case 0xfe: /* IDAM */
+                if (im->sync == SYNC_fm) {
+                    wrbuf[0] = x;
+                    for (i = 1; i < 7; i++)
+                        wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+                    idam_r = wrbuf[3];
+                } else { /* MFM */
+                    for (i = 0; i < 3; i++)
+                        wrbuf[i] = 0xa1;
+                    wrbuf[i++] = x;
+                    for (; i < 10; i++)
+                        wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
+                    idam_r = wrbuf[6];
+                }
+                crc = crc16_ccitt(wrbuf, i, 0xffff);
+                if (crc != 0) {
+                    log("IDAM Bad CRC: %04x, %u\n", crc, idam_r);
+                    break;
+                }
+                /* Search by sector id for this sector's logical order. */
+                for (i = 0, sec = im->img.sec_info;
+                     (i < trk->nr_sectors) && (sec->r != idam_r);
+                     i++, sec++)
+                    continue;
+                im->img.write_sector = i;
+                if (i >= trk->nr_sectors) {
+                    log("IDAM Bad Sector: %02x\n", idam_r);
+                    im->img.write_sector = -2;
+                }
+                break;
+
+            case 0xfb: /* DAM */
+                im->img.decode_pos = 1;
+                im->img.decode_data_pos = 0;
                 break;
             }
-            /* Search by sector id for this sector's logical order. */
-            for (i = 0, sec = im->img.sec_info;
-                 (i < trk->nr_sectors) && (sec->r != idam_r);
-                 i++, sec++)
-                continue;
-            im->img.write_sector = i;
-            if (i >= trk->nr_sectors) {
-                log("IDAM Bad Sector: %02x\n", idam_r);
-                im->img.write_sector = -2;
-            }
-            break;
 
-        case 0xfb: /* DAM */ {
-            unsigned int nr, todo, sec_sz;
+        } else {
+
+            /* Data record, shy address mark */
+            unsigned int sec_sz;
             int sec_nr = im->img.write_sector;
 
+            ASSERT(im->img.decode_pos == 1);
+
             if (sec_nr < 0) {
-                if (sec_nr == -1)
+                if (sec_nr == -1) {
                     sec_nr = raw_find_first_write_sector(im, write, trk);
+                    im->img.write_sector = sec_nr;
+                }
                 if (sec_nr < 0) {
                     log("DAM Unknown\n");
-                    goto dam_out;
+                    goto data_complete;
                 }
             }
 
             sec_sz = sec_sz(im->img.sec_info[sec_nr].n);
-            if ((int16_t)(p - c) < (sec_sz + 2)) {
-                c = sc;
-                goto out;
-            }
-
-            crc = (im->sync == SYNC_fm) ? FM_DAM_CRC : MFM_DAM_CRC;
 
             sec = &im->img.sec_info[sec_nr];
-            log("Write %u[%02x]/%u... ", sec_nr, sec->r, trk->nr_sectors);
-            t = time_now();
 
             if (im->img.file_sec_offsets) {
                 off = im->img.file_sec_offsets[sec_nr];
             } else if (trk->img_bps != 0) {
                 off = sec_nr * trk->img_bps;
             } else {
-                off = 0;
                 sec = im->img.sec_info;
-                for (i = 0; i < sec_nr; i++)
+                for (i = off = 0; i < sec_nr; i++)
                     off += sec_sz(sec++->n);
             }
-            F_lseek(&im->fp, im->img.trk_off + off);
+            off += im->img.trk_off;
+            off += im->img.decode_data_pos;
 
-            for (todo = sec_sz; todo != 0; todo -= nr) {
-                nr = min_t(unsigned int, todo, CHUNK_SIZE);
+            if (im->img.decode_data_pos < sec_sz) {
+                unsigned int nr = sec_sz - im->img.decode_data_pos;
+                nr = min_t(unsigned int, nr, CHUNK_SIZE - (off & 511));
+                if ((int16_t)(p - c) < nr)
+                    break;
+
+                if (!im->img.decode_data_pos) {
+                    crc = (im->sync == SYNC_fm) ? FM_DAM_CRC : MFM_DAM_CRC;
+                    log("Write %u[%02x]/%u...",
+                            sec_nr, sec->r, trk->nr_sectors);
+                    F_lseek(&im->fp, off);
+                }
+
+                t = time_now();
                 mfm_ring_to_bin(buf, bufmask, c, wrbuf, nr);
                 c += nr;
                 crc = crc16_ccitt(wrbuf, nr, crc);
                 process_data(im, wrbuf, nr);
                 F_write(&im->fp, wrbuf, nr, NULL);
+                printk(" %u us", time_diff(t, time_now()) / TIME_MHZ);
+                im->img.decode_data_pos += nr;
+                if (im->img.decode_data_pos < sec_sz)
+                    printk("...");
+                else
+                    printk("\n");
             }
 
-            printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
+            if (im->img.decode_data_pos < sec_sz)
+                continue;
 
+            if ((int16_t)(p - c) < 2)
+                break;
             mfm_ring_to_bin(buf, bufmask, c, wrbuf, 2);
             c += 2;
             crc = crc16_ccitt(wrbuf, 2, crc);
@@ -2085,15 +2114,14 @@ static bool_t raw_write_track(struct image *im)
                 log("Bad CRC: %04x, %u[%02x]\n", crc, sec_nr, sec->r);
             }
 
-            dam_out:
+        data_complete:
             im->img.write_sector = -2;
-            break;
-        }
+            im->img.decode_pos = 0;
 
         }
     }
 
-out:
+    im->img.crc = crc;
     wr->cons = c * 16;
     return flush;
 }
