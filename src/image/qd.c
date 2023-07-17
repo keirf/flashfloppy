@@ -159,11 +159,11 @@ static uint16_t qd_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
     uint32_t bc_c = bc->cons, bc_p = bc->prod, bc_mask = bc->len - 1;
     uint32_t ticks = im->ticks_since_flux;
     uint32_t ticks_per_cell = im->ticks_per_cell;
-    uint32_t y = 8, todo = nr;
+    uint32_t bit_off, todo = nr;
     uint8_t x;
 
     while ((uint32_t)(bc_p - bc_c) >= 8) {
-        ASSERT(y == 8);
+
         if (im->cur_bc >= im->tracklen_bc) {
             ASSERT(im->cur_bc == im->tracklen_bc);
             im->tracklen_ticks = im->cur_ticks;
@@ -172,19 +172,25 @@ static uint16_t qd_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             bc_c = (bc_c + 512*8-1) & ~(512*8-1);
             continue;
         }
-        y = bc_c % 8;
-        x = bc_b[(bc_c/8) & bc_mask] >> y;
-        bc_c += 8 - y;
-        im->cur_bc += 8 - y;
-        im->cur_ticks += (8 - y) * ticks_per_cell;
-        while (y < 8) {
-            y++;
+
+        bit_off = bc_c % 8;
+        x = bc_b[(bc_c/8) & bc_mask] >> bit_off;
+        bc_c += 8 - bit_off;
+        im->cur_bc += 8 - bit_off;
+        im->cur_ticks += (8 - bit_off) * ticks_per_cell;
+
+        while (bit_off < 8) {
+            bit_off++;
             ticks += ticks_per_cell;
             if (x & 1) {
                 *tbuf++ = ticks - 1;
                 ticks = 0;
-                if (!--todo)
+                if (!--todo) {
+                    bc_c -= 8 - bit_off;
+                    im->cur_bc -= 8 - bit_off;
+                    im->cur_ticks -= (8 - bit_off) * ticks_per_cell;
                     goto out;
+                }
             }
             x >>= 1;
         }
@@ -198,12 +204,11 @@ static uint16_t qd_rdata_flux(struct image *im, uint16_t *tbuf, uint16_t nr)
             if (!--todo)
                 goto out;
         }
+
     }
 
 out:
-    bc->cons = bc_c - (8 - y);
-    im->cur_bc -= 8 - y;
-    im->cur_ticks -= (8 - y) * ticks_per_cell;
+    bc->cons = bc_c;
     im->ticks_since_flux = ticks;
     return nr - todo;
 }
