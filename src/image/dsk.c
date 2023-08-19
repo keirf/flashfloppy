@@ -16,6 +16,8 @@
 #define GAP_4A   80 /* Post-Index */
 #define GAP_SYNC 12
 
+#define CHUNK_SIZE 1024
+
 struct dib { /* disk info */
     char sig[34];
     char creator[14];
@@ -103,7 +105,7 @@ static bool_t dsk_open(struct image *im)
      * length and thus the period between index pulses. */
     im->ticks_per_cell = im->write_bc_ticks * 16;
 
-    volume_cache_init(im->bufs.write_data.p + 512 + 1024,
+    volume_cache_init(im->bufs.write_data.p + 512 + CHUNK_SIZE,
                       im->bufs.write_data.p + im->bufs.write_data.len);
 
     return TRUE;
@@ -226,9 +228,9 @@ static uint32_t calc_start_pos(struct image *im)
                     im->dsk.decode_pos++;
                     if (decode_off < data_sz(&tib->sib[i])) {
                         /* Data */
-                        im->dsk.rd_sec_pos = decode_off / 1024;
+                        im->dsk.rd_sec_pos = decode_off / CHUNK_SIZE;
                         im->dsk.decode_data_pos = im->dsk.rd_sec_pos;
-                        decode_off %= 1024;
+                        decode_off %= CHUNK_SIZE;
                     } else {
                         /* Post Data */
                         decode_off -= data_sz(&tib->sib[i]);
@@ -240,8 +242,8 @@ static uint32_t calc_start_pos(struct image *im)
         } else {
             /* Pre-index track gap */
             im->dsk.decode_pos = tib->nr_secs * 4 + 1;
-            im->dsk.decode_data_pos = decode_off / 1024;
-            decode_off %= 1024;
+            im->dsk.decode_data_pos = decode_off / CHUNK_SIZE;
+            decode_off %= CHUNK_SIZE;
         }
     }
 
@@ -301,10 +303,10 @@ static bool_t dsk_read_track(struct image *im)
             /* Weak sector -- pick different data each revolution. */
             off += len * (im->dsk.rev % (tib->sib[i].actual_length / len));
         }
-        off += im->dsk.rd_sec_pos * 1024;
-        len -= im->dsk.rd_sec_pos * 1024;
-        if (len > 1024) {
-            len = 1024;
+        off += im->dsk.rd_sec_pos * CHUNK_SIZE;
+        len -= im->dsk.rd_sec_pos * CHUNK_SIZE;
+        if (len > CHUNK_SIZE) {
+            len = CHUNK_SIZE;
             im->dsk.rd_sec_pos++;
         } else {
             im->dsk.rd_sec_pos = 0;
@@ -348,11 +350,11 @@ static bool_t dsk_read_track(struct image *im)
             emit_byte(0x4e);
     } else if (im->dsk.decode_pos == (tib->nr_secs * 4 + 1)) {
         /* Pre-index track gap */
-        uint16_t sz = im->dsk.gap4 - im->dsk.decode_data_pos * 1024;
-        if (bc_space < min_t(unsigned int, sz, 1024))
+        uint16_t sz = im->dsk.gap4 - im->dsk.decode_data_pos * CHUNK_SIZE;
+        if (bc_space < min_t(unsigned int, sz, CHUNK_SIZE))
             return FALSE;
-        if (sz > 1024) {
-            sz = 1024;
+        if (sz > CHUNK_SIZE) {
+            sz = CHUNK_SIZE;
             im->dsk.decode_data_pos++;
             im->dsk.decode_pos--;
         } else {
@@ -404,11 +406,11 @@ static bool_t dsk_read_track(struct image *im)
         }
         case 2: /* Data */ {
             uint16_t sec_sz = data_sz(&tib->sib[sec]);
-            sec_sz -= im->dsk.decode_data_pos * 1024;
-            if (bc_space < min_t(unsigned int, sec_sz, 1024))
+            sec_sz -= im->dsk.decode_data_pos * CHUNK_SIZE;
+            if (bc_space < min_t(unsigned int, sec_sz, CHUNK_SIZE))
                 return FALSE;
-            if (sec_sz > 1024) {
-                sec_sz = 1024;
+            if (sec_sz > CHUNK_SIZE) {
+                sec_sz = CHUNK_SIZE;
                 im->dsk.decode_data_pos++;
                 im->dsk.decode_pos--;
             } else {
@@ -554,7 +556,7 @@ static bool_t dsk_write_track(struct image *im)
             F_lseek(&im->fp, im->dsk.trk_off + off);
 
             for (todo = sec_sz; todo != 0; todo -= nr) {
-                nr = min_t(unsigned int, todo, 1024);
+                nr = min_t(unsigned int, todo, CHUNK_SIZE);
                 mfm_ring_to_bin(buf, bufmask, c, wrbuf, nr);
                 c += nr;
                 crc = crc16_ccitt(wrbuf, nr, crc);
