@@ -66,6 +66,8 @@ static bool_t xdf_check(const struct bpb *bpb);
 #define LAYOUT_sides_swapped   (1u<<1)
 #define LAYOUT_reverse_side(x) (1u<<(2+(x)))
 
+#define CHUNK_SIZE 1024
+
 #define sec_sz(n) (128u << (n))
 
 #define _IAM 1 /* IAM */
@@ -1830,9 +1832,9 @@ static uint32_t calc_start_pos(struct image *im)
                     im->img.decode_pos++;
                     if (decode_off < sec_sz(sec->n)) {
                         /* Data */
-                        im->img.rd_sec_pos = decode_off / 1024;
+                        im->img.rd_sec_pos = decode_off / CHUNK_SIZE;
                         im->img.decode_data_pos = im->img.rd_sec_pos;
-                        decode_off %= 1024;
+                        decode_off %= CHUNK_SIZE;
                     } else {
                         /* Post Data */
                         decode_off -= sec_sz(sec->n);
@@ -1845,8 +1847,8 @@ static uint32_t calc_start_pos(struct image *im)
         } else {
             /* Pre-index track gap */
             im->img.decode_pos = trk->nr_sectors * 4 + 1;
-            im->img.decode_data_pos = decode_off / 1024;
-            decode_off %= 1024;
+            im->img.decode_data_pos = decode_off / CHUNK_SIZE;
+            decode_off %= CHUNK_SIZE;
         }
     }
 
@@ -1891,7 +1893,7 @@ static bool_t raw_open(struct image *im)
     if (im->step == 0)
         im->step = 1;
 
-    volume_cache_init(im->bufs.write_data.p + 1024,
+    volume_cache_init(im->bufs.write_data.p + CHUNK_SIZE,
                       im->img.heap_bottom);
 
     /* Initialise write_bc_ticks (used by floppy_insert to set outp_hden). */
@@ -2066,7 +2068,7 @@ static bool_t raw_write_track(struct image *im)
             F_lseek(&im->fp, im->img.trk_off + off);
 
             for (todo = sec_sz; todo != 0; todo -= nr) {
-                nr = min_t(unsigned int, todo, 1024);
+                nr = min_t(unsigned int, todo, CHUNK_SIZE);
                 mfm_ring_to_bin(buf, bufmask, c, wrbuf, nr);
                 c += nr;
                 crc = crc16_ccitt(wrbuf, nr, crc);
@@ -2154,11 +2156,11 @@ static void img_fetch_data(struct image *im)
 
     len = sec_sz(sec->n);
 
-    off += im->img.rd_sec_pos * 1024;
-    len -= im->img.rd_sec_pos * 1024;
+    off += im->img.rd_sec_pos * CHUNK_SIZE;
+    len -= im->img.rd_sec_pos * CHUNK_SIZE;
 
-    if (len > 1024) {
-        len = 1024;
+    if (len > CHUNK_SIZE) {
+        len = CHUNK_SIZE;
         im->img.rd_sec_pos++;
     } else {
         im->img.rd_sec_pos = 0;
@@ -2181,14 +2183,14 @@ static void *align_p(void *p)
 static void check_p(void *p, struct image *im)
 {
     uint8_t *a = p, *b = (uint8_t *)im->bufs.read_data.p;
-    if ((int32_t)(a-b) < 1024)
+    if ((int32_t)(a-b) < CHUNK_SIZE)
         F_die(FR_BAD_IMAGE);
     im->img.heap_bottom = p;
 }
 
 /* Initialise track/sector-info structures at the top of the heap. 
  * In ascending address order: 
- * {read,write}_data (truncated to 1024 bytes)
+ * {read,write}_data (truncated to CHUNK_SIZE bytes)
  * ... [volume cache]
  * im->img.trk_info (trk_map[] points into here)
  * im->img.sec_info_base (trk_info[] + sec_map[] point into here)
@@ -2455,11 +2457,11 @@ static bool_t mfm_read_track(struct image *im)
         }
     } else if (im->img.decode_pos == (trk->nr_sectors * 4 + 1)) {
         /* Pre-index track gap */
-        uint16_t sz = im->img.gap_4 - im->img.decode_data_pos * 1024;
-        if (bc_space < min_t(unsigned int, sz, 1024))
+        uint16_t sz = im->img.gap_4 - im->img.decode_data_pos * CHUNK_SIZE;
+        if (bc_space < min_t(unsigned int, sz, CHUNK_SIZE))
             return FALSE;
-        if (sz > 1024) {
-            sz = 1024;
+        if (sz > CHUNK_SIZE) {
+            sz = CHUNK_SIZE;
             im->img.decode_data_pos++;
             im->img.decode_pos--;
         } else {
@@ -2507,11 +2509,11 @@ static bool_t mfm_read_track(struct image *im)
         }
         case 2: /* Data */ {
             uint16_t sec_sz = sec_sz(sec->n);
-            sec_sz -= im->img.decode_data_pos * 1024;
-            if (bc_space < min_t(unsigned int, sec_sz, 1024))
+            sec_sz -= im->img.decode_data_pos * CHUNK_SIZE;
+            if (bc_space < min_t(unsigned int, sec_sz, CHUNK_SIZE))
                 return FALSE;
-            if (sec_sz > 1024) {
-                sec_sz = 1024;
+            if (sec_sz > CHUNK_SIZE) {
+                sec_sz = CHUNK_SIZE;
                 im->img.decode_data_pos++;
                 im->img.decode_pos--;
             } else {
@@ -2668,11 +2670,11 @@ static bool_t fm_read_track(struct image *im)
         }
     } else if (im->img.decode_pos == (trk->nr_sectors * 4 + 1)) {
         /* Pre-index track gap */
-        uint16_t sz = im->img.gap_4 - im->img.decode_data_pos * 1024;
-        if (bc_space < min_t(unsigned int, sz, 1024))
+        uint16_t sz = im->img.gap_4 - im->img.decode_data_pos * CHUNK_SIZE;
+        if (bc_space < min_t(unsigned int, sz, CHUNK_SIZE))
             return FALSE;
-        if (sz > 1024) {
-            sz = 1024;
+        if (sz > CHUNK_SIZE) {
+            sz = CHUNK_SIZE;
             im->img.decode_data_pos++;
             im->img.decode_pos--;
         } else {
@@ -2714,11 +2716,11 @@ static bool_t fm_read_track(struct image *im)
         }
         case 2: /* Data */ {
             uint16_t sec_sz = sec_sz(sec->n);
-            sec_sz -= im->img.decode_data_pos * 1024;
-            if (bc_space < min_t(unsigned int, sec_sz, 1024))
+            sec_sz -= im->img.decode_data_pos * CHUNK_SIZE;
+            if (bc_space < min_t(unsigned int, sec_sz, CHUNK_SIZE))
                 return FALSE;
-            if (sec_sz > 1024) {
-                sec_sz = 1024;
+            if (sec_sz > CHUNK_SIZE) {
+                sec_sz = CHUNK_SIZE;
                 im->img.decode_data_pos++;
                 im->img.decode_pos--;
             } else {
