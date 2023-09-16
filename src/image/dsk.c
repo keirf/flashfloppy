@@ -9,6 +9,8 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#define LOG_PREFIX "DSK"
+
 #define GAP_1    50 /* Post-IAM */
 #define GAP_2    22 /* Post-IDAM */
 #define GAP_4A   80 /* Post-Index */
@@ -94,7 +96,7 @@ static bool_t dsk_open(struct image *im)
 
     im->nr_cyls = dib->nr_tracks;
     im->nr_sides = dib->nr_sides;
-    printk("DSK: %u cyls, %u sides\n", im->nr_cyls, im->nr_sides);
+    log("%u cyls, %u sides\n", im->nr_cyls, im->nr_sides);
 
     /* DSK data rate is fixed at 2us bitcell. Where the specified track layout 
      * will not fit in regular 100k-bitcell track we simply extend the track 
@@ -460,7 +462,7 @@ static int dsk_find_first_write_sector(
     }
 
     if (i >= tib->nr_secs) {
-        printk("%s Bad Wr.Off: %d\n", "DSK", base);
+        log("Bad Wr.Off: %d\n", base);
         return -2;
     }
 
@@ -508,7 +510,7 @@ static bool_t dsk_write_track(struct image *im)
                 wrbuf[i] = mfmtobin(buf[c++ & bufmask]);
             crc = crc16_ccitt(wrbuf, i, 0xffff);
             if (crc != 0) {
-                printk("%s IDAM Bad CRC: %04x, %02x\n", "DSK", crc, wrbuf[6]);
+                log("IDAM Bad CRC: %04x, %02x\n", crc, wrbuf[6]);
                 break;
             }
             /* Convert logical sector number -> rotational number. */
@@ -517,7 +519,7 @@ static bool_t dsk_write_track(struct image *im)
                     break;
             im->dsk.write_sector = i;
             if (im->dsk.write_sector >= tib->nr_secs) {
-                printk("%s IDAM Bad Sector: %02x\n", "DSK", wrbuf[6]);
+                log("IDAM Bad Sector: %02x\n", wrbuf[6]);
                 im->dsk.write_sector = -2;
             }
             break;
@@ -530,7 +532,7 @@ static bool_t dsk_write_track(struct image *im)
                 if (sec_nr == -1)
                     sec_nr = dsk_find_first_write_sector(im, write, tib);
                 if (sec_nr < 0) {
-                    printk("%s DAM Unknown\n", "DSK");
+                    log("DAM Unknown\n");
                     goto dam_out;
                 }
             }
@@ -543,8 +545,8 @@ static bool_t dsk_write_track(struct image *im)
 
             crc = MFM_DAM_CRC;
 
-            printk("Write %d[%02x]/%u... ",
-                   sec_nr, tib->sib[sec_nr].r, tib->nr_secs);
+            log("Write %u[%02x]/%u... ",
+                sec_nr, tib->sib[sec_nr].r, tib->nr_secs);
             t = time_now();
 
             for (i = off = 0; i < sec_nr; i++)
@@ -565,8 +567,8 @@ static bool_t dsk_write_track(struct image *im)
             c += 2;
             crc = crc16_ccitt(wrbuf, 2, crc);
             if (crc != 0) {
-                printk("%s Bad CRC: %04x, %d[%02x]\n",
-                       "DSK", crc, sec_nr, tib->sib[sec_nr].r);
+                log("Bad CRC: %04x, %d[%02x]\n",
+                    crc, sec_nr, tib->sib[sec_nr].r);
             }
 
             dam_out:

@@ -9,6 +9,8 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#define LOG_PREFIX "IMG"
+
 static FSIZE_t raw_extend(struct image *im);
 static void raw_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos);
@@ -1940,7 +1942,7 @@ static int raw_find_first_write_sector(
 
     /* Convert rotational order to logical order. */
     if (i >= trk->nr_sectors) {
-        printk("%s Bad Wr.Off: %d\n", "IMG", base);
+        log("Bad Wr.Off: %d\n", base);
         return -2;
     }
     return *sec_map;
@@ -2011,7 +2013,7 @@ static bool_t raw_write_track(struct image *im)
             }
             crc = crc16_ccitt(wrbuf, i, 0xffff);
             if (crc != 0) {
-                printk("%s IDAM Bad CRC: %04x, %u\n", "IMG", crc, idam_r);
+                log("IDAM Bad CRC: %04x, %u\n", crc, idam_r);
                 break;
             }
             /* Search by sector id for this sector's logical order. */
@@ -2021,7 +2023,7 @@ static bool_t raw_write_track(struct image *im)
                 continue;
             im->img.write_sector = i;
             if (i >= trk->nr_sectors) {
-                printk("%s IDAM Bad Sector: %02x\n", "IMG", idam_r);
+                log("IDAM Bad Sector: %02x\n", idam_r);
                 im->img.write_sector = -2;
             }
             break;
@@ -2034,7 +2036,7 @@ static bool_t raw_write_track(struct image *im)
                 if (sec_nr == -1)
                     sec_nr = raw_find_first_write_sector(im, write, trk);
                 if (sec_nr < 0) {
-                    printk("%s DAM Unknown\n", "IMG");
+                    log("DAM Unknown\n");
                     goto dam_out;
                 }
             }
@@ -2048,7 +2050,7 @@ static bool_t raw_write_track(struct image *im)
             crc = (im->sync == SYNC_fm) ? FM_DAM_CRC : MFM_DAM_CRC;
 
             sec = &im->img.sec_info[sec_nr];
-            printk("Write %u[%02x]/%u... ", sec_nr, sec->r, trk->nr_sectors);
+            log("Write %u[%02x]/%u... ", sec_nr, sec->r, trk->nr_sectors);
             t = time_now();
 
             if (im->img.file_sec_offsets) {
@@ -2078,8 +2080,7 @@ static bool_t raw_write_track(struct image *im)
             c += 2;
             crc = crc16_ccitt(wrbuf, 2, crc);
             if (crc != 0) {
-                printk("%s Bad CRC: %04x, %u[%02x]\n",
-                       "IMG", crc, sec_nr, sec->r);
+                log("Bad CRC: %04x, %u[%02x]\n", crc, sec_nr, sec->r);
             }
 
             dam_out:

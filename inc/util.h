@@ -89,6 +89,8 @@ static inline int vprintk(const char *format, va_list ap) { return 0; }
 static inline int printk(const char *format, ...) { return 0; }
 #endif
 
+#define log(f, a...) printk("%s: " f, LOG_PREFIX, ## a)
+
 #if defined(LOGFILE)
 /* Logfile management */
 void logfile_flush(FIL *file);
