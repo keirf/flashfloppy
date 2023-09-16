@@ -643,15 +643,13 @@ static void IRQ_rdata_dma(void)
 static void IRQ_wdata_dma(void)
 {
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
-    uint16_t cons, prod, prev, curr, next;
-    uint16_t cell = image->write_bc_ticks, window;
+    uint16_t cons, prod, prev, next;
     uint32_t bc_dat = 0, bc_prod;
     uint32_t *bc_buf = image->bufs.write_bc.p;
     unsigned int sync = image->sync;
     unsigned int bc_bufmask = (image->bufs.write_bc.len / 4) - 1;
+    int curr, cell = image->write_bc_ticks;
     struct write *write = NULL;
-
-    window = cell + (cell >> 1);
 
     /* Clear DMA peripheral interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_wdata_ch);
@@ -676,10 +674,13 @@ static void IRQ_wdata_dma(void)
     bc_dat = image->write_bc_window;
     for (cons = dma_wr->cons; cons != prod; cons = (cons+1) & buf_mask) {
         next = dma_wr->buf[cons];
-        curr = next - prev;
+        curr = (uint16_t)(next - prev) - (cell >> 1);
+        if (unlikely(curr < 0)) {
+            /* Runt flux, much shorter than bitcell clock. Merge it forward. */
+            continue;
+        }
         prev = next;
-        while (curr > window) {
-            curr -= cell;
+        while ((curr -= cell) > 0) {
             bc_dat <<= 1;
             bc_prod++;
             if (!(bc_prod&31))
