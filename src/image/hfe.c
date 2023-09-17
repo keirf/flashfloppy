@@ -152,13 +152,16 @@ static void hfe_setup_track(
         hfe_seek_track(im, track);
 
     start_ticks = start_pos ? *start_pos : get_write(im, im->wr_cons)->start;
-    im->cur_bc = (start_ticks * 16) / im->ticks_per_cell;
-    if (im->cur_bc >= im->tracklen_bc)
-        im->cur_bc = 0;
-    im->cur_ticks = im->cur_bc * im->ticks_per_cell;
-    im->ticks_since_flux = 0;
 
-    start_ticks = im->cur_ticks / 16;
+    im->cur_ticks = start_ticks * 16;
+    im->cur_bc = udiv64((uint64_t)im->cur_ticks * im->tracklen_bc,
+                        im->tracklen_ticks);
+    if ((im->cur_ticks >= im->tracklen_ticks) ||
+        (im->cur_bc >= im->tracklen_bc)) {
+        im->cur_ticks = 0;
+        im->cur_bc = 0;
+    }
+    im->ticks_since_flux = 0;
 
     rd->prod = rd->cons = 0;
     bc->prod = bc->cons = 0;
@@ -172,7 +175,6 @@ static void hfe_setup_track(
         im->hfe.trk_pos = (im->cur_bc/8) & ~255;
         image_read_track(im);
         bc->cons = im->cur_bc & 2047;
-        *start_pos = start_ticks;
     } else {
         /* Write mode. */
         im->hfe.trk_pos = im->cur_bc / 8;
