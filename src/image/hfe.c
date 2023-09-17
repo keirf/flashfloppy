@@ -128,9 +128,10 @@ static void hfe_seek_track(struct image *im, uint16_t track)
     im->hfe.trk_off = le16toh(thdr.offset);
     im->hfe.trk_len = le16toh(thdr.len) / 2;
     im->tracklen_bc = im->hfe.trk_len * 8;
-    /* Opcodes in v3 make it difficult to predict the track's length. Keep the
-     * previous track's value if this isn't the first seek. */
-    if (!(im->hfe.is_v3 && im->tracklen_ticks)) {
+    if (im->hfe.is_v3 && im->tracklen_ticks) {
+        /* Opcodes in v3 make it difficult to predict the track's length. Keep
+         * the previous track's value since this isn't the first seek. */
+    } else {
         im->tracklen_ticks = im->tracklen_bc * im->ticks_per_cell;
         im->stk_per_rev = stk_sampleclk(im->tracklen_ticks / 16);
     }
