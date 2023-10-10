@@ -415,7 +415,6 @@ static bool_t hfe_write_track(struct image *im)
                     w[i++] = OP_Nop;
                     continue;
 
-                    /* fallthrough */
                 case OP_Bitrate:
                     /* Assume bitrate does not change for the entire track, and
                      * write_bc_ticks already adjusted when reading. */
