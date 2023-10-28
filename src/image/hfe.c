@@ -416,10 +416,12 @@ static bool_t hfe_write_track(struct image *im)
                     continue;
 
                 case OP_Bitrate:
-                    /* Assume bitrate does not change for the entire track, and
-                     * write_bc_ticks already adjusted when reading. */
-                    i++;
-                    /* fallthrough */
+                    /* Assume bitrate does not change significantly for the
+                     * entire track, and write_bc_ticks already adjusted when
+                     * reading. */
+                    i += 2;
+                    continue;
+
                 case OP_Nop:
                 case OP_Index:
                 default:
