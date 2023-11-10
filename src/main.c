@@ -1004,6 +1004,7 @@ static void read_ff_cfg(void)
                 : !strcmp(opts.arg, "tandy-coco") ? HOST_tandy_coco
                 : !strcmp(opts.arg, "ti99") ? HOST_ti99
                 : !strcmp(opts.arg, "uknc") ? HOST_uknc
+                : !strcmp(opts.arg, "otrona") ? HOST_otrona
                 : HOST_unspecified;
             break;
 

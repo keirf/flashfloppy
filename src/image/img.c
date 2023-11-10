@@ -172,6 +172,9 @@ const static struct raw_type {
 }, uknc_type[] = {
     { 10, _S(2), 0, 38, 1, 2, 1, 0, 0, 0, _C(80), _R(300) },
     { 0 }
+}, otrona_type[] = {
+    { 10, _S(2), _IAM, 20, 5, 2, 1, 0, 0, 0, _C(40), _R(300) },
+    { 0 }
 };
 
 static FSIZE_t im_size(struct image *im)
@@ -584,6 +587,9 @@ static bool_t img_open(struct image *im)
         return ti99_open(im);
     case HOST_uknc:
         return uknc_open(im);
+    case HOST_otrona:
+        type = otrona_type;
+        break;
     default:
         type = img_type;
         break;
