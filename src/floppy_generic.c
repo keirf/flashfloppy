@@ -674,7 +674,7 @@ static void IRQ_wdata_dma(void)
     bc_dat = image->write_bc_window;
     for (cons = dma_wr->cons; cons != prod; cons = (cons+1) & buf_mask) {
         next = dma_wr->buf[cons];
-        curr = (uint16_t)(next - prev) - (cell >> 1);
+        curr = (int16_t)(next - prev) - (cell >> 1);
         if (unlikely(curr < 0)) {
             /* Runt flux, much shorter than bitcell clock. Merge it forward. */
             continue;
@@ -686,6 +686,8 @@ static void IRQ_wdata_dma(void)
             if (!(bc_prod&31))
                 bc_buf[((bc_prod-1) / 32) & bc_bufmask] = htobe32(bc_dat);
         }
+        curr += cell >> 1; /* remove the 1/2-cell bias */
+        prev -= curr >> 2; /* de-jitter/precomp: carry 1/4 of phase error */
         bc_dat = (bc_dat << 1) | 1;
         bc_prod++;
         switch (sync) {
