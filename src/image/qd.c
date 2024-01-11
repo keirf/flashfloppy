@@ -33,7 +33,7 @@ static bool_t qd_open(struct image *im)
     im->qd.tb = 1;
     im->nr_cyls = 1;
     im->nr_sides = 1;
-    im->write_bc_ticks = sampleclk_us(4) + 66; /* 4.917us */
+    im->write_bc_ticks = sampleclk_ns(4917); /* 4.917us */
     im->ticks_per_cell = im->write_bc_ticks;
     im->sync = SYNC_none;
 
