@@ -41,6 +41,7 @@ static bool_t adf_open(struct image *im)
     im->tracklen_bc = DD_TRACKLEN_BC;
     im->ticks_per_cell = ((sampleclk_stk(im->stk_per_rev) * 16u)
                           / im->tracklen_bc);
+    im->write_bc_ticks = im->ticks_per_cell / 16u;
 
     im->nr_cyls = f_size(&im->fp) / (2 * 11 * 512);
 
