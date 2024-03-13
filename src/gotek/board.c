@@ -219,10 +219,12 @@ void board_init(void)
 
         if (mcu_package == MCU_QFN32) {
 
+#if !defined(APPLE2)
             /* The sole QFN32 board is a KC30 Rev 1 design. */
             has_kc30_header = 1;
 
             pa_skip &= ~(1<<10); /* PA10 is not used as serial rx */
+#endif
             pb_skip |= 1<<1; /* PB1 is a floppy input (WGATE) */
 
         } else {
