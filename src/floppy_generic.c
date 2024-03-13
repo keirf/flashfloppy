@@ -262,7 +262,11 @@ static void timer_dma_init(void)
     tim_rdata->ccmr1 = (TIM_CCMR1_CC2S(TIM_CCS_OUTPUT) |
                         TIM_CCMR1_OC2M(TIM_OCM_PWM1));
     tim_rdata->ccer = TIM_CCER_CC2E | ((O_TRUE==0) ? TIM_CCER_CC2P : 0);
+#if defined(APPLE2)
+    tim_rdata->ccr2 = sampleclk_ns(1000);
+#else
     tim_rdata->ccr2 = sampleclk_ns(400);
+#endif
     tim_rdata->dier = TIM_DIER_UDE;
     tim_rdata->cr2 = 0;
 
@@ -290,7 +294,7 @@ static void timer_dma_init(void)
     tim_wdata->psc = (SYSCLK_MHZ/SAMPLECLK_MHZ) - 1;
     tim_wdata->arr = 0xffff;
     tim_wdata->ccmr1 = TIM_CCMR1_CC1S(TIM_CCS_INPUT_TI1);
-    tim_wdata->dier = TIM_DIER_CC1DE;
+    tim_wdata->dier = TIM_DIER_CC1DE | (WDATA_TOGGLE ? TIM_DIER_CC1IE : 0);
     tim_wdata->cr2 = 0;
 
     /* DMA setup: From the WDATA Timer's CCRx into a circular buffer. */

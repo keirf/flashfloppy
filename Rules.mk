@@ -42,6 +42,11 @@ ifeq ($(logfile),y)
 FLAGS += -DLOGFILE=1
 endif
 
+ifeq ($(apple2),y)
+floppy := y
+FLAGS += -DAPPLE2=1
+endif
+
 ifeq ($(quickdisk),y)
 FLAGS += -DQUICKDISK=1
 endif

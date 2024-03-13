@@ -15,6 +15,7 @@ export ROOT := $(CURDIR)
 prod-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=prod
 	$(MAKE) target mcu=$* target=floppy level=prod
+	$(MAKE) target mcu=$* target=apple2 level=prod
 	$(MAKE) target mcu=$* target=quickdisk level=prod
 	$(MAKE) target mcu=$* target=bl_update level=prod
 	$(MAKE) target mcu=$* target=io_test level=prod
@@ -22,6 +23,7 @@ prod-%: FORCE
 debug-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=debug
 	$(MAKE) target mcu=$* target=floppy level=debug
+	$(MAKE) target mcu=$* target=apple2 level=debug
 	$(MAKE) target mcu=$* target=quickdisk level=debug
 	$(MAKE) target mcu=$* target=bl_update level=debug
 	$(MAKE) target mcu=$* target=io_test level=debug
@@ -29,6 +31,7 @@ debug-%: FORCE
 logfile-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=logfile
 	$(MAKE) target mcu=$* target=floppy level=logfile
+	$(MAKE) target mcu=$* target=apple2 level=logfile
 	$(MAKE) target mcu=$* target=quickdisk level=logfile
 
 all-%: FORCE prod-% debug-% logfile-% ;
@@ -66,6 +69,12 @@ _legacy_dist: FORCE
 	  $(t)/alt/logfile/$(PROJ)-logfile-$(VER).upd \
 	  out/$(mcu)/logfile/floppy/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/alt/apple2/$(PROJ)-apple2-$(VER).upd \
+	  out/$(mcu)/$(level)/apple2/target.bin & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/alt/apple2/logfile/$(PROJ)-apple2-logfile-$(VER).upd \
+	  out/$(mcu)/logfile/apple2/target.bin & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/quickdisk/$(PROJ)-quickdisk-$(VER).upd \
 	  out/$(mcu)/$(level)/quickdisk/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
@@ -90,6 +99,12 @@ _dist: FORCE
 	  $(t)/alt/logfile/$(PROJ)-logfile-$(VER).upd \
 	  out/$(mcu)/logfile/floppy/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/apple2/$(PROJ)-apple2-$(VER).upd \
+	  out/$(mcu)/$(level)/apple2/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/apple2/logfile/$(PROJ)-apple2-logfile-$(VER).upd \
+	  out/$(mcu)/logfile/apple2/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/quickdisk/$(PROJ)-quickdisk-$(VER).upd \
 	  out/$(mcu)/$(level)/quickdisk/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
@@ -106,6 +121,7 @@ dist: FORCE all
 	mkdir -p $(t)/alt/bootloader
 	mkdir -p $(t)/alt/logfile
 	mkdir -p $(t)/alt/io-test
+	mkdir -p $(t)/alt/apple2/logfile
 	mkdir -p $(t)/alt/quickdisk/logfile
 	$(MAKE) _legacy_dist mcu=stm32f105 level=$(level) t=$(t)
 	$(MAKE) _dist mcu=stm32f105 n=at415-st105 level=$(level) t=$(t)

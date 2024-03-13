@@ -83,6 +83,12 @@ unsigned int board_get_buttons(void)
     if (mcu_package == MCU_LQFP64)
         x &= _rbit32(gpioc->idr) >> 23;
     x = ~x & 7;
+
+#if defined(APPLE2)
+    /* Apple 2: QFN32 select pin PA10 is reassigned as stepper phase #0. */
+    if (mcu_package == MCU_QFN32)
+        return x;
+#endif
     if (has_kc30_header) {
         /* KC30 Select pin, Artery models only: 
          *  PF6/PH2 = Select; except QFN32: PA10 = Select. */
@@ -91,6 +97,7 @@ unsigned int board_get_buttons(void)
                              : kc30_sel_gpio->idr >> (kc30_sel_pin-2));
         x |= ~kc30 & 4;
     }
+
     return x;
 }
 
@@ -280,6 +287,17 @@ void board_init(void)
         }
 
     }
+
+#if defined(APPLE2)
+#if defined(NDEBUG)
+    /* Normal build: Two phases use UART RX/TX. */
+    pa_skip |= m(9) | m(10);
+#else
+    /* Debug build: Move the two UART phases to the KC30 header. */
+    pa_skip |= m(6) | m(15);
+    has_kc30_header = 0;
+#endif
+#endif
 
     gpio_pull_up_pins(gpioa, ~pa_skip);
     gpio_pull_up_pins(gpiob, ~pb_skip);

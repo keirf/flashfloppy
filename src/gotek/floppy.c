@@ -14,8 +14,20 @@
 
 /* Input pins: DIR=PB0, STEP=PA1, SELA=PA0, SELB=PA3, WGATE=PB9, SIDE=PB4, 
  *             MOTOR=PA15/PB15 */
+#if defined(APPLE2)
+#if defined(NDEBUG)
+#define pin_pha0   10 /* PA10 - (aka UART RX (PCB silk J4)) */
+#define pin_pha1    9 /* PA9  - (aka UART TX) */
+#else
+#define pin_pha0    6 /* PA6  - (aka SFRKC30 Rotary DAT (PCB silk J8)) */
+#define pin_pha1   15 /* PA15 - (aka SRFKC30 Rotary CLK) */
+#endif
+#define pin_pha2    0 /* PB0 */
+#define pin_pha3    1 /* PA1 */
+#else
 #define pin_dir     0 /* PB0 */
 #define pin_step    1 /* PA1 */
+#endif
 #define pin_sel0    0 /* PA0 */
 #define pin_sel1    3 /* PA3 */
 static uint8_t pin_wgate = 9; /* PB9 */
@@ -46,17 +58,32 @@ DEFINE_IRQ(dma_wdata_irq, "IRQ_wdata_dma");
 #define dma_rdata_irq DMA1_CH3_IRQ
 DEFINE_IRQ(dma_rdata_irq, "IRQ_rdata_dma");
 
+/* Head step handling. */
+#if defined(APPLE2)
+static struct timer step_timer;
+static void POLL_step(void *unused);
+#else
+void IRQ_28(void) __attribute__((alias("IRQ_STEP_changed"))); /* TMR2 */
+#endif
+
 /* EXTI IRQs. */
 void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI0 */
 void IRQ_7(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI1 */
 void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
 void IRQ_23(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI9_5 */
-void IRQ_28(void) __attribute__((alias("IRQ_STEP_changed"))); /* TMR2 */
 void IRQ_40(void) __attribute__((alias("IRQ_MOTOR_CHGRST_rotary"))); /* EXTI15_10 */
+#if WDATA_TOGGLE
+void IRQ_27(void) __attribute__((alias("IRQ_wdata_capture"))); /* TMR1_CC */
+#endif
 #define MOTOR_CHGRST_IRQ 40
 static const struct exti_irq exti_irqs[] = {
+#if WDATA_TOGGLE
+    /* WDATA */ { 27, FLOPPY_IRQ_WGATE_PRI, 0 },
+#endif
     /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
+#if !defined(APPLE2)
     /* STEP */ { 28, FLOPPY_IRQ_STEP_PRI, m(2) /* dummy */ },
+#endif
     /* WGATE */ {  7, FLOPPY_IRQ_WGATE_PRI, 0 },
     /* SIDE */ { 10, TIMER_IRQ_PRI, 0 }, 
     /* WGATE */ { 23, FLOPPY_IRQ_WGATE_PRI, 0 },
@@ -80,6 +107,7 @@ static volatile uint32_t *p_dma_rd_active;
 
 bool_t floppy_ribbon_is_reversed(void)
 {
+#if !defined(APPLE2)
     time_t t_start = time_now();
 
     /* If ribbon is reversed then most/all inputs are grounded. 
@@ -91,6 +119,7 @@ bool_t floppy_ribbon_is_reversed(void)
         if (time_since(t_start) > time_ms(1000))
             return TRUE;
     }
+#endif
 
     return FALSE;
 }
@@ -111,7 +140,9 @@ static void board_floppy_init(void)
     gpio->crl = (gpio->crl & ~(0xfu<<((pin)<<2)))       \
         | (((mode)&0xfu)<<((pin)<<2))
 
+#if !defined(APPLE2)
     gpio_configure_pin(gpioa, pin_step, GPI_bus);
+#endif
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
@@ -122,8 +153,10 @@ static void board_floppy_init(void)
         | (((mode)&0x3u)<<((pin)<<1));
 #define afio syscfg
 
+#if !defined(APPLE2)
     gpio_set_af(gpioa, pin_step, 1);
     gpio_configure_pin(gpioa, pin_step, AFI(PUPD_none));
+#endif
 
     gpio_set_af(gpio_data, pin_wdata, 1);
     gpio_configure_pin(gpio_data, pin_wdata, AFI(PUPD_none));
@@ -149,7 +182,16 @@ static void board_floppy_init(void)
         pin_wgate = 1; /* PB1 */
     }
 
+#if defined(APPLE2)
+    gpio_configure_pin(gpioa, pin_pha0,  GPI_bus);
+    gpio_configure_pin(gpioa, pin_pha1,  GPI_bus);
+    gpio_configure_pin(gpiob, pin_pha2,  GPI_bus);
+    gpio_configure_pin(gpioa, pin_pha3,  GPI_bus);
+    timer_init(&step_timer, POLL_step, NULL);
+    timer_set(&step_timer, time_now());
+#else
     gpio_configure_pin(gpiob, pin_dir,   GPI_bus);
+#endif
     gpio_configure_pin(gpioa, pin_sel0,  GPI_bus);
     gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
     gpio_configure_pin(gpiob, pin_side,  GPI_bus);
@@ -275,6 +317,76 @@ static void update_SELA_irq(bool_t amiga_hd_id)
 #undef OFF
 }
 
+#if defined(APPLE2)
+
+static void POLL_step(void *unused)
+{
+    static unsigned int _pha;
+
+    struct drive *drv = &drive;
+    uint16_t idr_a, idr_b;
+    unsigned int pha;
+
+    /* Latch inputs. */
+    idr_a = gpioa->idr;
+    idr_b = gpiob->idr;
+
+    /* Bail if drive not selected. */
+    if (idr_a & m(pin_sel0)) {
+        _pha = 0;
+        goto out;
+    }
+
+    /* Debounce the phase signals. */
+    pha = _pha;
+    _pha = ((idr_a >> pin_pha0) & 1)
+        | ((idr_a >> (pin_pha1-1)) & 2)
+        | ((idr_b << (2-pin_pha2)) & 4)
+        | ((idr_a << (3-pin_pha3)) & 8);
+    pha &= _pha;
+
+    /* Do nothing while we're mid-step. */
+    if (drv->step.state & STEP_active)
+        goto out;
+
+    /* Rotate the phase bitmap so that the current phase is at bit 0. Note 
+     * that the current phase is directly related to the current cylinder. */
+    pha = ((pha | (pha << 4)) >> (drv->cyl & 3)) & 0xf;
+
+    /* Conditions to action a head step:
+     *  (1) Only one phase is asserted;
+     *  (2) That phase is adjacent to the current phase;
+     *  (3) We haven't hit a cylinder hard limit. */
+    switch (pha) {
+    case m(1): /* Phase +1 only */
+        if (drv->cyl == ff_cfg.max_cyl)
+            goto out;
+        drv->step.inward = TRUE;
+        break;
+    case m(3): /* Phase -1 only */
+        if (drv->cyl == 0)
+            goto out;
+        drv->step.inward = FALSE;
+        break;
+    default:
+        goto out;
+    }
+
+    /* Action a head step. */
+    if (dma_rd != NULL)
+        rdata_stop();
+    if (dma_wr != NULL)
+        wdata_stop();
+    drv->step.start = time_now();
+    drv->step.state = STEP_started;
+    IRQx_set_pending(FLOPPY_SOFTIRQ);
+
+out:
+    timer_set(&step_timer, step_timer.deadline + time_ms(1));
+}
+
+#else
+
 static bool_t drive_is_writing(void)
 {
     if (!dma_wr)
@@ -334,6 +446,8 @@ static void IRQ_STEP_changed(void)
     }
     IRQx_set_pending(FLOPPY_SOFTIRQ);
 }
+
+#endif
 
 static void IRQ_SIDE_changed(void)
 {
@@ -430,6 +544,17 @@ static void IRQ_CHGRST(struct drive *drv)
         drive_change_output(drv, outp_dskchg, FALSE);
     }
 }
+
+#if WDATA_TOGGLE
+static void IRQ_wdata_capture(void)
+{
+    /* Clear WDATA-captured flag. */
+    (void)tim_wdata->ccr1;
+
+    /* Toggle polarity to capture the next edge. */
+    tim_wdata->ccer ^= TIM_CCER_CC1P;
+}
+#endif
 
 static void IRQ_MOTOR_CHGRST_rotary(void)
 {
