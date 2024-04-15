@@ -65,7 +65,7 @@ The alternative firmwares include:
  * alt/io-test: Test your Gotek I/O pins if you suspect a hardware fault
  * alt/quickdisk: QuickDisk emulation (see the wiki)
    - If you don't know what QuickDisk is, you don't need this firmware.
- * alt/logile: Firmware with debug logging to FFLOG.TXT on the USB drive
+ * alt/logfile: Firmware with debug logging to FFLOG.TXT on the USB drive
    - Useful only for fault finding. Not for general use.
 
 Redistribution
