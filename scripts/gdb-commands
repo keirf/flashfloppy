@@ -1,0 +1,6 @@
+file /home/keir/flashfloppy/out/at32f435/debug/floppy/target.elf
+target extended-remote localhost:3333
+# Reset the target and call its init script
+monitor reset init
+# Halt the target. The init script should halt the target, but just in case
+monitor halt

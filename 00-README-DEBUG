@@ -1,0 +1,27 @@
+# Run OpenCD:
+~/install/bin/openocd -s ~/install/share/openocd/scripts/ -f interface/cmsis-dap.cfg -f target/at32f4xx.cfg
+
+# In another window, run GDB (note elf image name is hardcoded in the script):
+gdb-multiarch -x scripts/gdb-commands
+
+# Telnet commands:
+telnet localhost 4444
+mdb 0x1fffc000 512 # Read USD on 435
+mdb 0x1ffff800 512 # Read USD on 415
+reset init                # FPEC operations need to be in reset state
+at32f4xx mass_erase
+at32f4xx usd_erase        # NB. Enables RDP!
+at32f4xx usd_write 0 0xa5 # Disable RDP -- Do this before resetting!!!!!!
+
+# If you reset after usd_erase, you can no longer read any flash including USD!
+# To get out of this do the following:
+at32f4xx usd_write 0 0xa5 # Slow (it mass erases main Flash)
+reset init                # Makes Flash and USD readable again
+
+# Oh no, after a USD erase, AT32F435 1MB+ Flash parts only have 128kB SRAM!
+# To fix this:
+at32f4xx usd_write 8 0xfa # Sets EOPB0 to 384kB SRAM mode
+
+# Some more general stuff:
+flash write_image [erase] flashfloppy/out/at32f435/debug/floppy/target.hex
+reset run|halt|init
