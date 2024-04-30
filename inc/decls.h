@@ -10,6 +10,8 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#define CONFIG_SWD 1
+
 #include <stdint.h>
 #include <stdarg.h>
 #include <stddef.h>
