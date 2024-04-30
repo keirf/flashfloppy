@@ -109,11 +109,23 @@ static void peripheral_init(void)
                     RCC_APB2ENR_TIM1EN);
     rcc->ahbenr = RCC_AHBENR_DMA1EN;
 
+#if defined(CONFIG_SWD)
+
+    /* Preserve PA13, PA14 as SWD. */
+    afio->mapr = AFIO_MAPR_SWJ_CFG_ENABLED;
+    gpioa->crl = 0x44444444u;
+    gpioa->crh = (gpioa->crh & 0x0ff00000u) | 0x40044444u;
+
+#else
+
     /* Turn off serial-wire JTAG and reclaim the GPIOs. */
     afio->mapr = AFIO_MAPR_SWJ_CFG_DISABLED;
 
     /* All pins in a stable state. */
     gpio_init(gpioa);
+
+#endif
+
     gpio_init(gpiob);
     gpio_init(gpioc);
 }
