@@ -97,10 +97,12 @@ unsigned int board_get_buttons(void)
 unsigned int board_get_rotary(void)
 {
     unsigned int x = 3;
+#if !defined(CONFIG_SWD)
     if ((mcu_package != MCU_QFN32) && (ff_cfg.chgrst != CHGRST_pa14)) {
         /* Alternative location at PA13, PA14. */
         x &= gpioa->idr >> 13;
     }
+#endif
     if (mcu_package == MCU_LQFP64) {
         /* Original rotary header at PC10, PC11. */
         x &= gpioc->idr >> 10;
@@ -118,12 +120,14 @@ uint32_t board_rotary_exti_mask;
 void board_setup_rotary_exti(void)
 {
     uint32_t m = 0;
+#if !defined(CONFIG_SWD)
     if ((mcu_package != MCU_QFN32) && (ff_cfg.chgrst != CHGRST_pa14)) {
         /* Alternative location at PA13, PA14. */
         exti_route_pa(13);
         exti_route_pa(14);
         m |= m(13) | m(14);
     }
+#endif
     if (mcu_package == MCU_LQFP64) {
         /* Original rotary header at PC10, PC11. */
         exti_route_pc(10);
@@ -179,6 +183,11 @@ void board_init(void)
 #if !defined(NDEBUG)
     /* PA9-10 (serial console). */
     pa_skip |= 0x0600;
+#endif
+
+#if defined(CONFIG_SWD)
+    /* PA13-14 (SWD) */
+    pa_skip |= 0x6000;
 #endif
 
     /* PB0,4,9 (floppy inputs). */
