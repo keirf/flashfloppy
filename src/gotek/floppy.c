@@ -68,7 +68,9 @@ void IRQ_40(void) __attribute__((alias("IRQ_MOTOR_CHGRST_rotary"))); /* EXTI15_1
 #define MOTOR_CHGRST_IRQ 40
 static const struct exti_irq exti_irqs[] = {
     /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
+#if !defined(APPLE2)
     /* STEP */ { 28, FLOPPY_IRQ_STEP_PRI, m(2) /* dummy */ },
+#endif
     /* WGATE */ {  7, FLOPPY_IRQ_WGATE_PRI, 0 },
     /* SIDE */ { 10, TIMER_IRQ_PRI, 0 }, 
     /* WGATE */ { 23, FLOPPY_IRQ_WGATE_PRI, 0 },
