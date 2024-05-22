@@ -262,7 +262,11 @@ static void timer_dma_init(void)
     tim_rdata->ccmr1 = (TIM_CCMR1_CC2S(TIM_CCS_OUTPUT) |
                         TIM_CCMR1_OC2M(TIM_OCM_PWM1));
     tim_rdata->ccer = TIM_CCER_CC2E | ((O_TRUE==0) ? TIM_CCER_CC2P : 0);
+#if defined(APPLE2)
+    tim_rdata->ccr2 = sampleclk_ns(1000);
+#else
     tim_rdata->ccr2 = sampleclk_ns(400);
+#endif
     tim_rdata->dier = TIM_DIER_UDE;
     tim_rdata->cr2 = 0;
 
