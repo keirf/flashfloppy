@@ -122,7 +122,12 @@ static void drive_change_output(
     switch (outp) {
     case outp_index:  pin = pin_08; break;
     case outp_trk0:   pin = pin_26; break;
-    case outp_wrprot: pin = pin_28; break;
+    case outp_wrprot:
+        pin = pin_28;
+#if defined(APPLE2)
+        assert ^= 1;
+#endif
+        break;
     default:
         _drive_change_output(drv, outp, assert);
         return;
