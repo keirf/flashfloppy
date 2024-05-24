@@ -283,12 +283,6 @@ void board_init(void)
 
     }
 
-#if defined(APPLE2)
-    /* HACK: Move two phases to the KC30 header. */
-    pa_skip |= m(6) | m(15);
-    has_kc30_header = 0;
-#endif
-
     gpio_pull_up_pins(gpioa, ~pa_skip);
     gpio_pull_up_pins(gpiob, ~pb_skip);
 }

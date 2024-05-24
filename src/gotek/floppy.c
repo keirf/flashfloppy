@@ -15,8 +15,8 @@
 /* Input pins: DIR=PB0, STEP=PA1, SELA=PA0, SELB=PA3, WGATE=PB9, SIDE=PB4, 
  *             MOTOR=PA15/PB15 */
 #if defined(APPLE2)
-#define pin_pha0    6 /* PA6 */
-#define pin_pha1   15 /* PA15 */
+#define pin_pha0   10 /* PA10 */
+#define pin_pha1    9 /* PA9 */
 #define pin_pha2    0 /* PB0 */
 #define pin_pha3    1 /* PA1 */
 #else
