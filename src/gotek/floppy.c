@@ -53,20 +53,28 @@ DEFINE_IRQ(dma_wdata_irq, "IRQ_wdata_dma");
 #define dma_rdata_irq DMA1_CH3_IRQ
 DEFINE_IRQ(dma_rdata_irq, "IRQ_rdata_dma");
 
-/* EXTI IRQs. */
-void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI0 */
-void IRQ_7(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI1 */
-void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
-void IRQ_23(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI9_5 */
+/* Head step handling. */
 #if defined(APPLE2)
 static struct timer step_timer;
 static void POLL_step(void *unused);
 #else
 void IRQ_28(void) __attribute__((alias("IRQ_STEP_changed"))); /* TMR2 */
 #endif
+
+/* EXTI IRQs. */
+void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI0 */
+void IRQ_7(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI1 */
+void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
+void IRQ_23(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI9_5 */
 void IRQ_40(void) __attribute__((alias("IRQ_MOTOR_CHGRST_rotary"))); /* EXTI15_10 */
+#if WDATA_TOGGLE
+void IRQ_27(void) __attribute__((alias("IRQ_wdata_capture"))); /* TMR1_CC */
+#endif
 #define MOTOR_CHGRST_IRQ 40
 static const struct exti_irq exti_irqs[] = {
+#if WDATA_TOGGLE
+    /* WDATA */ { 27, FLOPPY_IRQ_WGATE_PRI, 0 },
+#endif
     /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
 #if !defined(APPLE2)
     /* STEP */ { 28, FLOPPY_IRQ_STEP_PRI, m(2) /* dummy */ },
@@ -531,6 +539,17 @@ static void IRQ_CHGRST(struct drive *drv)
         drive_change_output(drv, outp_dskchg, FALSE);
     }
 }
+
+#if WDATA_TOGGLE
+static void IRQ_wdata_capture(void)
+{
+    /* Clear WDATA-captured flag. */
+    (void)tim_wdata->ccr1;
+
+    /* Toggle polarity to capture the next edge. */
+    tim_wdata->ccer ^= TIM_CCER_CC1P;
+}
+#endif
 
 static void IRQ_MOTOR_CHGRST_rotary(void)
 {

@@ -294,7 +294,7 @@ static void timer_dma_init(void)
     tim_wdata->psc = (SYSCLK_MHZ/SAMPLECLK_MHZ) - 1;
     tim_wdata->arr = 0xffff;
     tim_wdata->ccmr1 = TIM_CCMR1_CC1S(TIM_CCS_INPUT_TI1);
-    tim_wdata->dier = TIM_DIER_CC1DE;
+    tim_wdata->dier = TIM_DIER_CC1DE | (WDATA_TOGGLE ? TIM_DIER_CC1IE : 0);
     tim_wdata->cr2 = 0;
 
     /* DMA setup: From the WDATA Timer's CCRx into a circular buffer. */
