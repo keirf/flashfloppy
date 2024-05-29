@@ -22,6 +22,12 @@
 #define is_quickdisk FALSE
 #endif
 
+#if defined(APPLE2)
+#define WDATA_TOGGLE TRUE
+#else
+#define WDATA_TOGGLE FALSE
+#endif
+
 #define FINTF_SHUGART     0
 #define FINTF_IBMPC       1
 #define FINTF_IBMPC_HDOUT 2
