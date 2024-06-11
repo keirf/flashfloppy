@@ -172,7 +172,7 @@ struct image {
 
     /* Info about image as a whole. */
     uint8_t nr_cyls, nr_sides;
-    uint8_t step;
+    uint8_t step, hswap;
 
     /* Data buffers. */
     struct image_bufs bufs;

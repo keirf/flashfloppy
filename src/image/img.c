@@ -754,7 +754,7 @@ static bool_t ibm_3174_open(struct image *im)
 
 static bool_t d81_open(struct image *im)
 {
-    im->img.layout = LAYOUT_sides_swapped;
+    im->hswap = TRUE;
     return raw_type_open(im, d81_type);
 }
 
@@ -1861,7 +1861,10 @@ static void raw_setup_track(
     struct image_buf *rd = &im->bufs.read_data;
     struct image_buf *bc = &im->bufs.read_bc;
     uint32_t decode_off, start_ticks = start_pos ? *start_pos : 0;
-    uint8_t cyl = track/(2*im->step), side = track & (im->nr_sides - 1);
+    uint8_t cyl, side;
+
+    cyl = track / (2*im->step);
+    side = (track ^ im->hswap) & (im->nr_sides - 1);
 
     track = cyl*2 + side;
     if (track != im->cur_track)
