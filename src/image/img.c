@@ -959,7 +959,8 @@ static bool_t trd_open(struct image *im)
         .gap3 = 57,
         .gap4a = -1,
         .base = { 1, 1 },
-        .interleave = 1
+        .interleave = 1,
+        .head = 0+1 /* both sides H=0 */
     };
     struct {
         uint8_t na, free_sec, free_trk;
