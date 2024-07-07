@@ -320,6 +320,10 @@ static void i2c_rx_tc(void)
     struct i2c_osd_info *info = (struct i2c_osd_info *)buffer;
 
     osd_buttons_rx = info->buttons;
+    if (osd_buttons_rx) {
+        printk("{%02x %02x %02x %02x}\n", info->protocol_ver,
+               info->fw_major, info->fw_minor, info->buttons);
+    }
 
     /* Now do the OSD write. */
     dma_start(osd_prep_buffer());
