@@ -39,6 +39,9 @@ extern const struct image_handler dummy_image_handler;
 const struct image_type image_type[] = {
     { "adf", &adf_image_handler },
     { "atr", &atr_image_handler },
+    { "d1m", &d81_image_handler }, /* CMD FD-2000 DD, 81 track */
+    { "d2m", &d81_image_handler }, /* CMD FD-2000 HD, 81 track */
+    { "d4m", &d81_image_handler }, /* CMD FD-4000 ED, 81 track */
     { "d81", &d81_image_handler },
     { "dsk", &dsk_image_handler },
     { "hdm", &pc98hdm_image_handler },
