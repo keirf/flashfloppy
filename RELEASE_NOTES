@@ -3,6 +3,15 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.43 - 22 January 2025
+ - Apple2: Read/write HFE images using alt firmware
+ - D81: Various fixes
+   - Support D1M/D2M/D4M extensions
+   - Support CMD third-party 1.6M and 3.2M image formats
+   - Invert sector header H byte
+   - No track Index Address Mark (IAM)
+ - TRDOS: All sectors have header H byte set to zero
+
 ** v3.42 - 11 January 2024
  - HFEv3: Various read/write improvements
  - WDATA: Merge short write pulses, and apply de-jitter/precomp
