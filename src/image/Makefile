@@ -3,7 +3,7 @@ OBJS += image.o
 
 OBJS-$(quickdisk) += qd.o
 
-ifeq ($(apple2),y)
+ifeq ($(target),apple2)
 shugart := y
 endif
 

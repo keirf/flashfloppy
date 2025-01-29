@@ -18,17 +18,17 @@ OBJS += volume.o
 OBJS-$(debug) += console.o
 OBJS-$(logfile) += logfile.o
 
-ifeq ($(bl_update),y)
+ifeq ($(target),bl_update)
 
 OBJS += bl_update.o
 SUBDIRS += display gotek
 
-else ifeq ($(io_test),y)
+else ifeq ($(target),io_test)
 
 OBJS += io_test.o
 SUBDIRS += display gotek
 
-else ifeq ($(bootloader),y)
+else ifeq ($(target),bootloader)
 
 OBJS += fw_update.o
 SUBDIRS += display fatfs gotek usb
