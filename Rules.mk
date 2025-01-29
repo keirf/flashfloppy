@@ -20,11 +20,9 @@ FLAGS += -Wundef
 ## STM32F105
 ifeq ($(mcu),stm32f105)
 FLAGS += -mcpu=cortex-m3
-ifeq ($(bootloader),y)
+ifeq ($(target),bootloader)
 # Debug bootloader doesn't fit in 32kB
 override level=prod
-override debug=n
-override logfile=n
 endif
 
 ## AT32F435
@@ -33,8 +31,14 @@ FLAGS += -mcpu=cortex-m4
 endif
 
 MCU_FLAG := -DMCU=MCU_$(mcu)
+$(mcu) := y
+
 TARGET_FLAG := -DTARGET=TARGET_$(target)
+$(target) := y
+
 LEVEL_FLAG := -DLEVEL=LEVEL_$(level)
+$(level) := y
+
 FLAGS += $(MCU_FLAG) $(TARGET_FLAG) $(LEVEL_FLAG)
 
 FLAGS += -MMD -MF .$(@F).d
@@ -81,7 +85,7 @@ build.o: $(OBJS)
 	$(OBJCOPY) -O ihex $< $@
 	chmod a-x $@
 	$(PYTHON) $(ROOT)/scripts/check_hex.py $@ $(mcu)
-ifneq ($(bootloader),y)
+ifneq ($(target),bootloader)
 	srec_cat ../bootloader/target.hex -Intel $@ -Intel -o $@ -Intel
 endif
 
