@@ -153,7 +153,7 @@ void board_setup_rotary_exti(void)
 void board_jc_set_mode(unsigned int mode)
 {
     if (mcu_package == MCU_QFN32) {
-#if !defined(NDEBUG)
+#if LEVEL == LEVEL_debug
         /* PA9 is used for serial tx */
 #else
         gpio_configure_pin(gpioa, 9, mode);
@@ -166,7 +166,7 @@ void board_jc_set_mode(unsigned int mode)
 bool_t board_jc_strapped(void)
 {
     if (mcu_package == MCU_QFN32) {
-#if !defined(NDEBUG)
+#if LEVEL == LEVEL_debug
         return FALSE; /* PA9 is used for serial tx */
 #else
         return !gpio_read_pin(gpioa, 9);
@@ -183,7 +183,7 @@ void board_init(void)
     /* PA0-1,8 (floppy inputs), PA2 (speaker). */
     pa_skip = 0x0107;
 
-#if !defined(NDEBUG)
+#if LEVEL == LEVEL_debug
     /* PA9-10 (serial console). */
     pa_skip |= 0x0600;
 #endif
@@ -289,7 +289,7 @@ void board_init(void)
     }
 
 #if TARGET == TARGET_apple2
-#if defined(NDEBUG)
+#if LEVEL != LEVEL_debug
     /* Normal build: Two phases use UART RX/TX. */
     pa_skip |= m(9) | m(10);
 #else

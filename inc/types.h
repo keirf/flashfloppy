@@ -7,7 +7,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#ifndef NDEBUG
+#if LEVEL == LEVEL_debug
 #define ASSERT(p) do { if (!(p)) illegal(); } while (0)
 #else
 #define ASSERT(p) do { if (0 && (p)) {} } while (0)

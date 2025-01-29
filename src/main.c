@@ -74,7 +74,7 @@ static void native_get_slot_map(bool_t sorted_only);
 /* Hack inside the guts of FatFS. */
 void flashfloppy_fill_fileinfo(FIL *fp);
 
-#ifdef LOGFILE
+#if LEVEL == LEVEL_logfile
 /* Logfile must be written to config dir. */
 #define logfile_flush(_file) do {               \
     fatfs.cdir = cfg.cfg_cdir;                  \
@@ -706,7 +706,7 @@ bool_t get_img_cfg(struct slot *slot)
 static void dump_file(void)
 {
     F_lseek(&fs->file, 0);
-#ifndef NDEBUG
+#if LEVEL == LEVEL_debug
     printk("[");
     do {
         F_read(&fs->file, fs->buf, sizeof(fs->buf), NULL);
@@ -3026,7 +3026,7 @@ static void noinline banner(void)
 #define sep_ch "z"
 #endif
         led_7seg_write_string(
-#if defined(LOGFILE)
+#if LEVEL == LEVEL_logfile
             "LOG"
 #elif TARGET == TARGET_quickdisk
             (led_7seg_nr_digits() == 3) ? "Q"sep_ch"D" : "QD"
@@ -3046,7 +3046,7 @@ static void noinline banner(void)
         lcd_write(0, 0, 0, "FlashFloppy+");
 #endif
         snprintf(msg[0], sizeof(msg[0]), "%s%s", fw_ver,
-#if defined(LOGFILE)
+#if LEVEL == LEVEL_logfile
                  " Log"
 #elif TARGET == TARGET_quickdisk
                  " QD"

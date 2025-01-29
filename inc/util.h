@@ -80,32 +80,32 @@ void arena_init(void);
 /* Board-specific callouts */
 void board_init(void);
 
-#if !defined(NDEBUG) || defined(LOGFILE)
+#if LEVEL == LEVEL_debug || LEVEL == LEVEL_logfile
 /* Log output, to serial console or logfile. */
 int vprintk(const char *format, va_list ap)
     __attribute__ ((format (printf, 1, 0)));
 int printk(const char *format, ...)
     __attribute__ ((format (printf, 1, 2)));
-#else /* NDEBUG && !LOGFILE */
+#elif LEVEL == LEVEL_prod
 static inline int vprintk(const char *format, va_list ap) { return 0; }
 static inline int printk(const char *format, ...) { return 0; }
 #endif
 
 #define log(f, a...) printk("%s: " f, LOG_PREFIX, ## a)
 
-#if defined(LOGFILE)
+#if LEVEL == LEVEL_logfile
 /* Logfile management */
 void logfile_flush(FIL *file);
-#else /* !LOGFILE */
+#else
 #define logfile_flush(f) ((void)0)
 #endif
 
-#if !defined(NDEBUG)
+#if LEVEL == LEVEL_debug
 /* Serial console control */
 void console_init(void);
 void console_sync(void);
 void console_crash_on_input(void);
-#else /* NDEBUG */
+#else
 #define console_init() ((void)0)
 #define console_sync() IRQ_global_disable()
 #define console_crash_on_input() ((void)0)

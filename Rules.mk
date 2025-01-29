@@ -22,6 +22,7 @@ ifeq ($(mcu),stm32f105)
 FLAGS += -mcpu=cortex-m3
 ifeq ($(bootloader),y)
 # Debug bootloader doesn't fit in 32kB
+override level=prod
 override debug=n
 override logfile=n
 endif
@@ -33,15 +34,8 @@ endif
 
 MCU_FLAG := -DMCU=MCU_$(mcu)
 TARGET_FLAG := -DTARGET=TARGET_$(target)
-FLAGS += $(MCU_FLAG) $(TARGET_FLAG)
-
-ifneq ($(debug),y)
-FLAGS += -DNDEBUG
-endif
-
-ifeq ($(logfile),y)
-FLAGS += -DLOGFILE=1
-endif
+LEVEL_FLAG := -DLEVEL=LEVEL_$(level)
+FLAGS += $(MCU_FLAG) $(TARGET_FLAG) $(LEVEL_FLAG)
 
 FLAGS += -MMD -MF .$(@F).d
 DEPS = .*.d

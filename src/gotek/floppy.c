@@ -15,7 +15,7 @@
 /* Input pins: DIR=PB0, STEP=PA1, SELA=PA0, SELB=PA3, WGATE=PB9, SIDE=PB4, 
  *             MOTOR=PA15/PB15 */
 #if TARGET == TARGET_apple2
-#if defined(NDEBUG)
+#if LEVEL != LEVEL_debug
 #define pin_pha0   10 /* PA10 - (aka UART RX (PCB silk J4)) */
 #define pin_pha1    9 /* PA9  - (aka UART TX) */
 #else

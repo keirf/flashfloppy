@@ -22,6 +22,11 @@
 #define TARGET_apple2     5
 #define TARGET_quickdisk  6
 
+/* LEVEL */
+#define LEVEL_prod     1
+#define LEVEL_debug    2
+#define LEVEL_logfile  3
+
 /*
  * Local variables:
  * mode: C
