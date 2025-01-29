@@ -14,7 +14,7 @@ export ROOT := $(CURDIR)
 
 prod-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=prod
-	$(MAKE) target mcu=$* target=floppy level=prod
+	$(MAKE) target mcu=$* target=shugart level=prod
 	$(MAKE) target mcu=$* target=apple2 level=prod
 	$(MAKE) target mcu=$* target=quickdisk level=prod
 	$(MAKE) target mcu=$* target=bl_update level=prod
@@ -22,7 +22,7 @@ prod-%: FORCE
 
 debug-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=debug
-	$(MAKE) target mcu=$* target=floppy level=debug
+	$(MAKE) target mcu=$* target=shugart level=debug
 	$(MAKE) target mcu=$* target=apple2 level=debug
 	$(MAKE) target mcu=$* target=quickdisk level=debug
 	$(MAKE) target mcu=$* target=bl_update level=debug
@@ -30,7 +30,7 @@ debug-%: FORCE
 
 logfile-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=logfile
-	$(MAKE) target mcu=$* target=floppy level=logfile
+	$(MAKE) target mcu=$* target=shugart level=logfile
 	$(MAKE) target mcu=$* target=apple2 level=logfile
 	$(MAKE) target mcu=$* target=quickdisk level=logfile
 
@@ -58,7 +58,7 @@ _legacy_dist: PROJ := FF_Gotek
 _legacy_dist: FORCE
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/$(PROJ)-$(VER).upd \
-	  out/$(mcu)/$(level)/floppy/target.bin & \
+	  out/$(mcu)/$(level)/shugart/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/bootloader/$(PROJ)-bootloader-$(VER).upd \
 	  out/$(mcu)/$(level)/bl_update/target.bin & \
@@ -67,7 +67,7 @@ _legacy_dist: FORCE
 	  out/$(mcu)/$(level)/io_test/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/logfile/$(PROJ)-logfile-$(VER).upd \
-	  out/$(mcu)/logfile/floppy/target.bin & \
+	  out/$(mcu)/logfile/shugart/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/apple2/$(PROJ)-apple2-$(VER).upd \
 	  out/$(mcu)/$(level)/apple2/target.bin & \
@@ -83,12 +83,12 @@ _legacy_dist: FORCE
 	wait
 
 _dist: FORCE
-	cd out/$(mcu)/$(level)/floppy; \
+	cd out/$(mcu)/$(level)/shugart; \
 	  cp -a target.dfu $(t)/dfu/$(PROJ)-$(n)-$(VER).dfu; \
 	  cp -a target.hex $(t)/hex/$(PROJ)-$(n)-$(VER).hex
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/$(PROJ)-$(VER).upd \
-	  out/$(mcu)/$(level)/floppy/target.bin $(mcu) & \
+	  out/$(mcu)/$(level)/shugart/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/bootloader/$(PROJ)-bootloader-$(VER).upd \
 	  out/$(mcu)/$(level)/bl_update/target.bin $(mcu) & \
@@ -97,7 +97,7 @@ _dist: FORCE
 	  out/$(mcu)/$(level)/io_test/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/logfile/$(PROJ)-logfile-$(VER).upd \
-	  out/$(mcu)/logfile/floppy/target.bin $(mcu) & \
+	  out/$(mcu)/logfile/shugart/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/apple2/$(PROJ)-apple2-$(VER).upd \
 	  out/$(mcu)/$(level)/apple2/target.bin $(mcu) & \

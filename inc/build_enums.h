@@ -18,7 +18,7 @@
 #define TARGET_bootloader 1
 #define TARGET_bl_update  2
 #define TARGET_io_test    3
-#define TARGET_floppy     4
+#define TARGET_shugart    4
 #define TARGET_apple2     5
 #define TARGET_quickdisk  6
 

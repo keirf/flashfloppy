@@ -24,7 +24,7 @@
 #endif
 #define pin_pha2    0 /* PB0 */
 #define pin_pha3    1 /* PA1 */
-#else
+#elif TARGET == TARGET_shugart
 #define pin_dir     0 /* PB0 */
 #define pin_step    1 /* PA1 */
 #endif
@@ -62,7 +62,7 @@ DEFINE_IRQ(dma_rdata_irq, "IRQ_rdata_dma");
 #if TARGET == TARGET_apple2
 static struct timer step_timer;
 static void POLL_step(void *unused);
-#else
+#elif TARGET == TARGET_shugart
 void IRQ_28(void) __attribute__((alias("IRQ_STEP_changed"))); /* TMR2 */
 #endif
 
@@ -81,7 +81,7 @@ static const struct exti_irq exti_irqs[] = {
     /* WDATA */ { 27, FLOPPY_IRQ_WGATE_PRI, 0 },
 #endif
     /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
-#if TARGET == TARGET_floppy
+#if TARGET == TARGET_shugart
     /* STEP */ { 28, FLOPPY_IRQ_STEP_PRI, m(2) /* dummy */ },
 #endif
     /* WGATE */ {  7, FLOPPY_IRQ_WGATE_PRI, 0 },
@@ -107,7 +107,7 @@ static volatile uint32_t *p_dma_rd_active;
 
 bool_t floppy_ribbon_is_reversed(void)
 {
-#if TARGET == TARGET_floppy
+#if TARGET == TARGET_shugart
     time_t t_start = time_now();
 
     /* If ribbon is reversed then most/all inputs are grounded. 
@@ -140,7 +140,7 @@ static void board_floppy_init(void)
     gpio->crl = (gpio->crl & ~(0xfu<<((pin)<<2)))       \
         | (((mode)&0xfu)<<((pin)<<2))
 
-#if TARGET == TARGET_floppy
+#if TARGET == TARGET_shugart
     gpio_configure_pin(gpioa, pin_step, GPI_bus);
 #endif
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
@@ -153,7 +153,7 @@ static void board_floppy_init(void)
         | (((mode)&0x3u)<<((pin)<<1));
 #define afio syscfg
 
-#if TARGET == TARGET_floppy
+#if TARGET == TARGET_shugart
     gpio_set_af(gpioa, pin_step, 1);
     gpio_configure_pin(gpioa, pin_step, AFI(PUPD_none));
 #endif
@@ -189,7 +189,7 @@ static void board_floppy_init(void)
     gpio_configure_pin(gpioa, pin_pha3,  GPI_bus);
     timer_init(&step_timer, POLL_step, NULL);
     timer_set(&step_timer, time_now());
-#else
+#elif TARGET == TARGET_shugart
     gpio_configure_pin(gpiob, pin_dir,   GPI_bus);
 #endif
     gpio_configure_pin(gpioa, pin_sel0,  GPI_bus);
@@ -385,7 +385,7 @@ out:
     timer_set(&step_timer, step_timer.deadline + time_ms(1));
 }
 
-#else
+#elif TARGET == TARGET_shugart
 
 static bool_t drive_is_writing(void)
 {

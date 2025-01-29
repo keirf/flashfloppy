@@ -38,8 +38,8 @@ else
 OBJS += main.o
 OBJS += cache.o
 
+OBJS-$(shugart) += floppy.o
 OBJS-$(apple2) += floppy.o
-OBJS-$(floppy) += floppy.o
 OBJS-$(quickdisk) += quickdisk.o
 
 SUBDIRS += display

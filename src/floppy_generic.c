@@ -368,7 +368,7 @@ static void wdata_stop(void)
     write->dma_end = ARRAY_SIZE(dma_wr->buf) - dma_wdata.cndtr;
     image->wr_prod++;
 
-#if TARGET == TARGET_floppy || TARGET == TARGET_apple2
+#if TARGET == TARGET_shugart || TARGET == TARGET_apple2
     if (!ff_cfg.index_suppression && ff_cfg.write_drain != WDRAIN_realtime) {
         /* Opportunistically insert an INDEX pulse ahead of writeback. */
         drive_change_output(drv, outp_index, TRUE);

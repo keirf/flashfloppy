@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if TARGET == TARGET_floppy || TARGET == TARGET_apple2
+#if TARGET == TARGET_shugart || TARGET == TARGET_apple2
 
 extern const struct image_handler adf_image_handler;
 extern const struct image_handler atr_image_handler;
@@ -135,7 +135,7 @@ static bool_t try_handler(struct image *im, struct slot *slot,
     return handler->open(im);
 }
 
-#if TARGET == TARGET_floppy || TARGET == TARGET_apple2
+#if TARGET == TARGET_shugart || TARGET == TARGET_apple2
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
@@ -262,7 +262,7 @@ bool_t image_setup_track(
 {
     const struct image_handler *h = im->track_handler;
 
-#if TARGET == TARGET_floppy
+#if TARGET == TARGET_shugart
     if (!in_da_mode(im, track>>1)) {
         /* If we are exiting D-A mode then need to re-read the config file. */
         if (h == &da_image_handler)
