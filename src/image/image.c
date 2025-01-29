@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if TARGET == TARGET_shugart || TARGET == TARGET_apple2
+#if TARGET == TARGET_shugart
 
 extern const struct image_handler adf_image_handler;
 extern const struct image_handler atr_image_handler;
@@ -65,6 +65,15 @@ const struct image_type image_type[] = {
     { "vdk", &vdk_image_handler },
     { "v9t9", &ti99_image_handler },
     { "xdf", &xdf_image_handler },
+    { "", NULL }
+};
+
+#elif TARGET == TARGET_apple2
+
+extern const struct image_handler hfe_image_handler;
+
+const struct image_type image_type[] = {
+    { "hfe", &hfe_image_handler },
     { "", NULL }
 };
 
@@ -135,7 +144,7 @@ static bool_t try_handler(struct image *im, struct slot *slot,
     return handler->open(im);
 }
 
-#if TARGET == TARGET_shugart || TARGET == TARGET_apple2
+#if TARGET == TARGET_shugart
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
@@ -195,6 +204,17 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
         if (try_handler(im, slot, cltbl, image_handlers[i]))
             return;
     }
+
+    /* No handler found: bad image. */
+    F_die(FR_BAD_IMAGE);
+}
+
+#elif TARGET == TARGET_apple2
+
+void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
+{
+    if (try_handler(im, slot, cltbl, &hfe_image_handler))
+        return;
 
     /* No handler found: bad image. */
     F_die(FR_BAD_IMAGE);

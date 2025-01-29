@@ -3,9 +3,7 @@ OBJS += image.o
 
 OBJS-$(quickdisk) += qd.o
 
-ifeq ($(target),apple2)
-shugart := y
-endif
+OBJS-$(apple2) += hfe.o
 
 OBJS-$(shugart) += adf.o
 OBJS-$(shugart) += dsk.o
