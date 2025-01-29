@@ -103,7 +103,7 @@ bool_t image_valid(FILINFO *fp)
 
     /* Check valid extension. */
     filename_extension(fp->fname, ext, sizeof(ext));
-    if (!strcmp(ext, "adf") && !is_quickdisk) {
+    if ((TARGET == TARGET_shugart) && !strcmp(ext, "adf")) {
         return (ff_cfg.host == HOST_acorn) || !(fp->fsize % (2*11*512));
     } else {
         const struct image_type *type;
@@ -323,7 +323,7 @@ uint32_t image_ticks_since_index(struct image *im)
     uint32_t ticks = im->cur_ticks - im->ticks_since_flux;
     if ((int32_t)ticks < 0)
         ticks += im->tracklen_ticks;
-    if (!is_quickdisk)
+    if (TARGET != TARGET_quickdisk)
         ticks >>= 4;
     return ticks;
 }

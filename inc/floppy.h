@@ -16,12 +16,6 @@
 #define sampleclk_stk(x) ((x) * (SAMPLECLK_MHZ / STK_MHZ))
 #define stk_sampleclk(x) ((x) / (SAMPLECLK_MHZ / STK_MHZ))
 
-#if TARGET == TARGET_quickdisk
-#define is_quickdisk TRUE
-#else
-#define is_quickdisk FALSE
-#endif
-
 #if TARGET == TARGET_apple2
 #define WDATA_TOGGLE TRUE
 #else
@@ -101,7 +95,6 @@ struct raw_trk {
     int16_t gap_2, gap_3, gap_4a;
     uint8_t interleave, cskew, hskew;
     uint8_t has_iam:1, is_fm:1, invert_data:1;
-#define RAW_TRK_HEAD(h) ((h)+1)
     uint8_t head:2;
 };
 
