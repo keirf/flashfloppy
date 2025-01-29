@@ -157,7 +157,7 @@ typedef struct _Device_TypeDef {
     uint8_t  *(*GetConfigurationStrDescriptor)( uint8_t speed , uint16_t *length);
     uint8_t  *(*GetInterfaceStrDescriptor)( uint8_t speed , uint16_t *length);
 
-#if (USBD_LPM_ENABLED == 1)
+#if 0//(USBD_LPM_ENABLED == 1)
     uint8_t  *(*GetBOSDescriptor)( uint8_t speed , uint16_t *length);
 #endif
 } USBD_DEVICE, *pUSBD_DEVICE;

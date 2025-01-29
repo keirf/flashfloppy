@@ -15,6 +15,7 @@ FLAGS += -Wstrict-prototypes -Wredundant-decls -Wnested-externs
 FLAGS += -fno-common -fno-exceptions -fno-strict-aliasing
 FLAGS += -mlittle-endian -mthumb -mfloat-abi=soft
 FLAGS += -Wno-unused-value -ffunction-sections
+FLAGS += -Wundef
 
 ## STM32F105
 ifeq ($(mcu),stm32f105)
