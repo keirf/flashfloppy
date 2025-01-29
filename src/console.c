@@ -138,10 +138,10 @@ void console_init(void)
 #endif
 
     /* Enable TX pin for USART output, RX pin as input. */
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
     gpio_configure_pin(usart_gpio, usart_tx_pin, AFO_pushpull(_10MHz));
     gpio_configure_pin(usart_gpio, usart_rx_pin, GPI_pull_up);
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
     gpio_set_af(usart_gpio, usart_tx_pin, 7);
     gpio_set_af(usart_gpio, usart_rx_pin, 7);
     gpio_configure_pin(usart_gpio, usart_tx_pin, AFO_pushpull(_10MHz));

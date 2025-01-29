@@ -67,13 +67,13 @@ bool_t floppy_ribbon_is_reversed(void)
 
 static void board_floppy_init(void)
 {
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
 
     gpio_configure_pin(gpioa, pin_reset, GPI_bus);
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_data, pin_rdata, GPO_rdata);
 
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
 
 #define afio syscfg
 

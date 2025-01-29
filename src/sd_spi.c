@@ -299,11 +299,11 @@ static DSTATUS sd_disk_initialize(BYTE pdrv)
 
     /* Enable external I/O pins. */
     gpio_configure_pin(gpiob, PIN_CS, GPO_pushpull(SPI_PIN_SPEED, HIGH));
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
     gpio_configure_pin(gpiob, 13, AFO_pushpull(SPI_PIN_SPEED)); /* CK */
     gpio_configure_pin(gpiob, 14, GPI_pull_up); /* MISO */
     gpio_configure_pin(gpiob, 15, AFO_pushpull(SPI_PIN_SPEED)); /* MOSI */
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
     gpio_set_af(gpiob, 13, 5);
     gpio_configure_pin(gpiob, 13, AFO_pushpull(SPI_PIN_SPEED)); /* CK */
     gpio_set_af(gpiob, 14, 5);

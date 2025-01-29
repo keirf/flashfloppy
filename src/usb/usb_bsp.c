@@ -20,7 +20,7 @@ USB_OTG_CORE_HANDLE USB_OTG_Core;
 
 void USB_OTG_BSP_Init(USB_OTG_CORE_HANDLE *pdev)
 {
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
     /* OTGFSPRE already clear in rcc->cfgr, OTG clock = PLL/3 */
     rcc->ahbenr |= RCC_AHBENR_OTGFSEN; /* OTG clock enable */
 #else

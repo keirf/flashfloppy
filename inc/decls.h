@@ -15,14 +15,15 @@
 #include <stddef.h>
 #include <limits.h>
 
+#include "build_enums.h"
 #include "types.h"
 #include "mcu/common_regs.h"
 #include "mcu/common.h"
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
 #include "mcu/stm32f105_regs.h"
 #include "mcu/at32f415_regs.h"
 #include "mcu/stm32f105.h"
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
 #include "mcu/at32f435_regs.h"
 #include "mcu/at32f435.h"
 #endif

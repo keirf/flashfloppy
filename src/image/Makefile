@@ -3,6 +3,10 @@ OBJS += image.o
 
 OBJS-$(quickdisk) += qd.o
 
+ifeq ($(apple2),y)
+floppy := y
+endif
+
 OBJS-$(floppy) += adf.o
 OBJS-$(floppy) += dsk.o
 OBJS-$(floppy) += hfe.o

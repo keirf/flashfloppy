@@ -52,10 +52,10 @@
 uint8_t mcu_package;
 uint8_t has_kc30_header;
 
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
 #define kc30_sel_gpio gpiof
 #define kc30_sel_pin  6
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
 #define kc30_sel_gpio gpioh
 #define kc30_sel_pin  2
 #endif
@@ -84,7 +84,7 @@ unsigned int board_get_buttons(void)
         x &= _rbit32(gpioc->idr) >> 23;
     x = ~x & 7;
 
-#if defined(APPLE2)
+#if TARGET == TARGET_apple2
     /* Apple 2: QFN32 select pin PA10 is reassigned as stepper phase #0. */
     if (mcu_package == MCU_QFN32)
         return x;
@@ -253,7 +253,7 @@ void board_init(void)
                 /* If PF7 is floating then we are running on a board with the
                  * optional rotary-encoder header (SFRKC30 Rev 1). On earlier
                  * boards PF6=VSS and PF7=VDD, hence we take care here. */
-#if MCU == STM32F105 /* Only AT32F415 has the PF7 pin. */
+#if MCU == MCU_stm32f105 /* Only AT32F415 has the PF7 pin. */
                 rcc->apb2enr |= RCC_APB2ENR_IOPFEN;
                 gpio_configure_pin(gpiof, 7, GPI_pull_down);
                 delay_us(100);
@@ -288,7 +288,7 @@ void board_init(void)
 
     }
 
-#if defined(APPLE2)
+#if TARGET == TARGET_apple2
 #if defined(NDEBUG)
     /* Normal build: Two phases use UART RX/TX. */
     pa_skip |= m(9) | m(10);

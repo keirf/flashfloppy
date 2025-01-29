@@ -1,11 +1,11 @@
 
-#if defined(BOOTLOADER)
+#if TARGET == TARGET_bootloader
 #define FLASH_BASE 0x08000000
 
-#elif MCU == STM32F105
+#elif MCU == MCU_stm32f105
 #define FLASH_BASE 0x08008000
 
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
 #define FLASH_BASE 0x0800c000
 #endif
 

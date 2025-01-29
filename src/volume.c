@@ -18,7 +18,7 @@ static struct cache *cache;
 static void *metadata_addr;
 #define SECSZ 512
 
-#if !defined(BOOTLOADER)
+#if TARGET != TARGET_bootloader
 void volume_cache_init(void *start, void *end)
 {
     volume_cache_destroy();

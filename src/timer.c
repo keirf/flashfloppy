@@ -9,14 +9,14 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
 /* TIM4: IRQ 30. */
 void IRQ_30(void) __attribute__((alias("IRQ_timer")));
 #define TIMER_IRQ 30
 #define tim tim4
 #define tim_bits 16
 #define TIM_CR1_MCUBITS 0
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
 void IRQ_50(void) __attribute__((alias("IRQ_timer")));
 #define TIMER_IRQ 50
 #define tim tim5 /* 32-bit timer */

@@ -14,7 +14,7 @@
 
 /* Input pins: DIR=PB0, STEP=PA1, SELA=PA0, SELB=PA3, WGATE=PB9, SIDE=PB4, 
  *             MOTOR=PA15/PB15 */
-#if defined(APPLE2)
+#if TARGET == TARGET_apple2
 #if defined(NDEBUG)
 #define pin_pha0   10 /* PA10 - (aka UART RX (PCB silk J4)) */
 #define pin_pha1    9 /* PA9  - (aka UART TX) */
@@ -59,7 +59,7 @@ DEFINE_IRQ(dma_wdata_irq, "IRQ_wdata_dma");
 DEFINE_IRQ(dma_rdata_irq, "IRQ_rdata_dma");
 
 /* Head step handling. */
-#if defined(APPLE2)
+#if TARGET == TARGET_apple2
 static struct timer step_timer;
 static void POLL_step(void *unused);
 #else
@@ -81,7 +81,7 @@ static const struct exti_irq exti_irqs[] = {
     /* WDATA */ { 27, FLOPPY_IRQ_WGATE_PRI, 0 },
 #endif
     /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
-#if !defined(APPLE2)
+#if TARGET == TARGET_floppy
     /* STEP */ { 28, FLOPPY_IRQ_STEP_PRI, m(2) /* dummy */ },
 #endif
     /* WGATE */ {  7, FLOPPY_IRQ_WGATE_PRI, 0 },
@@ -107,7 +107,7 @@ static volatile uint32_t *p_dma_rd_active;
 
 bool_t floppy_ribbon_is_reversed(void)
 {
-#if !defined(APPLE2)
+#if TARGET == TARGET_floppy
     time_t t_start = time_now();
 
     /* If ribbon is reversed then most/all inputs are grounded. 
@@ -134,26 +134,26 @@ static void board_floppy_init(void)
 {
     p_dma_rd_active = get_bitband(&gpio_out_active, GPIO_OUT_DMA_RD_ACTIVE);
 
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
 
 #define change_pin_mode(gpio, pin, mode)                \
     gpio->crl = (gpio->crl & ~(0xfu<<((pin)<<2)))       \
         | (((mode)&0xfu)<<((pin)<<2))
 
-#if !defined(APPLE2)
+#if TARGET == TARGET_floppy
     gpio_configure_pin(gpioa, pin_step, GPI_bus);
 #endif
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
 
 #define change_pin_mode(gpio, pin, mode)                \
     gpio->moder = (gpio->moder & ~(0x3u<<((pin)<<1)))   \
         | (((mode)&0x3u)<<((pin)<<1));
 #define afio syscfg
 
-#if !defined(APPLE2)
+#if TARGET == TARGET_floppy
     gpio_set_af(gpioa, pin_step, 1);
     gpio_configure_pin(gpioa, pin_step, AFI(PUPD_none));
 #endif
@@ -182,7 +182,7 @@ static void board_floppy_init(void)
         pin_wgate = 1; /* PB1 */
     }
 
-#if defined(APPLE2)
+#if TARGET == TARGET_apple2
     gpio_configure_pin(gpioa, pin_pha0,  GPI_bus);
     gpio_configure_pin(gpioa, pin_pha1,  GPI_bus);
     gpio_configure_pin(gpiob, pin_pha2,  GPI_bus);
@@ -317,7 +317,7 @@ static void update_SELA_irq(bool_t amiga_hd_id)
 #undef OFF
 }
 
-#if defined(APPLE2)
+#if TARGET == TARGET_apple2
 
 static void POLL_step(void *unused)
 {

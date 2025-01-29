@@ -19,7 +19,7 @@ FLAGS += -Wundef
 
 ## STM32F105
 ifeq ($(mcu),stm32f105)
-FLAGS += -mcpu=cortex-m3 -DSTM32F105=1 -DMCU=1
+FLAGS += -mcpu=cortex-m3
 ifeq ($(bootloader),y)
 # Debug bootloader doesn't fit in 32kB
 override debug=n
@@ -28,28 +28,19 @@ endif
 
 ## AT32F435
 else ifeq ($(mcu),at32f435)
-FLAGS += -mcpu=cortex-m4 -DAT32F435=4 -DMCU=4
+FLAGS += -mcpu=cortex-m4
 endif
+
+MCU_FLAG := -DMCU=MCU_$(mcu)
+TARGET_FLAG := -DTARGET=TARGET_$(target)
+FLAGS += $(MCU_FLAG) $(TARGET_FLAG)
 
 ifneq ($(debug),y)
 FLAGS += -DNDEBUG
 endif
 
-ifeq ($(bootloader),y)
-FLAGS += -DBOOTLOADER=1
-endif
-
 ifeq ($(logfile),y)
 FLAGS += -DLOGFILE=1
-endif
-
-ifeq ($(apple2),y)
-floppy := y
-FLAGS += -DAPPLE2=1
-endif
-
-ifeq ($(quickdisk),y)
-FLAGS += -DQUICKDISK=1
 endif
 
 FLAGS += -MMD -MF .$(@F).d
@@ -58,7 +49,7 @@ DEPS = .*.d
 FLAGS += $(FLAGS-y)
 
 CFLAGS += $(CFLAGS-y) $(FLAGS) -include decls.h
-AFLAGS += $(AFLAGS-y) $(FLAGS) -D__ASSEMBLY__
+AFLAGS += $(AFLAGS-y) $(FLAGS) -include build_enums.h -D__ASSEMBLY__
 LDFLAGS += $(LDFLAGS-y) $(FLAGS) -Wl,--gc-sections
 
 SRCDIR := $(shell $(PYTHON) $(ROOT)/scripts/srcdir.py $(CURDIR))

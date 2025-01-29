@@ -16,13 +16,13 @@
 #define sampleclk_stk(x) ((x) * (SAMPLECLK_MHZ / STK_MHZ))
 #define stk_sampleclk(x) ((x) / (SAMPLECLK_MHZ / STK_MHZ))
 
-#ifdef QUICKDISK
+#if TARGET == TARGET_quickdisk
 #define is_quickdisk TRUE
 #else
 #define is_quickdisk FALSE
 #endif
 
-#if defined(APPLE2)
+#if TARGET == TARGET_apple2
 #define WDATA_TOGGLE TRUE
 #else
 #define WDATA_TOGGLE FALSE

@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if !defined(QUICKDISK)
+#if TARGET == TARGET_floppy || TARGET == TARGET_apple2
 
 extern const struct image_handler adf_image_handler;
 extern const struct image_handler atr_image_handler;
@@ -68,7 +68,7 @@ const struct image_type image_type[] = {
     { "", NULL }
 };
 
-#else /* defined(QUICKDISK) */
+#elif TARGET == TARGET_quickdisk
 
 extern const struct image_handler qd_image_handler;
 
@@ -77,7 +77,7 @@ const struct image_type image_type[] = {
     { "", NULL }
 };
 
-#endif /* QUICKDISK */
+#endif
 
 
 bool_t image_valid(FILINFO *fp)
@@ -135,7 +135,7 @@ static bool_t try_handler(struct image *im, struct slot *slot,
     return handler->open(im);
 }
 
-#if !defined(QUICKDISK)
+#if TARGET == TARGET_floppy || TARGET == TARGET_apple2
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
@@ -200,7 +200,7 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
     F_die(FR_BAD_IMAGE);
 }
 
-#else /* defined(QUICKDISK) */
+#elif TARGET == TARGET_quickdisk
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
@@ -262,7 +262,7 @@ bool_t image_setup_track(
 {
     const struct image_handler *h = im->track_handler;
 
-#if !defined(QUICKDISK)
+#if TARGET == TARGET_floppy
     if (!in_da_mode(im, track>>1)) {
         /* If we are exiting D-A mode then need to re-read the config file. */
         if (h == &da_image_handler)

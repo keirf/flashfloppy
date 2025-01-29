@@ -2842,12 +2842,12 @@ static bool_t main_menu_confirm(const char *op)
 
 static void noinline mcu_info(void)
 {
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
     static const char * const mcus[] = {
         "STM32F105", "AT32F415"
     };
     const char * const mcu = mcus[!!is_artery_mcu];
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
     const static char mcu[] = "AT32F435";
 #endif
     char msg[20];
@@ -2890,7 +2890,7 @@ static void factory_reset(void)
 
 static void update_firmware(void)
 {
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
 
     /* Power up the backup-register interface and allow writes. */
     rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
@@ -2900,7 +2900,7 @@ static void update_firmware(void)
     bkp->dr1[0] = 0xdead;
     bkp->dr1[1] = 0xbeef;
 
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
 
     _reset_flag = RESET_FLAG_BOOTLOADER;
 
@@ -3020,15 +3020,15 @@ static void noinline banner(void)
     switch (display_type) {
 
     case DT_LED_7SEG:
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
 #define sep_ch "-"
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
 #define sep_ch "z"
 #endif
         led_7seg_write_string(
 #if defined(LOGFILE)
             "LOG"
-#elif defined(QUICKDISK)
+#elif TARGET == TARGET_quickdisk
             (led_7seg_nr_digits() == 3) ? "Q"sep_ch"D" : "QD"
 #else
             (led_7seg_nr_digits() == 3) ? "F"sep_ch"F" : "FF"
@@ -3040,15 +3040,15 @@ static void noinline banner(void)
     case DT_LCD_OLED:
         lcd_clear();
         display_mode = DM_banner; /* double height row 0 */
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
         lcd_write(0, 0, 0, "FlashFloppy");
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
         lcd_write(0, 0, 0, "FlashFloppy+");
 #endif
         snprintf(msg[0], sizeof(msg[0]), "%s%s", fw_ver,
 #if defined(LOGFILE)
                  " Log"
-#elif defined(QUICKDISK)
+#elif TARGET == TARGET_quickdisk
                  " QD"
 #else
                  ""

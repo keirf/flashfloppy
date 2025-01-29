@@ -168,7 +168,7 @@ void F_findnext(DIR *dp, FILINFO *fno)
     handle_fr(fr);
 }
 
-#if !defined(BOOTLOADER)
+#if TARGET != TARGET_bootloader
 void F_chdir(const TCHAR *path)
 {
     FRESULT fr = f_chdir(path);

@@ -24,7 +24,7 @@ SECTIONS
     _etext = .;
   } >FLASH
 
-#if MCU == AT32F435
+#if MCU == MCU_at32f435
   .flags : {
     _reset_flag = .;
     . = . + 4;

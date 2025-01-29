@@ -33,10 +33,10 @@
  */
 
 /* Main bootloader: flashes the main firmware. */
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
 #define FIRMWARE_START 0x08008000
 #define FIRMWARE_END   (0x08020000 - FLASH_PAGE_SIZE)
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
 #define FIRMWARE_START 0x0800c000
 #define FIRMWARE_END   (0x08040000 - FLASH_PAGE_SIZE)
 #endif
@@ -95,7 +95,7 @@ static bool_t fw_update_requested(void)
 {
     bool_t requested;
 
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
 
     /* Power up the backup-register interface and allow writes. */
     rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
@@ -108,7 +108,7 @@ static bool_t fw_update_requested(void)
     bkp->dr1[0] = bkp->dr1[1] = 0;
     rcc->apb1enr = 0;
 
-#elif MCU == AT32F435
+#elif MCU == MCU_at32f435
 
     /* Check-and-clear a magic value poked into SRAM1 by the main firmware. */
     requested = (_reset_flag == RESET_FLAG_BOOTLOADER);
@@ -281,7 +281,7 @@ static enum fail_code find_update_entry(FIL *fp, UINT *p_off, UINT *p_sz)
     F_lseek(fp, f_size(fp) - sizeof(footer));
     F_read(fp, footer, sizeof(footer), NULL);
     switch (be16toh(footer[0])) {
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
     case 0x4659/* "FY" */:
         *p_off = 0;
         *p_sz = f_size(fp);
@@ -305,7 +305,7 @@ int update(void *unused)
 
     fail_code = find_update_file(update_fname, sizeof(update_fname),
                                  "flashfloppy-*.upd");
-#if MCU == STM32F105
+#if MCU == MCU_stm32f105
     if (fail_code == FC_no_file)
         fail_code = find_update_file(update_fname, sizeof(update_fname),
                                      "ff_gotek*.upd");

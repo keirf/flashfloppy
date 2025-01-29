@@ -38,6 +38,7 @@ else
 OBJS += main.o
 OBJS += cache.o
 
+OBJS-$(apple2) += floppy.o
 OBJS-$(floppy) += floppy.o
 OBJS-$(quickdisk) += quickdisk.o
 
