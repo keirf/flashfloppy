@@ -50,6 +50,16 @@ struct adf_image {
     uint8_t sec_map[2][22];
 };
 
+struct apple2_image { /* XXX */
+    uint32_t trk_off;
+    uint32_t sec_idx;
+    int32_t decode_pos;
+    uint32_t pre_idx_gap_bc;
+    uint32_t nr_secs;
+    uint32_t written_secs;
+    uint8_t sec_map[2][22];
+};
+
 struct hfe_image {
     uint16_t tlut_base;
     uint16_t trk_off;
@@ -198,6 +208,7 @@ struct image {
 
     union {
         struct adf_image adf;
+        struct apple2_image apple2;
         struct hfe_image hfe;
         struct qd_image qd;
         struct img_image img;

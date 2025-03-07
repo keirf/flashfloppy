@@ -71,9 +71,15 @@ const struct image_type image_type[] = {
 #elif TARGET == TARGET_apple2
 
 extern const struct image_handler hfe_image_handler;
+extern const struct image_handler apple2_po_image_handler;
+extern const struct image_handler apple2_do_image_handler;
+extern const struct image_handler apple2_dsk_image_handler;
 
 const struct image_type image_type[] = {
     { "hfe", &hfe_image_handler },
+    { "po", &apple2_po_image_handler },
+    { "do", &apple2_do_image_handler },
+    { "dsk",&apple2_dsk_image_handler },
     { "", NULL }
 };
 
@@ -213,7 +219,19 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
-    if (try_handler(im, slot, cltbl, &hfe_image_handler))
+    char ext[sizeof(slot->type)+1];
+    const struct image_type *type;
+
+    /* Extract filename extension. */
+    memcpy(ext, slot->type, sizeof(slot->type));
+    ext[sizeof(slot->type)] = '\0';
+
+    /* Use the extension to find the correct image handler. */
+    for (type = &image_type[0]; type->handler != NULL; type++)
+        if (!strcmp(ext, type->ext))
+            break;
+
+    if (type->handler && try_handler(im, slot, cltbl, type->handler))
         return;
 
     /* No handler found: bad image. */
