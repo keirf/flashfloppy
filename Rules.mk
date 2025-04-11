@@ -19,7 +19,16 @@ FLAGS += -Wundef
 
 ## STM32F105
 ifeq ($(mcu),stm32f105)
+
 FLAGS += -mcpu=cortex-m3
+
+# Build hack for an Apple2-specific bootloader which knows that QFN32 pin
+# PA10 is reassigned.
+ifeq ($(target),apple2-bootloader)
+override target=bootloader
+FLAGS += -DAPPLE2_BOOTLOADER=1
+endif
+
 ifeq ($(target),bootloader)
 # Debug bootloader doesn't fit in 32kB
 override level=prod

@@ -34,9 +34,12 @@ logfile-%: FORCE
 	$(MAKE) target mcu=$* target=apple2 level=logfile
 	$(MAKE) target mcu=$* target=quickdisk level=logfile
 
+apple2-bootloader-%: FORCE
+	$(MAKE) target mcu=$* target=apple2-bootloader level=prod
+
 all-%: FORCE prod-% debug-% logfile-% ;
 
-all: FORCE all-stm32f105 all-at32f435 ;
+all: FORCE all-stm32f105 all-at32f435 apple2-bootloader-stm32f105;
 
 clean: FORCE
 	rm -rf out
@@ -112,6 +115,14 @@ _dist: FORCE
 	  out/$(mcu)/logfile/quickdisk/target.bin $(mcu) & \
 	wait
 
+_dist_apple2_at2_bootloader: f := $(t)/alt/apple2/at2-bootloader
+_dist_apple2_at2_bootloader: n := $(PROJ)-apple2-at2-bootloader-$(VER)
+_dist_apple2_at2_bootloader: FORCE
+	mkdir -p $(f)
+	cd out/stm32f105/prod/apple2-bootloader; \
+	  cp -a target.dfu $(f)/$(n).dfu; \
+	  cp -a target.hex $(f)/$(n).hex
+
 dist: level := prod
 dist: t := $(ROOT)/out/$(PROJ)-$(VER)
 dist: FORCE all
@@ -126,6 +137,7 @@ dist: FORCE all
 	$(MAKE) _legacy_dist mcu=stm32f105 level=$(level) t=$(t)
 	$(MAKE) _dist mcu=stm32f105 n=at415-st105 level=$(level) t=$(t)
 	$(MAKE) _dist mcu=at32f435 n=at435 level=$(level) t=$(t)
+	$(MAKE) _dist_apple2_at2_bootloader level=$(level) t=$(t)
 	$(PYTHON) scripts/mk_qd.py --window=6.5 $(t)/alt/quickdisk/Blank.qd
 	cp -a COPYING $(t)/
 	cp -a README $(t)/

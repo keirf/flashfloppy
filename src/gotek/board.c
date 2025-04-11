@@ -84,7 +84,7 @@ unsigned int board_get_buttons(void)
         x &= _rbit32(gpioc->idr) >> 23;
     x = ~x & 7;
 
-#if TARGET == TARGET_apple2
+#if (TARGET == TARGET_apple2) || defined(APPLE2_BOOTLOADER)
     /* Apple 2: QFN32 select pin PA10 is reassigned as stepper phase #0. */
     if (mcu_package == MCU_QFN32)
         return x;
