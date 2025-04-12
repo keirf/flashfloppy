@@ -24,12 +24,10 @@ SECTIONS
     _etext = .;
   } >FLASH
 
-#if MCU == MCU_at32f435
   .flags : {
     _reset_flag = .;
     . = . + 4;
   } >RAM
-#endif
 
   .data : AT (_etext) {
     . = ALIGN(4);

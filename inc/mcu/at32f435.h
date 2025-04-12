@@ -66,9 +66,6 @@ void gpio_set_af(GPIO gpio, unsigned int pin, unsigned int af);
 #define SOFTIRQ_0 85
 #define SOFTIRQ_1 86
 
-extern volatile uint32_t _reset_flag;
-#define RESET_FLAG_BOOTLOADER 0xdeadbeefu
-
 /*
  * Local variables:
  * mode: C

@@ -2891,20 +2891,18 @@ static void factory_reset(void)
 static void update_firmware(void)
 {
 #if MCU == MCU_stm32f105
+    if (!is_artery_mcu) {
+        /* Power up the backup-register interface and allow writes. */
+        rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
+        pwr->cr |= PWR_CR_DBP;
 
-    /* Power up the backup-register interface and allow writes. */
-    rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
-    pwr->cr |= PWR_CR_DBP;
-
-    /* Indicate to bootloader that we want to perform firmware update. */
-    bkp->dr1[0] = 0xdead;
-    bkp->dr1[1] = 0xbeef;
-
-#elif MCU == MCU_at32f435
+        /* Indicate to bootloader that we want to perform firmware update. */
+        bkp->dr1[0] = 0xdead;
+        bkp->dr1[1] = 0xbeef;
+    }
+#endif
 
     _reset_flag = RESET_FLAG_BOOTLOADER;
-
-#endif
 
     system_reset();
 }

@@ -93,28 +93,32 @@ static bool_t main_fw_requested(void)
 
 static bool_t fw_update_requested(void)
 {
-    bool_t requested;
+    bool_t requested = FALSE;
 
 #if MCU == MCU_stm32f105
 
-    /* Power up the backup-register interface and allow writes. */
-    rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
-    pwr->cr |= PWR_CR_DBP;
+    /* We detect an Artery MCU by presence of Cortex-M4 CPUID. 
+     * Cortex-M4: 41xfc24x ; Cortex-M3: 41xfc23x */
+    is_artery_mcu = ((scb->cpuid >> 4) & 0xf) == 4;
 
-    /* Has bootloader been requested via magic numbers in the backup regs? */
-    requested = ((bkp->dr1[0] == 0xdead) && (bkp->dr1[1] == 0xbeef));
+    if (!is_artery_mcu) {
+        /* Power up the backup-register interface and allow writes. */
+        rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
+        pwr->cr |= PWR_CR_DBP;
 
-    /* Clean up backup registers and peripheral clocks. */
-    bkp->dr1[0] = bkp->dr1[1] = 0;
-    rcc->apb1enr = 0;
+        /* Has bootloader been requested via magic in the backup regs? */
+        requested |= ((bkp->dr1[0] == 0xdead) && (bkp->dr1[1] == 0xbeef));
 
-#elif MCU == MCU_at32f435
-
-    /* Check-and-clear a magic value poked into SRAM1 by the main firmware. */
-    requested = (_reset_flag == RESET_FLAG_BOOTLOADER);
-    _reset_flag = 0;
+        /* Clean up backup registers and peripheral clocks. */
+        bkp->dr1[0] = bkp->dr1[1] = 0;
+        rcc->apb1enr = 0;
+    }
 
 #endif
+
+    /* Check-and-clear a magic value poked into SRAM1 by the main firmware. */
+    requested |= (_reset_flag == RESET_FLAG_BOOTLOADER);
+    _reset_flag = 0;
 
     return requested;
 }

@@ -187,6 +187,10 @@ extern const char fw_ver[];
 extern const char build_date[];
 extern const char build_time[];
 
+/* Bootloader mode flag. */
+extern volatile uint32_t _reset_flag;
+#define RESET_FLAG_BOOTLOADER 0xdeadbeefu
+
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];
 extern char _smaintext[], _emaintext[];
