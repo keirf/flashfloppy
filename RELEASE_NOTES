@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v3.44 - 12 April 2025
+ - Apple2: Replacement bootloader for AT2 (QFN32) Goteks
+ - AT32F415: Fix entry to "update mode" from main menu
+ - FF.CFG: Document the 7-char limit on indexed-prefix option
+
 ** v3.43 - 22 January 2025
  - Apple2: Read/write HFE images using alt firmware
  - D81: Various fixes
