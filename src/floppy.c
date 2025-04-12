@@ -38,6 +38,7 @@ static always_inline void drive_change_pin(
     struct drive *drv, uint8_t pin, bool_t assert);
 static always_inline void drive_change_output(
     struct drive *drv, uint8_t outp, bool_t assert);
+static void disk_inserted_output(uint8_t outp, bool_t assert);
 
 #include "floppy_generic.c"
 
@@ -135,6 +136,18 @@ static void drive_change_output(
     drive_change_pin(drv, pin, assert);
 }
 
+static void disk_inserted_output(uint8_t outp, bool_t assert)
+{
+    if (pin02 == outp) {
+        GPIO gpio = pin_02 < 16 ? gpiob : gpioa;
+        gpio_write_pin(gpio, pin_02 & 15, assert ^ pin02_inverted);
+    }
+    if (pin34 == outp) {
+        GPIO gpio = pin_34 < 16 ? gpiob : gpioa;
+        gpio_write_pin(gpio, pin_34 & 15, assert ^ pin34_inverted);
+    }
+}
+
 static void update_amiga_id(struct drive *drv, bool_t amiga_hd_id)
 {
     /* JC and pin 34 are overridden only for the Amiga interface. */
@@ -215,6 +228,7 @@ void floppy_cancel(void)
     barrier();
     drive_change_output(drv, outp_index, FALSE);
     drive_change_output(drv, outp_dskchg, TRUE);
+    disk_inserted_output(outp_in, TRUE);
 }
 
 void floppy_set_fintf_mode(void)
@@ -228,6 +242,7 @@ void floppy_set_fintf_mode(void)
         [FINTF_AMIGA]       = "Amiga"
     };
     static const char *const outp_name[] = {
+        [outp_in] = "in",
         [outp_dskchg] = "chg",
         [outp_rdy] = "rdy",
         [outp_hden] = "dens",
@@ -325,6 +340,7 @@ void floppy_init(void)
     drive_change_output(drv, outp_dskchg, TRUE);
     drive_change_output(drv, outp_wrprot, TRUE);
     drive_change_output(drv, outp_trk0,   TRUE);
+    disk_inserted_output(outp_in, TRUE);
 
     floppy_init_irqs();
 
@@ -357,6 +373,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     update_amiga_id(drv, im->stk_per_rev > stk_ms(300));
     if (!(slot->attributes & AM_RDO))
         drive_change_output(drv, outp_wrprot, FALSE);
+    disk_inserted_output(outp_in, FALSE);
     barrier();
     drv->inserted = TRUE;
     motor_chgrst_update_status(drv); /* update RDY + motor state */
