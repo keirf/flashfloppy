@@ -170,6 +170,8 @@ struct packed ff_cfg {
 #define NOTIFY_volume_mask 15
 #define NOTIFY_slotnr      (1<<4)
     uint8_t notify_volume;
+    uint16_t hfe_rpm;
+    uint8_t hfe_step;
 };
 
 extern struct ff_cfg ff_cfg;

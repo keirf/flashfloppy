@@ -1269,6 +1269,16 @@ static void read_ff_cfg(void)
             ff_cfg.nav_scroll_pause = strtol(opts.arg, NULL, 10);
             break;
 
+            /* HFE OVERRIDES */
+
+        case FFCFG_hfe_step:
+            ff_cfg.hfe_step = strtol(opts.arg, NULL, 10);
+            break;
+
+        case FFCFG_hfe_rpm:
+            ff_cfg.hfe_rpm = strtol(opts.arg, NULL, 10);
+            break;
+
             /* MISCELLANEOUS */
 
         case FFCFG_step_volume: {

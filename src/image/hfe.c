@@ -97,7 +97,8 @@ static bool_t hfe_open(struct image *im)
         return FALSE;
     }
 
-    im->hfe.double_step = !dhdr.single_step;
+    im->hfe.double_step = (ff_cfg.hfe_step ? (ff_cfg.hfe_step == 2)
+                           : !dhdr.single_step);
     im->hfe.tlut_base = le16toh(dhdr.track_list_offset);
     im->nr_cyls = dhdr.nr_tracks;
     im->step = im->hfe.double_step ? 2 : 1;
@@ -131,6 +132,11 @@ static void hfe_seek_track(struct image *im, uint16_t track)
     if (im->hfe.is_v3 && im->tracklen_ticks) {
         /* Opcodes in v3 make it difficult to predict the track's length. Keep
          * the previous track's value since this isn't the first seek. */
+    } else if (!im->hfe.is_v3 && ff_cfg.hfe_rpm) {
+        im->stk_per_rev = ((uint32_t)stk_ms(200) * 300) / ff_cfg.hfe_rpm;
+        im->ticks_per_cell = ((sampleclk_stk(im->stk_per_rev) * 16u)
+                              / im->tracklen_bc);
+        im->write_bc_ticks = im->ticks_per_cell / 16;
     } else {
         im->tracklen_ticks = im->tracklen_bc * im->ticks_per_cell;
         im->stk_per_rev = stk_sampleclk(im->tracklen_ticks / 16);
