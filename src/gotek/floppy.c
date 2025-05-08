@@ -417,8 +417,9 @@ static void IRQ_STEP_changed(void)
 
     /* Deassert DSKCHG if a disk is inserted. */
     if ((drv->outp & m(outp_dskchg)) && drv->inserted
-        && (ff_cfg.chgrst == CHGRST_step))
+        && (ff_cfg.chgrst == CHGRST_step)) {
         drive_change_output(drv, outp_dskchg, FALSE);
+    }
 
     /* Do we accept this STEP command? */
     if ((drv->step.state & STEP_active) /* Already mid-step? */

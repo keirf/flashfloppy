@@ -131,11 +131,13 @@ struct packed ff_cfg {
 #define PIN_rdy    (outp_rdy + 1)
 #define PIN_dens   (outp_hden + 1)
 #define PIN_chg    (outp_dskchg + 1)
+#define PIN_in     (outp_in + 1)
 #define PIN_invert 0x80
 #define PIN_low    (PIN_high | PIN_invert)
 #define PIN_nrdy   (PIN_rdy | PIN_invert)
 #define PIN_ndens  (PIN_dens | PIN_invert)
 #define PIN_nchg   (PIN_chg | PIN_invert)
+#define PIN_nin    (PIN_in | PIN_invert)
     uint8_t pin02, pin34;
     uint8_t head_settle_ms;
     uint8_t oled_contrast;
