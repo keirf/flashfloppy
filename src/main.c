@@ -911,6 +911,7 @@ static uint8_t parse_pin_str(const char *s)
         : !strcmp(s, "rdy") ? PIN_rdy
         : !strcmp(s, "dens") ? PIN_dens
         : !strcmp(s, "chg") ? PIN_chg
+        : !strcmp(s, "in") ? PIN_in
         : PIN_auto;
     return pin;
 }
