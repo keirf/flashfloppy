@@ -199,38 +199,41 @@ static uint32_t USB_OTG_USBH_handle_Disconnect_ISR (USB_OTG_CORE_HANDLE *pdev)
 static uint32_t USB_OTG_USBH_handle_nptxfempty_ISR (USB_OTG_CORE_HANDLE *pdev)
 {
     USB_OTG_GINTMSK_TypeDef      intmsk;
-    USB_OTG_HNPTXSTS_TypeDef     hnptxsts = { 0 };
-    uint16_t                     len_words, len;
+    volatile USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+    uint16_t                     len_words, len, chnum;
 
+    hnptxsts.d32 = 0;
     hnptxsts.d32 = USB_OTG_READ_REG32(&pdev->regs.GREGS->HNPTXSTS);
 
-    len_words = (pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len + 3) / 4;
+    chnum = hnptxsts.b.nptxqtop.chnum;
+    len_words = (pdev->host.hc[chnum].xfer_len + 3) / 4;
 
     while ((hnptxsts.b.nptxfspcavail > len_words)&&
-           (pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len != 0))
+           (pdev->host.hc[chnum].xfer_len != 0))
     {
 
         len = hnptxsts.b.nptxfspcavail * 4;
 
-        if (len > pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len)
+        if (len > pdev->host.hc[chnum].xfer_len)
         {
             /* Last packet */
-            len = pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len;
+            len = pdev->host.hc[chnum].xfer_len;
 
             intmsk.d32 = 0;
             intmsk.b.nptxfempty = 1;
             USB_OTG_MODIFY_REG32( &pdev->regs.GREGS->GINTMSK, intmsk.d32, 0);
         }
 
-        len_words = (pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len + 3) / 4;
+        len_words = (pdev->host.hc[chnum].xfer_len + 3) / 4;
 
-        USB_OTG_WritePacket (pdev , pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_buff, hnptxsts.b.nptxqtop.chnum, len);
+        USB_OTG_WritePacket (pdev , pdev->host.hc[chnum].xfer_buff, chnum, len);
 
-        pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_buff  += len;
-        pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len   -= len;
-        pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_count  += len;
+        pdev->host.hc[chnum].xfer_buff  += len;
+        pdev->host.hc[chnum].xfer_len   -= len;
+        pdev->host.hc[chnum].xfer_count  += len;
 
         hnptxsts.d32 = USB_OTG_READ_REG32(&pdev->regs.GREGS->HNPTXSTS);
+        chnum = hnptxsts.b.nptxqtop.chnum;
     }
 
     return 1;
