@@ -76,7 +76,7 @@ static bool_t hfe_open(struct image *im)
     struct disk_header dhdr;
     uint16_t bitrate;
 
-    F_read(&im->fp, &dhdr, sizeof(dhdr), NULL);
+    F_read(im->fp, &dhdr, sizeof(dhdr), NULL);
     if (!strncmp(dhdr.sig, "HXCHFEV3", sizeof(dhdr.sig))) {
         if (dhdr.formatrevision > 0)
             return FALSE;
@@ -111,7 +111,7 @@ static bool_t hfe_open(struct image *im)
     volume_cache_init(im->bufs.read_data.p + 8*512,
                       im->bufs.read_data.p + im->bufs.read_data.len);
     if (im->bufs.read_data.len < (64*1024))
-        volume_cache_metadata_only(&im->fp);
+        volume_cache_metadata_only(im->fp);
 
     /* Get an initial value for ticks per revolution. */
     hfe_seek_track(im, 0);
@@ -123,8 +123,8 @@ static void hfe_seek_track(struct image *im, uint16_t track)
 {
     struct track_header thdr;
 
-    F_lseek(&im->fp, im->hfe.tlut_base*512 + (track/2)*4);
-    F_read(&im->fp, &thdr, sizeof(thdr), NULL);
+    F_lseek(im->fp, im->hfe.tlut_base*512 + (track/2)*4);
+    F_read(im->fp, &thdr, sizeof(thdr), NULL);
 
     im->hfe.trk_off = le16toh(thdr.offset);
     im->hfe.trk_len = le16toh(thdr.len) / 2;
@@ -211,8 +211,8 @@ static bool_t hfe_read_track(struct image *im)
     if (rd->prod == rd->cons) {
         nr_sec = min_t(unsigned int, im->hfe.batch_secs,
                        (im->hfe.trk_len+255 - im->hfe.trk_pos) / 256);
-        F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.trk_pos * 2);
-        F_read(&im->fp, buf, nr_sec*512, NULL);
+        F_lseek(im->fp, im->hfe.trk_off * 512 + im->hfe.trk_pos * 2);
+        F_read(im->fp, buf, nr_sec*512, NULL);
         rd->cons = 0;
         rd->prod = nr_sec;
         im->hfe.trk_pos += nr_sec * 256;
@@ -365,9 +365,9 @@ static bool_t hfe_write_track(struct image *im)
         im->hfe.write_batch.len = min_t(
             uint32_t, batch_secs * 512,
             (((im->hfe.trk_len * 2) + 511) & ~511) - im->hfe.write_batch.off);
-        F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
-        F_read(&im->fp, wrbuf, im->hfe.write_batch.len, NULL);
-        F_lseek(&im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
+        F_lseek(im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
+        F_read(im->fp, wrbuf, im->hfe.write_batch.len, NULL);
+        F_lseek(im->fp, im->hfe.trk_off * 512 + im->hfe.write_batch.off);
     }
 
     for (;;) {
@@ -489,7 +489,7 @@ static bool_t hfe_write_track(struct image *im)
                im->hfe.write_batch.off,
                im->hfe.write_batch.off + im->hfe.write_batch.len - 1,
                im->hfe.write_batch.len);
-        F_write(&im->fp, wrbuf, im->hfe.write_batch.len, NULL);
+        F_write(im->fp, wrbuf, im->hfe.write_batch.len, NULL);
         printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
         im->hfe.write_batch.len = 0;
         im->hfe.write_batch.dirty = FALSE;

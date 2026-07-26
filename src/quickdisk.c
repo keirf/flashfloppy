@@ -143,9 +143,10 @@ void floppy_init(void)
     timer_init(&index.timer, index_assert, NULL);
 }
 
-void floppy_insert(unsigned int unit, struct slot *slot)
+void floppy_insert(unsigned int unit, struct slot *slot, struct slot *slot2)
 {
-    floppy_mount(slot);
+    (void)slot2;
+    floppy_mount(slot, NULL);
 
     timer_dma_init();
     tim_rdata->ccr2 = sampleclk_ns(1500); /* RD: 1.5us positive pulses */
@@ -286,6 +287,8 @@ void floppy_get_track(struct track_info *ti)
     ti->cyl = ti->side = 0;
     ti->sel = TRUE;
     ti->writing = (dma_wr && dma_wr->state != DMA_inactive);
+    ti->in_da_mode = FALSE;
+    ti->unit = 0;
 }
 
 static void index_assert(void *dat)
