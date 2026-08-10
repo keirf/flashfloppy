@@ -292,10 +292,10 @@ void floppy_set_max_cyl(void)
 {
     struct drive *drv = &drive;
     IRQ_global_disable();
-    if (drv->cyl[0] > ff_cfg.max_cyl)
-        drv->cyl[0] = ff_cfg.max_cyl;
-    if (drv->cyl[1] > ff_cfg.max_cyl)
-        drv->cyl[1] = ff_cfg.max_cyl;
+    if (drv->drives[0].cyl > ff_cfg.max_cyl)
+        drv->drives[0].cyl = ff_cfg.max_cyl;
+    if (drv->drives[1].cyl > ff_cfg.max_cyl)
+        drv->drives[1].cyl = ff_cfg.max_cyl;
     IRQ_global_enable();
 }
 
@@ -553,7 +553,7 @@ void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 {
     if (unit < 2) {
         struct drive *drv = &drive;
-        drv->cyl[unit] = cyl;
+        drv->drives[unit].cyl = cyl;
         if ((unit == drv->unit) && (cyl == 0))
             drive_change_output(drv, outp_trk0, TRUE);
     }
@@ -562,7 +562,7 @@ void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 void floppy_get_track(struct track_info *ti)
 {
     bool_t active = dma_wr != NULL;
-    ti->cyl = drive.cyl[drive.unit];
+    ti->cyl = drive.drives[drive.unit].cyl;
     ti->side = active ? drive.head & (drive.image->nr_sides - 1) : 0;
     ti->sel = drive.sel;
     ti->writing = (active && dma_wr->state != DMA_inactive);
@@ -622,10 +622,10 @@ static void drive_step_timer(void *_drv)
         break;
     case STEP_latched:
         speaker_pulse();
-        drv->cyl[drv->unit] += drv->step.inward ? 1 : -1;
+        drv->drives[drv->unit].cyl += drv->step.inward ? 1 : -1;
         timer_set(&drv->step.timer,
                   drv->step.start + time_ms(ff_cfg.head_settle_ms));
-        if (drv->cyl[drv->unit] == 0)
+        if (drv->drives[drv->unit].cyl == 0)
             drive_change_output(drv, outp_trk0, TRUE);
         /* New state last, as that lets hi-pri IRQ start another step. */
         barrier();

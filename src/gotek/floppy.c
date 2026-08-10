@@ -282,14 +282,10 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
     if (drive.sel) {
         /* Prefer drive A if both are asserted (hosts should never do this). */
         unit = sel0 ? 0 : 1;
-        if (drive.image && (drive.unit != unit)) {
+        if (drive.unit != unit) {
             drive.unit = unit;
-            if (drive.dual)
-                drive.image->fp = &drive.image->filesp[unit];
-            /* Force track reload for the newly selected image/cylinder. */
-            drive.image->cur_track = ~0;
-            /* Match TRK0 to the newly selected unit's cylinder. */
-            if (drive.cyl[unit] == 0) {
+            /* TRK0 follows this unit's cyl even with no disk mounted. */
+            if (drive.drives[unit].cyl == 0) {
                 drive.outp |= m(outp_trk0);
                 gpio_out_active |= m(pin_26);
             } else {
@@ -297,6 +293,13 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
                 gpio_out_active &= ~m(pin_26);
             }
             _gpio_out_active = gpio_out_active;
+
+            /* Image switch only when media is mounted. */
+            if (drive.image) {
+                if (drive.dual)
+                    drive.image->fp = &drive.image->filesp[unit];
+                drive.image->cur_track = ~0;
+            }
         }
         /* Selected: immediately re-enable all our asserted outputs. */
         gpiob->brr = _gpio_out_active & 0xffff;
@@ -377,7 +380,7 @@ static void POLL_step(void *unused)
 
     /* Rotate the phase bitmap so that the current phase is at bit 0. Note 
      * that the current phase is directly related to the current cylinder. */
-    pha = ((pha | (pha << 4)) >> (drv->cyl[drv->unit] & 3)) & 0xf;
+    pha = ((pha | (pha << 4)) >> (drv->drives[drv->unit].cyl & 3)) & 0xf;
 
     /* Conditions to action a head step:
      *  (1) Only one phase is asserted;
@@ -385,12 +388,12 @@ static void POLL_step(void *unused)
      *  (3) We haven't hit a cylinder hard limit. */
     switch (pha) {
     case m(1): /* Phase +1 only */
-        if (drv->cyl[drv->unit] == ff_cfg.max_cyl)
+        if (drv->drives[drv->unit].cyl == ff_cfg.max_cyl)
             goto out;
         drv->step.inward = TRUE;
         break;
     case m(3): /* Phase -1 only */
-        if (drv->cyl[drv->unit] == 0)
+        if (drv->drives[drv->unit].cyl == 0)
             goto out;
         drv->step.inward = FALSE;
         break;
@@ -453,7 +456,7 @@ static void IRQ_STEP_changed(void)
 
     /* Latch the step direction and check bounds (0 <= cyl <= 255). */
     drv->step.inward = !(idr_b & m(pin_dir));
-    if (drv->cyl[drv->unit] == (drv->step.inward ? ff_cfg.max_cyl : 0))
+    if (drv->drives[drv->unit].cyl == (drv->step.inward ? ff_cfg.max_cyl : 0))
         return;
 
     /* Valid step request for this drive: start the step operation. */

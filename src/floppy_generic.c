@@ -45,9 +45,13 @@ static struct dma_ring *dma_rd; /* RDATA DMA buffer */
 static struct dma_ring *dma_wr; /* WDATA DMA buffer */
 
 /* Statically-allocated floppy drive state. Tracks head movements and 
- * side changes at all times, even when the drive is empty. */
+ * side changes at all times, even when the drive is empty.
+ * Two logical drives share one physical bus; per-drive state lives in
+ * drives[]. Shared bus / media-path state is in the outer struct. */
 static struct drive {
-    uint8_t cyl[2];
+    struct {
+        uint8_t cyl;
+    } drives[2];
     uint8_t unit; /* currently selected logical unit (0=A, 1=B) */
     bool_t dual;  /* TRUE if image B is mounted */
     uint8_t head;
@@ -363,7 +367,8 @@ static void timer_dma_init(void)
 
 static unsigned int drive_calc_track(struct drive *drv)
 {
-    return drv->cyl[drv->unit]*2 + (drv->head & (drv->image->nr_sides - 1));
+    return drv->drives[drv->unit].cyl*2
+        + (drv->head & (drv->image->nr_sides - 1));
 }
 
 /* Find current rotational position for read-stream restart. */
