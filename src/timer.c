@@ -22,7 +22,26 @@ void IRQ_50(void) __attribute__((alias("IRQ_timer")));
 #define tim tim5 /* 32-bit timer */
 #define tim_bits 32
 #define TIM_CR1_MCUBITS TIM_CR1_PMEN
+#elif MCU == MCU_rp2350
+/* TIMER0 alarm 0: IRQ 0. */
+void IRQ_0(void) __attribute__((alias("IRQ_timer")));
+#define TIMER_IRQ TIMER0_IRQ_0
 #endif
+
+#if MCU == MCU_rp2350
+
+/* TIMER0 counts the 1MHz tick (== TIME_MHZ); alarms match on the low
+ * 32 bits of the count. */
+#define SLACK_TICKS 2
+
+static void reprogram_timer(int32_t delta)
+{
+    if (delta < (SLACK_TICKS + 1))
+        delta = SLACK_TICKS + 1;
+    timer0->alarm[0] = timer0->timerawl + delta - SLACK_TICKS;
+}
+
+#else
 
 /* IRQ only on counter overflow, one-time enable. */
 #define TIM_CR1 (TIM_CR1_URS | TIM_CR1_OPM | TIM_CR1_MCUBITS)
@@ -30,10 +49,6 @@ void IRQ_50(void) __attribute__((alias("IRQ_timer")));
 /* Empirically-determined offset applied to timer deadlines to counteract the
  * latency incurred by reprogram_timer() and IRQ_timer(). */
 #define SLACK_TICKS 12
-
-#define TIMER_INACTIVE ((struct timer *)1ul)
-
-static struct timer *head;
 
 static void reprogram_timer(int32_t delta)
 {
@@ -53,6 +68,12 @@ static void reprogram_timer(int32_t delta)
     tim->sr = 0; /* dummy write, gives hardware time to process EGR.UG=1 */
     tim->cr1 = TIM_CR1 | TIM_CR1_CEN;
 }
+
+#endif
+
+#define TIMER_INACTIVE ((struct timer *)1ul)
+
+static struct timer *head;
 
 void timer_init(struct timer *timer, void (*cb_fn)(void *), void *cb_dat)
 {
@@ -117,8 +138,13 @@ void timer_cancel(struct timer *timer)
 
 void timers_init(void)
 {
+#if MCU == MCU_rp2350
+    timer0->pause = 0;
+    timer0->inte = 1; /* alarm 0 */
+#else
     tim->cr2 = 0;
     tim->dier = TIM_DIER_UIE;
+#endif
     IRQx_set_prio(TIMER_IRQ, TIMER_IRQ_PRI);
     IRQx_enable(TIMER_IRQ);
 }
@@ -128,7 +154,11 @@ static void IRQ_timer(void)
     struct timer *t;
     int32_t delta;
 
+#if MCU == MCU_rp2350
+    timer0->intr = 1; /* clear alarm 0 */
+#else
     tim->sr = 0;
+#endif
 
     while ((t = head) != NULL) {
         if ((delta = time_diff(time_now(), t->deadline)) > SLACK_TICKS) {

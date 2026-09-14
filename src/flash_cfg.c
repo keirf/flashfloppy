@@ -33,6 +33,10 @@ union cfg_slot {
 #define SLOT_BASE (union cfg_slot *)(0x8020000 - FLASH_PAGE_SIZE)
 #elif MCU == MCU_at32f435
 #define SLOT_BASE (union cfg_slot *)(0x8040000 - FLASH_PAGE_SIZE)
+#elif MCU == MCU_rp2350
+/* Final 4kB sector below the 1MB boundary: clear of the firmware image
+ * and present on all Pico 2 flash sizes. */
+#define SLOT_BASE (union cfg_slot *)(0x10100000 - FLASH_PAGE_SIZE)
 #endif
 #define SLOT_NR   (FLASH_PAGE_SIZE / sizeof(union cfg_slot))
 

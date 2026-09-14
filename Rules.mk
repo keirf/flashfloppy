@@ -9,7 +9,7 @@ ifneq ($(VERBOSE),1)
 TOOL_PREFIX := @$(TOOL_PREFIX)
 endif
 
-FLAGS  = -g -Os -nostdlib -std=gnu99 -iquote $(ROOT)/inc
+FLAGS  = -g -Os -nostdlib -ffreestanding -std=gnu99 -iquote $(ROOT)/inc
 FLAGS += -Wall -Werror -Wno-format -Wdeclaration-after-statement
 FLAGS += -Wstrict-prototypes -Wredundant-decls -Wnested-externs
 FLAGS += -fno-common -fno-exceptions -fno-strict-aliasing
@@ -37,6 +37,10 @@ endif
 ## AT32F435
 else ifeq ($(mcu),at32f435)
 FLAGS += -mcpu=cortex-m4
+
+## RP2350 (Raspberry Pi Pico 2)
+else ifeq ($(mcu),rp2350)
+FLAGS += -mcpu=cortex-m33
 endif
 
 MCU_FLAG := -DMCU=MCU_$(mcu)
@@ -105,6 +109,9 @@ endif
 
 %.dfu: %.hex
 	$(PYTHON) $(ROOT)/scripts/dfu-convert.py -i $< $@
+
+%.uf2: %.bin
+	$(PYTHON) $(ROOT)/scripts/mk_uf2.py $< $@
 
 %.o: $(SRCDIR)/%.c $(SRCDIR)/Makefile
 	@echo CC $@

@@ -11,6 +11,9 @@
 
 extern struct volume_ops sd_ops;
 extern struct volume_ops usb_ops;
+#if MCU == MCU_rp2350
+extern struct volume_ops flash_ops;
+#endif
 
 static struct volume_ops *vol_ops = &usb_ops;
 
@@ -45,13 +48,21 @@ DSTATUS disk_initialize(BYTE pdrv)
     if (!(usb_ops.initialize(pdrv) & STA_NOINIT))
         goto out;
 
-    /* Try SD if the build and the board support it, and no USB drive is 
-     * inserted. */
-    if ((board_id == BRDREV_Gotek_sd_card)
+    /* Try SD if the build and the board support it, and no USB drive is
+     * inserted. (RP2350 boards have no USB stack: SD is the only card.) */
+    if (((board_id == BRDREV_Gotek_sd_card) || (MCU == MCU_rp2350))
         && !usbh_msc_inserted()
         && !(sd_ops.initialize(pdrv) & STA_NOINIT)) {
         vol_ops = &sd_ops;
+        goto out;
     }
+
+#if MCU == MCU_rp2350
+    /* No removable media: fall back to the FAT image store in the internal
+     * QSPI flash. */
+    if (!(flash_ops.initialize(pdrv) & STA_NOINIT))
+        vol_ops = &flash_ops;
+#endif
 
 out:
     return disk_status(pdrv);

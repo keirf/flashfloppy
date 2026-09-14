@@ -489,7 +489,11 @@ void IRQ_rotary(void)
 
 static void set_rotary_exti(void)
 {
+#if MCU == MCU_rp2350
+    gpio_irq_disable_mask(board_rotary_exti_mask);
+#else
     exti->imr &= ~board_rotary_exti_mask;
+#endif
     board_rotary_exti_mask = 0;
     if ((ff_cfg.rotary & ROT_typemask) == ROT_full)
         board_setup_rotary_exti();
@@ -1334,7 +1338,11 @@ static void process_ff_cfg_opts(const struct ff_cfg *old)
     /* chgrst, motor-delay: Reset EXTI handlers. */
     if ((ff_cfg.motor_delay != old->motor_delay)
         || (ff_cfg.chgrst != old->chgrst)) {
+#if MCU == MCU_rp2350
+        gpio_irq_disable_mask(motor_chgrst_exti_mask);
+#else
         exti->imr &= ~motor_chgrst_exti_mask;
+#endif
         motor_chgrst_exti_mask = 0;
     }
 
@@ -2859,6 +2867,8 @@ static void noinline mcu_info(void)
     const char * const mcu = mcus[!!is_artery_mcu];
 #elif MCU == MCU_at32f435
     const static char mcu[] = "AT32F435";
+#elif MCU == MCU_rp2350
+    const static char mcu[] = "RP2350";
 #endif
     char msg[20];
     snprintf(msg, sizeof(msg), "%uMHz, %ukB", SYSCLK_MHZ, ram_kb);
@@ -3032,6 +3042,8 @@ static void noinline banner(void)
 #define sep_ch "-"
 #elif MCU == MCU_at32f435
 #define sep_ch "z"
+#elif MCU == MCU_rp2350
+#define sep_ch "r"
 #endif
         led_7seg_write_string(
 #if LEVEL == LEVEL_logfile
@@ -3052,6 +3064,8 @@ static void noinline banner(void)
         lcd_write(0, 0, 0, "FlashFloppy");
 #elif MCU == MCU_at32f435
         lcd_write(0, 0, 0, "FlashFloppy+");
+#elif MCU == MCU_rp2350
+        lcd_write(0, 0, 0, "FlashFloppy Pi");
 #endif
         snprintf(msg[0], sizeof(msg[0]), "%s%s", fw_ver,
 #if LEVEL == LEVEL_logfile

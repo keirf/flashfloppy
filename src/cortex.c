@@ -157,7 +157,15 @@ void system_reset(void)
 {
     console_sync();
     printk("Resetting...\n");
+#if MCU == MCU_rp2350
+    /* Full-chip reset via the watchdog: SYSRESETREQ resets only the core
+     * domain on RP2350. Reset everything except PROC_COLD(b0), OTP(b1) and
+     * the oscillators ROSC(b2)/XOSC(b3). */
+    psm->wdsel = 0x01fffff0u;
+    watchdog->ctrl = WDOG_CTRL_TRIGGER | WDOG_CTRL_ENABLE;
+#else
     scb->aircr = SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
+#endif
     for (;;) ;
 }
 

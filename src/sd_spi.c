@@ -41,8 +41,17 @@ static DSTATUS status = STA_NOINIT;
 #define CT_SDHC (CT_BLOCK | CT_SD2) /* SDHC is v2.xx and fixed-block-size */
 static uint8_t cardtype;
 
+#if MCU == MCU_rp2350
+/* SPI0: GPIO16 = MISO, GPIO17 = CS, GPIO18 = SCK, GPIO19 = MOSI. */
+#define spi ((SPI)NULL) /* handle unused by the PL022 helpers */
+#define PIN_CS   17
+#define PIN_MISO 16
+#define PIN_SCK  18
+#define PIN_MOSI 19
+#else
 #define spi spi2
 #define PIN_CS 12
+#endif
 
 static void spi_acquire(void)
 {
@@ -261,8 +270,31 @@ out:
 
 static bool_t sd_inserted(void)
 {
+#if MCU == MCU_rp2350
+    /* No card-detect line: assume a card is present and let the SPI
+     * initialisation handshake decide. */
+    return TRUE;
+#else
     return gpio_read_pin(gpioc, 9);
+#endif
 }
+
+#if MCU == MCU_rp2350
+
+static void sd_spi_set_cr(uint32_t cr1, unsigned int max_khz)
+{
+    /* PL022: Fout = Fclk_peri / (CPSDVSR * (1 + SCR)), CPSDVSR = 2. */
+    unsigned int scr = (PCLK_MHZ * 1000 + 2*max_khz - 1) / (2 * max_khz);
+    scr = (scr != 0) ? scr - 1 : 0;
+    if (scr > 255)
+        scr = 255;
+    rp_spi0->cr1 = 0;
+    rp_spi0->cpsr = 2;
+    rp_spi0->cr0 = SPI_CR0_DSS(8) | SPI_CR0_SCR(scr);
+    rp_spi0->cr1 = SPI_CR1_SSE;
+}
+
+#else
 
 static void sd_spi_set_cr(uint32_t cr1, unsigned int max_khz)
 {
@@ -280,6 +312,8 @@ static void sd_spi_set_cr(uint32_t cr1, unsigned int max_khz)
     spi->cr1 = cr1 | ((br & 7) << 3);  /* CR1[5:4] := MDIV[2:0] */
 }
 
+#endif
+
 static DSTATUS sd_disk_initialize(BYTE pdrv)
 {
     time_t start;
@@ -293,6 +327,23 @@ static DSTATUS sd_disk_initialize(BYTE pdrv)
     status |= STA_NOINIT;
     if (!sd_inserted())
         return status;
+
+#if MCU == MCU_rp2350
+
+    /* Enable external I/O pins. */
+    gpio_configure_pin(gpiob, PIN_CS, GPO_pushpull(SPI_PIN_SPEED, HIGH));
+    gpio_configure_pin(gpiob, PIN_MISO, GPI_pull_up);
+    io_bank0->gpio[PIN_MISO].ctrl = GPIO_FUNC_SPI;
+    io_bank0->gpio[PIN_SCK].ctrl = GPIO_FUNC_SPI;
+    io_bank0->gpio[PIN_MOSI].ctrl = GPIO_FUNC_SPI;
+    gpio_set_pad(PIN_SCK, PAD_IE | PAD_DRIVE_8MA | PAD_SLEWFAST);
+    gpio_set_pad(PIN_MOSI, PAD_IE | PAD_DRIVE_8MA | PAD_SLEWFAST);
+
+    /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
+    cr1 = 0;
+    sd_spi_set_cr(cr1, INIT_SPEED_KHZ);
+
+#else
 
     /* Turn on the clocks. */
     rcc->apb1enr |= RCC_APB1ENR_SPI2EN;
@@ -317,6 +368,8 @@ static DSTATUS sd_disk_initialize(BYTE pdrv)
            SPI_CR1_SSM | SPI_CR1_SSI | /* software NSS */
            SPI_CR1_SPE);
     sd_spi_set_cr(cr1, INIT_SPEED_KHZ);
+
+#endif
 
     /* Drain SPI I/O. */
     spi_quiesce(spi);
@@ -402,6 +455,15 @@ out:
         printk("SD Card configured\n");
         dump_cid_info();
     } else {
+#if MCU == MCU_rp2350
+        /* Disable SPI. */
+        rp_spi0->cr1 = 0;
+        /* Configure external I/O pins as pulled-up inputs. */
+        gpio_configure_pin(gpiob, PIN_CS, GPI_pull_up);
+        gpio_configure_pin(gpiob, PIN_SCK, GPI_pull_up);
+        gpio_configure_pin(gpiob, PIN_MISO, GPI_pull_up);
+        gpio_configure_pin(gpiob, PIN_MOSI, GPI_pull_up);
+#else
         /* Disable SPI. */
         spi->cr1 = 0;
         rcc->apb1enr &= ~RCC_APB1ENR_SPI2EN;
@@ -410,6 +472,7 @@ out:
         gpio_configure_pin(gpiob, 13, GPI_pull_up); /* CK */
         gpio_configure_pin(gpiob, 14, GPI_pull_up); /* MISO */
         gpio_configure_pin(gpiob, 15, GPI_pull_up); /* MOSI */
+#endif
     }
 
     return status;

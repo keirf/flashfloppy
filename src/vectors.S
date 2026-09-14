@@ -48,3 +48,46 @@ EXC_unused:
     push {r4, r5, r6, r7, r8, r9, r10, r11, lr}
     mov  r0, sp
     b    EXC_unexpected
+
+#if MCU == MCU_rp2350
+
+/* RP2350 boot: this block lives at the start of flash. The bootrom scans
+ * the first 4kB for a PICOBIN block loop; the IMAGE_DEF below declares a
+ * Secure Arm executable with an explicit entry point (the copy stub).
+ * The stub copies the whole firmware image from flash into SRAM, points
+ * VTOR at the SRAM vector table, and enters EXC_reset. */
+
+    .section .rp2350_boot, "ax"
+
+    .word 0xffffded3            /* PICOBIN_BLOCK_MARKER_START */
+    .word 0x10210142            /* IMAGE_TYPE: EXE, Secure, Arm, RP2350 */
+    .word 0x00000344            /* ENTRY_POINT item, 3 words */
+    .word _rp2350_boot + 1      /* entry PC (Thumb) */
+    .word 0x20081000            /* initial SP: top of scratch X */
+    .word 0x000004ff            /* LAST item: 4 item-words precede */
+    .word 0                     /* block-loop link: loop to self */
+    .word 0xab123579            /* PICOBIN_BLOCK_MARKER_END */
+
+    .thumb_func
+.global _rp2350_boot
+_rp2350_boot:
+    ldr  r0, =_ram_image_lma    /* flash source (XIP) */
+    ldr  r1, =_ram_image_start  /* SRAM destination */
+    ldr  r2, =_ram_image_end
+1:  cmp  r1, r2
+    bcs  2f
+    ldr  r3, [r0], #4
+    str  r3, [r1], #4
+    b    1b
+2:  ldr  r0, =0xe000ed08        /* SCB->VTOR */
+    ldr  r1, =_ram_image_start  /* vector table at SRAM image base */
+    str  r1, [r0]
+    dsb  sy
+    isb  sy
+    ldr  r0, [r1]               /* initial SP */
+    mov  sp, r0
+    ldr  r0, [r1, #4]           /* EXC_reset */
+    bx   r0
+    .ltorg
+
+#endif

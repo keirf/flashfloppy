@@ -39,6 +39,17 @@ apple2-bootloader-%: FORCE
 
 all-%: FORCE prod-% debug-% logfile-% ;
 
+# RP2350 supports the shugart target only. There is no custom bootloader:
+# the mask-ROM UF2 BOOTSEL loader is used for firmware update.
+prod-rp2350: FORCE
+	$(MAKE) target mcu=rp2350 target=shugart level=prod
+
+debug-rp2350: FORCE
+	$(MAKE) target mcu=rp2350 target=shugart level=debug
+
+logfile-rp2350: FORCE
+	$(MAKE) target mcu=rp2350 target=shugart level=logfile
+
 all: FORCE all-stm32f105 all-at32f435 apple2-bootloader-stm32f105;
 
 clean: FORCE
@@ -50,8 +61,11 @@ mrproper: FORCE clean
 out: FORCE
 	+mkdir -p out/$(mcu)/$(level)/$(target)
 
+TARGET_FILES = $(if $(filter rp2350,$(mcu)), \
+    target.bin target.uf2, target.bin target.hex target.dfu)
+
 target: FORCE out
-	$(MAKE) -C out/$(mcu)/$(level)/$(target) -f $(ROOT)/Rules.mk target.bin target.hex target.dfu
+	$(MAKE) -C out/$(mcu)/$(level)/$(target) -f $(ROOT)/Rules.mk $(TARGET_FILES)
 
 HXC_FF_URL := https://www.github.com/keirf/flashfloppy-hxc-file-selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download

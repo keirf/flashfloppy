@@ -102,6 +102,8 @@ struct nvic {
 
 #define NVIC_BASE 0xe000e100
 
+#if MCU != MCU_rp2350 /* STM32/AT32 peripherals (see rp2350_regs.h) */
+
 struct dbg {
     uint32_t mcu_idcode; /* 00: MCU ID code */
     uint32_t mcu_cr;     /* 04: Debug MCU configuration */
@@ -606,6 +608,8 @@ struct usb_otg {
 #define OTG_HCTSIZ_XFRSIZ(x)  ((x)<< 0)
 
 #define USB_OTG_BASE 0x50000000
+
+#endif /* MCU != MCU_rp2350 */
 
 /*
  * Local variables:

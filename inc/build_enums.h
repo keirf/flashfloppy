@@ -13,6 +13,7 @@
 /* MCU */
 #define MCU_stm32f105  1
 #define MCU_at32f435   4
+#define MCU_rp2350     7
 
 /* TARGET */
 #define TARGET_bootloader 1

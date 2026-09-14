@@ -9,9 +9,14 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#ifdef PICO2_SPEAKER_PIN
+#define gpio_spk gpioa /* ignored on RP2350 */
+#define pin_spk PICO2_SPEAKER_PIN
+#else
 /* JPB: PA2 */
 #define gpio_spk gpioa
 #define pin_spk 2
+#endif
 
 static struct {
     volatile enum { STATE_idle, STATE_active, STATE_masked } state;

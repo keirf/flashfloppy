@@ -45,8 +45,13 @@ OBJS-$(quickdisk) += quickdisk.o
 SUBDIRS += display
 SUBDIRS += fatfs
 SUBDIRS += image
+ifeq ($(mcu),rp2350)
+OBJS += usb_stub.o
+SUBDIRS += pico2
+else
 SUBDIRS += gotek
 SUBDIRS += usb
+endif
 
 endif
 

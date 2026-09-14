@@ -26,6 +26,9 @@
 #elif MCU == MCU_at32f435
 #include "mcu/at32f435_regs.h"
 #include "mcu/at32f435.h"
+#elif MCU == MCU_rp2350
+#include "mcu/rp2350_regs.h"
+#include "mcu/rp2350.h"
 #endif
 #include "intrinsics.h"
 

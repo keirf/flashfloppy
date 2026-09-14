@@ -1,4 +1,13 @@
 
+#if MCU == MCU_rp2350
+#define FLASH_BASE 0x10000000
+#define FLASH_LEN  4096K
+#define RAM_BASE   0x20000000
+#define RAM_LEN    512K
+#include "../scripts/rp2350.ld.S"
+
+#else
+
 #if TARGET == TARGET_bootloader
 #define FLASH_BASE 0x08000000
 
@@ -17,3 +26,5 @@
 #define RAM_LEN    16K
 
 #include "../scripts/stm32.ld.S"
+
+#endif

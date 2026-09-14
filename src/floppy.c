@@ -9,9 +9,29 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#if MCU == MCU_rp2350
+/* A real drive pulls every bus input up hard, and so does a Gotek. A bare
+ * Pico 2 has no such resistors, so use the pad's own pull-up: a floating
+ * CMOS input oscillates, and on STEP or WGATE that arrives as a storm of
+ * edge interrupts which starves the flux engine. Weak (~50k), so it is
+ * invisible to a host that is driving the line. MOTOR keeps its pull-DOWN:
+ * an unconnected MOTOR must read as asserted.
+ *
+ * Bus outputs are driven push-pull at 3.3V while selected, exactly as the
+ * STM32 Gotek drives them: asserted lines low, everything else actively
+ * high, so no line is left to the host's pull-up and cable noise between
+ * assertions. Deselect tri-states the whole bus. Pins whose bus line is
+ * unmapped in the current interface mode stay inputs -- bus pin 2 is the
+ * controller-driven DENSEL on a PC cable, and driving it would contend.
+ * "AFO" hands the RDATA pin to PIO0. */
+#define GPI_bus GPI_pull_up
+#define GPO_bus (GPO_pushpull(_2MHz,O_FALSE) | _GPM_HIDRIVE)
+#define AFO_bus (_GPM_FUNC(GPIO_FUNC_PIO0) | _GPM_HIDRIVE)
+#else
 #define GPI_bus GPI_floating
 #define GPO_bus GPO_pushpull(_2MHz,O_FALSE)
 #define AFO_bus _AFO_pushpull(_2MHz,O_FALSE)
+#endif
 
 #define GPO_rdata GPO_bus
 #define AFO_rdata AFO_bus
@@ -32,6 +52,7 @@ static time_t sync_time, sync_pos;
 
 static time_t prefetch_start_time;
 static uint32_t max_prefetch_us;
+static time_t prefetch_logged_for;
 
 struct drive;
 static always_inline void drive_change_pin(
@@ -194,8 +215,12 @@ void floppy_cancel(void)
     IRQx_disable(dma_wdata_irq);
     rdata_stop();
     wdata_stop();
+#if MCU == MCU_rp2350
+    flux_dma_disable();
+#else
     dma_rdata.ccr = 0;
     dma_wdata.ccr = 0;
+#endif
 
     /* Clear soft state. */
     timer_cancel(&drv->chgrst_timer);
@@ -263,6 +288,17 @@ void floppy_set_fintf_mode(void)
     if (((drv->outp >> pin34) ^ pin34_inverted) & 1)
         gpio_out_active |= m(pin_34);
 
+#if MCU == MCU_rp2350
+    /* Drive only pins carrying a mapped output. Amiga mode drives pin 34
+     * directly for the HD-ID magic even though it is "unmapped". Runs with
+     * IRQs disabled (we are inside this function's critical region). */
+    board_floppy_set_driven(
+        m(pin_08) | m(pin_26) | m(pin_28)
+        | (((pin02 != outp_unused) || pin02_inverted) ? m(pin_02) : 0)
+        | (((pin34 != outp_unused) || pin34_inverted
+            || (mode == FINTF_AMIGA)) ? m(pin_34) : 0));
+#endif
+
     /* Default handler for IRQ_SELA_changed */
     update_SELA_irq(FALSE);
 
@@ -297,6 +333,12 @@ void floppy_set_max_cyl(void)
 
 static void drive_configure_output_pin(unsigned int pin)
 {
+#if MCU == MCU_rp2350
+    /* Pins carrying no mapped output are left as inputs by
+     * board_floppy_set_driven() (e.g. DENSEL on bus pin 2 in PC mode). */
+    if (!(m(pin) & gpio_out_driven))
+        return;
+#endif
     if (pin >= 16) {
         gpio_configure_pin(gpioa, pin-16, GPO_bus);
     } else {
@@ -372,32 +414,55 @@ static void floppy_sync_flux(void)
     uint16_t nr_to_wrap, nr_to_cons, nr;
     int32_t ticks;
 
-    /* No DMA should occur until the timer is enabled. */
-    ASSERT(dma_rd->cons == (ARRAY_SIZE(dma_rd->buf) - dma_rdata.cndtr));
+    /* No DMA should occur until the timer is enabled. (On RP2350 the flux
+     * channel is aborted when the stream stops, so its position is frozen
+     * here just as the STM32 timer's is.) */
+    ASSERT(dma_rd->cons == dma_rdata_pos());
 
     nr_to_wrap = ARRAY_SIZE(dma_rd->buf) - dma_rd->prod;
     nr_to_cons = (dma_rd->cons - dma_rd->prod - 1) & buf_mask;
     nr = min(nr_to_wrap, nr_to_cons);
     if (nr) {
-        dma_rd->prod += image_rdata_flux(
-            drv->image, &dma_rd->buf[dma_rd->prod], nr);
-        dma_rd->prod &= buf_mask;
+        nr = image_rdata_flux(drv->image, &dma_rd->buf[dma_rd->prod], nr);
+        flux_adjust(&dma_rd->buf[dma_rd->prod], nr);
+        dma_rd->prod = (dma_rd->prod + nr) & buf_mask;
     }
 
     nr = (dma_rd->prod - dma_rd->cons) & buf_mask;
     if (nr < buf_mask)
         return;
 
-    /* Log maximum prefetch times. */
-    prefetch_us = time_diff(prefetch_start_time, time_now()) / TIME_MHZ;
-    if (prefetch_us > max_prefetch_us) {
-        max_prefetch_us = prefetch_us;
-        printk("[%uus]\n", max_prefetch_us);
+    /* Log maximum prefetch times: once per track load, at the moment the
+     * ring first fills. Re-entries while waiting for the aligned start
+     * would otherwise count the wait as prefetch and log every poll. */
+    if (prefetch_logged_for != prefetch_start_time) {
+        prefetch_logged_for = prefetch_start_time;
+        prefetch_us = time_diff(prefetch_start_time, time_now()) / TIME_MHZ;
+        if (prefetch_us > max_prefetch_us) {
+            max_prefetch_us = prefetch_us;
+            printk("[%uus]\n", max_prefetch_us);
+        }
     }
 
     if (!drv->index_suppressed) {
         ticks = time_diff(time_now(), sync_time) - time_us(1);
         if (ticks > time_ms(15)) {
+#if MCU == MCU_rp2350
+            /* Wait for the aligned start instead of skipping the virtual
+             * spindle forward. This port loads tracks from QSPI flash or SD
+             * fast enough that the aligned start is routinely ~18ms away
+             * when the ring fills, so the skip path below would run on
+             * every seek -- on a Gotek, USB latency absorbs the wait and it
+             * almost never runs. Each skip displaces the index train, and a
+             * burst of seeks makes INDEX aperiodic (intervals of 90..570ms
+             * measured against a nominal 200ms). A PC controller abandons a
+             * sector search after two INDEX pulses, so bunched pulses fail
+             * reads on perfectly good tracks; each failure provokes more
+             * seeks, which displace the train further. Keep the skip only
+             * as an escape for a pathological start position. */
+            if (ticks < (int32_t)(drv->image->stk_per_rev + time_ms(50)))
+                return; /* come back when the start is nearer */
+#endif
             /* Too long to wait. Immediately re-sync index timing. */
             drv->index_suppressed = TRUE;
             printk("Trk %u: skip %ums\n",
@@ -444,7 +509,7 @@ static void floppy_sync_flux(void)
             const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
             uint32_t i, ticks = 0;
             for (i = dma_rd->cons; i != dma_rd->prod; i = (i+1) & buf_mask)
-                ticks += dma_rd->buf[i] + 1;
+                ticks += DMA_RD_TICKS(dma_rd->buf[i]);
 
             /* Subtract current flux offset beyond the index. */
             ticks -= image_ticks_since_index(drv->image);
@@ -530,8 +595,7 @@ static bool_t dma_rd_handle(struct drive *drv)
     case DMA_stopping:
         dma_rd->state = DMA_inactive;
         /* Reinitialise the circular buffer to empty. */
-        dma_rd->cons = dma_rd->prod =
-            ARRAY_SIZE(dma_rd->buf) - dma_rdata.cndtr;
+        dma_rd->cons = dma_rd->prod = dma_rdata_pos();
         /* Free-running index timer. */
         timer_cancel(&index.timer);
         timer_set(&index.timer, index.prev_time + drv->image->stk_per_rev);

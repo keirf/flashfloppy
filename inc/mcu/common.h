@@ -43,7 +43,12 @@ extern bool_t is_artery_mcu;
 #define sysclk_stk(x) ((x) * (SYSCLK_MHZ / STK_MHZ))
 
 /* SysTick Timer */
+#if MCU == MCU_rp2350
+/* SysTick counts the 1MHz tick generator (TICKS::PROC0). */
+#define STK_MHZ    1
+#else
 #define STK_MHZ    (SYSCLK_MHZ / 8)
+#endif
 void delay_ticks(unsigned int ticks);
 void delay_ns(unsigned int ns);
 void delay_us(unsigned int us);
@@ -79,11 +84,13 @@ typedef uint32_t stk_time_t;
 /* GPIO */
 struct gpio;
 void gpio_configure_pin(GPIO gpio, unsigned int pin, unsigned int mode);
+#if MCU != MCU_rp2350 /* RP2350 defines its own accessors (single bank) */
 #define gpio_write_pin(gpio, pin, level) \
     ((gpio)->bsrr = ((level) ? 0x1u : 0x10000u) << (pin))
 #define gpio_write_pins(gpio, mask, level) \
     ((gpio)->bsrr = (uint32_t)(mask) << ((level) ? 0 : 16))
 #define gpio_read_pin(gpio, pin) (((gpio)->idr >> (pin)) & 1)
+#endif
 
 /* EXTI */
 void _exti_route(unsigned int px, unsigned int pin);
@@ -96,7 +103,11 @@ void fpec_init(void);
 void fpec_page_erase(uint32_t flash_address);
 void fpec_write(const void *data, unsigned int size, uint32_t flash_address);
 
+#if MCU == MCU_rp2350
+#define FLASH_PAGE_SIZE 4096 /* QSPI flash erase-sector size */
+#else
 #define FLASH_PAGE_SIZE 2048
+#endif
 extern unsigned int flash_page_size;
 extern unsigned int ram_kb;
 

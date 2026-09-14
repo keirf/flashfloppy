@@ -20,9 +20,15 @@
 /* TM1651, 74HC164: Full clock cycle is 8us (freq = 125kHZ) */
 #define CYCLE 8
 
+#if MCU == MCU_rp2350
+/* TM1651, 74HC164: shares the display header with I2C (SDA/SCL). */
+static uint8_t DAT_PIN = 20;
+static uint8_t CLK_PIN = 21;
+#else
 /* TM1651, 74HC164: DAT = PB10, CLK = PB11 */
 static uint8_t DAT_PIN = 10;
 static uint8_t CLK_PIN = 11;
+#endif
 
 /* TM1651, 74HC164: Alphanumeric segment arrangements.
  * Bit positions 0-6 correspond to conventional segment labels A-G resp. */
