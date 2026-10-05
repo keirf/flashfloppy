@@ -1913,7 +1913,7 @@ static bool_t raw_open(struct image *im)
 void process_data(struct image *im, void *p, unsigned int len)
 {
     /* Pointer and size should be 4-byte aligned. */
-    ASSERT(!((len|(uint32_t)p)&3));
+    ASSERT(!((len|(uintptr_t)p)&3));
 
     if (im->img.trk->invert_data) {
         uint32_t *_p = p, *_q = _p + len/4;
@@ -2211,7 +2211,7 @@ static void img_fetch_data(struct image *im)
 
 static void *align_p(void *p)
 {
-    return (void *)((uint32_t)p&~3);
+    return (void *)((uintptr_t)p&~3);
 }
 
 static void check_p(void *p, struct image *im)
