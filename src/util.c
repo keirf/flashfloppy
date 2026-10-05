@@ -30,7 +30,7 @@ void *memset(void *s, int c, size_t n)
 
     /* Large aligned memset? */
     size_t n32 = n & ~31;
-    if (n32 && !((uint32_t)p & 3)) {
+    if (n32 && !((uintptr_t)p & 3)) {
         memset_fast(p, c, n32);
         p += n32;
         n &= 31;
@@ -49,7 +49,7 @@ void *memcpy(void *dest, const void *src, size_t n)
 
     /* Large aligned copy? */
     size_t n32 = n & ~31;
-    if (n32 && !(((uint32_t)p | (uint32_t)q) & 3)) {
+    if (n32 && !(((uintptr_t)p | (uintptr_t)q) & 3)) {
         memcpy_fast(p, q, n32);
         p += n32;
         q += n32;
