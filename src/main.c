@@ -288,7 +288,8 @@ static void lcd_write_track_info(bool_t force)
         if (emulation_is_qd()) {
             if (ti.qd_active) {
                 snprintf(msg, sizeof(msg), "%c QD:%02u%%",
-                         (cfg.slot.attributes & AM_RDO) ? '*' : ' ',
+                         (cfg.slot.attributes & AM_RDO) ? '*'
+                         : ti.writing ? 'W' : ' ',
                          ti.qd_progress);
             } else {
                 snprintf(msg, sizeof(msg), "%c QD:--%%",
@@ -1015,6 +1016,11 @@ static void read_ff_cfg(void)
                 : FINTF_JC;
             break;
 
+        case FFCFG_qd_jc:
+            ff_cfg.qd_jc = !strcmp(opts.arg, "yes") ? QD_JC_yes
+                : !strcmp(opts.arg, "no") ? QD_JC_no : QD_JC_auto;
+            break;
+
         case FFCFG_host:
             ff_cfg.host =
                 !strcmp(opts.arg, "acorn") ? HOST_acorn
@@ -1319,7 +1325,16 @@ static void read_ff_cfg(void)
             break;
         }
 
+        case FFCFG_qd_motor_volume: {
+            int volume = strtol(opts.arg, NULL, 10);
+            if (volume <= 0) volume = 0;
+            if (volume >= 20) volume = 20;
+            ff_cfg.qd_motor_volume = volume;
+            break;
+        }
+
         case FFCFG_notify_volume: {
+            /* Notifications remain shared; QD motor volume is separate. */
             char *p, *q;
             ff_cfg.notify_volume = 0;
             for (p = opts.arg; *p != '\0'; p = q) {
@@ -2161,6 +2176,7 @@ static int run_floppy(void *_b)
     floppy_insert(0, &cfg.slot);
 
     led_7seg_update_track(TRUE);
+    lcd_write_track_info(TRUE);
 
     update_ticks = time_ms(20);
     t_prev = time_now();

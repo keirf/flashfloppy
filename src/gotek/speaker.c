@@ -29,7 +29,7 @@ static struct {
 
 static void motor_hum_timer_fn(void *unused)
 {
-    unsigned int volume = ff_cfg.step_volume;
+    unsigned int volume = ff_cfg.qd_motor_volume;
     unsigned int period = time_us(1000000 / MOTOR_HUM_HZ);
     unsigned int on_ticks = volume * volume * (TIME_MHZ / 3);
     time_t now = time_now();
@@ -97,7 +97,7 @@ void speaker_motor(bool_t on)
     timer_cancel(&motor_hum.timer);
     gpio_write_pin(gpio_spk, pin_spk, FALSE);
     motor_hum.level = FALSE;
-    if (on && !motor_hum.masked && ff_cfg.step_volume)
+    if (on && !motor_hum.masked && ff_cfg.qd_motor_volume)
         timer_set(&motor_hum.timer, time_now());
 
     IRQ_restore(oldpri);
@@ -134,7 +134,7 @@ static void speaker_unlock(void)
 {
     pulse.state = STATE_idle;
     motor_hum.masked = FALSE;
-    if (motor_hum.on && ff_cfg.step_volume)
+    if (motor_hum.on && ff_cfg.qd_motor_volume)
         timer_set(&motor_hum.timer, time_now());
 }
 

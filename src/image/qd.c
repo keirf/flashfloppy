@@ -21,11 +21,14 @@ struct track_header {
 };
 
 static void qd_seek_track(struct image *im, uint16_t track);
+static void qd_logical_read(struct image *im, uint8_t *buf, unsigned int len);
 
 static bool_t qd_open(struct image *im)
 {
     struct disk_header dh;
 
+    if (f_size(&im->fp) < 1024)
+        return FALSE;
     F_read(&im->fp, &dh, sizeof(dh), NULL);
     if (strncmp(&dh.sig[3], "QD", 2))
         return FALSE;
@@ -53,18 +56,20 @@ static void qd_seek_track(struct image *im, uint16_t track)
 {
     struct track_header thdr;
 
-    F_lseek(&im->fp, im->qd.tb*512 + (track/2)*16);
-    F_read(&im->fp, &thdr, sizeof(thdr), NULL);
+    if (im->qd.tb != 0) {
+        F_lseek(&im->fp, im->qd.tb*512 + (track/2)*16);
+        F_read(&im->fp, &thdr, sizeof(thdr), NULL);
 
-    /* Byte offset and length of track data. */
-    im->qd.trk_off = le32toh(thdr.offset);
-    im->qd.trk_len = le32toh(thdr.len);
+        /* Byte offset and length of track data. */
+        im->qd.trk_off = le32toh(thdr.offset);
+        im->qd.trk_len = le32toh(thdr.len);
 
-    /* Read/write window limits in STK ticks from data start. */
-    im->qd.win_start = (le32toh(thdr.win_start) * im->write_bc_ticks
-                        * ((8 * STK_MHZ) / SAMPLECLK_MHZ));
-    im->qd.win_end = (le32toh(thdr.win_end) * im->write_bc_ticks
-                      * ((8 * STK_MHZ) / SAMPLECLK_MHZ));
+        /* Read/write window limits in STK ticks from data start. */
+        im->qd.win_start = (le32toh(thdr.win_start) * im->write_bc_ticks
+                           * ((8 * STK_MHZ) / SAMPLECLK_MHZ));
+        im->qd.win_end = (le32toh(thdr.win_end) * im->write_bc_ticks
+                         * ((8 * STK_MHZ) / SAMPLECLK_MHZ));
+    }
 
     im->tracklen_bc = im->qd.trk_len * 8;
     im->stk_per_rev = stk_sampleclk(im->tracklen_bc * im->write_bc_ticks);
@@ -120,8 +125,12 @@ static bool_t qd_read_track(struct image *im)
     if (rd->prod == rd->cons) {
         nr_sec = min_t(unsigned int, batch_secs,
                        (im->qd.trk_len+511 - im->qd.trk_pos) / 512);
-        F_lseek(&im->fp, im->qd.trk_off + im->qd.trk_pos);
-        F_read(&im->fp, buf, nr_sec*512, NULL);
+        if (im->qd.tb != 0) {
+            F_lseek(&im->fp, im->qd.trk_off + im->qd.trk_pos);
+            F_read(&im->fp, buf, nr_sec*512, NULL);
+        } else {
+            qd_logical_read(im, buf, nr_sec*512);
+        }
         rd->cons = 0;
         rd->prod = nr_sec;
         im->qd.trk_pos += nr_sec * 512;
@@ -317,6 +326,8 @@ const struct image_handler qd_image_handler = {
     .rdata_flux = qd_rdata_flux,
     .write_track = qd_write_track,
 };
+
+#include "qd_logical.c"
 
 /*
  * Local variables:

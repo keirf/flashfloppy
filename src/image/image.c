@@ -72,6 +72,8 @@ const struct image_type image_type[] = {
 extern const struct image_handler qd_image_handler;
 static const struct image_type qd_image_types[] = {
     { "qd", &qd_image_handler },
+    { "mzq", &qd_logical_image_handler },
+    { "qdf", &qd_logical_image_handler },
     { "", NULL }
 };
 
@@ -96,6 +98,8 @@ extern const struct image_handler qd_image_handler;
 
 const struct image_type image_type[] = {
     { "qd", &qd_image_handler },
+    { "mzq", &qd_logical_image_handler },
+    { "qdf", &qd_logical_image_handler },
     { "", NULL }
 };
 
@@ -180,6 +184,8 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
     if (emulation_is_qd()) {
         if (try_handler(im, slot, cltbl, &qd_image_handler))
             return;
+        if (try_handler(im, slot, cltbl, &qd_logical_image_handler))
+            return;
         F_die(FR_BAD_IMAGE);
     }
 #endif
@@ -248,6 +254,8 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
     if (try_handler(im, slot, cltbl, &qd_image_handler))
+        return;
+    if (try_handler(im, slot, cltbl, &qd_logical_image_handler))
         return;
 
     /* No handler found: bad image. */

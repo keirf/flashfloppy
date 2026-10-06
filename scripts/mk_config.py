@@ -21,6 +21,8 @@ def main(argv):
             val = match.group(2)
             if opt == "interface":
                 val = "FINTF_" + val.upper().replace("-","_")
+            elif opt == "qd-jc":
+                val = "QD_JC_" + val
             elif opt == "pin02" or opt == "pin34":
                 val = "PIN_" + val
             elif opt == "track-change":

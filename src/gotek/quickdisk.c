@@ -155,6 +155,9 @@ static void IRQ_WGATE_rotary(void)
 
 static bool_t qd_roland_mode(void)
 {
+    if (ff_cfg.qd_jc != QD_JC_auto)
+        return ff_cfg.qd_jc == QD_JC_yes;
+
     if (board_jc_strapped())
         return TRUE;
 

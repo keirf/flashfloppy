@@ -68,6 +68,10 @@ struct hfe_image {
 
 struct qd_image {
     uint16_t tb;
+    /* tb == 0: byte image synthesised as MFM bitcells. */
+    uint16_t logical_blocks, logical_block;
+    uint32_t logical_len, logical_cache;
+    uint8_t logical_format; /* 0=MZQ, 1=compact QDF, 2=full QDF */
     uint32_t trk_off;
     uint32_t trk_pos, trk_len;
     uint32_t win_start, win_end;
@@ -213,6 +217,7 @@ static inline struct write *get_write(struct image *im, uint16_t idx)
     return &im->write[idx & (ARRAY_SIZE(im->write) - 1)];
 }
 
+
 struct image_handler {
     bool_t (*open)(struct image *im);
     FSIZE_t (*extend)(struct image *im);
@@ -222,6 +227,8 @@ struct image_handler {
     uint16_t (*rdata_flux)(struct image *im, uint16_t *tbuf, uint16_t nr);
     bool_t (*write_track)(struct image *im);
 };
+
+extern const struct image_handler qd_logical_image_handler;
 
 /* List of supported image types. */
 extern const struct image_type {

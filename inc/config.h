@@ -174,6 +174,11 @@ struct packed ff_cfg {
     uint8_t hfe_step;
     /* Last selection in the combined firmware boot menu; not an FF.CFG option. */
     uint8_t boot_emulation;
+#define QD_JC_auto 0
+#define QD_JC_yes  1
+#define QD_JC_no   2
+    uint8_t qd_jc; /* QD-only READY behaviour, independent of FDD interface. */
+    uint8_t qd_motor_volume; /* QD spindle hum; FDD uses step_volume. */
 };
 
 extern struct ff_cfg ff_cfg;

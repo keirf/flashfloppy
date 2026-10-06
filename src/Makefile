@@ -44,7 +44,6 @@ OBJS-$(apple2) += floppy.o
 OBJS-$(quickdisk) += quickdisk.o
 OBJS-$(dual) += floppy.o quickdisk.o emulation.o
 OBJS += floppy_image.o
-
 ifeq ($(target),dual)
 floppy.o: CFLAGS += -DDUAL_FDD
 quickdisk.o: CFLAGS += -DDUAL_QD
