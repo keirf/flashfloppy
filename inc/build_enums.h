@@ -21,6 +21,10 @@
 #define TARGET_shugart    4
 #define TARGET_apple2     5
 #define TARGET_quickdisk  6
+#define TARGET_dual       7
+
+/* Reserved vector slot identifies firmware with a boot selection menu. */
+#define DUAL_FW_MAGIC 0x46464451
 
 /* LEVEL */
 #define LEVEL_prod     1

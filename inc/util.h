@@ -124,6 +124,7 @@ extern uint8_t display_type;
 /* Speaker. */
 void speaker_init(void);
 void speaker_pulse(void);
+void speaker_motor(bool_t on);
 void speaker_notify_insert(unsigned int slotnr);
 void speaker_notify_eject(void);
 
@@ -190,6 +191,7 @@ extern const char build_time[];
 /* Bootloader mode flag. */
 extern volatile uint32_t _reset_flag;
 #define RESET_FLAG_BOOTLOADER 0xdeadbeefu
+#define RESET_FLAG_BOOT_MENU  0x51444646u
 
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];

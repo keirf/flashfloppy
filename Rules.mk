@@ -98,6 +98,17 @@ ifneq ($(target),bootloader)
 	srec_cat ../bootloader/target.hex -Intel $@ -Intel -o $@ -Intel
 endif
 
+# HEX/DFU contain both images: rebuild them when the bootloader changes.
+ifneq ($(target),bootloader)
+target.hex: ../bootloader/target.hex
+../bootloader/target.hex: $(ROOT)/src/fw_update.c $(ROOT)/src/vectors.S $(ROOT)/src/target.ld.S $(ROOT)/examples/FF.CFG $(wildcard $(ROOT)/inc/*.h)
+	+mkdir -p ../bootloader
+	$(MAKE) -f $(ROOT)/Rules.mk -C ../bootloader target=bootloader target.bin target.hex
+../bootloader/target.bin: ../bootloader/target.hex
+	$(OBJCOPY) -O binary ../bootloader/target.elf $@
+	chmod a-x $@
+endif
+
 %.bin: %.elf
 	@echo OBJCOPY $@
 	$(OBJCOPY) -O binary $< $@

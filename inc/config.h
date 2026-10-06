@@ -172,6 +172,8 @@ struct packed ff_cfg {
     uint8_t notify_volume;
     uint16_t hfe_rpm;
     uint8_t hfe_step;
+    /* Last selection in the combined firmware boot menu; not an FF.CFG option. */
+    uint8_t boot_emulation;
 };
 
 extern struct ff_cfg ff_cfg;

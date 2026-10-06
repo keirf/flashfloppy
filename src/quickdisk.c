@@ -74,6 +74,7 @@ void floppy_cancel(void)
     write_pin(media, HIGH);
 
     /* Deasserts /RY and turns off motor. */
+    speaker_motor(FALSE);
     IRQx_set_pending(motor_irq);
 
     /* Stop DMA + timer work. */
@@ -283,9 +284,24 @@ static bool_t dma_rd_handle(struct drive *drv)
 
 void floppy_get_track(struct track_info *ti)
 {
+    uint32_t pos, quantum;
+
     ti->cyl = ti->side = 0;
+    ti->qd_progress = 0;
     ti->sel = TRUE;
     ti->writing = (dma_wr && dma_wr->state != DMA_inactive);
+    ti->in_da_mode = FALSE;
+    ti->qd_active = (motor.on && image && dma_rd
+                     && (dma_rd->state == DMA_active) && !ti->writing);
+
+    if (!ti->qd_active || (image->stk_per_rev == 0))
+        return;
+
+    /* QuickDisk has one continuous spiral track. Report actual stream time
+     * past its index rather than the read-ahead cursor in the image codec. */
+    pos = time_since(index.prev_time) % image->stk_per_rev;
+    quantum = max_t(uint32_t, image->stk_per_rev / 100, 1);
+    ti->qd_progress = min_t(uint32_t, pos / quantum, 99);
 }
 
 static void index_assert(void *dat)
@@ -361,6 +377,8 @@ static void window_timer(void *_drv)
 
     w->state++;
 }
+
+#include "emulation_backend.c"
 
 /*
  * Local variables:

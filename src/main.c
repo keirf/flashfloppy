@@ -11,8 +11,14 @@
 
 int EXC_reset(void) __attribute__((alias("main")));
 
+#if TARGET == TARGET_dual
+/* Keep each emulation's navigation state without duplicating the filesystem. */
+#define image_a (emulation_is_qd() ? "IMAGE_Q.CFG" : "IMAGE_A.CFG")
+#define init_image_a (emulation_is_qd() ? "INIT_Q.CFG" : "INIT_A.CFG")
+#else
 static const char image_a[] = "IMAGE_A.CFG";
 static const char init_image_a[] = "INIT_A.CFG";
+#endif
 
 static FATFS fatfs;
 static struct {
@@ -232,7 +238,7 @@ static void display_write_slot(bool_t nav_mode)
     if (slot_type("v9t9")) {
         snprintf(typename, sizeof(typename), "T99");
     } else if (!(cfg.slot.attributes & AM_DIR)) {
-        for (type = &image_type[0]; type->handler != NULL; type++)
+        for (type = image_types(); type->handler != NULL; type++)
             if (slot_type(type->ext))
                 break;
         if (type->handler != NULL) {
@@ -276,10 +282,24 @@ static void lcd_write_track_info(bool_t force)
 
     if (force || (ti.cyl != lcd_ti.cyl)
         || ((ti.side != lcd_ti.side) && ti.sel)
-        || (ti.writing != lcd_ti.writing)) {
-        snprintf(msg, sizeof(msg), "%c T:%02u.%u",
-                 (cfg.slot.attributes & AM_RDO) ? '*' : ti.writing ? 'W' : ' ',
-                 ti.cyl, ti.side);
+        || (ti.writing != lcd_ti.writing)
+        || (ti.qd_active != lcd_ti.qd_active)
+        || (ti.qd_progress != lcd_ti.qd_progress)) {
+        if (emulation_is_qd()) {
+            if (ti.qd_active) {
+                snprintf(msg, sizeof(msg), "%c QD:%02u%%",
+                         (cfg.slot.attributes & AM_RDO) ? '*' : ' ',
+                         ti.qd_progress);
+            } else {
+                snprintf(msg, sizeof(msg), "%c QD:--%%",
+                         (cfg.slot.attributes & AM_RDO) ? '*'
+                         : ti.writing ? 'W' : ' ');
+            }
+        } else {
+            snprintf(msg, sizeof(msg), "%c T:%02u.%u",
+                     (cfg.slot.attributes & AM_RDO) ? '*'
+                     : ti.writing ? 'W' : ' ', ti.cyl, ti.side);
+        }
         lcd_write(wp_column, 1, -1, msg);
         if (ff_cfg.display_on_activity != DISPON_no)
             lcd_on();
@@ -304,7 +324,9 @@ static void led_7seg_update_track(bool_t force)
 
     floppy_get_track(&ti);
     changed = (ti.cyl != led_ti.cyl) || ((ti.side != led_ti.side) && ti.sel)
-        || (ti.writing != led_ti.writing);
+        || (ti.writing != led_ti.writing)
+        || (ti.qd_active != led_ti.qd_active)
+        || (ti.qd_progress != led_ti.qd_progress);
 
     if (force) {
         /* First call afer mounting new image: forcibly show track nr. */
@@ -340,10 +362,17 @@ static void led_7seg_update_track(bool_t force)
     }
 
     if (!showing_track || changed) {
-        const static char status[] = { 'k', 'm', 'v', 'w' };
-        snprintf(msg, sizeof(msg), "%2u%c", ti.cyl,
-                 status[ti.side|(ti.writing<<1)]);
-        led_7seg_write_string(msg);
+        if (emulation_is_qd()) {
+            if (ti.qd_active)
+                led_7seg_write_decimal(ti.qd_progress);
+            else
+                led_7seg_write_string(ti.writing ? "wrt" : "qd");
+        } else {
+            const static char status[] = { 'k', 'm', 'v', 'w' };
+            snprintf(msg, sizeof(msg), "%2u%c", ti.cyl,
+                     status[ti.side|(ti.writing<<1)]);
+            led_7seg_write_string(msg);
+        }
         showing_track = TRUE;
     }
 }
@@ -3036,10 +3065,10 @@ static void noinline banner(void)
         led_7seg_write_string(
 #if LEVEL == LEVEL_logfile
             "LOG"
-#elif TARGET == TARGET_quickdisk
-            (led_7seg_nr_digits() == 3) ? "Q"sep_ch"D" : "QD"
 #else
-            (led_7seg_nr_digits() == 3) ? "F"sep_ch"F" : "FF"
+            emulation_is_qd()
+                ? ((led_7seg_nr_digits() == 3) ? "Q"sep_ch"D" : "QD")
+                : ((led_7seg_nr_digits() == 3) ? "F"sep_ch"F" : "FF")
 #endif
             );
 #undef sep_ch
@@ -3048,6 +3077,15 @@ static void noinline banner(void)
     case DT_LCD_OLED:
         lcd_clear();
         display_mode = DM_banner; /* double height row 0 */
+#if TARGET == TARGET_dual
+        lcd_write(0, 0, 0, emulation_is_qd()
+                  ? "FlashFloppy QD" : "FlashFloppy FDD");
+#if LEVEL == LEVEL_logfile
+        snprintf(msg[1], sizeof(msg[1]), "%s Log", fw_ver);
+#else
+        snprintf(msg[1], sizeof(msg[1]), "%s %dkB", fw_ver, ram_kb);
+#endif
+#else
 #if MCU == MCU_stm32f105
         lcd_write(0, 0, 0, "FlashFloppy");
 #elif MCU == MCU_at32f435
@@ -3056,13 +3094,12 @@ static void noinline banner(void)
         snprintf(msg[0], sizeof(msg[0]), "%s%s", fw_ver,
 #if LEVEL == LEVEL_logfile
                  " Log"
-#elif TARGET == TARGET_quickdisk
-                 " QD"
 #else
-                 ""
+                 emulation_is_qd() ? " QD" : ""
 #endif
             );
         snprintf(msg[1], sizeof(msg[1]), "%9s %dkB", msg[0], ram_kb);
+#endif
         lcd_write(0, 1, 0, msg[1]);
         lcd_on();
         break;
@@ -3182,6 +3219,53 @@ static void handle_errors(FRESULT fres)
     if (pwr)
         system_reset();
 }
+#if TARGET == TARGET_dual
+static void boot_emulation_menu(void)
+{
+    static const char * const choices[] = { "QuickDisk", "FDD", "Update FW" };
+    static const char * const led_choices[] = { "qd", "Fdd", "UPd" };
+    int sel = emulation_is_qd() ? 0 : 1;
+    uint8_t b;
+
+    display_mode = DM_menu;
+    lcd_on();
+    display_state = (display_type == DT_LED_7SEG) ? LED_NORMAL : BACKLIGHT_ON;
+
+    for (;;) {
+        if (display_type == DT_LCD_OLED) {
+            lcd_write(0, 0, -1, "**Boot Menu**");
+            lcd_write(0, 1, -1, choices[sel]);
+            lcd_on();
+        } else if (display_type == DT_LED_7SEG) {
+            led_7seg_write_string(led_choices[sel]);
+        }
+
+        /* Consume the power-on press. Only a fresh press can confirm a choice. */
+        while (buttons || (board_get_buttons() & B_SELECT))
+            delay_ms(1);
+        while ((b = buttons) == 0)
+            delay_ms(1);
+        if (b & B_SELECT) {
+            while (buttons)
+                delay_ms(1);
+            if (sel == 2)
+                update_firmware();
+            ff_cfg.boot_emulation = (sel == 0) ? EMULATION_QD : EMULATION_FDD;
+            arena_init();
+            flash_ff_cfg_update(arena_alloc(128));
+            emulation_select(ff_cfg.boot_emulation);
+            break;
+        }
+        if (b & B_LEFT)
+            sel = (sel + 2) % 3;
+        else if (b & B_RIGHT)
+            sel = (sel + 1) % 3;
+        while (buttons)
+            delay_ms(1);
+    }
+    display_mode = DM_normal;
+}
+#endif
 
 int main(void)
 {
@@ -3192,6 +3276,9 @@ int main(void)
     };
 
     FRESULT fres;
+#if TARGET == TARGET_dual
+    bool_t boot_menu;
+#endif
 
     /* Relocate DATA. Initialise BSS. */
     if (&_sdat[0] != &_ldat[0])
@@ -3217,9 +3304,24 @@ int main(void)
 
     flash_ff_cfg_read();
 
-    floppy_init();
-
+#if TARGET == TARGET_dual
+    /* Read the physical SELECT input before ordinary UI button handling. */
+    boot_menu = (_reset_flag == RESET_FLAG_BOOT_MENU)
+        || !!(board_get_buttons() & B_SELECT);
+    _reset_flag = 0;
+    emulation_select(ff_cfg.boot_emulation);
     display_init();
+    rotary = board_get_rotary();
+    timer_init(&button_timer, button_timer_fn, NULL);
+    timer_set(&button_timer, time_now());
+    delay_ms(20); /* Let the common scanner debounce the initial press. */
+    if (boot_menu)
+        boot_emulation_menu();
+    floppy_init();
+#else
+    floppy_init();
+    display_init();
+#endif
 
     while (floppy_ribbon_is_reversed()) {
         printk("** Error: Ribbon cable upside down?\n");
@@ -3239,8 +3341,10 @@ int main(void)
 
     rotary = board_get_rotary();
     set_rotary_exti();
+#if TARGET != TARGET_dual
     timer_init(&button_timer, button_timer_fn, NULL);
     timer_set(&button_timer, time_now());
+#endif
 
     for (;;) {
 

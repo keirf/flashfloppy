@@ -19,6 +19,34 @@ static struct {
     struct timer timer;
 } pulse;
 
+/* Continuous low-duty-cycle buzz used for the QuickDisk spindle motor. */
+static struct {
+    bool_t on, level, masked;
+    struct timer timer;
+} motor_hum;
+
+#define MOTOR_HUM_HZ 100
+
+static void motor_hum_timer_fn(void *unused)
+{
+    unsigned int volume = ff_cfg.step_volume;
+    unsigned int period = time_us(1000000 / MOTOR_HUM_HZ);
+    unsigned int on_ticks = volume * volume * (TIME_MHZ / 3);
+    time_t now = time_now();
+
+    if (!motor_hum.on || motor_hum.masked || !volume) {
+        gpio_write_pin(gpio_spk, pin_spk, FALSE);
+        motor_hum.level = FALSE;
+        return;
+    }
+
+    on_ticks = min(on_ticks, period / 2);
+    motor_hum.level = !motor_hum.level;
+    gpio_write_pin(gpio_spk, pin_spk, motor_hum.level);
+    timer_set(&motor_hum.timer, now + (motor_hum.level
+              ? max_t(unsigned int, on_ticks, 1) : period - on_ticks));
+}
+
 static void pulse_timer_fn(void *unused)
 {
     switch (pulse.state) {
@@ -39,8 +67,10 @@ static void pulse_timer_fn(void *unused)
 void speaker_init(void)
 {
     pulse.state = STATE_idle;
+    motor_hum.on = motor_hum.level = motor_hum.masked = FALSE;
     gpio_configure_pin(gpio_spk, pin_spk, GPO_pushpull(_2MHz, FALSE));
     timer_init(&pulse.timer, pulse_timer_fn, NULL);
+    timer_init(&motor_hum.timer, motor_hum_timer_fn, NULL);
 }
 
 void speaker_pulse(void)
@@ -48,7 +78,7 @@ void speaker_pulse(void)
     unsigned int volume = ff_cfg.step_volume;
     time_t now;
 
-    if (!volume || (pulse.state != STATE_idle))
+    if (!volume || motor_hum.on || (pulse.state != STATE_idle))
         return;
 
     gpio_write_pin(gpio_spk, pin_spk, TRUE);
@@ -57,6 +87,20 @@ void speaker_pulse(void)
     pulse.state = STATE_active;
     pulse.start = now;
     timer_set(&pulse.timer, now + volume*volume*(TIME_MHZ/3));
+}
+
+void speaker_motor(bool_t on)
+{
+    uint32_t oldpri = IRQ_save(TIMER_IRQ_PRI);
+
+    motor_hum.on = on;
+    timer_cancel(&motor_hum.timer);
+    gpio_write_pin(gpio_spk, pin_spk, FALSE);
+    motor_hum.level = FALSE;
+    if (on && !motor_hum.masked && ff_cfg.step_volume)
+        timer_set(&motor_hum.timer, time_now());
+
+    IRQ_restore(oldpri);
 }
 
 static void speaker_hz(unsigned int hz, unsigned int ms)
@@ -78,13 +122,20 @@ static void speaker_lock(void)
     uint32_t oldpri;
     oldpri = IRQ_save(TIMER_IRQ_PRI);
     timer_cancel(&pulse.timer);
+    timer_cancel(&motor_hum.timer);
     pulse.state = STATE_masked;
+    motor_hum.masked = TRUE;
+    motor_hum.level = FALSE;
+    gpio_write_pin(gpio_spk, pin_spk, FALSE);
     IRQ_restore(oldpri);
 }
 
 static void speaker_unlock(void)
 {
     pulse.state = STATE_idle;
+    motor_hum.masked = FALSE;
+    if (motor_hum.on && ff_cfg.step_volume)
+        timer_set(&motor_hum.timer, time_now());
 }
 
 static void speaker_notify_slot(unsigned int nr)

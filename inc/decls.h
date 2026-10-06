@@ -16,6 +16,7 @@
 #include <limits.h>
 
 #include "build_enums.h"
+#include "emulation_backend.h"
 #include "types.h"
 #include "mcu/common_regs.h"
 #include "mcu/common.h"
@@ -40,6 +41,7 @@
 #include "spi.h"
 #include "timer.h"
 #include "fs.h"
+#include "emulation.h"
 #include "floppy.h"
 #include "volume.h"
 #include "config.h"

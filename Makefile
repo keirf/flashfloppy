@@ -1,6 +1,6 @@
 
 PROJ := flashfloppy
-VER := $(shell git rev-parse --short HEAD)
+VER := 3.45-dual
 
 export FW_VER := $(VER)
 
@@ -17,6 +17,7 @@ prod-%: FORCE
 	$(MAKE) target mcu=$* target=shugart level=prod
 	$(MAKE) target mcu=$* target=apple2 level=prod
 	$(MAKE) target mcu=$* target=quickdisk level=prod
+	$(MAKE) target mcu=$* target=dual level=prod
 	$(MAKE) target mcu=$* target=bl_update level=prod
 	$(MAKE) target mcu=$* target=io_test level=prod
 
@@ -25,6 +26,7 @@ debug-%: FORCE
 	$(MAKE) target mcu=$* target=shugart level=debug
 	$(MAKE) target mcu=$* target=apple2 level=debug
 	$(MAKE) target mcu=$* target=quickdisk level=debug
+	$(if $(filter stm32f105,$*),,$(MAKE) target mcu=$* target=dual level=debug)
 	$(MAKE) target mcu=$* target=bl_update level=debug
 	$(MAKE) target mcu=$* target=io_test level=debug
 
@@ -33,6 +35,13 @@ logfile-%: FORCE
 	$(MAKE) target mcu=$* target=shugart level=logfile
 	$(MAKE) target mcu=$* target=apple2 level=logfile
 	$(MAKE) target mcu=$* target=quickdisk level=logfile
+	$(if $(filter stm32f105,$*),,$(MAKE) target mcu=$* target=dual level=logfile)
+
+# The 128kB devices fit the combined production firmware. Additional debug
+# logging does not fit; their standalone debug/logfile builds remain available.
+dual-%: FORCE
+	$(MAKE) target mcu=$* target=bootloader level=prod
+	$(MAKE) target mcu=$* target=dual level=prod
 
 apple2-bootloader-%: FORCE
 	$(MAKE) target mcu=$* target=apple2-bootloader level=prod
@@ -83,6 +92,10 @@ _legacy_dist: FORCE
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/quickdisk/logfile/$(PROJ)-quickdisk-logfile-$(VER).upd \
 	  out/$(mcu)/logfile/quickdisk/target.bin & \
+	if [ "$(level)" = prod ]; then \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/alt/dual/$(PROJ)-dual-$(VER).upd \
+	  out/$(mcu)/$(level)/dual/target.bin; fi & \
 	wait
 
 _dist: FORCE
@@ -113,7 +126,15 @@ _dist: FORCE
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/quickdisk/logfile/$(PROJ)-quickdisk-logfile-$(VER).upd \
 	  out/$(mcu)/logfile/quickdisk/target.bin $(mcu) & \
+	if [ "$(mcu)" != stm32f105 ] || [ "$(level)" = prod ]; then \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/dual/$(PROJ)-dual-$(VER).upd \
+	  out/$(mcu)/$(level)/dual/target.bin $(mcu); fi & \
 	wait
+	if [ "$(mcu)" != stm32f105 ] || [ "$(level)" = prod ]; then \
+	  cp -a out/$(mcu)/$(level)/dual/target.hex $(t)/hex/$(PROJ)-dual-$(n)-$(VER).hex; \
+	  cp -a out/$(mcu)/$(level)/dual/target.dfu $(t)/dfu/$(PROJ)-dual-$(n)-$(VER).dfu; \
+	fi
 
 _dist_apple2_at2_bootloader: f := $(t)/alt/apple2/at2-bootloader
 _dist_apple2_at2_bootloader: n := $(PROJ)-apple2-at2-bootloader-$(VER)
@@ -134,6 +155,7 @@ dist: FORCE all
 	mkdir -p $(t)/alt/io-test
 	mkdir -p $(t)/alt/apple2/logfile
 	mkdir -p $(t)/alt/quickdisk/logfile
+	mkdir -p $(t)/alt/dual
 	$(MAKE) _legacy_dist mcu=stm32f105 level=$(level) t=$(t)
 	$(MAKE) _dist mcu=stm32f105 n=at415-st105 level=$(level) t=$(t)
 	$(MAKE) _dist mcu=at32f435 n=at435 level=$(level) t=$(t)

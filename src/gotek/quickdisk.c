@@ -178,6 +178,10 @@ static void _IRQ_MOTOR_RESET_changed(unsigned int gpioa_idr)
     if (read_pin(media))
         off |= m(pin_reset);
 
+    /* A QuickDisk motor runs continuously while /MOTOR and /RESET permit it.
+     * Mirror that state as a low mechanical hum on the Gotek speaker. */
+    speaker_motor(!off);
+
     /* Some signal changed, so we lose the spun-up state immediately. */
     motor.on = FALSE;
 

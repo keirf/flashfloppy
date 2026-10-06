@@ -19,6 +19,7 @@ like a real floppy drive but use disk images on a modern USB stick!
 - Directly reads and writes [many image formats][Image-Formats]
 - [Flexible track layout][Track-Layouts] for Raw Sector Images
 - [Extremely configurable][FF.CFG-Configuration-File]
+- [Combined FDD/QuickDisk firmware with a boot selection menu](docs/dual-firmware.md)
 
 **FlashFloppy** is **Free and Open-Source Software**.
 

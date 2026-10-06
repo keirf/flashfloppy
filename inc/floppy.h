@@ -229,6 +229,15 @@ extern const struct image_type {
     const struct image_handler *handler;
 } image_type[];
 
+#if TARGET == TARGET_dual
+const struct image_type *image_types(void);
+#else
+static inline const struct image_type *image_types(void)
+{
+    return image_type;
+}
+#endif
+
 /* Is given file valid to open as an image? */
 bool_t image_valid(FILINFO *fp);
 
@@ -284,7 +293,8 @@ void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
 void floppy_set_cyl(uint8_t unit, uint8_t cyl);
 struct track_info {
-    uint8_t cyl, side:1, sel:1, writing:1, in_da_mode:1;
+    uint8_t cyl, qd_progress;
+    uint8_t side:1, sel:1, writing:1, in_da_mode:1, qd_active:1;
 };
 void floppy_get_track(struct track_info *ti);
 void floppy_set_fintf_mode(void);
@@ -295,7 +305,10 @@ static inline unsigned int im_nphys_cyls(struct image *im)
 }
 static inline bool_t in_da_mode(struct image *im, unsigned int cyl)
 {
-#if TARGET == TARGET_shugart
+#if TARGET == TARGET_dual
+    return !emulation_is_qd()
+        && cyl >= max_t(unsigned int, DA_FIRST_CYL, im_nphys_cyls(im));
+#elif TARGET == TARGET_shugart
     return cyl >= max_t(unsigned int, DA_FIRST_CYL, im_nphys_cyls(im));
 #else
     return FALSE;

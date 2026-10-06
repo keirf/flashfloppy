@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if TARGET == TARGET_shugart
+#if TARGET == TARGET_shugart || TARGET == TARGET_dual
 
 extern const struct image_handler adf_image_handler;
 extern const struct image_handler atr_image_handler;
@@ -68,6 +68,19 @@ const struct image_type image_type[] = {
     { "", NULL }
 };
 
+#if TARGET == TARGET_dual
+extern const struct image_handler qd_image_handler;
+static const struct image_type qd_image_types[] = {
+    { "qd", &qd_image_handler },
+    { "", NULL }
+};
+
+const struct image_type *image_types(void)
+{
+    return emulation_is_qd() ? qd_image_types : image_type;
+}
+#endif
+
 #elif TARGET == TARGET_apple2
 
 extern const struct image_handler hfe_image_handler;
@@ -103,11 +116,13 @@ bool_t image_valid(FILINFO *fp)
 
     /* Check valid extension. */
     filename_extension(fp->fname, ext, sizeof(ext));
-    if ((TARGET == TARGET_shugart) && !strcmp(ext, "adf")) {
+    if (!emulation_is_qd()
+        && (TARGET == TARGET_shugart || TARGET == TARGET_dual)
+        && !strcmp(ext, "adf")) {
         return (ff_cfg.host == HOST_acorn) || !(fp->fsize % (2*11*512));
     } else {
         const struct image_type *type;
-        for (type = &image_type[0]; type->handler != NULL; type++)
+        for (type = image_types(); type->handler != NULL; type++)
             if (!strcmp(ext, type->ext))
                 return TRUE;
     }
@@ -144,7 +159,7 @@ static bool_t try_handler(struct image *im, struct slot *slot,
     return handler->open(im);
 }
 
-#if TARGET == TARGET_shugart
+#if TARGET == TARGET_shugart || TARGET == TARGET_dual
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
@@ -161,12 +176,20 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
     const struct image_type *type;
     int i;
 
+#if TARGET == TARGET_dual
+    if (emulation_is_qd()) {
+        if (try_handler(im, slot, cltbl, &qd_image_handler))
+            return;
+        F_die(FR_BAD_IMAGE);
+    }
+#endif
+
     /* Extract filename extension (if available). */
     memcpy(ext, slot->type, sizeof(slot->type));
     ext[sizeof(slot->type)] = '\0';
 
     /* Use the extension as a hint to the correct image handler. */
-    for (type = &image_type[0]; type->handler != NULL; type++)
+    for (type = image_types(); type->handler != NULL; type++)
         if (!strcmp(ext, type->ext))
             break;
     hint = type->handler;
@@ -282,16 +305,18 @@ bool_t image_setup_track(
 {
     const struct image_handler *h = im->track_handler;
 
-#if TARGET == TARGET_shugart
-    if (!in_da_mode(im, track>>1)) {
-        /* If we are exiting D-A mode then need to re-read the config file. */
-        if (h == &da_image_handler)
-            return TRUE;
-        h = ((track>>1) >= im_nphys_cyls(im)) ? &dummy_image_handler
-             : im->disk_handler;
-    } else {
-        h = &da_image_handler;
-        im->nr_sides = 1;
+#if TARGET == TARGET_shugart || TARGET == TARGET_dual
+    if (!emulation_is_qd()) {
+        if (!in_da_mode(im, track>>1)) {
+            /* Re-read the config file when exiting Direct Access mode. */
+            if (h == &da_image_handler)
+                return TRUE;
+            h = ((track>>1) >= im_nphys_cyls(im)) ? &dummy_image_handler
+                : im->disk_handler;
+        } else {
+            h = &da_image_handler;
+            im->nr_sides = 1;
+        }
     }
 #endif
 
@@ -323,7 +348,7 @@ uint32_t image_ticks_since_index(struct image *im)
     uint32_t ticks = im->cur_ticks - im->ticks_since_flux;
     if ((int32_t)ticks < 0)
         ticks += im->tracklen_ticks;
-    if (TARGET != TARGET_quickdisk)
+    if (!emulation_is_qd())
         ticks >>= 4;
     return ticks;
 }

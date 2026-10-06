@@ -21,6 +21,7 @@ OBJS-$(logfile) += logfile.o
 ifeq ($(target),bl_update)
 
 OBJS += bl_update.o
+bl_update.o: ../bootloader/target.bin
 SUBDIRS += display gotek
 
 else ifeq ($(target),io_test)
@@ -41,6 +42,13 @@ OBJS += cache.o
 OBJS-$(shugart) += floppy.o
 OBJS-$(apple2) += floppy.o
 OBJS-$(quickdisk) += quickdisk.o
+OBJS-$(dual) += floppy.o quickdisk.o emulation.o
+OBJS += floppy_image.o
+
+ifeq ($(target),dual)
+floppy.o: CFLAGS += -DDUAL_FDD
+quickdisk.o: CFLAGS += -DDUAL_QD
+endif
 
 SUBDIRS += display
 SUBDIRS += fatfs

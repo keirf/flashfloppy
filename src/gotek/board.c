@@ -104,7 +104,8 @@ unsigned int board_get_buttons(void)
 unsigned int board_get_rotary(void)
 {
     unsigned int x = 3;
-    if ((mcu_package != MCU_QFN32) && (ff_cfg.chgrst != CHGRST_pa14)) {
+    if ((mcu_package != MCU_QFN32)
+        && (emulation_is_qd() || (ff_cfg.chgrst != CHGRST_pa14))) {
         /* Alternative location at PA13, PA14. */
         x &= gpioa->idr >> 13;
     }
@@ -125,7 +126,8 @@ uint32_t board_rotary_exti_mask;
 void board_setup_rotary_exti(void)
 {
     uint32_t m = 0;
-    if ((mcu_package != MCU_QFN32) && (ff_cfg.chgrst != CHGRST_pa14)) {
+    if ((mcu_package != MCU_QFN32)
+        && (emulation_is_qd() || (ff_cfg.chgrst != CHGRST_pa14))) {
         /* Alternative location at PA13, PA14. */
         exti_route_pa(13);
         exti_route_pa(14);
@@ -137,7 +139,8 @@ void board_setup_rotary_exti(void)
         exti_route_pc(11);
         m |= m(10) | m(11);
     }
-    if (((has_kc30_header == 1) && (ff_cfg.motor_delay == MOTOR_ignore))
+    if (((has_kc30_header == 1)
+         && (emulation_is_qd() || (ff_cfg.motor_delay == MOTOR_ignore)))
         || (has_kc30_header == 2) /* No conflict with motor on PB12 */) {
         /* KC30 rotary pins PA6, PA15. */
         exti_route_pa(6);

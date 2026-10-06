@@ -555,10 +555,12 @@ void floppy_get_track(struct track_info *ti)
 {
     bool_t active = dma_wr != NULL;
     ti->cyl = drive.cyl;
+    ti->qd_progress = 0;
     ti->side = active ? drive.head & (drive.image->nr_sides - 1) : 0;
     ti->sel = drive.sel;
     ti->writing = (active && dma_wr->state != DMA_inactive);
     ti->in_da_mode = active ? in_da_mode(drive.image, ti->cyl) : FALSE;
+    ti->qd_active = FALSE;
 }
 
 static bool_t index_is_suppressed(struct drive *drv)
@@ -656,6 +658,8 @@ static void IRQ_soft(void)
         timer_set(&index.timer_deassert, time_now() + time_us(500));
     }
 }
+
+#include "emulation_backend.c"
 
 /*
  * Local variables:

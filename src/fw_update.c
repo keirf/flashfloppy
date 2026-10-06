@@ -42,6 +42,8 @@
 #endif
 #define FILE_PATTERN   "ff_gotek*.upd"
 
+#include "boot_policy.h"
+
 int EXC_reset(void) __attribute__((alias("main")));
 
 static uint8_t USBH_Cfg_Rx_Buffer[512];
@@ -76,10 +78,11 @@ static void canary_check(void)
 }
 
 #define MAIN_FW_KEY 0x39b5ba2c
-static void reset_to_main_fw(void) __attribute__((noreturn));
-static void reset_to_main_fw(void)
+static void reset_to_main_fw(bool_t boot_menu) __attribute__((noreturn));
+static void reset_to_main_fw(bool_t boot_menu)
 {
     *(volatile uint32_t *)_ebss = MAIN_FW_KEY;
+    _reset_flag = boot_menu ? RESET_FLAG_BOOT_MENU : 0;
     cpu_sync();
     system_reset();
 }
@@ -380,19 +383,26 @@ int main(void)
     char msg[20];
     FRESULT fres;
     bool_t update_requested;
+    bool_t boot_menu_requested;
+    bool_t update_confirmed;
 
     /* Relocate DATA. Initialise BSS. */
     if (&_sdat[0] != &_ldat[0])
         memcpy(_sdat, _ldat, _edat-_sdat);
     memset(_sbss, 0, _ebss-_sbss);
 
+    boot_menu_requested = (_reset_flag == RESET_FLAG_BOOT_MENU);
     update_requested = fw_update_requested();
+    update_confirmed = update_requested;
 
     if (main_fw_requested() && !update_requested) {
         /* Check for, and jump to, the main firmware. */
         uint32_t sp = *(uint32_t *)FIRMWARE_START;
         uint32_t pc = *(uint32_t *)(FIRMWARE_START + 4);
         if (sp != ~0u) { /* only if firmware is apparently not erased */
+            /* Keep the initial SELECT request even if it is released during
+             * the reset used to leave the bootloader's peripheral state. */
+            _reset_flag = boot_menu_requested ? RESET_FLAG_BOOT_MENU : 0;
             asm volatile (
                 "mov sp,%0 ; blx %1"
                 :: "r" (sp), "r" (pc));
@@ -415,8 +425,13 @@ int main(void)
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** github:keirf/flashfloppy\n\n");
 
-    if (!update_requested && !buttons_pressed())
-        reset_to_main_fw();
+    {
+        enum firmware_boot_action action = firmware_boot_action(
+            *(const uint32_t *)(FIRMWARE_START + 7*4),
+            board_get_buttons() | osd_buttons_rx, update_requested);
+        if (action != BOOT_UPDATE)
+            reset_to_main_fw(action == BOOT_MENU);
+    }
 
     delay_ms(200); /* 5v settle */
 
@@ -440,8 +455,9 @@ int main(void)
     usbh_msc_init();
     usbh_msc_buffer_set(USBH_Cfg_Rx_Buffer);
 
-    /* Wait for buttons to be pressed. */
-    wait_buttons(LOW);
+    /* The application menu has already confirmed an explicit update request. */
+    if (!update_confirmed)
+        wait_buttons(LOW);
 
     /* Wait for buttons to be released. */
     wait_buttons(HIGH);

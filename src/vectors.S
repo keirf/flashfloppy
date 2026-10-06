@@ -16,7 +16,11 @@ vector_table:
     E(EXC_memory_management_fault)
     E(EXC_bus_fault)
     E(EXC_usage_fault)
+#if TARGET == TARGET_dual
+    .word DUAL_FW_MAGIC
+#else
     E(EXC_7)
+#endif
     E(EXC_8)
     E(EXC_9)
     E(EXC_10)

@@ -29,6 +29,10 @@ union cfg_slot {
     uint16_t words[SLOTW_NR];
 };
 
+/* DEAD and CRC occupy the last four bytes of a configuration slot. */
+_Static_assert(sizeof(struct ff_cfg) <= sizeof(union cfg_slot) - 4,
+               "FF.CFG overlaps the slot metadata");
+
 #if MCU == MCU_stm32f105
 #define SLOT_BASE (union cfg_slot *)(0x8020000 - FLASH_PAGE_SIZE)
 #elif MCU == MCU_at32f435

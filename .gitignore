@@ -3,3 +3,5 @@
 *.rej
 /out
 /ext
+/tests
+/specification
