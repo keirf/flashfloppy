@@ -48,6 +48,7 @@ uint8_t always_inline mfmtobin(uint16_t x)
 {
     uint8_t y;
     x = be16toh(x) << 1;
+#if defined(__arm__)
     asm volatile (
         "lsrs %1,%1,#2 ; rrx %0,%0\n"
         "lsrs %1,%1,#2 ; rrx %0,%0\n"
@@ -59,6 +60,13 @@ uint8_t always_inline mfmtobin(uint16_t x)
         "lsrs %1,%1,#2 ; rrx %0,%0\n"
         "rev %0,%0\n"
         : "=&r" (y) : "r" (x) );
+#else
+    {
+        unsigned int i;
+        for (y = i = 0; i < 8; i++)
+            y |= ((x >> (2*i + 1)) & 1) << i;
+    }
+#endif
     return y;
 }
 

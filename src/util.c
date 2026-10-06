@@ -62,6 +62,8 @@ void *memcpy(void *dest, const void *src, size_t n)
     return dest;
 }
 
+#if defined(__arm__)
+
 __attribute__((naked))
 void memcpy_fast(void *dest, const void *src, size_t n) {
     asm (
@@ -96,6 +98,25 @@ void memset_fast(void *s, int c, size_t n) {
         "    bx    lr\n"
         );
 }
+
+#else
+
+void memcpy_fast(void *dest, const void *src, size_t n)
+{
+    uint32_t *p = dest;
+    const uint32_t *q = src;
+    for (n /= 4; n != 0; n--)
+        *p++ = *q++;
+}
+
+void memset_fast(void *s, int c, size_t n)
+{
+    uint32_t *p = s, x = (uint8_t)c * 0x01010101u;
+    for (n /= 4; n != 0; n--)
+        *p++ = x;
+}
+
+#endif
 
 void *memmove(void *dest, const void *src, size_t n)
 {
