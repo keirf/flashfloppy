@@ -79,6 +79,9 @@ static uint8_t i2c_dead;
 static uint8_t i2c_row;
 static bool_t is_oled_display;
 static uint8_t oled_height;
+/* The font that lcd_columns is sized for. FF.CFG may change
+ * ff_cfg.oled_font before it resets the system. */
+static uint8_t oled_font;
 
 #define OLED_ADDR 0x3c
 enum { OLED_unknown, OLED_ssd1306, OLED_sh1106 };
@@ -571,7 +574,8 @@ bool_t lcd_init(void)
 
         if (is_oled_display) {
             oled_height = (ff_cfg.display_type & DISPLAY_oled_64) ? 64 : 32;
-            lcd_columns = (ff_cfg.oled_font == FONT_8x16) ? 16
+            oled_font = ff_cfg.oled_font;
+            lcd_columns = (oled_font == FONT_8x16) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrower) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
             lcd_rows = 4;
@@ -715,7 +719,7 @@ static void oled_convert_text_row_8x16(char *pc)
 static void oled_convert_text_row(char *pc)
 {
 #ifdef font_extra
-    if (ff_cfg.oled_font == FONT_8x16)
+    if (oled_font == FONT_8x16)
         oled_convert_text_row_8x16(pc);
     else
 #endif
