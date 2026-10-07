@@ -40,6 +40,9 @@ uint64_t emu_time_ns(void);
 /* Waits @ns, keeping the peripherals and the interrupts running. */
 void emu_idle_ns(uint64_t ns);
 void emu_relax(void);
+/* Whether the caller is the thread that runs the peripheral models beside
+ * the firmware's own. */
+int emu_on_hw_thread(void);
 
 /* Process control (cpu.c). */
 void emu_illegal(const char *file, int line) __attribute__((noreturn));
@@ -85,6 +88,10 @@ int ff_main(void);
 /* MCU peripherals (hw.c). */
 void emu_hw_init(void);
 void emu_hw_sync(void);
+/* The part of emu_hw_sync() that the bus thread runs: the I2C bus and its
+ * DMA, which interrupt handlers wait on. */
+void emu_hw_sync_bus(void);
+/* Whether the calling thread is in the middle of a sync. */
 int emu_hw_busy(void);
 void emu_irq_vector(unsigned int nr);
 

@@ -55,7 +55,7 @@ The commands are `key <action>`, the action being `select`, `left`, `right`, `cw
 ## How it works
 
 - `decls.h`, `regs.h`, `hooks.h`: the host counterparts of `inc/decls.h` and `inc/intrinsics.h`. The MCU register blocks become ordinary memory, and interrupt control is routed to the emulated interrupt controller.
-- `hw.c`: models of the peripherals behind those registers that the user interface needs: GPIO inputs with their EXTI interrupts, the one-shot timer of `src/timer.c`, and the I2C master with its DMA channel.
+- `hw.c`: models of the peripherals behind those registers that the user interface needs: GPIO inputs with their EXTI interrupts, the one-shot timer of `src/timer.c`, and the I2C master with its DMA channel. The I2C bus also runs on a thread of its own, beside the firmware, as the hardware does, so that an interrupt handler that waits for the bus is released whatever the firmware's thread is doing.
 - `stubs.c`: stand-ins for MCU bring-up, the serial console, the configuration flash page, the heap, the USB host stack and the floppy interface.
 - `cpu.c`: the interrupt controller, a 1 ms tick delivered as a signal to the thread that runs the firmware, cancellable calls, and reset, which re-executes the program.
 - `ssd1306.c`: the display controller, an SSD1306 or an SH1106, as an I2C slave.
