@@ -1,12 +1,13 @@
 /*
  * rc.c
  *
- * Settings, kept in ffemurc in ${XDG_CONFIG_HOME:-~/.config}/ffemu/: lines of
- * "name = value", a '#' starting a comment line. The file is written with the
- * defaults and a comment on each setting when it does not exist, and a
- * setting changed from the keyboard is written back into it, other lines
- * kept as they are. Its last section, [Flash mem], mirrors the emulated
- * flash memory, and is written anew whenever the flash changes.
+ * Settings, kept in ffemurc in ${XDG_CONFIG_HOME:-~/.config}/ffemu/ (or
+ * /ffemu-apple2/): lines of "name = value", a '#' starting a comment line.
+ * The file is written with the defaults and a comment on each setting when
+ * it does not exist, and a setting changed from the keyboard is written back
+ * into it, other lines kept as they are. Its last section, [Flash mem],
+ * mirrors the emulated flash memory, and is written anew whenever the flash
+ * changes.
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
@@ -508,10 +509,11 @@ void rc_load(void)
     config.hold_ms = 150;
 
     if ((xdg != NULL) && (xdg[0] != '\0'))
-        snprintf(config.path, sizeof(config.path), "%s/ffemu/ffemurc", xdg);
+        snprintf(config.path, sizeof(config.path),
+                 "%s/" FFEMU_NAME "/ffemurc", xdg);
     else
-        snprintf(config.path, sizeof(config.path), "%s/.config/ffemu/ffemurc",
-                 home ? home : "");
+        snprintf(config.path, sizeof(config.path),
+                 "%s/.config/" FFEMU_NAME "/ffemurc", home ? home : "");
 
     f = fopen(config.path, "r");
     if (f == NULL) {

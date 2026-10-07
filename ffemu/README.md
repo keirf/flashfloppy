@@ -6,9 +6,9 @@ Nothing is connected to the floppy interface: an image can be selected and is op
 
 ## Building
 
-    make -C ffemu [O=<path>]
+    make -C ffemu [O=<path>] [TARGET=shugart|apple2]
 
-The program is `out/ffemu/ffemu` under `<path>`, which defaults to the top of the source tree. It needs a C compiler, `objcopy`, Python 3 (for the font and configuration generators of the firmware build) and the wide-character "ncurses" library with its headers: `ncurses-devel` on Cygwin/MSYS2, `libncurses-dev` on Debian and Ubuntu. On Cygwin/MSYS2 everything but the runtime DLL is linked statically, so the program built there also runs in any Git Bash.
+The program is `out/ffemu/ffemu` under `<path>`, which defaults to the top of the source tree. `TARGET=apple2` builds `out/ffemu-apple2/ffemu-apple2` instead, which runs the Apple2 firmware: it lists only HFE images, and its board code is that of the release, which keeps the rotary encoder where the Apple2 debug build puts two stepper phases. The two programs keep their settings and logs apart, in `ffemu/` and `ffemu-apple2/` of the directories below. The build needs a C compiler, `objcopy`, Python 3 (for the font and configuration generators of the firmware build) and the wide-character "ncurses" library with its headers: `ncurses-devel` on Cygwin/MSYS2, `libncurses-dev` on Debian and Ubuntu. On Cygwin/MSYS2 everything but the runtime DLL is linked statically, so the program built there also runs in any Git Bash.
 
 ## Running
 

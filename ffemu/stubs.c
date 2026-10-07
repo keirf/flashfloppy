@@ -1062,6 +1062,15 @@ const char *emu_fw_version(void)
     return fw_ver;
 }
 
+const char *emu_fw_target(void)
+{
+#if TARGET == TARGET_apple2
+    return "Apple2";
+#else
+    return "Shugart";
+#endif
+}
+
 /*
  * Local variables:
  * mode: C

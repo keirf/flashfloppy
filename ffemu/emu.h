@@ -98,6 +98,7 @@ void emu_irq_vector(unsigned int nr);
 /* Facts about the emulated device, for the status pane (hw.c, stubs.c). */
 const char *emu_board_name(void);
 const char *emu_fw_version(void);
+const char *emu_fw_target(void);
 unsigned int emu_arena_used(void);
 unsigned int emu_arena_size(void);
 

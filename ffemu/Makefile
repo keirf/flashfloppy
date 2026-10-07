@@ -1,15 +1,25 @@
 # ffemu: runs the FlashFloppy user interface in a terminal, with no hardware.
 #
-# Usage: make -C ffemu [O=<path>]
+# Usage: make -C ffemu [O=<path>] [TARGET=shugart|apple2]
 #
-# The program is built as $(O)/out/ffemu/ffemu. O defaults to the top of the
-# source tree, as in the main Makefile.
+# The program is built as $(O)/out/ffemu/ffemu, or for the Apple2 firmware
+# as $(O)/out/ffemu-apple2/ffemu-apple2. O defaults to the top of the source
+# tree, as in the main Makefile.
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
 EMU := $(ROOT)/ffemu
 
+TARGET ?= shugart
+ifeq ($(TARGET),shugart)
+NAME := ffemu
+else ifeq ($(TARGET),apple2)
+NAME := ffemu-apple2
+else
+$(error TARGET must be shugart or apple2)
+endif
+
 O ?= $(ROOT)
-OUT := $(abspath $(O))/out/ffemu
+OUT := $(abspath $(O))/out/$(NAME)
 
 CC ?= cc
 OBJCOPY ?= objcopy
@@ -50,11 +60,11 @@ FW_CFLAGS += -fno-tree-loop-distribute-patterns
 FW_CFLAGS += -Wall -Werror -Wno-format -Wno-unused-value
 FW_CFLAGS += -iquote $(ROOT)/inc -iquote $(EMU) -iquote $(OUT)
 FW_CFLAGS += -include $(EMU)/decls.h
-FW_CFLAGS += -DMCU=MCU_stm32f105 -DTARGET=TARGET_shugart -DLEVEL=LEVEL_debug
+FW_CFLAGS += -DMCU=MCU_stm32f105 -DTARGET=TARGET_$(TARGET) -DLEVEL=LEVEL_debug
 FW_CFLAGS += -MMD -MP
 
 HOST_CFLAGS := -std=gnu11 -O2 -g -Wall -Werror -D_GNU_SOURCE
-HOST_CFLAGS += -DNCURSES_WIDECHAR=1
+HOST_CFLAGS += -DNCURSES_WIDECHAR=1 -DFFEMU_NAME='"$(NAME)"'
 HOST_CFLAGS += -MMD -MP
 
 LIBS := $(shell pkg-config --libs ncursesw 2>/dev/null || echo -lncursesw)
@@ -73,9 +83,9 @@ endif
 # Keep the generated sources.
 .SECONDARY:
 
-all: $(OUT)/ffemu
+all: $(OUT)/$(NAME)
 
-$(OUT)/ffemu: $(FW_OBJS) $(HOST_OBJS)
+$(OUT)/$(NAME): $(FW_OBJS) $(HOST_OBJS)
 	@echo LD $(notdir $@)
 	$(Q)$(CC) -g $(LDFLAGS) -o $@ $^ $(LIBS)
 
@@ -92,6 +102,13 @@ $(OUT)/gen/oled_font_%.c: $(ROOT)/fonts/%.bdf $(ROOT)/scripts/mk_font.py
 $(OUT)/gen/%.o: $(OUT)/gen/%.c
 	@echo CC $*.c
 	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
+
+# The Apple2 debug build moves two stepper phases onto the rotary encoder
+# pins; the board code of the logfile level keeps them where the release has
+# them, and ffemu takes the console output itself.
+ifeq ($(TARGET),apple2)
+$(OUT)/fw/gotek/board.o: FW_CFLAGS += -ULEVEL -DLEVEL=LEVEL_logfile
+endif
 
 # As in src/display/Makefile: the main firmware has both fonts.
 $(OUT)/fw/display/lcd_stm32f105.o: FW_CFLAGS += -Dfont_extra=1
