@@ -70,6 +70,12 @@ static void restart(void) __attribute__((noreturn));
 /* Runs every interrupt handler that is pending, enabled and not masked. */
 static void irq_run(void)
 {
+    /* Not from a tick that came in the middle of an update of the models,
+     * which a handler waiting on a peripheral would never see finish: every
+     * update is followed by a run of the handlers anyway. */
+    if (emu_hw_busy())
+        return;
+
     for (;;) {
         unsigned int n, best = NR_IRQS, limit = cur_prio, saved;
         uint32_t bit;
@@ -159,8 +165,9 @@ void emu_irqx_set_pending(unsigned int x)
 {
     __sync_fetch_and_or(&pend[x>>5], 1u << (x&31));
     /* The peripheral models only mark interrupts. Handlers run once the
-     * models are done, since a handler may wait on a peripheral. */
-    if (!emu_hw_busy())
+     * models are done, since a handler may wait on a peripheral, and only on
+     * the firmware's thread. */
+    if (!emu_on_hw_thread() && !emu_hw_busy())
         irq_run();
 }
 
@@ -322,6 +329,33 @@ void emu_relax(void)
     emu_hw_sync();
     irq_run();
     pause_briefly();
+}
+
+/*
+ * The peripherals also run on a thread of their own, as the hardware runs
+ * beside the CPU. A handler that waits on a peripheral, as the display driver
+ * waits for the end of an I2C STOP, is otherwise released only by a nested
+ * tick, which Cygwin defers until the spinning thread calls into it.
+ */
+
+static pthread_t hw_tid;
+static volatile bool hw_started;
+
+int emu_on_hw_thread(void)
+{
+    return hw_started && pthread_equal(pthread_self(), hw_tid);
+}
+
+static void *hw_thread(void *unused)
+{
+    /* It must know itself before it runs a model, which pends interrupts. */
+    while (!hw_started)
+        sleep_us(100);
+    for (;;) {
+        emu_hw_sync_bus();
+        sleep_us(100);
+    }
+    return NULL;
 }
 
 /* Finds out whether the host's sleeps are coarse: the shortest of a few. */
@@ -695,6 +729,10 @@ void cpu_start(void)
     it.it_interval.tv_sec = it.it_value.tv_sec = 0;
     it.it_interval.tv_usec = it.it_value.tv_usec = 1000;
     setitimer(ITIMER_REAL, &it, NULL);
+
+    /* Created while the tick is still blocked, which it inherits. */
+    if (pthread_create(&hw_tid, NULL, hw_thread, NULL) == 0)
+        hw_started = true;
 
     block_tick(SIG_UNBLOCK);
 }
