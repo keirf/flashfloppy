@@ -4,7 +4,8 @@
  * Runs the FlashFloppy user interface in a terminal, with no Gotek hardware:
  * the firmware's own code draws on an emulated OLED display and reads an
  * emulated USB drive, while the keyboard stands in for the buttons and
- * the rotary encoder. Nothing is connected to the floppy interface.
+ * the rotary encoder, and for the signals of a host computer that select the
+ * drive and move its head. No data flows on the floppy interface.
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
@@ -184,8 +185,118 @@ void ui_poll(void)
     }
 }
 
+const char * const fdd_action_name[FDD_ACT_nr] = {
+    [FDD_ACT_sel] = "sel",
+    [FDD_ACT_motor] = "motor",
+    [FDD_ACT_dir] = "dir",
+    [FDD_ACT_step] = "step",
+    [FDD_ACT_side] = "side",
+    [FDD_ACT_phase_in] = "phase-in",
+    [FDD_ACT_phase_out] = "phase-out",
+    [FDD_ACT_release] = "release"
+};
+
+/* The STEP pulse is shown until this time. */
+static uint64_t step_until;
+/* Apple2: the position of the phases in their cycle of eight states, from
+ * phase 0 alone, through phases 0 and 1, to phase 1 alone, and on. */
+static unsigned int phase_pos;
+
+bool ui_fdd_has(int act)
+{
+    if (act == FDD_ACT_sel)
+        return true;
+    return FFEMU_APPLE2 ? (act >= FDD_ACT_phase_in) : (act < FDD_ACT_phase_in);
+}
+
+unsigned int ui_fdd_phases(void)
+{
+    unsigned int ph = 1u << (phase_pos / 2);
+
+    if (phase_pos & 1)
+        ph |= 1u << ((phase_pos / 2 + 1) & 3);
+    return ph * EMU_FDD_PH0;
+}
+
+void ui_fdd_action(int act)
+{
+    unsigned int in = emu_in_fdd, phases = 15 * EMU_FDD_PH0;
+
+    if (!ui_fdd_has(act))
+        return;
+
+    /* This thread alone writes the signals. */
+    switch (act) {
+    case FDD_ACT_sel:
+        emu_in_fdd = in ^ EMU_FDD_SEL;
+        break;
+    case FDD_ACT_motor:
+        emu_in_fdd = in ^ EMU_FDD_MOTOR;
+        break;
+    case FDD_ACT_dir:
+        emu_in_fdd = in ^ EMU_FDD_DIR;
+        break;
+    case FDD_ACT_step:
+        step_until = emu_time_ns() + (uint64_t)config.hold_ms * 1000000u;
+        __sync_fetch_and_add(&emu_in_step, 1);
+        break;
+    case FDD_ACT_side:
+        emu_in_fdd = in ^ EMU_FDD_SIDE;
+        break;
+    case FDD_ACT_phase_in:
+    case FDD_ACT_phase_out:
+        phase_pos = (phase_pos + ((act == FDD_ACT_phase_in) ? 1 : 7)) % 8;
+        emu_in_fdd = (in & ~phases) | ui_fdd_phases();
+        break;
+    case FDD_ACT_release:
+        emu_in_fdd = in & ~phases;
+        break;
+    }
+}
+
+const char *ui_fdd_phase_text(unsigned int phases, char buf[5])
+{
+    unsigned int i;
+
+    for (i = 0; i < 4; i++)
+        buf[i] = (phases & (EMU_FDD_PH0 << i)) ? '0' + i : '.';
+    buf[4] = '\0';
+    return buf;
+}
+
+bool ui_fdd_stepping(void)
+{
+    return emu_time_ns() < step_until;
+}
+
+void ui_fdd_save(unsigned int *in, unsigned int *pos)
+{
+    *in = emu_in_fdd;
+    *pos = phase_pos;
+}
+
+void ui_fdd_restore(unsigned int in, unsigned int pos)
+{
+    emu_in_fdd = in;
+    phase_pos = pos % 8;
+}
+
 static void usage(FILE *f)
 {
+    char fdd[128] = "";
+    int i, n = 0;
+
+    for (i = 0; i < FDD_ACT_nr; i++)
+        if (ui_fdd_has(i))
+            n++;
+    for (i = 0; i < FDD_ACT_nr; i++) {
+        if (!ui_fdd_has(i))
+            continue;
+        n--;
+        snprintf(fdd + strlen(fdd), sizeof(fdd) - strlen(fdd), "%s%s",
+                 fdd_action_name[i], (n > 1) ? ", " : (n == 1) ? " or " : "");
+    }
+
     fprintf(f,
             "Usage: " FFEMU_NAME " [<directory> | <image> | <disk>]\n"
             "\n"
@@ -202,7 +313,8 @@ static void usage(FILE *f)
             "When standard input is not a terminal, commands are read from "
             "it instead:\n"
             "  key <action>: select, left, right, cw, ccw, remove, insert, "
-            "reset or quit\n"
+            "reset or quit,\n"
+            "    or on the floppy interface: %s\n"
             "  sleep <ms>: let the firmware run\n"
             "  dump: print the display\n"
             "  log: print the firmware's console output so far\n"
@@ -215,14 +327,14 @@ static void usage(FILE *f)
 #else
             "/dev/sdb",
 #endif
-            config.path);
+            config.path, fdd);
 }
 
 int main(int argc, char **argv)
 {
     const char *state, *store = getenv("FFEMU_USB");
     int style, usb = 1, fd;
-    unsigned int sleep_ms = 0, layout;
+    unsigned int sleep_ms = 0, layout, fdd, phase_pos;
     struct stat st;
 
     /* The display is drawn with Unicode block and Braille characters. */
@@ -273,9 +385,12 @@ int main(int argc, char **argv)
 
     state = cpu_restart_state();
     if ((state != NULL)
-        && (sscanf(state, "%d,%d,%u", &style, &usb, &sleep_ms) == 3)
-        && (style >= 1) && (style <= STYLE_nr))
+        && (sscanf(state, "%d,%d,%u,%x,%u", &style, &usb, &sleep_ms, &fdd,
+                   &phase_pos) == 5)
+        && (style >= 1) && (style <= STYLE_nr)) {
         config.style = style;
+        ui_fdd_restore(fdd, phase_pos);
+    }
 
     if ((store != NULL) && (sscanf(store, "%d,%x", &fd, &layout) == 2))
         usb_set_store(fd, layout);
