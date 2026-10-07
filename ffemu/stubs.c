@@ -3,9 +3,9 @@
  *
  * Stand-ins for the parts of the firmware that are tied to the MCU or that
  * ffemu leaves out: MCU bring-up and delays, the serial console, the
- * configuration flash page, the heap, the USB host stack, and the floppy
- * interface itself. Each keeps the interface that the rest of the firmware
- * expects of the file it replaces.
+ * configuration flash page, the heap and the USB host stack, each keeping the
+ * interface that the rest of the firmware expects of the file it replaces;
+ * and wrappers of the firmware's floppy interface code.
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
@@ -927,124 +927,51 @@ struct volume_ops usb_ops = {
 };
 
 /*
- * Floppy interface: src/floppy.c and what it includes. No host computer is
- * attached. An image is opened when selected, so that a bad image is
- * reported as on the real device, but no data ever flows.
+ * Floppy interface: the firmware's own src/floppy.c, with what it includes,
+ * runs against the models of hw.c. ffemu renames three of its functions when
+ * building it, and wraps them here.
  */
 
-static struct image *image;
-static uint8_t cur_cyl;
+bool_t fw_floppy_handle(void);
+void fw_floppy_insert(unsigned int unit, struct slot *slot);
+void fw_floppy_cancel(void);
 
-uint32_t motor_chgrst_exti_mask;
+/* The image mounted, for the Status window; "" if none. */
+static char image_name[64];
 
-void motor_chgrst_setup_exti(void)
-{
-}
-
-/* EXTI lines of the rotary encoder: PA6 and PA15 on the KC30 header. */
-static void IRQ_exti_rotary(void)
-{
-    uint32_t pr = exti->pr;
-    __sync_fetch_and_and(&emu_exti.pr, ~pr);
-    if (pr & board_rotary_exti_mask)
-        IRQ_rotary();
-}
-void IRQ_23(void) __attribute__((alias("IRQ_exti_rotary"))); /* EXTI9_5 */
-void IRQ_40(void) __attribute__((alias("IRQ_exti_rotary"))); /* EXTI15_10 */
-
-void floppy_init(void)
-{
-    exti->rtsr = 0xffff;
-    exti->ftsr = 0xffff;
-    IRQx_set_prio(23, FLOPPY_IRQ_WGATE_PRI);
-    IRQx_set_prio(40, TIMER_IRQ_PRI);
-    IRQx_enable(23);
-    IRQx_enable(40);
-}
-
-bool_t floppy_ribbon_is_reversed(void)
-{
-    return FALSE;
-}
-
-void floppy_set_fintf_mode(void)
-{
-}
-
-void floppy_set_max_cyl(void)
-{
-    if (cur_cyl > ff_cfg.max_cyl)
-        cur_cyl = ff_cfg.max_cyl;
-}
-
-/* As floppy_mount(), less the cluster table and the flux buffers. */
 void floppy_insert(unsigned int unit, struct slot *slot)
 {
-    struct image *im;
-    FSIZE_t sz;
-
-    do {
-
-        arena_init();
-
-        im = arena_alloc(sizeof(*im));
-        memset(im, 0, sizeof(*im));
-
-        fatfs_from_slot(&im->fp, slot, FA_READ);
-        sz = f_size(&im->fp);
-
-        im->write_bc_window = ~0;
-
-        im->bufs.write_bc.len = 8*1024;
-        im->bufs.write_bc.p = arena_alloc(im->bufs.write_bc.len);
-        im->bufs.read_bc.len = im->bufs.write_bc.len / 2;
-        im->bufs.read_bc.p = (char *)im->bufs.write_bc.p
-            + im->bufs.read_bc.len;
-        im->bufs.write_data.len = arena_avail();
-        im->bufs.write_data.p = arena_alloc(im->bufs.write_data.len);
-        im->bufs.read_data = im->bufs.write_data;
-
-        /* Mount the image file. */
-        image_open(im, slot, NULL);
-        if (!im->disk_handler->write_track || volume_readonly())
-            slot->attributes |= AM_RDO;
-        if (slot->attributes & AM_RDO) {
-            printk("Image is R/O\n");
-        } else {
-            image_extend(im);
-        }
-
-    } while (f_size(&im->fp) != sz);
-
-    im->fp.dir_ptr = NULL;
-    im->fp.dir_sect = 0;
-
-    image = im;
+    fw_floppy_insert(unit, slot);
+    snprintf(image_name, sizeof(image_name), "%s.%s", slot->name,
+             slot->type);
 }
 
 void floppy_cancel(void)
 {
-    image = NULL;
+    image_name[0] = '\0';
+    fw_floppy_cancel();
 }
 
+/* Called over and over while an image is mounted, which the device does at
+ * full speed: the host takes a rest each time round. */
 bool_t floppy_handle(void)
 {
-    /* Called from the loop that runs while an image is mounted. */
+    bool_t rc = fw_floppy_handle();
     emu_idle_ns(1000000);
-    return FALSE;
+    return rc;
 }
 
-void floppy_set_cyl(uint8_t unit, uint8_t cyl)
+void emu_fdd_status(unsigned int *cyl, unsigned int *side, int *sel,
+                    const char **name)
 {
-    if (unit == 0)
-        cur_cyl = cyl;
-}
+    struct track_info ti;
 
-void floppy_get_track(struct track_info *ti)
-{
-    memset(ti, 0, sizeof(*ti));
-    ti->cyl = cur_cyl;
-    ti->in_da_mode = image ? in_da_mode(image, cur_cyl) : FALSE;
+    /* From another thread, which may see a mount half done. */
+    floppy_get_track(&ti);
+    *cyl = ti.cyl;
+    *side = ti.side;
+    *sel = ti.sel;
+    *name = image_name[0] ? image_name : NULL;
 }
 
 const char *emu_fw_version(void)

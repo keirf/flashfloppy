@@ -37,7 +37,7 @@ FW_SRCS := main.c config.c fs.c volume.c cache.c crc.c string.c util.c
 FW_SRCS += time.c timer.c build_info.c spi.c sd_spi.c
 FW_SRCS += fatfs/ff.c fatfs/ffunicode.c
 FW_SRCS += display/display.c display/lcd_stm32f105.c display/led_7seg.c
-FW_SRCS += gotek/board.c gotek/speaker.c
+FW_SRCS += gotek/board.c gotek/speaker.c floppy.c
 FW_SRCS += image/image.c image/adf.c image/dsk.c image/hfe.c image/img.c
 FW_SRCS += image/da.c image/dummy.c image/mfm.c
 EMU_FW_SRCS := hw.c stubs.c
@@ -65,6 +65,9 @@ FW_CFLAGS += -MMD -MP
 
 HOST_CFLAGS := -std=gnu11 -O2 -g -Wall -Werror -D_GNU_SOURCE
 HOST_CFLAGS += -DNCURSES_WIDECHAR=1 -DFFEMU_NAME='"$(NAME)"'
+ifeq ($(TARGET),apple2)
+HOST_CFLAGS += -DFFEMU_APPLE2=1
+endif
 HOST_CFLAGS += -MMD -MP
 
 LIBS := $(shell pkg-config --libs ncursesw 2>/dev/null || echo -lncursesw)
@@ -104,10 +107,11 @@ $(OUT)/gen/%.o: $(OUT)/gen/%.c
 	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
 
 # The Apple2 debug build moves two stepper phases onto the rotary encoder
-# pins; the board code of the logfile level keeps them where the release has
-# them, and ffemu takes the console output itself.
+# pins; the board and floppy code of the logfile level keep them where the
+# release has them, and ffemu takes the console output itself.
 ifeq ($(TARGET),apple2)
-$(OUT)/fw/gotek/board.o: FW_CFLAGS += -ULEVEL -DLEVEL=LEVEL_logfile
+$(OUT)/fw/gotek/board.o $(OUT)/fw/floppy.o: \
+    FW_CFLAGS += -ULEVEL -DLEVEL=LEVEL_logfile
 endif
 
 # As in src/display/Makefile: the main firmware has both fonts.
@@ -127,6 +131,15 @@ $(OUT)/fw/main.o: $(ROOT)/src/main.c
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
 	$(Q)$(OBJCOPY) --redefine-sym main=ff_main $@
+
+# stubs.c wraps these with what ffemu adds to them.
+$(OUT)/fw/floppy.o: $(ROOT)/src/floppy.c
+	@echo CC floppy.c
+	@mkdir -p $(dir $@)
+	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
+	$(Q)$(OBJCOPY) --redefine-sym floppy_handle=fw_floppy_handle \
+	    --redefine-sym floppy_insert=fw_floppy_insert \
+	    --redefine-sym floppy_cancel=fw_floppy_cancel $@
 
 $(OUT)/emu/%.o: $(EMU)/%.c
 	@echo CC ffemu/$*.c

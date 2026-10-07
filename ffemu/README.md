@@ -2,7 +2,7 @@
 
 Runs the FlashFloppy user interface in a terminal, with no Gotek hardware. Windows (Git Bash / Cygwin / MSYS2) and Linux are supported. The firmware's own code (`src/main.c`, the display driver, FatFS, the image handlers) is compiled for the host and draws on an emulated OLED display, reads an emulated USB drive, and takes the keyboard for its buttons and rotary encoder. It is intended to help UI/UX development of FlashFloppy - working on menus, display layout and fonts without flashing a device.
 
-Nothing is connected to the floppy interface: an image can be selected and is opened, so a bad image is reported as on the device, but no data flows and the track number stays at 0.
+On the floppy interface, the keyboard also stands in for the host computer's signals that select the drive and move its head, so that the track display can be watched as a computer would drive it. An image can be selected and is opened, so a bad image is reported as on the device, but no data flows.
 
 ## Building
 
@@ -32,6 +32,19 @@ The app presents a TUI similar in look to Turbo Vision, mostly self-documented. 
 
 A terminal reports key presses but not releases, so a key press holds its virtual button down for a fixed time (150 ms by default), and then auto-repeat kicks in. To simulate long presses, or pressing/holding several keys at once, which is used by the fw to trigger certain functions, use the "latching mode": press Space, then press each key to toggle the virtual button state; Space again to release all the latched virtual buttons.
 
+## The floppy interface
+
+The FDD rows of the Controls pane show the kind of controller on the other side of the cable, `Step/Dir` or `Apple2`, and the signals that it sends to the drive, each lit in dark yellow while it is active as on the schematics, whatever its voltage, with the key that changes it below:
+
+- Shugart: `[` toggles D_S (drive select), `]` M_O (motor on), `-` DIR (step direction: active, as at the start, steps inward to higher tracks), `+` sends a STP (step) pulse, which stays lit for a moment, and `\` toggles SID (side select).
+- Apple2: `[` toggles D_E (drive enable), and `+` and `-` move the stepper phases PH0 to PH3 to their next or previous state in the cycle a computer goes through: phase 0 alone, phases 0 and 1, phase 1 alone, and so on. The firmware steps the head when one phase alone is on next to the present one, so two presses make one step. `\` releases all phases, as a computer does between seeks; the state they were in is kept, shown in bright green to the right of the phases, and the next press goes on from it.
+
+`=` also works as `+`, and `/` as `\`, which is the key that types it on a Russian layout, as do the keys of `[` and `]`. The drive selected or enabled is the default. The signals survive a power cycle of the device, as the computer's would. The Status pane shows the cylinder and the side as the firmware sees them, and, as Floppy, the image mounted; the firmware's display shows them as on the device, and the beeper sounds each step, unless `step-volume` is 0.
+
+The firmware's own floppy code, `src/floppy.c` with what it includes, runs in ffemu against models of the pins, of their EXTI interrupts and of the timer that captures STEP, so that the firmware itself decides what the signals do: no steps unless selected, none beyond `max-cyl`, the side only for a double-sided image, the motor as `motor-delay` says. No data flows, though: the timers and DMA channels of the read and write data are mere registers.
+
+## Timing and the console
+
 The firmware needs its timers on time to within a millisecond. Where the host sleeps only in coarser steps, as a virtual machine on a Windows host may (4 to 16 ms), ffemu keeps time by spinning, which keeps one CPU core busy, and says so in the console window.
 
 The firmware's console output (normally available in debug builds on the Gotek's UART pins) is shown at the bottom pane, and also written to `${XDG_STATE_HOME:-~/.local/state}/ffemu/console.log` (all file paths are shown at the bottom of the respective panes). The file is recreated on every start and power cycle; the previous one is kept as `console.bak`, replacing the one before it.
@@ -50,13 +63,13 @@ When standard input is not a terminal, ffemu reads commands from it and prints t
 
     printf 'sleep 2500\nkey right\nsleep 500\ndump\nlog\n' | ffemu <directory>
 
-The commands are `key <action>`, the action being `select`, `left`, `right`, `cw`, `ccw`, `remove`, `insert`, `reset`, `quit` or `latch`, `sleep <ms>`, `dump` (the display as text), `log` (the firmware's console output so far), `status`, `flash` (the `[Flash mem]` section as the flash memory is now), and `save <file>`, which writes the USB drive as the firmware sees it, its writes included, to an image file.
+The commands are `key <action>`, the action being `select`, `left`, `right`, `cw`, `ccw`, `remove`, `insert`, `reset`, `quit` or `latch`, or on the floppy interface `sel`, `motor`, `dir`, `step` or `side` for Shugart, and `sel`, `phase-in`, `phase-out` or `release` for Apple2, `sleep <ms>`, `dump` (the display as text), `log` (the firmware's console output so far), `status`, `flash` (the `[Flash mem]` section as the flash memory is now), and `save <file>`, which writes the USB drive as the firmware sees it, its writes included, to an image file.
 
 ## How it works
 
 - `decls.h`, `regs.h`, `hooks.h`: the host counterparts of `inc/decls.h` and `inc/intrinsics.h`. The MCU register blocks become ordinary memory, and interrupt control is routed to the emulated interrupt controller.
-- `hw.c`: models of the peripherals behind those registers that the user interface needs: GPIO inputs with their EXTI interrupts, the one-shot timer of `src/timer.c`, and the I2C master with its DMA channel. The I2C bus also runs on a thread of its own, beside the firmware, as the hardware does, so that an interrupt handler that waits for the bus is released whatever the firmware's thread is doing.
-- `stubs.c`: stand-ins for MCU bring-up, the serial console, the configuration flash page, the heap, the USB host stack and the floppy interface.
+- `hw.c`: models of the peripherals behind those registers that the user interface needs: GPIO inputs for the buttons, the rotary encoder and the floppy interface, with their EXTI interrupts as AFIO routes them, TIM2 capturing STEP, the one-shot timer of `src/timer.c`, and the I2C master with its DMA channel. The I2C bus also runs on a thread of its own, beside the firmware, as the hardware does, so that an interrupt handler that waits for the bus is released whatever the firmware's thread is doing.
+- `stubs.c`: stand-ins for MCU bring-up, the serial console, the configuration flash page, the heap and the USB host stack, and wrappers of three functions of the firmware's floppy code: an idle in the loop that runs while an image is mounted, and the image's name for the Status window.
 - `cpu.c`: the interrupt controller, a 1 ms tick delivered as a signal to the thread that runs the firmware, cancellable calls, and reset, which re-executes the program.
 - `ssd1306.c`: the display controller, an SSD1306 or an SH1106, as an I2C slave.
 - `fatimg.c`: the USB drive: the FAT32 volume built from a directory, or an image or a disk read as it is, with the firmware's writes kept aside.
@@ -66,7 +79,7 @@ The firmware half is built with the firmware's headers and its own subset of the
 
 ## Not emulated [yet]
 
-- Floppy interface and any data flow.
+- Data flow on the floppy interface, and WGATE; the drive's outputs to the computer (INDEX, TRK0, WRPROT, RDY, DSKCHG) are set by the firmware but not shown.
 - AT32F435 boards, which have a display driver of their own, the HD44780 LCD, and the 7-segment LED display.
 - FF OSD.
 - Getting `IMAGE_A.CFG` written by the firmware.

@@ -36,6 +36,11 @@
 volatile unsigned int emu_in_buttons;
 volatile int emu_in_rotary;
 volatile unsigned int emu_out_speaker;
+/* As connected to a computer that has just selected the drive; Shugart
+ * steps go inward. */
+volatile unsigned int emu_in_fdd = EMU_FDD_SEL
+    | (FFEMU_APPLE2 ? 0 : EMU_FDD_DIR);
+volatile unsigned int emu_in_step;
 
 char log_ring[LOG_SIZE];
 volatile unsigned int log_head;
@@ -587,11 +592,13 @@ void emu_illegal(const char *file, int line)
 }
 
 /* What survives a power cycle travels in the environment of the new process:
- * the configuration flash, and the state of the user interface. */
+ * the configuration flash, and the state of the user interface, including
+ * the signals of the host computer on the floppy interface. */
 static void prepare_restart(void)
 {
-    char hex[2*sizeof(flash_data)+1], state[32];
+    char hex[2*sizeof(flash_data)+1], state[48];
     struct usb_info usb;
+    unsigned int fdd, phase_pos;
     uint32_t layout;
     int fd;
 
@@ -600,8 +607,9 @@ static void prepare_restart(void)
     setenv("FFEMU_USB", state, 1);
 
     usb_get_info(&usb);
-    snprintf(state, sizeof(state), "%d,%d,%u", config.style, usb.inserted,
-             script_sleep_left());
+    ui_fdd_save(&fdd, &phase_pos);
+    snprintf(state, sizeof(state), "%d,%d,%u,%x,%u", config.style,
+             usb.inserted, script_sleep_left(), fdd, phase_pos);
     setenv("FFEMU_STATE", state, 1);
 
     flash_to_hex(hex, sizeof(hex));

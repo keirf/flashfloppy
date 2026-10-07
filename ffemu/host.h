@@ -14,6 +14,10 @@
 #ifndef FFEMU_NAME
 #define FFEMU_NAME "ffemu"
 #endif
+/* 1 where the firmware is that of the Apple2 target. */
+#ifndef FFEMU_APPLE2
+#define FFEMU_APPLE2 0
+#endif
 
 #include <stdbool.h>
 #include "emu.h"
@@ -195,6 +199,36 @@ unsigned int ui_rotary_flash(void);
 /* Latch mode, KEY_ACT_latch: a button stays down until its key comes again,
  * or until the mode ends, which releases them all. */
 bool ui_latched(void);
+
+/* What the host computer does on the floppy interface, each a change of its
+ * signals in emu_in_fdd or a STEP pulse; the firmware's target has some of
+ * them only. */
+enum {
+    FDD_ACT_sel,       /* toggles drive select, or Apple2 drive enable */
+    FDD_ACT_motor,     /* Shugart: toggles motor on */
+    FDD_ACT_dir,       /* Shugart: toggles the step direction */
+    FDD_ACT_step,      /* Shugart: sends a STEP pulse */
+    FDD_ACT_side,      /* Shugart: toggles side select */
+    FDD_ACT_phase_in,  /* Apple2: the phases' next state, inward */
+    FDD_ACT_phase_out, /* Apple2: their previous state, outward */
+    FDD_ACT_release,   /* Apple2: all phases off, the state kept */
+    FDD_ACT_nr
+};
+extern const char * const fdd_action_name[FDD_ACT_nr];
+/* Whether the firmware's target has action @act. */
+bool ui_fdd_has(int act);
+/* Performs FDD_ACT_* @act. User interface thread only. */
+void ui_fdd_action(int act);
+/* Whether a STEP pulse was sent a moment ago, to show. */
+bool ui_fdd_stepping(void);
+/* Apple2: the phases of the state kept in their cycle, which they show
+ * unless released, as EMU_FDD_PH0 and up. */
+unsigned int ui_fdd_phases(void);
+/* Phases @phases, as EMU_FDD_PH0 and up, as text such as "01..". */
+const char *ui_fdd_phase_text(unsigned int phases, char buf[5]);
+/* The FDD signals and the kept phase state, for a power cycle, and back. */
+void ui_fdd_save(unsigned int *in, unsigned int *pos);
+void ui_fdd_restore(unsigned int in, unsigned int pos);
 /* A line for the firmware log pane, from the emulator itself, which starts
  * it with HOST_LOG_PREFIX. */
 void host_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
