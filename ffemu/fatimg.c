@@ -1600,6 +1600,17 @@ void usb_remove(void)
     free_image(grave);
     grave = im;
     memset(&last_info, 0, sizeof(last_info));
+    last_info.kind = im->info.kind;
+    memcpy(last_info.ff_cfg, im->info.ff_cfg, sizeof(last_info.ff_cfg));
+}
+
+static unsigned int ff_cfg_gen;
+
+void usb_eject_ff_cfg(void)
+{
+    if ((cur == NULL) && (last_info.kind == USB_dir))
+        find_ff_cfg(usb_path, last_info.ff_cfg, sizeof(last_info.ff_cfg));
+    ff_cfg_gen++;
 }
 
 void usb_get_info(struct usb_info *info)
@@ -1609,16 +1620,19 @@ void usb_get_info(struct usb_info *info)
     if (im == NULL) {
         *info = last_info;
         info->inserted = false;
+        info->ff_cfg_gen = ff_cfg_gen;
         return;
     }
     *info = im->info;
     info->nr_reads = im->nr_reads;
     info->nr_writes = im->nr_writes;
+    info->ff_cfg_gen = ff_cfg_gen;
 }
 
 const char *usb_ff_cfg_text(void)
 {
-    struct image *im = cur;
+    /* The image last removed is kept until the next removal. */
+    struct image *im = (cur != NULL) ? cur : grave;
 
     return (im != NULL) ? im->ff_cfg_text : NULL;
 }

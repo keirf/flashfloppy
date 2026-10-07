@@ -561,23 +561,28 @@ static void draw_status(int y, int x, int w)
 /* Green arrows in the top and bottom frame of a window at (@y,@x) of @h,
  * over its first column of text, where lines are out of view above or
  * below. */
-static void scroll_marks(int y, int x, int h, bool above, bool below)
+static void scroll_marks(int y, int x, int h, bool dim, bool above,
+                         bool below)
 {
+    attr_t attr = dim ? COLOR_PAIR(CP_crop) : BRIGHT(CP_crop);
+
     if (above)
-        put(y, x + 1, 1, BRIGHT(CP_crop), "^");
+        put(y, x + 1, 1, attr, "^");
     if (below)
-        put(y + h - 1, x + 1, 1, BRIGHT(CP_crop), "v");
+        put(y + h - 1, x + 1, 1, attr, "v");
 }
 
 /* A Turbo Vision scroll bar in the right frame of a window at (@y,@x) of @w
- * by @h, which shows its lines from @top on, of @nr_lines. */
-static void scroll_bar(int y, int x, int w, int h, int top, int nr_lines)
+ * by @h, which shows its lines from @top on, of @nr_lines; in dark gray if
+ * @dim. */
+static void scroll_bar(int y, int x, int w, int h, bool dim, int top,
+                       int nr_lines)
 {
     /* Not the triangles of the DOS character set: many fonts draw them
      * twice as wide. */
     static const wchar_t up[] = { L'^' }, down[] = { L'v' };
     static const wchar_t track[] = { 0x2592 }, thumb[] = { 0x2588 };
-    attr_t attr = COLOR_PAIR(CP_scroll);
+    attr_t attr = dim ? DARK_GRAY : COLOR_PAIR(CP_scroll);
     int len = h - 4, max_top = nr_lines - (h - 2), i;
 
     if (len < 1)
@@ -615,24 +620,26 @@ static int flash_top;
 /* The keys that page a window at (@x) of @w, at the right end of its bottom
  * frame @y: PgUp/PgDn, after modifier @mod and a '+' unless it is NULL.
  * Returns the columns taken, or 0 if they do not fit. */
-static int page_keys(int y, int x, int w, const char *mod)
+static int page_keys(int y, int x, int w, bool dim, const char *mod)
 {
     int m = mod ? strlen(mod) : 0, n = 11 + (mod ? m + 1 : 0);
     int sx = x + w - 2 - n;
+    attr_t key = dim ? COLOR_PAIR(CP_value) : BRIGHT(CP_value);
+    attr_t text = dim ? DARK_GRAY : COLOR_PAIR(CP_text);
 
     if (sx <= x + 2)
         return 0;
     pane_right = -1;
-    put(y, sx, 1, COLOR_PAIR(CP_text), " ");
+    put(y, sx, 1, text, " ");
     if (mod != NULL) {
-        put(y, sx + 1, m, BRIGHT(CP_value), "%s", mod);
-        put(y, sx + 1 + m, 1, COLOR_PAIR(CP_text), "+");
+        put(y, sx + 1, m, key, "%s", mod);
+        put(y, sx + 1 + m, 1, text, "+");
         sx += m + 1;
     }
-    put(y, sx + 1, 4, BRIGHT(CP_value), "PgUp");
-    put(y, sx + 5, 1, COLOR_PAIR(CP_text), "/");
-    put(y, sx + 6, 4, BRIGHT(CP_value), "PgDn");
-    put(y, sx + 10, 1, COLOR_PAIR(CP_text), " ");
+    put(y, sx + 1, 4, key, "PgUp");
+    put(y, sx + 5, 1, text, "/");
+    put(y, sx + 6, 4, key, "PgDn");
+    put(y, sx + 10, 1, text, " ");
     return n;
 }
 
@@ -669,7 +676,7 @@ static void draw_flash(int y, int x, int w)
 
     /* The scroll bar first: the '>' of a line cut short goes over it. */
     if (nr_lines > PANE_ROWS)
-        scroll_bar(y, x, w, PANE_ROWS + 2, flash_top, nr_lines);
+        scroll_bar(y, x, w, PANE_ROWS + 2, false, flash_top, nr_lines);
     for (row = 0; (row < PANE_ROWS) && (flash_top + row < nr_lines); row++) {
         name = emu_flash_option(flash_top + row, cfg, value, sizeof(value),
                                 &flags);
@@ -683,11 +690,11 @@ static void draw_flash(int y, int x, int w)
     if (nr_lines <= PANE_ROWS)
         return;
 
-    scroll_marks(y, x, PANE_ROWS + 2, flash_top > 0,
+    scroll_marks(y, x, PANE_ROWS + 2, false, flash_top > 0,
                  flash_top + PANE_ROWS < nr_lines);
 
     /* The keys that page, in the bottom right corner. */
-    page_keys(y + PANE_ROWS + 1, x, w, NULL);
+    page_keys(y + PANE_ROWS + 1, x, w, false, NULL);
 }
 
 /*
@@ -901,12 +908,10 @@ static void draw_keys(int y, int x, int w)
  * The firmware console window.
  */
 
-/* The file that the console goes to, in the bottom left corner of the
- * frame at (@y,@x) of width @w; the home directory as ~, or the file name
- * alone where the whole path does not fit. */
-/* File @name in the bottom left corner of a frame at (@y,@x) of @w, as a
- * path from the home directory, its start cut off if that is too long. */
-static void path_label(int y, int x, int w, const char *name)
+/* File @name in the bottom left corner of a frame at (@y,@x) of @w, in
+ * @attr, as a path from the home directory, its start cut off if that is too
+ * long. */
+static void path_label(int y, int x, int w, attr_t attr, const char *name)
 {
     char path[600];
     const char *s;
@@ -922,18 +927,21 @@ static void path_label(int y, int x, int w, const char *name)
         s += n - (w - 4 - 5);
 
     pane_right = -1;
-    put(y, x + 2, strlen(s) + (cut ? 5 : 2), COLOR_PAIR(CP_text), " %s%s ",
+    put(y, x + 2, strlen(s) + (cut ? 5 : 2), attr, " %s%s ",
         cut ? "..." : "", s);
     pane_right = x + w - 1;
 }
 
-/* Line @s of @n bytes at (@y,@x) in @w columns, in @attr: a carriage return
+/* Line @s of @n bytes at (@y,@x) in @w columns, in color pair @cp, bright,
+ * or dark if @dim, as are its marks: a carriage return
  * at its end, of a CRLF, dropped; a tab as a space; and the other bytes that
  * are not printable ASCII, a lone carriage return among them, as a '?' in
  * magenta. */
-static void put_line(int y, int x, int w, attr_t attr, const char *s,
+static void put_line(int y, int x, int w, bool dim, int cp, const char *s,
                      size_t n)
 {
+#define INK(cp) (dim ? COLOR_PAIR(cp) : BRIGHT(cp))
+    attr_t attr = INK(cp);
     char run[512];
     size_t i, k = 0;
     int col = 0;
@@ -952,7 +960,7 @@ static void put_line(int y, int x, int w, attr_t attr, const char *s,
         put(y, x + col, w - col, attr, "%s", run);
         col += k;
         k = 0;
-        put(y, x + col, 1, BRIGHT(CP_raw), "?");
+        put(y, x + col, 1, INK(CP_raw), "?");
         col++;
     }
     run[k] = '\0';
@@ -960,7 +968,8 @@ static void put_line(int y, int x, int w, attr_t attr, const char *s,
 
     /* More than fits: marked as put() marks a line cut short. */
     if ((i < n) && (pane_right >= 0))
-        put_wide(y, pane_right, BRIGHT(CP_crop), L">", 1);
+        put_wide(y, pane_right, INK(CP_crop), L">", 1);
+#undef INK
 }
 
 static void draw_log(int y, int x, int w, int h)
@@ -975,7 +984,7 @@ static void draw_log(int y, int x, int w, int h)
         return;
     frame(y, x, w, h, "Firmware console", COLOR_PAIR(CP_text),
           COLOR_PAIR(CP_text));
-    path_label(y + h - 1, x, w, log_file_name);
+    path_label(y + h - 1, x, w, COLOR_PAIR(CP_text), log_file_name);
 
     len = (head < sizeof(tail) - 1) ? head : sizeof(tail) - 1;
     truncated = len < head; /* older output than the tail holds */
@@ -991,16 +1000,16 @@ static void draw_log(int y, int x, int w, int h)
         if ((p[-1] == '\n') && (++nr_lines == (unsigned int)rows))
             break;
     }
-    scroll_marks(y, x, h, (p > tail) || truncated, false);
+    scroll_marks(y, x, h, false, (p > tail) || truncated, false);
 
     for (row = 0, line = p; (row < rows) && (line != NULL); row++) {
         char *end = strchr(line, '\n');
         if (end != NULL)
             *end++ = '\0';
         /* The emulator's own lines in green, the firmware's in yellow. */
-        put_line(y + 1 + row, x + 1, w - 2,
+        put_line(y + 1 + row, x + 1, w - 2, false,
                  strncmp(line, HOST_LOG_PREFIX, strlen(HOST_LOG_PREFIX))
-                 ? BRIGHT(CP_value) : BRIGHT(CP_good), line, strlen(line));
+                 ? CP_value : CP_good, line, strlen(line));
         line = end;
     }
 }
@@ -1082,15 +1091,17 @@ static void draw_bars(void)
  * Ctrl+PgUp and Ctrl+PgDn move it. */
 static int ff_cfg_top, ff_cfg_rows = 1;
 
-/* FF.CFG as last read from the host, read again when it changes. */
+/* FF.CFG as last read from the host, read again when it changes, or when
+ * @gen does, as on every eject. */
 static struct {
     char path[700];
     time_t mtime;
     off_t size;
+    unsigned int gen;
     char text[16384];
 } ff_cfg_file;
 
-static const char *ff_cfg_text(const char *path)
+static const char *ff_cfg_text(const char *path, unsigned int gen)
 {
     struct stat st;
     FILE *f;
@@ -1099,7 +1110,7 @@ static const char *ff_cfg_text(const char *path)
     if (stat(path, &st) != 0)
         return NULL;
     if (!strcmp(path, ff_cfg_file.path) && (st.st_mtime == ff_cfg_file.mtime)
-        && (st.st_size == ff_cfg_file.size))
+        && (st.st_size == ff_cfg_file.size) && (gen == ff_cfg_file.gen))
         return ff_cfg_file.text;
 
     f = fopen(path, "rb");
@@ -1113,17 +1124,20 @@ static const char *ff_cfg_text(const char *path)
     snprintf(ff_cfg_file.path, sizeof(ff_cfg_file.path), "%s", path);
     ff_cfg_file.mtime = st.st_mtime;
     ff_cfg_file.size = st.st_size;
+    ff_cfg_file.gen = gen;
     return ff_cfg_file.text;
 }
 
 /* The FF.CFG that the firmware reads, beside the display: named by its path
- * on the drive, with its path on the host in the corner. */
+ * on the drive, with its path on the host in the corner. While the drive is
+ * out, dimmed: as it is on the host now, or as last read from an image. */
 static void draw_ff_cfg(int y, int x, int w, int h)
 {
     struct usb_info usb;
     char path[700];
     const char *text = NULL, *p;
     int row, rows = h - 2, nr_lines = 0, keys = 0;
+    attr_t gray;
 
     if ((w < 16) || (h < 3))
         return;
@@ -1133,7 +1147,7 @@ static void draw_ff_cfg(int y, int x, int w, int h)
         text = usb_ff_cfg_text();
     } else if (usb.ff_cfg[0]) {
         snprintf(path, sizeof(path), "%s/%s", usb_path, usb.ff_cfg);
-        text = ff_cfg_text(path);
+        text = ff_cfg_text(path, usb.ff_cfg_gen);
     }
     if (text == NULL) {
         frame(y, x, w, h, "FF.CFG - absent", COLOR_PAIR(CP_off),
@@ -1141,7 +1155,8 @@ static void draw_ff_cfg(int y, int x, int w, int h)
         return;
     }
 
-    frame(y, x, w, h, usb.ff_cfg, COLOR_PAIR(CP_text), COLOR_PAIR(CP_text));
+    gray = usb.inserted ? COLOR_PAIR(CP_text) : DARK_GRAY;
+    frame(y, x, w, h, usb.ff_cfg, COLOR_PAIR(CP_text), gray);
     /* In an image or on a disk, the corner names that. */
     if (usb.kind == USB_dir)
         snprintf(path, sizeof(path), "%s/%s", usb_path_name, usb.ff_cfg);
@@ -1158,11 +1173,11 @@ static void draw_ff_cfg(int y, int x, int w, int h)
 
     /* The scroll bar first: the '>' of a line cut short goes over it. */
     if (nr_lines > rows)
-        scroll_bar(y, x, w, h, ff_cfg_top, nr_lines);
+        scroll_bar(y, x, w, h, !usb.inserted, ff_cfg_top, nr_lines);
     for (row = 0, p = text; row < ff_cfg_top; row++)
         p += strcspn(p, "\n") + 1;
     for (row = 0; (row < rows) && (*p != '\0'); row++) {
-        put_line(y + 1 + row, x + 1, w - 2, BRIGHT(CP_value), p,
+        put_line(y + 1 + row, x + 1, w - 2, !usb.inserted, CP_value, p,
                  strcspn(p, "\n"));
         p += strcspn(p, "\n");
         if (*p == '\n')
@@ -1171,9 +1186,10 @@ static void draw_ff_cfg(int y, int x, int w, int h)
 
     /* The arrows that say there is more take the end of the bottom frame. */
     if (nr_lines > rows)
-        keys = page_keys(y + h - 1, x, w, "Ctrl");
-    path_label(y + h - 1, x, keys ? w - keys - 1 : w, path);
-    scroll_marks(y, x, h, ff_cfg_top > 0, ff_cfg_top + rows < nr_lines);
+        keys = page_keys(y + h - 1, x, w, !usb.inserted, "Ctrl");
+    path_label(y + h - 1, x, keys ? w - keys - 1 : w, gray, path);
+    scroll_marks(y, x, h, !usb.inserted, ff_cfg_top > 0,
+                 ff_cfg_top + rows < nr_lines);
 }
 
 static void redraw(void)
