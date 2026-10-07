@@ -135,6 +135,7 @@ void ui_action(int act)
             usb_remove();
             host_log("USB drive ejected");
         }
+        usb_eject_ff_cfg();
         break;
     case KEY_ACT_insert:
         if (emu_usb_inserted()) {

@@ -113,6 +113,7 @@ struct usb_info {
     bool writes_lost;      /* such sectors were dropped: the files changed */
     uint64_t image_bytes;
     char ff_cfg[16];  /* the FF.CFG that the firmware reads, as on the drive */
+    unsigned int ff_cfg_gen; /* changes whenever FF.CFG is to be read again */
     char case_dup[160]; /* the first of those left out, as a path */
     char error[160];  /* why the last usb_insert() failed, or "" */
 };
@@ -126,10 +127,16 @@ bool usb_insert(const char *path, bool keep_writes);
 void usb_get_store(int *fd, uint32_t *layout);
 void usb_set_store(int fd, uint32_t layout);
 void usb_remove(void);
+/* On every eject, of a drive that is in or already out: the FF.CFG of a
+ * drive made from a directory is looked for again, for showing what the
+ * next insertion would give the firmware. */
+void usb_eject_ff_cfg(void);
 void usb_get_info(struct usb_info *info);
 /* The text of FF.CFG on a drive from an image or a disk, read when it was
  * inserted; NULL for a directory, or if it has none. */
 const char *usb_ff_cfg_text(void);
+/* While the drive is out, usb_get_info() and usb_ff_cfg_text() tell of the
+ * FF.CFG of the last drive. */
 /* Writes the drive as the firmware sees it to file @path; if that fails,
  * says why in @err. */
 bool usb_save(const char *path, char *err, size_t size);
