@@ -35,7 +35,7 @@ static struct {
     struct short_slot autoboot;
     struct short_slot hxcsdfe;
     struct short_slot imgcfg;
-    struct slot slot, clipboard;
+    struct slot slot, slot2, clipboard;
     uint32_t cfg_cdir, cur_cdir;
     struct native_dirent **sorted;
     struct {
@@ -143,6 +143,16 @@ static bool_t slot_type(const char *str)
 
 #define wp_column ((lcd_columns > 16) ? 8 : 7)
 
+/* Name currently shown for dual-drive select (A or B). */
+static const char *active_image_name(void)
+{
+    struct track_info ti;
+    floppy_get_track(&ti);
+    if (ti.unit && cfg.slot2.size && cfg.slot2.name[0])
+        return cfg.slot2.name;
+    return cfg.slot.name;
+}
+
 /* Scroll long filename. */
 static struct {
     uint16_t off, end, pause, rate;
@@ -150,11 +160,12 @@ static struct {
 } lcd_scroll;
 static void lcd_scroll_init(uint16_t pause, uint16_t rate)
 {
+    const char *name = active_image_name();
     int diff = lcd_scroll.off - lcd_scroll.end;
     lcd_scroll.pause = pause;
     lcd_scroll.rate = rate;
     lcd_scroll.end = max_t(
-        int, strnlen(cfg.slot.name, sizeof(cfg.slot.name)) - lcd_columns, 0);
+        int, strnlen(name, sizeof(cfg.slot.name)) - lcd_columns, 0);
     if (lcd_scroll.end && !lcd_scroll.pause)
         lcd_scroll.end += lcd_columns;
     if (lcd_scroll.off > lcd_scroll.end)
@@ -164,6 +175,7 @@ static void lcd_scroll_init(uint16_t pause, uint16_t rate)
 static void lcd_scroll_name(void)
 {
     static struct track_info ti;
+    const char *name;
     char msg[lcd_columns+1];
 
     if ((lcd_scroll.ticks > 0) || (lcd_scroll.end == 0))
@@ -175,11 +187,12 @@ static void lcd_scroll_name(void)
         return;
     }
 
+    name = active_image_name();
     lcd_scroll.ticks = time_ms(lcd_scroll.rate);
     if (lcd_scroll.pause != 0) {
         if (++lcd_scroll.off > lcd_scroll.end)
             lcd_scroll.off = 0;
-        snprintf(msg, sizeof(msg), "%s", cfg.slot.name + lcd_scroll.off);
+        snprintf(msg, sizeof(msg), "%s", name + lcd_scroll.off);
         if ((lcd_scroll.off == 0)
             || (lcd_scroll.off == lcd_scroll.end))
             lcd_scroll.ticks = time_ms(lcd_scroll.pause);
@@ -188,12 +201,12 @@ static void lcd_scroll_name(void)
         lcd_scroll.off++;
         if (lcd_scroll.off <= lcd_scroll.end) {
             snprintf(msg, sizeof(msg), "%s%*s%s",
-                     cfg.slot.name + lcd_scroll.off,
-                     scroll_gap, "", cfg.slot.name);
+                     name + lcd_scroll.off,
+                     scroll_gap, "", name);
         } else {
             snprintf(msg, sizeof(msg), "%*s%s",
                      scroll_gap - (lcd_scroll.off - lcd_scroll.end), "",
-                     cfg.slot.name);
+                     name);
             if ((lcd_scroll.off - lcd_scroll.end) == scroll_gap)
                 lcd_scroll.off = 0;
         }
@@ -205,6 +218,7 @@ static void lcd_scroll_name(void)
 static void display_write_slot(bool_t nav_mode)
 {
     const struct image_type *type;
+    const char *name = active_image_name();
     char msg[lcd_columns+1], typename[4] = "";
     unsigned int i;
 
@@ -217,7 +231,7 @@ static void display_write_slot(bool_t nav_mode)
     if (nav_mode && !cfg_scroll_reset) {
         lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
         if (lcd_scroll.end == 0) {
-            snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
+            snprintf(msg, sizeof(msg), "%s", name);
             lcd_write(0, 0, -1, msg);
         } else {
             lcd_scroll.off--;
@@ -225,7 +239,7 @@ static void display_write_slot(bool_t nav_mode)
             lcd_scroll_name();
         }
     } else {
-        snprintf(msg, sizeof(msg), "%s", cfg.slot.name);
+        snprintf(msg, sizeof(msg), "%s", name);
         lcd_write(0, 0, -1, msg);
     }
 
@@ -276,7 +290,16 @@ static void lcd_write_track_info(bool_t force)
 
     if (force || (ti.cyl != lcd_ti.cyl)
         || ((ti.side != lcd_ti.side) && ti.sel)
-        || (ti.writing != lcd_ti.writing)) {
+        || (ti.writing != lcd_ti.writing)
+        || (ti.unit != lcd_ti.unit)) {
+        if (ti.unit != lcd_ti.unit) {
+            /* Dual drive: show DSKA / DSKB name for the selected unit. */
+            lcd_scroll.off = lcd_scroll.end = 0;
+            lcd_scroll_init(ff_cfg.display_scroll_pause,
+                            ff_cfg.display_scroll_rate);
+            snprintf(msg, sizeof(msg), "%s", active_image_name());
+            lcd_write(0, 0, -1, msg);
+        }
         snprintf(msg, sizeof(msg), "%c T:%02u.%u",
                  (cfg.slot.attributes & AM_RDO) ? '*' : ti.writing ? 'W' : ' ',
                  ti.cyl, ti.side);
@@ -1942,10 +1965,26 @@ indexed_mode:
         } else {
             memset(&cfg.slot, 0, sizeof(cfg.slot));
         }
+
+        /* Dual drive B: DSKBnnnn alongside DSKAnnnn (same index). */
+        snprintf(name, sizeof(name), "DSKB%04u*.*", cfg.slot_nr);
+        printk("[%s]\n", name);
+        F_findfirst(&fs->dp, &fs->fp, "", name);
+        F_closedir(&fs->dp);
+        if (fs->fp.fname[0]) {
+            F_open(&fs->file, fs->fp.fname, FA_READ);
+            fs->file.obj.attr = fs->fp.fattrib;
+            fatfs_to_slot(&cfg.slot2, &fs->file, fs->fp.fname);
+            F_close(&fs->file);
+        } else {
+            memset(&cfg.slot2, 0, sizeof(cfg.slot2));
+        }
     }
 
-    for (i = 0; i < sizeof(cfg.slot.type); i++)
+    for (i = 0; i < sizeof(cfg.slot.type); i++) {
         cfg.slot.type[i] = tolower(cfg.slot.type[i]);
+        cfg.slot2.type[i] = tolower(cfg.slot2.type[i]);
+    }
 }
 
 /* Always updates cfg.slot info for current slot_nr. Additionally:
@@ -2130,7 +2169,7 @@ static int run_floppy(void *_b)
     time_t t_now, t_prev, t_diff;
     int32_t update_ticks;
 
-    floppy_insert(0, &cfg.slot);
+    floppy_insert(0, &cfg.slot, &cfg.slot2);
 
     led_7seg_update_track(TRUE);
 

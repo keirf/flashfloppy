@@ -13,7 +13,7 @@ static bool_t dummy_open(struct image *im)
 {
     /* Check for dummy slot info (zero-sized, invalid start cluster). */
     im->nr_sides = 1;
-    return (im->fp.obj.sclust == ~0u) && (f_size(&im->fp) == 0);
+    return (im->fp->obj.sclust == ~0u) && (f_size(im->fp) == 0);
 }
 
 static void dummy_setup_track(

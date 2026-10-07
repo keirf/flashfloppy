@@ -125,6 +125,7 @@ static bool_t try_handler(struct image *im, struct slot *slot,
     /* Reinitialise image structure, except for static buffers. */
     memset(im, 0, sizeof(*im));
     im->bufs = bufs;
+    im->fp = &im->filesp[0];
     im->cur_track = ~0;
     im->slot = slot;
 
@@ -138,8 +139,8 @@ static bool_t try_handler(struct image *im, struct slot *slot,
     mode = FA_READ | FA_OPEN_EXISTING;
     if (handler->write_track != NULL)
         mode |= FA_WRITE;
-    fatfs_from_slot(&im->fp, slot, mode);
-    im->fp.cltbl = cltbl;
+    fatfs_from_slot(im->fp, slot, mode);
+    im->fp->cltbl = cltbl;
 
     return handler->open(im);
 }
@@ -237,20 +238,20 @@ void image_extend(struct image *im)
 {
     FSIZE_t new_sz;
 
-    if (!(im->disk_handler->extend && im->fp.dir_ptr && ff_cfg.extend_image))
+    if (!(im->disk_handler->extend && im->fp->dir_ptr && ff_cfg.extend_image))
         return;
 
     new_sz = im->disk_handler->extend(im);
-    if (f_size(&im->fp) >= new_sz)
+    if (f_size(im->fp) >= new_sz)
         return;
 
     /* Disable fast-seek mode, as it disallows extending the file. */
-    im->fp.cltbl = NULL;
+    im->fp->cltbl = NULL;
 
     /* Attempt to extend the file. */
-    F_lseek(&im->fp, new_sz);
-    F_sync(&im->fp);
-    if (f_tell(&im->fp) != new_sz)
+    F_lseek(im->fp, new_sz);
+    F_sync(im->fp);
+    if (f_tell(im->fp) != new_sz)
         F_die(FR_DISK_FULL);
 
     /* Update the slot for the new file size. */
