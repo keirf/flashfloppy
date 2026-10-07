@@ -272,13 +272,33 @@ static void sleep_us(unsigned int us)
     nanosleep(&t, NULL);
 }
 
-/* Gives up the CPU for a moment, as the host allows. */
+static void go_coarse(uint64_t step_ns)
+{
+    coarse_sleep = true;
+    host_log("This host sleeps in steps of %u ms: keeping time by "
+             "spinning, which keeps a CPU core busy",
+             (unsigned int)((step_ns + 500000) / 1000000));
+}
+
+/* Gives up the CPU for a moment, as the host allows. A host whose sleeps are
+ * coarse may pass the measurement at the start by chance, as a virtual
+ * machine does now and then, so sleeps that overshoot many times in a row
+ * mean coarse too. */
 static void pause_briefly(void)
 {
-    if (coarse_sleep)
+    static unsigned int overshoots;
+    uint64_t t;
+
+    if (coarse_sleep) {
         sched_yield();
-    else
-        sleep_us(100);
+        return;
+    }
+    t = emu_time_ns();
+    sleep_us(100);
+    t = emu_time_ns() - t;
+    overshoots = (t > 2000000) ? overshoots + 1 : 0;
+    if (overshoots == 8)
+        go_coarse(t);
 }
 
 void emu_idle_ns(uint64_t ns)
@@ -318,11 +338,8 @@ static void measure_sleep(void)
             best = t;
     }
 
-    coarse_sleep = (best > 2000000);
-    if (coarse_sleep)
-        host_log("This host sleeps in steps of %u ms: keeping time by "
-                 "spinning, which keeps a CPU core busy",
-                 (unsigned int)((best + 500000) / 1000000));
+    if (best > 2000000)
+        go_coarse(best);
 }
 
 /* The terminal's modes at the first start, carried over power cycles. */
