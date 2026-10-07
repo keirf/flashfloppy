@@ -445,8 +445,8 @@ void emu_log(const char *s)
 }
 
 /* The console also goes to console.log in ${XDG_STATE_HOME:-~/.local/state}
- * /ffemu/, begun anew on every start and power cycle; the previous one
- * becomes console.bak, replacing the one before it. */
+ * /ffemu/ (or /ffemu-apple2/), begun anew on every start and power cycle;
+ * the previous one becomes console.bak, replacing the one before it. */
 static void open_log(void)
 {
     const char *state = getenv("XDG_STATE_HOME"), *home = user_home();
@@ -454,9 +454,9 @@ static void open_log(void)
     char dir[512], bak[600];
 
     if ((state != NULL) && (state[0] != '\0'))
-        snprintf(dir, sizeof(dir), "%s/ffemu", state);
+        snprintf(dir, sizeof(dir), "%s/" FFEMU_NAME, state);
     else if ((home != NULL) && (home[0] != '\0'))
-        snprintf(dir, sizeof(dir), "%s/.local/state/ffemu", home);
+        snprintf(dir, sizeof(dir), "%s/.local/state/" FFEMU_NAME, home);
     else
         return;
     make_dirs(dir);

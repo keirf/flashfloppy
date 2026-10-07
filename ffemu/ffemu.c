@@ -187,10 +187,11 @@ void ui_poll(void)
 static void usage(FILE *f)
 {
     fprintf(f,
-            "Usage: ffemu [<directory> | <image> | <disk>]\n"
+            "Usage: " FFEMU_NAME " [<directory> | <image> | <disk>]\n"
             "\n"
             "Runs the FlashFloppy user interface in the terminal, with no "
-            "Gotek hardware.\n"
+            "Gotek hardware,\n"
+            "for the %s firmware.\n"
             "The USB drive holds the files of <directory>, by default "
             "the current\n"
             "one, or is read from an image file or a disk such as %s.\n"
@@ -208,6 +209,7 @@ static void usage(FILE *f)
             "  status: print the state of the emulated device\n"
             "  flash: print the flash memory as in the settings\n"
             "  save <file>: write the USB drive as the firmware sees it\n",
+            emu_fw_target(),
 #ifdef __CYGWIN__
             "/dev/sdb (\\\\.\\PhysicalDrive1)",
 #else

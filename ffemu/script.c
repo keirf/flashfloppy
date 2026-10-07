@@ -105,7 +105,8 @@ static void print_status(void)
     printf("flash: %s\n", flash);
 
     usb_get_info(&usb);
-    printf("firmware: %s on %s\n", emu_fw_version(), emu_board_name());
+    printf("firmware: %s, %s, on %s\n", emu_fw_version(), emu_fw_target(),
+           emu_board_name());
     if (usb.inserted && (usb.kind == USB_dir))
         printf("usb: inserted, %u files, %u dirs, %u left out, "
                "%u case duplicates left out, %lu reads, %lu writes, "
