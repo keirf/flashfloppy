@@ -493,7 +493,13 @@ static void draw_status(int y, int x, int w)
     x++;
     w -= 2;
 
-    field(&y, x, w, "Firmware", 0, "FlashFloppy %s", emu_fw_version());
+    field(&y, x, w, "Firmware", 0, "FlashFloppy %s, %s", emu_fw_version(),
+          emu_fw_target());
+    {
+        /* The target in bright green. */
+        int n = 10 + strlen("FlashFloppy , ") + strlen(emu_fw_version());
+        put(y - 1, x + n, w - n, BRIGHT(CP_good), "%s", emu_fw_target());
+    }
     field(&y, x, w, "Board", 0, "%s", emu_board_name());
     y++;
 
@@ -955,7 +961,7 @@ static int hotkey(int x, const char *key, const char *what)
  * bottom. */
 static void draw_bars(void)
 {
-    static const char *name = "ffemu", *ver = " v" FFEMU_VERSION;
+    static const char *name = FFEMU_NAME, *ver = " v" FFEMU_VERSION;
     static const char *what = " - flashfloppy fw on a PC";
     /* "KIBER-MUZEJ, MUROM" in Cyrillic capitals, or in English where
      * everything is ASCII. */

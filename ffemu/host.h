@@ -10,6 +10,11 @@
 #ifndef FFEMU_HOST_H
 #define FFEMU_HOST_H
 
+/* The program name, which also names its directories of settings and logs. */
+#ifndef FFEMU_NAME
+#define FFEMU_NAME "ffemu"
+#endif
+
 #include <stdbool.h>
 #include "emu.h"
 
