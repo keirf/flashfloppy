@@ -135,7 +135,7 @@ static void lcd_on(void)
     barrier();
     display_state = BACKLIGHT_ON;
     barrier();
-    lcd_backlight(ff_cfg.display_off_secs != 0);
+    lcd_backlight((display_mode == DM_menu) || (ff_cfg.display_off_secs != 0));
 }
 
 static bool_t slot_type(const char *str)
@@ -283,19 +283,11 @@ static void lcd_write_track_info(bool_t force)
     if (force || (ti.cyl != lcd_ti.cyl)
         || ((ti.side != lcd_ti.side) && ti.sel)
         || (ti.writing != lcd_ti.writing)
-        || (ti.qd_active != lcd_ti.qd_active)
-        || (ti.qd_progress != lcd_ti.qd_progress)) {
+        || (ti.qd_reading != lcd_ti.qd_reading)) {
         if (emulation_is_qd()) {
-            if (ti.qd_active) {
-                snprintf(msg, sizeof(msg), "%c QD:%02u%%",
-                         (cfg.slot.attributes & AM_RDO) ? '*'
-                         : ti.writing ? 'W' : ' ',
-                         ti.qd_progress);
-            } else {
-                snprintf(msg, sizeof(msg), "%c QD:--%%",
-                         (cfg.slot.attributes & AM_RDO) ? '*'
-                         : ti.writing ? 'W' : ' ');
-            }
+            snprintf(msg, sizeof(msg), "%c%c QD",
+                     (cfg.slot.attributes & AM_RDO) ? '*' : ' ',
+                     ti.writing ? 'W' : ti.qd_reading ? 'R' : ' ');
         } else {
             snprintf(msg, sizeof(msg), "%c T:%02u.%u",
                      (cfg.slot.attributes & AM_RDO) ? '*'
@@ -326,8 +318,7 @@ static void led_7seg_update_track(bool_t force)
     floppy_get_track(&ti);
     changed = (ti.cyl != led_ti.cyl) || ((ti.side != led_ti.side) && ti.sel)
         || (ti.writing != led_ti.writing)
-        || (ti.qd_active != led_ti.qd_active)
-        || (ti.qd_progress != led_ti.qd_progress);
+        || (ti.qd_reading != led_ti.qd_reading);
 
     if (force) {
         /* First call afer mounting new image: forcibly show track nr. */
@@ -364,10 +355,8 @@ static void led_7seg_update_track(bool_t force)
 
     if (!showing_track || changed) {
         if (emulation_is_qd()) {
-            if (ti.qd_active)
-                led_7seg_write_decimal(ti.qd_progress);
-            else
-                led_7seg_write_string(ti.writing ? "wrt" : "qd");
+            led_7seg_write_string(ti.writing ? "wrt"
+                                  : ti.qd_reading ? "rd" : "qd");
         } else {
             const static char status[] = { 'k', 'm', 'v', 'w' };
             snprintf(msg, sizeof(msg), "%2u%c", ti.cyl,
@@ -969,7 +958,7 @@ static uint16_t parse_display_order(const char *p)
     return order;
 }
 
-static void read_ff_cfg(void)
+static bool_t read_ff_cfg(void)
 {
     enum {
 #define x(n,o,v) FFCFG_##o,
@@ -996,7 +985,7 @@ static void read_ff_cfg(void)
     fatfs.cdir = cfg.cfg_cdir;
     fr = F_try_open(&fs->file, "FF.CFG", FA_READ);
     if (fr)
-        return;
+        return FALSE;
 
     while ((option = get_next_opt(&opts)) != -1) {
 
@@ -1016,9 +1005,9 @@ static void read_ff_cfg(void)
                 : FINTF_JC;
             break;
 
-        case FFCFG_qd_jc:
-            ff_cfg.qd_jc = !strcmp(opts.arg, "yes") ? QD_JC_yes
-                : !strcmp(opts.arg, "no") ? QD_JC_no : QD_JC_auto;
+        case FFCFG_qd_ready:
+            ff_cfg.qd_ready = !strcmp(opts.arg, "standard") ? QD_READY_STANDARD
+                : !strcmp(opts.arg, "jc") ? QD_READY_JC : QD_READY_MOTOR_OFF;
             break;
 
         case FFCFG_host:
@@ -1370,7 +1359,7 @@ static void read_ff_cfg(void)
 
     F_close(&fs->file);
 
-    flash_ff_cfg_update(fs->buf);
+    return TRUE;
 }
 
 static void process_ff_cfg_opts(const struct ff_cfg *old)
@@ -1407,7 +1396,6 @@ static void process_ff_cfg_opts(const struct ff_cfg *old)
 
     /* oled-font, display-type: Reinitialise the display subsystem. */
     if ((ff_cfg.oled_font != old->oled_font)
-        || (ff_cfg.oled_contrast != old->oled_contrast)
         || (ff_cfg.display_type != old->display_type))
         system_reset(); /* hit it with a hammer */
 }
@@ -1419,6 +1407,7 @@ static void cfg_init(void)
     unsigned int sofar;
     char *p;
     FRESULT fr;
+    bool_t have_ff_cfg;
 
     memset(&cfg.clipboard, 0, sizeof(cfg.clipboard));
     cfg.dirty_slot_nr = FALSE;
@@ -1438,7 +1427,11 @@ static void cfg_init(void)
         F_close(&fs->file);
     }
 
-    read_ff_cfg();
+    runtime_settings_base();
+    have_ff_cfg = read_ff_cfg();
+    runtime_settings_apply();
+    if (have_ff_cfg)
+        flash_ff_cfg_update(fs->buf);
     process_ff_cfg_opts(&old_ff_cfg);
 
     switch (ff_cfg.nav_mode) {
@@ -1836,10 +1829,10 @@ static void hxc_cfg_update(uint8_t slot_mode)
 
     if (slot_mode == CFG_READ_SLOT_NR) {
         /* buzzer_step_duration seems to range 0xFF-0xD8. */
-        if (!cfg.ffcfg_has_step_volume)
+        if (!cfg.ffcfg_has_step_volume && !runtime_setting_active(SET_step))
             ff_cfg.step_volume = hxc->cfg.step_sound
                 ? (0x100 - hxc->cfg.buzzer_step_duration) / 2 : 0;
-        if (!cfg.ffcfg_has_display_off_secs)
+        if (!cfg.ffcfg_has_display_off_secs && !runtime_setting_active(SET_timeout))
             ff_cfg.display_off_secs = hxc->cfg.back_light_tmr;
         /* Interpret HxC scroll speed as updates per minute. */
         if (!cfg.ffcfg_has_display_scroll_rate && hxc->cfg.lcd_scroll_speed)
@@ -2498,12 +2491,126 @@ static bool_t image_delete(void)
     return ok;
 }
 
+/* Settings are entered only after floppy_cancel(), with media ejected. */
+static const char *const setting_names[SET_nr] = {
+    "FDD Step Volume", "QD Motor Volume", "Notify Volume", "OLED Contrast",
+    "Display Timeout", "FDD Interface", "QD READY Mode"
+};
+static const char *const interface_names[] = {
+    "Shugart", "IBM PC", "IBM PC + HD", "Japanese PC", "Japanese PC+HD", "Amiga",
+    "JC"
+};
+static const char *const ready_names[] = { "Standard", "Motor Off", "JC" };
+
+static void settings_edit(unsigned int item)
+{
+    char msg[17];
+    uint8_t b, stored, value, limit;
+
+    for (;;) {
+        stored = *runtime_setting(item);
+        value = stored;
+        limit = 255;
+        if (item <= SET_motor)
+            limit = 20;
+        else if (item == SET_notify) {
+            value &= NOTIFY_volume_mask;
+            limit = NOTIFY_volume_mask;
+        } else if (item == SET_interface) {
+            value = stored == FINTF_JC ? 6 : stored;
+            limit = 6;
+        } else if (item == SET_ready)
+            limit = QD_READY_JC;
+        value = min(value, limit);
+
+        if (item == SET_interface)
+            snprintf(msg, sizeof(msg), "%s", interface_names[value]);
+        else if (item == SET_ready)
+            snprintf(msg, sizeof(msg), "%s", ready_names[value]);
+        else if (item == SET_timeout && (!value || value == 255))
+            snprintf(msg, sizeof(msg), "%s", value ? "Always On" : "Off");
+        else
+            snprintf(msg, sizeof(msg), "%u%s", value,
+                     item == SET_timeout ? " sec" : "");
+        lcd_write(0, 0, -1, setting_names[item]);
+        lcd_write(0, 1, -1, msg);
+        lcd_on();
+        while (buttons)
+            delay_ms(1);
+        b = menu_wait_button(TRUE, "SET");
+        if (b & B_SELECT) {
+            while (buttons)
+                delay_ms(1);
+            return;
+        }
+        if (!(b & (B_LEFT | B_RIGHT)))
+            continue;
+        if (b & B_LEFT)
+            value = value ? value - 1 : limit;
+        else
+            value = value == limit ? 0 : value + 1;
+
+        if (item == SET_notify)
+            value |= stored & ~NOTIFY_volume_mask;
+        else if (item == SET_interface && value == 6)
+            value = FINTF_JC;
+        runtime_setting_set(item, value);
+        if (item == SET_motor)
+            speaker_motor_refresh();
+        else if (item == SET_interface && !emulation_is_qd())
+            floppy_set_fintf_mode();
+    }
+}
+
+static void settings_menu(void)
+{
+    static const char *const groups[] = { "Sound", "Display", "Drive", "Exit" };
+    static const uint8_t first[] = { 0, SET_step, SET_contrast, SET_interface };
+    static const uint8_t count[] = { 4, 3, 2, 2 };
+    uint8_t b;
+    unsigned int group = 0, sel = 0;
+    const char *label;
+
+    for (;;) {
+        label = !group ? groups[sel] : sel == count[group] ? "Back"
+            : setting_names[first[group] + sel];
+        lcd_write(0, 0, -1, group ? groups[group-1] : "Settings (RAM)");
+        lcd_write(0, 1, -1, label);
+        lcd_on();
+        while (buttons)
+            delay_ms(1);
+        b = menu_wait_button(TRUE, "SET");
+        if (b & B_SELECT) {
+            while (buttons)
+                delay_ms(1);
+            if (!group) {
+                if (sel == 3)
+                    return;
+                group = sel + 1;
+                sel = 0;
+            } else if (sel == count[group]) {
+                sel = group - 1;
+                group = 0;
+            } else {
+                settings_edit(first[group] + sel);
+            }
+        } else {
+            unsigned int last = group ? count[group] : 3;
+            if (b & B_LEFT)
+                sel = sel ? sel - 1 : last;
+            else if (b & B_RIGHT)
+                sel = sel == last ? 0 : sel + 1;
+        }
+    }
+}
+
 enum {
     EJM_header = 0,
     EJM_wrprot,
     EJM_copy,
     EJM_paste,
     EJM_delete,
+    EJM_settings,
     EJM_exit_to_selector,
     EJM_exit_reinsert,
     EJM_nr
@@ -2529,6 +2636,7 @@ static uint8_t noinline eject_menu(uint8_t b)
         [EJM_copy]   = "Copy",
         [EJM_paste]  = "Paste",
         [EJM_delete] = "Delete",
+        [EJM_settings] = "Settings",
         [EJM_exit_to_selector] = "Exit to Selector",
         [EJM_exit_reinsert] = "Exit & Re-Insert",
     };
@@ -2637,6 +2745,10 @@ static uint8_t noinline eject_menu(uint8_t b)
                     break;
                 b = 0xff; /* selector */
                 goto out;
+            case EJM_settings:
+                settings_menu();
+                display_write_slot(TRUE);
+                break;
             case EJM_exit_to_selector:
                 display_write_slot(TRUE);
                 b = 0xff; /* selector */

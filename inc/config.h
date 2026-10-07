@@ -174,16 +174,26 @@ struct packed ff_cfg {
     uint8_t hfe_step;
     /* Last selection in the combined firmware boot menu; not an FF.CFG option. */
     uint8_t boot_emulation;
-#define QD_JC_auto 0
-#define QD_JC_yes  1
-#define QD_JC_no   2
-    uint8_t qd_jc; /* QD-only READY behaviour, independent of FDD interface. */
+    uint8_t qd_ready_layout; /* 0xff: new READY layout; retain older offsets. */
     uint8_t qd_motor_volume; /* QD spindle hum; FDD uses step_volume. */
+#define QD_READY_STANDARD  0
+#define QD_READY_MOTOR_OFF 1
+#define QD_READY_JC        2
+    uint8_t qd_ready; /* QD-only READY behaviour, independent of FDD interface. */
 };
 
 extern struct ff_cfg ff_cfg;
 extern const struct ff_cfg dfl_ff_cfg;
 
+enum {
+    SET_step, SET_motor, SET_notify, SET_contrast, SET_timeout,
+    SET_interface, SET_ready, SET_nr
+};
+uint8_t *runtime_setting(unsigned int item);
+bool_t runtime_setting_active(unsigned int item);
+void runtime_setting_set(unsigned int item, uint8_t value);
+void runtime_settings_base(void);
+void runtime_settings_apply(void);
 void flash_ff_cfg_update(void *scratch);
 void flash_ff_cfg_erase(void);
 void flash_ff_cfg_read(void);

@@ -103,6 +103,12 @@ void speaker_motor(bool_t on)
     IRQ_restore(oldpri);
 }
 
+void speaker_motor_refresh(void)
+{
+    if (motor_hum.on)
+        speaker_motor(TRUE);
+}
+
 static void speaker_hz(unsigned int hz, unsigned int ms)
 {
     unsigned int vol = (ff_cfg.notify_volume & NOTIFY_volume_mask) + 1;

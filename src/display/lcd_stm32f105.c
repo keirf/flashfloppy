@@ -854,7 +854,7 @@ static unsigned int oled_start_i2c(uint8_t *buf)
         0x10          /* column address high nibble is zero */
     };
 
-    uint8_t dynamic_cmds[4], *dc = dynamic_cmds;
+    uint8_t dynamic_cmds[6], *dc = dynamic_cmds;
     uint8_t *p = buf;
 
     /* Set up the display address range. */
@@ -867,6 +867,10 @@ static unsigned int oled_start_i2c(uint8_t *buf)
     } else {
         p += oled_queue_cmds(p, ssd1306_addr_cmds, sizeof(ssd1306_addr_cmds));
     }
+
+    /* Contrast follows RAM configuration on each refresh, without reset. */
+    *dc++ = 0x81;
+    *dc++ = ff_cfg.oled_contrast;
 
     /* Display on/off according to backlight setting. */
     *dc++ = _bl ? 0xaf : 0xae;

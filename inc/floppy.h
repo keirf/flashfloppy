@@ -300,8 +300,8 @@ void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
 void floppy_set_cyl(uint8_t unit, uint8_t cyl);
 struct track_info {
-    uint8_t cyl, qd_progress;
-    uint8_t side:1, sel:1, writing:1, in_da_mode:1, qd_active:1;
+    uint8_t cyl;
+    uint8_t side:1, sel:1, writing:1, in_da_mode:1, qd_reading:1;
 };
 void floppy_get_track(struct track_info *ti);
 void floppy_set_fintf_mode(void);

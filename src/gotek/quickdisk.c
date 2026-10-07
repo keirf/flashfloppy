@@ -126,6 +126,10 @@ static void IRQ_WGATE(void)
 
     if (!(gpiob->idr & m(pin_wgate)) || read_pin(ready)) {
         /* !WG || !/RY */
+        /* Ignore repeated OFF edges: stop() would be a no-op, and clearing
+         * suppression would discard a pending instant/eot read restart. */
+        if ((dma_wr->state == DMA_inactive) || (dma_wr->state == DMA_stopping))
+            return;
         drive.index_suppressed = FALSE;
         wdata_stop();
         if (drive.index_suppressed && (window.state <= WIN_rdata_off)) {
@@ -153,19 +157,10 @@ static void IRQ_WGATE_rotary(void)
         IRQ_rotary();
 }
 
-static bool_t qd_roland_mode(void)
+static bool_t qd_ready_off_on_motor_off(void)
 {
-    if (ff_cfg.qd_jc != QD_JC_auto)
-        return ff_cfg.qd_jc == QD_JC_yes;
-
-    if (board_jc_strapped())
-        return TRUE;
-
-    /* FF.CFG alternative to setting the physical JC strap. */
-    if (ff_cfg.interface == FINTF_IBMPC)
-        return TRUE;
-
-    return FALSE;
+    return ff_cfg.qd_ready == QD_READY_JC ? board_jc_strapped()
+        : ff_cfg.qd_ready == QD_READY_MOTOR_OFF;
 }
 
 static void _IRQ_MOTOR_RESET_changed(unsigned int gpioa_idr)
@@ -200,8 +195,8 @@ static void _IRQ_MOTOR_RESET_changed(unsigned int gpioa_idr)
 
         if (/* RESET immediately clears READY */
             (off & m(pin_reset))
-            /* !MOTOR immediately clears READY iff Roland mode is selected */
-            || ((off & m(pin_motor)) && qd_roland_mode())) {
+            /* !MOTOR immediately clears READY iff configured */
+            || ((off & m(pin_motor)) && qd_ready_off_on_motor_off())) {
             write_pin(ready, HIGH);
         }
 

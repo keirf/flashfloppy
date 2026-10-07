@@ -58,6 +58,8 @@ static volatile struct {
         gpio_write_pin(gpiob, __pin, level);    \
     pins.pin = level; })
 
+static bool_t write_active;
+
 #include "floppy_generic.c"
 
 void floppy_cancel(void)
@@ -121,8 +123,8 @@ void floppy_init(void)
 
     floppy_set_fintf_mode();
 
-    printk("Interface: QuickDisk, JC=%s\n",
-           qd_roland_mode() ? "On (Roland)" : "Off");
+    printk("Interface: QuickDisk, READY=%s\n",
+           qd_ready_off_on_motor_off() ? "motor-off" : "standard");
     
     board_floppy_init();
 
@@ -160,6 +162,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     IRQx_set_pending(motor_irq);
 
     window.paused = FALSE;
+    write_active = FALSE;
 }
 
 static void floppy_unpause_window(struct drive *drv)
@@ -284,25 +287,18 @@ static bool_t dma_rd_handle(struct drive *drv)
 
 void floppy_get_track(struct track_info *ti)
 {
-    uint32_t pos, quantum;
+    uint32_t oldpri;
 
-    ti->cyl = ti->side = 0;
-    ti->qd_progress = 0;
+    memset(ti, 0, sizeof(*ti));
     ti->sel = TRUE;
-    ti->writing = (dma_wr && dma_wr->state != DMA_inactive);
-    ti->in_da_mode = FALSE;
-    ti->qd_active = (motor.on && image && dma_rd
-                     && ((dma_rd->state == DMA_active) || ti->writing));
-
-    if (!ti->qd_active || (image->stk_per_rev == 0))
-        return;
-
-    /* QuickDisk has one continuous spiral track. Report actual stream time
-     * past its index rather than the read-ahead cursor in the image codec. */
-    pos = (window.paused ? window.pause_pos : time_since(index.prev_time))
-        % image->stk_per_rev;
-    quantum = max_t(uint32_t, image->stk_per_rev / 100, 1);
-    ti->qd_progress = min_t(uint32_t, pos / quantum, 99);
+    oldpri = IRQ_save(FLOPPY_IRQ_WGATE_PRI);
+    if (image && dma_rd && dma_wr) {
+        ti->writing = write_active;
+        /* R indicates the transmitted stream while READY is asserted. */
+        ti->qd_reading = motor.on && (dma_rd->state == DMA_active)
+            && !window.paused && !read_pin(ready) && !ti->writing;
+    }
+    IRQ_restore(oldpri);
 }
 
 static void index_assert(void *dat)

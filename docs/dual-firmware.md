@@ -27,21 +27,88 @@ In native navigation, FDD retains `IMAGE_A.CFG`/`INIT_A.CFG`; QuickDisk uses
 lists `.qd`, `.mzq` and `.qdf` images, while FDD retains its supported formats and
 Direct Access mode.
 
-### Independent QuickDisk JC setting
+### Independent QuickDisk READY setting
 
-`qd-jc = auto | yes | no` affects QuickDisk only. `auto` retains the physical
-JC jumper / `interface=ibmpc` behaviour; `yes` enables motor-off READY deassertion
-regardless of either setting, and `no` disables it. Sharp MZ-800 and Roland
-require this behaviour. For an MZ-800 using both modes, use
-`interface = shugart` and `qd-jc = yes`; the physical JC jumper may remain open.
-FDD continues to use its own `interface` setting. The complete option comments
-are in `examples/FF.CFG`.
+`qd-ready = standard | motor-off | jc` affects QuickDisk only:
+
+- `standard`: Motor-off does not immediately deactivate READY.
+- `motor-off`: Motor-off immediately deactivates READY, as required by
+  Sharp MZ-800/MZ-1F11 and Roland. This is the example configuration default.
+- `jc`: Only the physical JC jumper selects the behaviour (open: standard,
+  closed: motor-off).
+
+FDD `interface=jc` still selects Shugart with JC open and IBM PC with JC closed.
+Explicit FDD interface values and explicit QD READY values ignore JC. FDD
+`interface=ibmpc` has no effect on QD READY. The previous option has been removed;
+replace it with `qd-ready` in your USB configuration. Older saved READY bytes
+are discarded in favour of the new default, then FF.CFG is applied as usual.
+For a Sharp using both modes, select `interface=shugart` and
+`qd-ready=motor-off`; JC may remain open.
+
+The QD motor input remains PA0. The universal wiring uses S0 fitted, S1 and MO
+open, and host QD /MOTOR connected to Gotek pin 10. FDD uses the same PA0 as
+SELA. Traditional QD wiring instead uses /MOTOR on pin 16 and MO fitted; both
+routes reach PA0. No firmware pin mapping changes are required.
 
 `qd-motor-volume = 0..20` controls the QD spindle sound independently of FDD
 `step-volume`. Both default to 10; 0 silences the respective drive sound.
 Insert/eject notifications continue to use the shared `notify-volume` setting.
-The QD status shows spiral position while reading and writing, with `W` during
-writes. This percentage describes track position, not completion of a file save.
+The OLED/LCD QD status shows `R` while the emulator outputs a read stream
+with READY asserted. The interface cannot determine whether the host actually
+consumes that stream. `W` means an accepted physical WGATE is active; USB
+writeback alone does not show `W`. Read-only images show `*` immediately on
+mount and throughout use, including alongside `R`. Percentages are removed.
+The seven-segment display uses `rd`, `wrt` and `qd` for read, write and idle;
+it cannot render the OLED/LCD asterisk.
+
+### Temporary runtime Settings
+
+With an OLED/LCD, use SELECT on an inserted image, then Eject Menu -> Settings.
+The drive has been cancelled before this menu is opened, in both FDD and QD.
+LEFT/RIGHT or the rotary encoder select items; SELECT enters a submenu/editor
+or accepts the edited value. Back returns to Settings; Exit returns to Eject Menu.
+
+- Sound: FDD Step Volume (0..20), QD Motor Volume (0..20), Notify Volume (0..15,
+  preserving the slot-number notification flag).
+- Display: OLED Contrast (0..255; applied on refresh without resetting), Display
+  Timeout (0=off, 1..254 seconds, 255=always on). Menus remain visible even when
+  the configured timeout is off. OLED Contrast has no effect on an HD44780 LCD.
+- Drive: FDD Interface (JC, Shugart, IBM PC, IBM PC+HD, Japanese PC,
+  Japanese PC+HD, Amiga), QD READY Mode (Standard, Motor Off, JC).
+
+All seven settings are RAM overrides until reset/power-on. They never update
+FF.CFG, another settings file, or internal Flash. Normal configuration writes
+exclude the RAM overrides, including if FF.CFG is reloaded after USB reconnect.
+Overrides survive reconnect and HxC settings cannot replace overridden volume
+or timeout values. Reset restores the usual saved/default configuration and
+FF.CFG. Drive settings take effect safely before the next insert; boot-only
+FDD/QD backend selection and service menu items are unchanged.
+
+### Hardware acceptance checks (Sharp MZ-800/MZ-1F11)
+
+1. Use S0 fitted, S1/MO open, /MOTOR on pin 10; confirm native physical QD
+   reads and formats as before. Keep logical QD/MZQ/QDF write-protected.
+2. With JC both open and closed, test explicit `qd-ready=standard` and
+   `motor-off`. Then test `jc`: open selects standard, closed motor-off.
+   Changing FDD `interface=ibmpc` must not change QD READY.
+3. In FDD, test `interface=jc` (open Shugart, closed IBM PC) and explicit
+   Shugart/IBM PC with either JC state. Check image navigation, encoder,
+   head-step sound and eject/reinsert.
+4. In both backends, enter SELECT -> Settings; edit every item, return via Back
+   and Exit, reinsert and confirm the changes. Check contrast without a reset,
+   timeout off/seconds/always-on and notification slot-number preservation.
+5. Reconnect USB and confirm overrides remain; reset and confirm FF.CFG values
+   return. Compare the USB configuration files before/after Settings.
+6. On a writable native QD, test LOAD from the MZ monitor and FORMAT including
+   verify. Check `R` during the READY read stream and `W` during WGATE.
+   `W` must stop with WGATE, including while USB writeback is pending.
+7. Test SAVE and COPY DISK, including multiple separated writes and track wrap.
+   Repeat with `write-drain=instant`, `realtime` and `eot`; inspect the handover
+   to READ and verify saved data. Compare against the previous working firmware.
+
+Host tests simulate the control and UI paths, not the electrical host signals.
+FORMAT/SAVE/COPY and FDD controller compatibility still require these hardware
+checks before treating the new build as validated on the Sharp.
 
 ### Sharp Quick Disk byte images
 

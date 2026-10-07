@@ -209,6 +209,10 @@ static void wdata_stop(void)
     if ((prev_state == DMA_inactive) || (prev_state == DMA_stopping))
         return;
 
+#if TARGET == TARGET_quickdisk
+    write_active = FALSE;
+#endif
+
     /* Ok we're now stopping DMA activity. */
     dma_wr->state = DMA_stopping;
 
@@ -285,11 +289,14 @@ static void wdata_start(void)
     tim_wdata->cr1 = TIM_CR1_CEN;
 
     /* Find rotational start position of the write, in SAMPLECLK ticks. */
-    start_pos = max_t(int32_t, 0, time_diff(index.prev_time, time_now()));
+    start_pos = max_t(int32_t, 0, time_since(index.prev_time));
     start_pos %= drive.image->stk_per_rev;
     start_pos *= SAMPLECLK_MHZ / STK_MHZ;
     write = get_write(image, image->wr_prod);
     write->start = start_pos;
+#if TARGET == TARGET_quickdisk
+    write_active = TRUE;
+#endif
     write->track = drive_calc_track(&drive);
 
     /* Allow IDX pulses while handling a write. */

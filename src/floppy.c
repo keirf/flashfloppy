@@ -555,12 +555,11 @@ void floppy_get_track(struct track_info *ti)
 {
     bool_t active = dma_wr != NULL;
     ti->cyl = drive.cyl;
-    ti->qd_progress = 0;
     ti->side = active ? drive.head & (drive.image->nr_sides - 1) : 0;
     ti->sel = drive.sel;
     ti->writing = (active && dma_wr->state != DMA_inactive);
     ti->in_da_mode = active ? in_da_mode(drive.image, ti->cyl) : FALSE;
-    ti->qd_active = FALSE;
+    ti->qd_reading = FALSE;
 }
 
 static bool_t index_is_suppressed(struct drive *drv)

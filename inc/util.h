@@ -125,6 +125,7 @@ extern uint8_t display_type;
 void speaker_init(void);
 void speaker_pulse(void);
 void speaker_motor(bool_t on);
+void speaker_motor_refresh(void);
 void speaker_notify_insert(unsigned int slotnr);
 void speaker_notify_eject(void);
 
