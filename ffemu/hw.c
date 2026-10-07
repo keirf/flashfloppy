@@ -4,7 +4,9 @@
  * Models of the MCU peripherals that the firmware's user interface depends
  * on. The firmware reads and writes register blocks in ordinary memory (see
  * regs.h); emu_hw_sync() looks at what it wrote and makes the registers
- * respond the way the hardware would.
+ * respond the way the hardware would. The I2C bus and its DMA are also kept
+ * going by a thread of their own, emu_hw_sync_bus(), concurrently with the
+ * firmware, as the hardware is.
  *
  * Modelled: GPIO inputs for the buttons and the rotary encoder, with their
  * EXTI interrupts; the one-shot timer behind timer.c; the I2C master with
@@ -65,11 +67,23 @@ void emu_irq_vector(unsigned int nr)
     }
 }
 
+/* Which thread is updating the models, if any: 1 the firmware's, which a
+ * tick may interrupt in the middle, 2 the bus thread. */
 static volatile int busy;
+static volatile bool_t hw_ready;
 
 int emu_hw_busy(void)
 {
-    return busy;
+    return busy == (emu_on_hw_thread() ? 2 : 1);
+}
+
+/* For the registers that the firmware writes while the bus thread runs the
+ * models: change the model's bits of them atomically. */
+static void reg_update(volatile uint32_t *reg, uint32_t clear, uint32_t set)
+{
+    uint32_t old = *reg;
+    while (!__sync_bool_compare_and_swap(reg, old, (old & ~clear) | set))
+        old = *reg;
 }
 
 uint32_t emu_stk_now(void)
@@ -206,8 +220,8 @@ static void tim_sync(uint64_t now)
 #define I2C_BYTE_NS 22500 /* 9 bit times at 400 kHz */
 
 static struct i2c_model {
-    struct i2c *r;
-    struct dma_chn *tx;
+    volatile struct i2c *r;
+    volatile struct dma_chn *tx;
     uint8_t tx_ch, irq_ev, irq_er, irq_dma_tx;
     enum { I2C_idle, I2C_addr, I2C_tx, I2C_rx } state;
     bool_t dma_active;
@@ -237,7 +251,7 @@ static void *ptr32(uint32_t lo)
 
 static void i2c_sync(struct i2c_model *m, uint64_t now)
 {
-    struct i2c *r = m->r;
+    volatile struct i2c *r = m->r;
     bool_t wrote;
 
     if (!(r->cr1 & I2C_CR1_PE) || (r->cr1 & I2C_CR1_SWRST)) {
@@ -252,9 +266,9 @@ static void i2c_sync(struct i2c_model *m, uint64_t now)
 
     if (r->cr1 & I2C_CR1_STOP) {
         emu_i2c_dev_stop();
-        __sync_fetch_and_and(&r->cr1, ~I2C_CR1_STOP);
-        r->sr1 &= I2C_SR1_ERRORS;
         r->dr = DR_IDLE;
+        reg_update(&r->sr1, ~I2C_SR1_ERRORS, 0);
+        __sync_fetch_and_and(&r->cr1, ~I2C_CR1_STOP);
         m->state = I2C_idle;
         m->dma_active = FALSE;
     }
@@ -264,13 +278,13 @@ static void i2c_sync(struct i2c_model *m, uint64_t now)
         if (m->state == I2C_rx) {
             /* The byte in flight completes first, and is NACKed. */
             r->dr = DR_IDLE | emu_i2c_dev_read();
-            r->sr1 |= I2C_SR1_RXNE;
+            reg_update(&r->sr1, 0, I2C_SR1_RXNE);
         } else {
             r->dr = DR_IDLE;
         }
         __sync_fetch_and_and(&r->cr1, ~I2C_CR1_START);
-        r->sr1 = (r->sr1 & ~(I2C_SR1_ADDR | I2C_SR1_BTF | I2C_SR1_TXE))
-            | I2C_SR1_SB;
+        reg_update(&r->sr1, I2C_SR1_ADDR | I2C_SR1_BTF | I2C_SR1_TXE,
+                   I2C_SR1_SB);
         m->state = I2C_addr;
         m->dma_active = FALSE;
     }
@@ -287,17 +301,17 @@ static void i2c_sync(struct i2c_model *m, uint64_t now)
             uint8_t a = r->dr;
             bool_t rd = a & 1;
             r->dr = DR_IDLE;
-            r->sr1 &= ~(I2C_SR1_SB | I2C_SR1_RXNE);
+            reg_update(&r->sr1, I2C_SR1_SB | I2C_SR1_RXNE, 0);
             if (!emu_i2c_dev_start(a >> 1, rd)) {
-                r->sr1 |= I2C_SR1_AF;
                 m->state = I2C_idle;
+                reg_update(&r->sr1, 0, I2C_SR1_AF);
             } else if (rd) {
                 r->dr = DR_IDLE | emu_i2c_dev_read();
-                r->sr1 |= I2C_SR1_ADDR | I2C_SR1_RXNE;
                 m->state = I2C_rx;
+                reg_update(&r->sr1, 0, I2C_SR1_ADDR | I2C_SR1_RXNE);
             } else {
-                r->sr1 |= I2C_SR1_ADDR | I2C_SR1_TXE;
                 m->state = I2C_tx;
+                reg_update(&r->sr1, 0, I2C_SR1_ADDR | I2C_SR1_TXE);
             }
         }
         break;
@@ -311,21 +325,21 @@ static void i2c_sync(struct i2c_model *m, uint64_t now)
                     emu_i2c_dev_write(p[i]);
                 m->tx->cndtr = 0;
                 m->dma_active = FALSE;
-                emu_dma[0].isr |= DMA_ISR_TCIF(m->tx_ch)
-                    | DMA_ISR_GIF(m->tx_ch);
-                r->sr1 |= I2C_SR1_BTF | I2C_SR1_TXE;
+                __sync_fetch_and_or(&emu_dma[0].isr, DMA_ISR_TCIF(m->tx_ch)
+                                    | DMA_ISR_GIF(m->tx_ch));
+                reg_update(&r->sr1, 0, I2C_SR1_BTF | I2C_SR1_TXE);
                 if (m->tx->ccr & DMA_CCR_TCIE)
                     emu_irqx_set_pending(m->irq_dma_tx);
             }
         } else if ((r->cr2 & I2C_CR2_DMAEN) && (m->tx->ccr & DMA_CCR_EN)
                    && (m->tx->cndtr != 0)) {
-            r->sr1 &= ~(I2C_SR1_ADDR | I2C_SR1_BTF | I2C_SR1_TXE);
+            reg_update(&r->sr1, I2C_SR1_ADDR | I2C_SR1_BTF | I2C_SR1_TXE, 0);
             m->dma_active = TRUE;
             m->dma_done_ns = now + (uint64_t)m->tx->cndtr * I2C_BYTE_NS;
         } else if (wrote) {
             emu_i2c_dev_write(r->dr);
             r->dr = DR_IDLE;
-            r->sr1 = (r->sr1 & ~I2C_SR1_ADDR) | I2C_SR1_BTF | I2C_SR1_TXE;
+            reg_update(&r->sr1, I2C_SR1_ADDR, I2C_SR1_BTF | I2C_SR1_TXE);
         }
         break;
 
@@ -345,28 +359,48 @@ static void i2c_sync(struct i2c_model *m, uint64_t now)
 static void dma_sync(void)
 {
     /* Writing 1s to IFCR clears the matching ISR flags. */
-    uint32_t ifcr = emu_dma[0].ifcr;
-    if (ifcr) {
-        emu_dma[0].isr &= ~ifcr;
-        emu_dma[0].ifcr = 0;
-    }
+    uint32_t ifcr = __sync_lock_test_and_set(&emu_dma[0].ifcr, 0);
+    if (ifcr)
+        __sync_fetch_and_and(&emu_dma[0].isr, ~ifcr);
+}
+
+static void bus_sync(uint64_t now)
+{
+    dma_sync();
+    i2c_sync(&i2c_model[0], now);
+    i2c_sync(&i2c_model[1], now);
+}
+
+/* One thread at a time updates the models; a tick that arrives while the
+ * firmware's thread is in here, or the other thread, leaves it to that. */
+static bool_t hw_lock(void)
+{
+    return hw_ready
+        && __sync_bool_compare_and_swap(&busy, 0, emu_on_hw_thread() ? 2 : 1);
 }
 
 void emu_hw_sync(void)
 {
     uint64_t now;
 
-    /* A tick may arrive while the firmware thread is in here. */
-    if (__sync_lock_test_and_set(&busy, 1))
+    if (!hw_lock())
         return;
 
     now = emu_time_ns();
     gpio_sync(now);
     tim_sync(now);
-    dma_sync();
-    i2c_sync(&i2c_model[0], now);
-    i2c_sync(&i2c_model[1], now);
+    bus_sync(now);
 
+    __sync_lock_release(&busy);
+}
+
+/* The timer and the GPIO stay with the firmware's thread: the one-shot
+ * timer's end would race the firmware setting the next deadline. */
+void emu_hw_sync_bus(void)
+{
+    if (!hw_lock())
+        return;
+    bus_sync(emu_time_ns());
     __sync_lock_release(&busy);
 }
 
@@ -382,6 +416,8 @@ void emu_hw_init(void)
         emu_gpio[i].idr = 0xffff;
     for (i = 0; i < ARRAY_SIZE(emu_i2c); i++)
         emu_i2c[i].dr = DR_IDLE;
+    barrier();
+    hw_ready = TRUE;
 }
 
 const char *emu_board_name(void)
