@@ -262,6 +262,18 @@ void board_init(void)
                     has_kc30_header = 1;
                 }
                 gpio_configure_pin(gpiof, 7, GPI_floating);
+#else
+                rcc->ahb1enr |= RCC_AHB1ENR_GPIOHEN;
+                gpio_configure_pin(gpioh, 2, GPI_pull_up);
+                delay_us(100);
+                if (gpio_read_pin(gpioh, 2) == HIGH) {
+                    /* KC30 Rev 1. has "select" on PH2. Old boards
+                       have this pin pulled low. As long as the user
+                       doesn't press select during power-up, this allows
+                       to recognize the board. */
+                    has_kc30_header = 1;
+                }
+                gpio_configure_pin(gpioh, 2, GPI_floating);
 #endif
             }
 
