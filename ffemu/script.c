@@ -92,6 +92,34 @@ static void print_log(void)
         putchar(log_ring[log_printed % LOG_SIZE]);
 }
 
+/* The signals of the host computer, active ones in capitals, and the drive
+ * as the firmware sees it. */
+static void print_fdd(void)
+{
+    unsigned int in = emu_in_fdd, cyl, side;
+    const char *image;
+    char ph[5], kept[5];
+    int sel;
+
+    if (FFEMU_APPLE2)
+        printf("fdd: %s, phases %s, kept %s\n",
+               (in & EMU_FDD_SEL) ? "D_E" : "d_e",
+               ui_fdd_phase_text(in, ph),
+               ui_fdd_phase_text(ui_fdd_phases(), kept));
+    else
+        printf("fdd: %s %s %s %s\n", (in & EMU_FDD_SEL) ? "D_S" : "d_s",
+               (in & EMU_FDD_MOTOR) ? "M_O" : "m_o",
+               (in & EMU_FDD_DIR) ? "DIR" : "dir",
+               (in & EMU_FDD_SIDE) ? "SID" : "sid");
+    emu_fdd_status(&cyl, &side, &sel, &image);
+    if (FFEMU_APPLE2)
+        printf("drive: cyl %u, %senabled, floppy %s\n", cyl,
+               sel ? "" : "not ", image ? image : "none");
+    else
+        printf("drive: cyl %u, side %u, %sselected, floppy %s\n", cyl, side,
+               sel ? "" : "not ", image ? image : "none");
+}
+
 static void print_status(void)
 {
     static uint8_t px[OLED_W * OLED_MAX_H];
@@ -120,6 +148,7 @@ static void print_status(void)
                usb.nr_writes, usb.ff_cfg[0] ? usb.ff_cfg : "none");
     else
         printf("usb: removed%s%s\n", usb.error[0] ? ", " : "", usb.error);
+    print_fdd();
     printf("buttons: %u, speaker pulses: %u, heap: %u of %u\n",
            emu_in_buttons, emu_out_speaker, emu_arena_used(),
            emu_arena_size());
@@ -160,6 +189,13 @@ static void *script_thread(void *arg_sleep_ms)
         if (sscanf(line, "sleep %u", &ms) == 1) {
             run_for(ms);
         } else if (sscanf(line, "key %63s", arg) == 1) {
+            for (i = 0; i < FDD_ACT_nr; i++)
+                if (ui_fdd_has(i) && !strcmp(arg, fdd_action_name[i]))
+                    break;
+            if (i < FDD_ACT_nr) {
+                ui_fdd_action(i);
+                continue;
+            }
             for (i = 0; i < KEY_ACT_nr; i++)
                 if (!strcmp(arg, action_name[i]))
                     break;

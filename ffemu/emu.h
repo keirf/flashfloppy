@@ -74,6 +74,18 @@ extern volatile unsigned int emu_in_buttons;
 /* Encoder detents not yet delivered: clockwise is positive. */
 extern volatile int emu_in_rotary;
 
+/* Floppy interface inputs from the host computer, written by the user
+ * interface: a bit is set while its signal is active, as on the schematics,
+ * whatever its voltage. */
+#define EMU_FDD_SEL   1  /* Shugart drive select, or Apple2 drive enable */
+#define EMU_FDD_MOTOR 2
+#define EMU_FDD_DIR   4  /* active: steps go inward, to higher tracks */
+#define EMU_FDD_SIDE  8
+#define EMU_FDD_PH0   16 /* Apple2 stepper phases 0 to 3: 16, 32, 64, 128 */
+extern volatile unsigned int emu_in_fdd;
+/* Counts the STEP pulses sent. */
+extern volatile unsigned int emu_in_step;
+
 /* Front-panel outputs, read by the user interface. */
 /* Counts the pulses sent to the speaker. */
 extern volatile unsigned int emu_out_speaker;
@@ -99,6 +111,10 @@ void emu_irq_vector(unsigned int nr);
 const char *emu_board_name(void);
 const char *emu_fw_version(void);
 const char *emu_fw_target(void);
+/* The drive as the firmware sees it: the cylinder of the head, the side,
+ * whether it is selected, and the image mounted, or NULL. */
+void emu_fdd_status(unsigned int *cyl, unsigned int *side, int *sel,
+                    const char **image);
 unsigned int emu_arena_used(void);
 unsigned int emu_arena_size(void);
 

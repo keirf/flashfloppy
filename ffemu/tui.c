@@ -94,6 +94,7 @@ enum {
     CP_cluster_hot, /* bright yellow on cyan: a hotkey among them */
     CP_input,     /* bright white on blue: an input line */
     CP_button_def, /* bright cyan on green: the default button */
+    CP_signal,    /* black on dark yellow: an active signal of the host */
     CP_nr
 };
 
@@ -111,7 +112,7 @@ enum {
 /* Controls, Status and Flash mem are side by side, of equal height; Status
  * is never narrower than its board name needs. */
 #define STATUS_MIN_W 42
-#define PANE_ROWS 8
+#define PANE_ROWS 12
 
 /* The letters that select the rendering styles, in their order. */
 #define STYLE_KEYS "qwe"
@@ -486,6 +487,9 @@ static void draw_status(int y, int x, int w)
 {
     struct usb_info usb;
     char path[600], line[128];
+    unsigned int cyl, side;
+    const char *image;
+    int sel;
 
     frame(y, x, w, PANE_ROWS + 2, "Status", COLOR_PAIR(CP_text),
           COLOR_PAIR(CP_text));
@@ -501,6 +505,18 @@ static void draw_status(int y, int x, int w)
         put(y - 1, x + n, w - n, BRIGHT(CP_good), "%s", emu_fw_target());
     }
     field(&y, x, w, "Board", 0, "%s", emu_board_name());
+    y++;
+
+    /* The drive as the firmware sees it. */
+    emu_fdd_status(&cyl, &side, &sel, &image);
+    if (FFEMU_APPLE2)
+        field(&y, x, w, "FDD", 0, "Cyl %u, %s", cyl,
+              sel ? "enabled" : "not enabled");
+    else
+        field(&y, x, w, "FDD", 0, "Cyl %u, side %u, %s", cyl, side,
+              sel ? "selected" : "not selected");
+    field(&y, x, w, "Floppy", image ? BRIGHT(CP_path) : DARK_GRAY, "%s",
+          image ? image : "None");
     y++;
 
     usb_get_info(&usb);
@@ -804,6 +820,57 @@ static int keys_width(void)
     return w + 2;
 }
 
+/* The signals of the host computer on the floppy interface, each lit while
+ * active as on the schematics, whatever its voltage, with the keys that
+ * change them below, at (@y,@x) in @w columns. */
+static void fdd_panel(int y, int x, int w)
+{
+#define SIGNAL(on) (COLOR_PAIR((on) ? CP_signal : CP_off))
+    unsigned int in = emu_in_fdd;
+    attr_t key = BRIGHT(CP_value);
+    char ph[5];
+    int i, c;
+
+    put(y, x, w, 0, "FDD:");
+    /* The kind of controller on the other side of the cable. */
+    put(y + 1, x, w, BRIGHT(CP_good), "%s",
+        FFEMU_APPLE2 ? "Apple2" : "Step/Dir");
+
+    if (FFEMU_APPLE2) {
+        static const char * const name[5] = {
+            "D_E", "PH0", "PH1", "PH2", "PH3" };
+        /* Closer than the Shugart ones, for the kept state of the phases,
+         * which a press of + or - goes on from. */
+        for (i = 0; i < 5; i++) {
+            bool on = in & (i ? EMU_FDD_PH0 << (i - 1) : EMU_FDD_SEL);
+            c = 9 + 5 * i;
+            put(y, x + c, w - c, SIGNAL(on), "%s", name[i]);
+        }
+        put(y, x + 35, w - 35, BRIGHT(CP_good), "%s",
+            ui_fdd_phase_text(ui_fdd_phases(), ph));
+        put(y + 1, x + 10, w - 10, key, "[");
+        put(y + 1, x + 15, w - 15, key, "-");
+        put(y + 1, x + 16, w - 16, 0, "/");
+        put(y + 1, x + 17, w - 17, key, "+");
+        put(y + 1, x + 19, w - 19, 0, "Step");
+        put(y + 1, x + 27, w - 27, key, "\\");
+        put(y + 1, x + 29, w - 29, 0, "Release");
+    } else {
+        static const char * const name[5] = {
+            "D_S", "M_O", "DIR", "STP", "SID" };
+        static const char * const keys[5] = { "[", "]", "-", "+", "\\" };
+        bool on[5] = {
+            in & EMU_FDD_SEL, in & EMU_FDD_MOTOR, in & EMU_FDD_DIR,
+            ui_fdd_stepping(), in & EMU_FDD_SIDE };
+        for (i = 0; i < 5; i++) {
+            c = 9 + 6 * i;
+            put(y, x + c, w - c, SIGNAL(on[i]), "%s", name[i]);
+            put(y + 1, x + c + 1, w - c - 1, key, "%s", keys[i]);
+        }
+    }
+#undef SIGNAL
+}
+
 static void draw_keys(int y, int x, int w)
 {
     unsigned int i, col = key_column();
@@ -817,7 +884,8 @@ static void draw_keys(int y, int x, int w)
     /* A drawing, not text: one space from the frame. */
     usb_port(y, x + 1, w - 1);
     picture(y, x + 11, w - 11);
-    y += 4;
+    fdd_panel(y + 5, x + 1, w - 1);
+    y += 8;
 
     /* The latch key lights up while its mode lasts. */
     for (i = 0; i < ARRAY_SIZE(device_keys); i++) {
@@ -1523,6 +1591,7 @@ static int key_of_char(wint_t ch)
     } map[] = {
         { 0x439, 'q' }, { 0x419, 'Q' }, { 0x446, 'w' }, { 0x426, 'W' },
         { 0x443, 'e' }, { 0x423, 'E' },
+        { 0x445, '[' }, { 0x44a, ']' },
         { 0x2116, '#' } /* the numero sign, Shift+3 */
     };
     unsigned int i;
@@ -2238,9 +2307,30 @@ static void draw_flash_dialog(void)
         fd_error[0] ? fd_error : fviews[fd_focus].help);
 }
 
+/* The FDD action of @key, or -1: the keys under the signals in the Controls
+ * window; also = for +, and / for the backslash, which the Russian layout
+ * types there. */
+static int fdd_key(int key)
+{
+    switch (key) {
+    case '[':
+        return FDD_ACT_sel;
+    case ']':
+        return FDD_ACT_motor;
+    case '-':
+        return FFEMU_APPLE2 ? FDD_ACT_phase_out : FDD_ACT_dir;
+    case '+': case '=':
+        return FFEMU_APPLE2 ? FDD_ACT_phase_in : FDD_ACT_step;
+    case '\\': case '/':
+        return FFEMU_APPLE2 ? FDD_ACT_release : FDD_ACT_side;
+    }
+    return -1;
+}
+
 static void handle_key(int key)
 {
     unsigned int i;
+    int act;
 
     if ((key == '\r') || (key == KEY_ENTER))
         key = '\n';
@@ -2302,6 +2392,12 @@ static void handle_key(int key)
         dialog = DLG_display;
         dialog_button = 0;
         dialog_display = config.display;
+        return;
+    }
+
+    act = fdd_key(key);
+    if (act >= 0) {
+        ui_fdd_action(act);
         return;
     }
 
@@ -2379,6 +2475,7 @@ static void *tui_thread(void *unused)
         init_pair(CP_cluster_hot, COLOR_YELLOW, COLOR_CYAN);
         init_pair(CP_input, COLOR_WHITE, COLOR_BLUE);
         init_pair(CP_button_def, COLOR_CYAN, COLOR_GREEN);
+        init_pair(CP_signal, COLOR_BLACK, COLOR_YELLOW);
         for (i = 1; i < CP_nr; i++)
             bright_twin(i);
     }

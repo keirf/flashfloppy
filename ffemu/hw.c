@@ -8,9 +8,11 @@
  * going by a thread of their own, emu_hw_sync_bus(), concurrently with the
  * firmware, as the hardware is.
  *
- * Modelled: GPIO inputs for the buttons and the rotary encoder, with their
- * EXTI interrupts; the one-shot timer behind timer.c; the I2C master with
- * its DMA channel, which carries the display traffic.
+ * Modelled: GPIO inputs for the buttons, the rotary encoder and the floppy
+ * interface, with their EXTI interrupts as AFIO routes them, and TIM2's
+ * capture of STEP; the one-shot timer behind timer.c; the I2C master with its
+ * DMA channel, which carries the display traffic. The floppy data timers and
+ * their DMA channels are mere registers: no data flows.
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
@@ -35,6 +37,11 @@ struct usart emu_usart[3];
 struct usb_otg emu_usb_otg;
 
 /* Interrupt handlers that the firmware half defines. */
+void IRQ_6(void);
+void IRQ_7(void);
+void IRQ_10(void);
+void IRQ_12(void);
+void IRQ_13(void);
 void IRQ_14(void);
 void IRQ_15(void);
 void IRQ_16(void);
@@ -45,11 +52,19 @@ void IRQ_31(void);
 void IRQ_32(void);
 void IRQ_33(void);
 void IRQ_34(void);
+void IRQ_27(void);
+void IRQ_28(void);
 void IRQ_40(void);
+void IRQ_43(void);
 
 void emu_irq_vector(unsigned int nr)
 {
     switch (nr) {
+    case 6: IRQ_6(); break;   /* EXTI0: SELA */
+    case 7: IRQ_7(); break;   /* EXTI1: WGATE on QFN32 */
+    case 10: IRQ_10(); break; /* EXTI4: SIDE */
+    case 12: IRQ_12(); break; /* DMA1 channel 2: WDATA */
+    case 13: IRQ_13(); break; /* DMA1 channel 3: RDATA */
     case 14: IRQ_14(); break; /* DMA1 channel 4: I2C2 transmit */
     case 15: IRQ_15(); break; /* DMA1 channel 5: I2C2 receive */
     case 16: IRQ_16(); break; /* DMA1 channel 6: I2C1 transmit */
@@ -61,6 +76,12 @@ void emu_irq_vector(unsigned int nr)
     case 33: IRQ_33(); break; /* I2C2 event */
     case 34: IRQ_34(); break; /* I2C2 error */
     case 40: IRQ_40(); break; /* EXTI15_10 */
+#if TARGET == TARGET_apple2
+    case 27: IRQ_27(); break; /* TIM1 capture: WDATA */
+#else
+    case 28: IRQ_28(); break; /* TIM2: STEP */
+#endif
+    case 43: IRQ_43(); break; /* the floppy interface's soft IRQ */
     default:
         printk("ffemu: no handler for IRQ %u\n", nr);
         break;
@@ -98,7 +119,8 @@ uint32_t emu_stk_now(void)
 
 /*
  * GPIO: every input reads high (pulled up, as on the board) except those
- * that a pressed button or the encoder pulls low.
+ * that a pressed button, the encoder or an active signal of the host
+ * computer pulls low.
  */
 
 #define PIN_SPEAKER 2  /* PA2 */
@@ -107,6 +129,109 @@ uint32_t emu_stk_now(void)
 #define PIN_SELECT  5  /* PA5 */
 #define PIN_ROT_A   6  /* PA6: KC30 header, rotary bit 0 */
 #define PIN_ROT_B  15  /* PA15: KC30 header, rotary bit 1 */
+
+/* The floppy interface: port A and port B pins. */
+#define PA_SEL0     0
+#define PA_STEP     1  /* Shugart; Apple2 phase 3 */
+#define PA_PHA1     9  /* Apple2, as in the release */
+#define PA_PHA0    10  /* Apple2, as in the release */
+#define PB_DIR      0  /* Shugart; Apple2 phase 2 */
+#define PB_SIDE     4
+#define PB_MOTOR   12  /* on a board with KC30 header type 2, else PB15 */
+#define PB_MOTOR2  15
+
+/* EXTI PR is cleared by writing ones to it, which ordinary memory cannot
+ * show: the model keeps the pending lines, with this reserved bit set, and a
+ * write of the firmware's leaves it out. */
+#define EXTI_PR_MARK (1u << 31)
+static uint32_t exti_pending, exti_levels;
+
+/* The levels of the EXTI lines: each the pin of the port AFIO routes to it. */
+static uint32_t exti_lines(void)
+{
+    uint32_t levels = 0;
+    unsigned int line, port;
+
+    for (line = 0; line < 16; line++) {
+        port = (emu_afio.exticr[line / 4] >> ((line % 4) * 4)) & 0xf;
+        if ((port < ARRAY_SIZE(emu_gpio)) && (emu_gpio[port].idr & m(line)))
+            levels |= m(line);
+    }
+    return levels;
+}
+
+static void exti_sync(void)
+{
+    uint32_t levels = exti_lines(), pr = emu_exti.pr, raised;
+
+    if (!(pr & EXTI_PR_MARK))
+        exti_pending &= ~pr;
+    raised = (levels ^ exti_levels) & emu_exti.imr
+        & ((levels & emu_exti.rtsr) | (~levels & emu_exti.ftsr));
+    exti_levels = levels;
+    exti_pending |= raised;
+    emu_exti.pr = exti_pending | EXTI_PR_MARK;
+
+    if (raised & m(0))
+        emu_irqx_set_pending(6);
+    if (raised & m(1))
+        emu_irqx_set_pending(7);
+    if (raised & m(4))
+        emu_irqx_set_pending(10);
+    if (raised & 0x03e0)
+        emu_irqx_set_pending(23);
+    if (raised & 0xfc00)
+        emu_irqx_set_pending(40);
+}
+
+/* STEP pulses of the host computer not yet sent, and the one being sent. */
+static unsigned int steps_sent;
+static bool_t step_low;
+
+/* The pins of the floppy interface that the host computer drives low. */
+static void fdd_pins(uint32_t *pa, uint32_t *pb)
+{
+    unsigned int in = emu_in_fdd;
+    bool_t step_ends = step_low;
+
+    /* A STEP pulse lasts from one sync to the next, as short as can be. */
+    step_low = !step_low && (steps_sent != emu_in_step);
+    if (step_low)
+        steps_sent++;
+
+    if (in & EMU_FDD_SEL)
+        *pa &= ~m(PA_SEL0);
+#if TARGET == TARGET_apple2
+    /* The stepper phases, unlike the drive enable, are active high. */
+    *pa &= ~(m(PA_PHA0) | m(PA_PHA1) | m(PA_STEP));
+    *pb &= ~m(PB_DIR);
+    if (in & (EMU_FDD_PH0 << 0))
+        *pa |= m(PA_PHA0);
+    if (in & (EMU_FDD_PH0 << 1))
+        *pa |= m(PA_PHA1);
+    if (in & (EMU_FDD_PH0 << 2))
+        *pb |= m(PB_DIR);
+    if (in & (EMU_FDD_PH0 << 3))
+        *pa |= m(PA_STEP);
+    (void)step_ends;
+#else
+    if (step_low)
+        *pa &= ~m(PA_STEP);
+    if (in & EMU_FDD_DIR)
+        *pb &= ~m(PB_DIR);
+    if (in & EMU_FDD_SIDE)
+        *pb &= ~m(PB_SIDE);
+    if (in & EMU_FDD_MOTOR)
+        *pb &= ~(m(PB_MOTOR) | m(PB_MOTOR2));
+
+    /* TIM2 captures the rising edge of STEP, at the end of the pulse. */
+    if (step_ends && (emu_tim[1].cr1 & TIM_CR1_CEN)) {
+        __sync_fetch_and_or(&emu_tim[1].sr, TIM_SR_CC2IF);
+        if (emu_tim[1].dier & TIM_DIER_CC2IE)
+            emu_irqx_set_pending(28);
+    }
+#endif
+}
 
 /* The encoder rests at 3 and outputs a Gray code. One detent is four
  * transitions: clockwise 3-2-0-1-3, anticlockwise 3-1-0-2-3. */
@@ -120,7 +245,7 @@ static uint64_t rot_next_ns;
 static void gpio_sync(uint64_t now)
 {
     unsigned int b = emu_in_buttons;
-    uint32_t pa = 0xffff, changed, pr, bsrr;
+    uint32_t pa = 0xffff, pb = 0xffff, bsrr;
 
     /* Outputs are driven through the set/reset register: a write that sets
      * the speaker pin is the start of a pulse. */
@@ -155,20 +280,11 @@ static void gpio_sync(uint64_t now)
         pa &= ~m(PIN_ROT_A);
     if (!(rot_state & 2))
         pa &= ~m(PIN_ROT_B);
+    fdd_pins(&pa, &pb);
 
-    changed = emu_gpio[0].idr ^ pa;
     emu_gpio[0].idr = pa;
-
-    /* EXTI: both edges of the unmasked port-A lines raise an interrupt. */
-    pr = changed & emu_exti.imr
-        & ((pa & emu_exti.rtsr) | (~pa & emu_exti.ftsr));
-    if (pr) {
-        __sync_fetch_and_or(&emu_exti.pr, pr);
-        if (pr & 0x03e0)
-            emu_irqx_set_pending(23);
-        if (pr & 0xfc00)
-            emu_irqx_set_pending(40);
-    }
+    emu_gpio[1].idr = pb;
+    exti_sync();
 }
 
 /*
