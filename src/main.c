@@ -657,7 +657,8 @@ static void slot_from_short_slot(
     slot->attributes = short_slot->attributes;
     slot->firstCluster = short_slot->firstCluster;
     slot->size = short_slot->size;
-    slot->dir_sect = slot->dir_ptr = 0;
+    slot->dir_ptr = NULL;
+    slot->dir_sect = 0;
 }
 
 static void fatfs_to_short_slot(
@@ -690,7 +691,7 @@ void fatfs_from_slot(FIL *file, const struct slot *slot, BYTE mode)
     file->obj.objsize = slot->size;
     file->flag = mode;
     file->dir_sect = slot->dir_sect;
-    file->dir_ptr = (void *)slot->dir_ptr;
+    file->dir_ptr = slot->dir_ptr;
 }
 
 static void fatfs_to_slot(struct slot *slot, FIL *file, const char *name)
@@ -702,7 +703,7 @@ static void fatfs_to_slot(struct slot *slot, FIL *file, const char *name)
     slot->firstCluster = file->obj.sclust;
     slot->size = file->obj.objsize;
     slot->dir_sect = file->dir_sect;
-    slot->dir_ptr = (uint32_t)file->dir_ptr;
+    slot->dir_ptr = file->dir_ptr;
     snprintf(slot->name, sizeof(slot->name), "%s", name);
     if ((dot = strrchr(slot->name, '.')) != NULL) {
         snprintf(slot->type, sizeof(slot->type), "%s", dot+1);
@@ -822,7 +823,7 @@ static int native_read_and_sort_dir(void)
         ent->attr = fs->fp.fattrib;
         strcpy(ent->name, fs->fp.fname);
         ent = (struct native_dirent *)(
-            ((uint32_t)ent + sizeof(*ent) + strlen(ent->name) + 1 + 3) & ~3);
+            ((uintptr_t)ent + sizeof(*ent) + strlen(ent->name) + 1 + 3) & ~3);
     }
 
     if (ff_cfg.folder_sort == SORT_always)

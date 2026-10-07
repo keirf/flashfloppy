@@ -8,6 +8,12 @@ PYTHON := python3
 
 export ROOT := $(CURDIR)
 
+# Build products are placed in $(O)/out. Downloads are cached in $(O)/ext.
+# Specify O=<path> for an out-of-tree build.
+O ?= $(ROOT)
+OUT := $(abspath $(O))/out
+EXT := $(abspath $(O))/ext
+
 .PHONY: FORCE
 
 .DEFAULT_GOAL := all
@@ -51,16 +57,16 @@ all-%: FORCE prod-% debug-% logfile-% ;
 all: FORCE all-stm32f105 all-at32f435 apple2-bootloader-stm32f105;
 
 clean: FORCE
-	rm -rf out
+	rm -rf $(OUT)
 
 mrproper: FORCE clean
-	rm -rf ext
+	rm -rf $(EXT)
 
 out: FORCE
-	+mkdir -p out/$(mcu)/$(level)/$(target)
+	+mkdir -p $(OUT)/$(mcu)/$(level)/$(target)
 
 target: FORCE out
-	$(MAKE) -C out/$(mcu)/$(level)/$(target) -f $(ROOT)/Rules.mk target.bin target.hex target.dfu
+	$(MAKE) -C $(OUT)/$(mcu)/$(level)/$(target) -f $(ROOT)/Rules.mk target.bin target.hex target.dfu
 
 HXC_FF_URL := https://www.github.com/keirf/flashfloppy-hxc-file-selector
 HXC_FF_URL := $(HXC_FF_URL)/releases/download
@@ -70,25 +76,25 @@ _legacy_dist: PROJ := FF_Gotek
 _legacy_dist: FORCE
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/$(PROJ)-$(VER).upd \
-	  out/$(mcu)/$(level)/shugart/target.bin & \
+	  $(OUT)/$(mcu)/$(level)/shugart/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/bootloader/$(PROJ)-bootloader-$(VER).upd \
-	  out/$(mcu)/$(level)/bl_update/target.bin & \
+	  $(OUT)/$(mcu)/$(level)/bl_update/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/io-test/$(PROJ)-io-test-$(VER).upd \
-	  out/$(mcu)/$(level)/io_test/target.bin & \
+	  $(OUT)/$(mcu)/$(level)/io_test/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/logfile/$(PROJ)-logfile-$(VER).upd \
-	  out/$(mcu)/logfile/shugart/target.bin & \
+	  $(OUT)/$(mcu)/logfile/shugart/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/apple2/$(PROJ)-apple2-$(VER).upd \
-	  out/$(mcu)/$(level)/apple2/target.bin & \
+	  $(OUT)/$(mcu)/$(level)/apple2/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/apple2/logfile/$(PROJ)-apple2-logfile-$(VER).upd \
-	  out/$(mcu)/logfile/apple2/target.bin & \
+	  $(OUT)/$(mcu)/logfile/apple2/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/quickdisk/$(PROJ)-quickdisk-$(VER).upd \
-	  out/$(mcu)/$(level)/quickdisk/target.bin & \
+	  $(OUT)/$(mcu)/$(level)/quickdisk/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/quickdisk/logfile/$(PROJ)-quickdisk-logfile-$(VER).upd \
 	  out/$(mcu)/logfile/quickdisk/target.bin & \
@@ -99,30 +105,30 @@ _legacy_dist: FORCE
 	wait
 
 _dist: FORCE
-	cd out/$(mcu)/$(level)/shugart; \
+	cd $(OUT)/$(mcu)/$(level)/shugart; \
 	  cp -a target.dfu $(t)/dfu/$(PROJ)-$(n)-$(VER).dfu; \
 	  cp -a target.hex $(t)/hex/$(PROJ)-$(n)-$(VER).hex
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/$(PROJ)-$(VER).upd \
-	  out/$(mcu)/$(level)/shugart/target.bin $(mcu) & \
+	  $(OUT)/$(mcu)/$(level)/shugart/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/bootloader/$(PROJ)-bootloader-$(VER).upd \
-	  out/$(mcu)/$(level)/bl_update/target.bin $(mcu) & \
+	  $(OUT)/$(mcu)/$(level)/bl_update/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/io-test/$(PROJ)-io-test-$(VER).upd \
-	  out/$(mcu)/$(level)/io_test/target.bin $(mcu) & \
+	  $(OUT)/$(mcu)/$(level)/io_test/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/logfile/$(PROJ)-logfile-$(VER).upd \
-	  out/$(mcu)/logfile/shugart/target.bin $(mcu) & \
+	  $(OUT)/$(mcu)/logfile/shugart/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/apple2/$(PROJ)-apple2-$(VER).upd \
-	  out/$(mcu)/$(level)/apple2/target.bin $(mcu) & \
+	  $(OUT)/$(mcu)/$(level)/apple2/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/apple2/logfile/$(PROJ)-apple2-logfile-$(VER).upd \
-	  out/$(mcu)/logfile/apple2/target.bin $(mcu) & \
+	  $(OUT)/$(mcu)/logfile/apple2/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/quickdisk/$(PROJ)-quickdisk-$(VER).upd \
-	  out/$(mcu)/$(level)/quickdisk/target.bin $(mcu) & \
+	  $(OUT)/$(mcu)/$(level)/quickdisk/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/quickdisk/logfile/$(PROJ)-quickdisk-logfile-$(VER).upd \
 	  out/$(mcu)/logfile/quickdisk/target.bin $(mcu) & \
@@ -140,14 +146,14 @@ _dist_apple2_at2_bootloader: f := $(t)/alt/apple2/at2-bootloader
 _dist_apple2_at2_bootloader: n := $(PROJ)-apple2-at2-bootloader-$(VER)
 _dist_apple2_at2_bootloader: FORCE
 	mkdir -p $(f)
-	cd out/stm32f105/prod/apple2-bootloader; \
+	cd $(OUT)/stm32f105/prod/apple2-bootloader; \
 	  cp -a target.dfu $(f)/$(n).dfu; \
 	  cp -a target.hex $(f)/$(n).hex
 
 dist: level := prod
-dist: t := $(ROOT)/out/$(PROJ)-$(VER)
+dist: t := $(OUT)/$(PROJ)-$(VER)
 dist: FORCE all
-	rm -rf out/$(PROJ)-*
+	rm -rf $(OUT)/$(PROJ)-*
 	mkdir -p $(t)/hex
 	mkdir -p $(t)/dfu
 	mkdir -p $(t)/alt/bootloader
@@ -167,19 +173,19 @@ dist: FORCE all
 	cp -a examples $(t)/
 	# Clive Drive is particularly fussy about QD timings.
 	$(PYTHON) scripts/mk_qd.py --window=6.4 --total=7.5 --round $(t)/examples/Host/Sinclair_ZX_Spectrum/Clive_Drive/CliveDrive_Blank.qd
-	[ -e ext/HxC_Compat_Mode-$(HXC_FF_VER).zip ] || \
-	(mkdir -p ext ; cd ext ; wget -q --show-progress $(HXC_FF_URL)/$(HXC_FF_VER)/HxC_Compat_Mode-$(HXC_FF_VER).zip ; rm -rf index.html)
-	(cd $(t) && unzip -q ../../ext/HxC_Compat_Mode-$(HXC_FF_VER).zip)
+	[ -e $(EXT)/HxC_Compat_Mode-$(HXC_FF_VER).zip ] || \
+	(mkdir -p $(EXT) ; cd $(EXT) ; wget -q --show-progress $(HXC_FF_URL)/$(HXC_FF_VER)/HxC_Compat_Mode-$(HXC_FF_VER).zip ; rm -rf index.html)
+	(cd $(t) && unzip -q $(EXT)/HxC_Compat_Mode-$(HXC_FF_VER).zip)
 	mkdir -p $(t)/scripts
 	cp -a scripts/edsk* $(t)/scripts/
 	cp -a scripts/mk_hfe.py $(t)/scripts/
-	cd out && zip -r $(PROJ)-$(VER).zip $(PROJ)-$(VER)
+	cd $(OUT) && zip -r $(PROJ)-$(VER).zip $(PROJ)-$(VER)
 
 BAUD=115200
 DEV=/dev/ttyUSB0
 SUDO=sudo
 STM32FLASH=stm32flash
-T=out/$(target)/target.hex
+T=$(OUT)/$(target)/target.hex
 
 ocd: FORCE all
 	$(PYTHON) scripts/openocd/flash.py $(T)

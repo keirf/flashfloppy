@@ -30,7 +30,7 @@ void *memset(void *s, int c, size_t n)
 
     /* Large aligned memset? */
     size_t n32 = n & ~31;
-    if (n32 && !((uint32_t)p & 3)) {
+    if (n32 && !((uintptr_t)p & 3)) {
         memset_fast(p, c, n32);
         p += n32;
         n &= 31;
@@ -49,7 +49,7 @@ void *memcpy(void *dest, const void *src, size_t n)
 
     /* Large aligned copy? */
     size_t n32 = n & ~31;
-    if (n32 && !(((uint32_t)p | (uint32_t)q) & 3)) {
+    if (n32 && !(((uintptr_t)p | (uintptr_t)q) & 3)) {
         memcpy_fast(p, q, n32);
         p += n32;
         q += n32;
@@ -61,6 +61,8 @@ void *memcpy(void *dest, const void *src, size_t n)
         *p++ = *q++;
     return dest;
 }
+
+#if defined(__arm__)
 
 __attribute__((naked))
 void memcpy_fast(void *dest, const void *src, size_t n) {
@@ -96,6 +98,25 @@ void memset_fast(void *s, int c, size_t n) {
         "    bx    lr\n"
         );
 }
+
+#else
+
+void memcpy_fast(void *dest, const void *src, size_t n)
+{
+    uint32_t *p = dest;
+    const uint32_t *q = src;
+    for (n /= 4; n != 0; n--)
+        *p++ = *q++;
+}
+
+void memset_fast(void *s, int c, size_t n)
+{
+    uint32_t *p = s, x = (uint8_t)c * 0x01010101u;
+    for (n /= 4; n != 0; n--)
+        *p++ = x;
+}
+
+#endif
 
 void *memmove(void *dest, const void *src, size_t n)
 {

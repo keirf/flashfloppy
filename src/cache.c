@@ -34,8 +34,8 @@ struct cache *cache_init(void *start, void *end, unsigned int item_sz)
     struct cache_ent *cent;
 
     /* Cache boundaries are four-byte aligned. */
-    s = (uint8_t *)(((uint32_t)start + 3) & ~3);
-    e = (uint8_t *)((uint32_t)end & ~3);
+    s = (uint8_t *)(((uintptr_t)start + 3) & ~3);
+    e = (uint8_t *)((uintptr_t)end & ~3);
 
     nitm = ((e - s) - (int)sizeof(*c)) / (int)(sizeof(*cent) + item_sz);
     if (nitm < 8) {
@@ -56,7 +56,7 @@ struct cache *cache_init(void *start, void *end, unsigned int item_sz)
     for (i = 0; i < nitm; i++) {
         list_insert_tail(&c->lru, &cent->lru);
         list_init(&cent->hash);
-        cent = (struct cache_ent *)((uint32_t)cent + sizeof(*cent) + item_sz);
+        cent = (struct cache_ent *)((uintptr_t)cent + sizeof(*cent) + item_sz);
     }
 
     printk("Cache %u items\n", nitm);
