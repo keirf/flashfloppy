@@ -1,7 +1,7 @@
 /*
  * fatimg.c
  *
- * The emulated USB flash drive. Made from a directory of the host, it is a
+ * The emulated USB drive. Made from a directory of the host, it is a
  * FAT32 volume synthesized from the files: only the file system structures
  * are built in memory, and file contents are read from the host files when
  * the firmware asks for their sectors. Made from an image file or a disk, it

@@ -3,7 +3,7 @@
  *
  * Runs the FlashFloppy user interface in a terminal, with no Gotek hardware:
  * the firmware's own code draws on an emulated OLED display and reads an
- * emulated USB flash drive, while the keyboard stands in for the buttons and
+ * emulated USB drive, while the keyboard stands in for the buttons and
  * the rotary encoder. Nothing is connected to the floppy interface.
  *
  * This is free and unencumbered software released into the public domain.
@@ -191,7 +191,7 @@ static void usage(FILE *f)
             "\n"
             "Runs the FlashFloppy user interface in the terminal, with no "
             "Gotek hardware.\n"
-            "The USB flash drive holds the files of <directory>, by default "
+            "The USB drive holds the files of <directory>, by default "
             "the current\n"
             "one, or is read from an image file or a disk such as %s.\n"
             "Whatever the firmware writes to it never reaches these.\n"
