@@ -63,7 +63,7 @@ void tui_stop_fatal(void)
  * black, and the space beside it keeps the terminal's own background. */
 enum {
     CP_text = 1,  /* light gray on blue: labels, log, frames */
-    CP_value,     /* yellow on blue: values, key names */
+    CP_value,     /* yellow on blue: values */
     CP_display,   /* the color of the settings on black: the OLED pixels */
     CP_dframe,    /* light gray on black: the frame around the OLED */
     CP_path,      /* light cyan on blue */
@@ -71,9 +71,9 @@ enum {
     CP_hotkey,    /* dark red on light gray: hotkeys in the status line */
     CP_warn,      /* bright white on red */
     CP_good,      /* bright green on blue */
-    CP_ctl_off,   /* dark blue on light gray: a control at rest */
+    CP_ctl_off,   /* bright red on blue: a control at rest */
     CP_ctl_latch, /* dark red on light gray: a latchable button */
-    CP_ctl_on,    /* black on bright yellow: a control in use */
+    CP_ctl_on,    /* dark red on bright yellow: a control or key in use */
     CP_crop,      /* bright green on blue: a line is cut short */
     CP_note,      /* dark red on black: a remark in the OLED's frame */
     CP_focus,     /* bright white on blue: the frame of the focused window */
@@ -83,18 +83,18 @@ enum {
     CP_button_on, /* bright white on green: the highlighted button */
     CP_shadow,    /* dark gray on black: what a dialog's shadow falls on */
     CP_dark,      /* dark gray on blue: something at rest, use DARK_GRAY */
-    CP_bad,       /* red on blue: bright with BRIGHT(), for "Ejected" */
     CP_off,       /* light gray on dark gray: a window with nothing to show */
     CP_scroll,    /* blue on cyan: a scroll bar */
     CP_raw,       /* bright magenta on blue: flash bytes FF.CFG cannot say */
     CP_bar_crop,  /* bright green on light gray: the status line is cut */
-    CP_dlg_hot,   /* bright yellow on light gray: a hotkey in a dialog */
+    CP_dlg_hot,   /* bright red on light gray: a hotkey in a dialog */
     CP_cluster,   /* black on cyan: radio buttons and check boxes */
     CP_cluster_hi, /* bright white on cyan: the one of them in focus */
-    CP_cluster_hot, /* bright yellow on cyan: a hotkey among them */
+    CP_cluster_hot, /* bright red on cyan: a hotkey among them */
     CP_input,     /* bright white on blue: an input line */
     CP_button_def, /* bright cyan on green: the default button */
     CP_signal,    /* black on dark yellow: an active signal of the host */
+    CP_key,       /* red on blue: key names, bright, or dark where dimmed */
     CP_nr
 };
 
@@ -252,7 +252,9 @@ static void frame(int y, int x, int w, int h, const char *title,
         0x250c, 0x2510, 0x2514, 0x2518, 0x2500, 0x2502 };
     static const wchar_t dual[6] = {
         0x2554, 0x2557, 0x255a, 0x255d, 0x2550, 0x2551 };
-    const wchar_t *box = (PAIR_NUMBER(attr) == CP_focus) ? dual : single;
+    /* The focused window's frame, in its bright twin or not. */
+    const wchar_t *box = (PAIR_NUMBER(attr) % CP_BRIGHT == CP_focus)
+        ? dual : single;
     wchar_t line[512];
     int i, tw = strlen(title) + 2;
 
@@ -483,13 +485,29 @@ static void left_path(int y, int x, int w, const char *path)
     put_wide(y, x, BRIGHT(CP_path), ws + n - w, w);
 }
 
+/* A piece of a line at (@y,@x) in @attr, which ends at column @end at the
+ * latest; the column after it. */
+static int piece(int y, int x, int end, attr_t attr, const char *fmt, ...)
+{
+    char s[256];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(s, sizeof(s), fmt, ap);
+    va_end(ap);
+
+    put(y, x, end - x, attr, "%s", s);
+    return x + strlen(s);
+}
+
 static void draw_status(int y, int x, int w)
 {
     struct usb_info usb;
-    char path[600], line[128];
+    char path[600];
     unsigned int cyl, side;
     const char *image;
-    int sel;
+    attr_t gray = COLOR_PAIR(CP_text), green = BRIGHT(CP_good);
+    int sel, c;
 
     frame(y, x, w, PANE_ROWS + 2, "Status", COLOR_PAIR(CP_text),
           COLOR_PAIR(CP_text));
@@ -507,42 +525,53 @@ static void draw_status(int y, int x, int w)
     field(&y, x, w, "Board", 0, "%s", emu_board_name());
     y++;
 
-    /* The drive as the firmware sees it. */
+    /* The drive as the firmware sees it: values and states in green, words
+     * and punctuation in gray, as for the USB drive below. */
     emu_fdd_status(&cyl, &side, &sel, &image);
-    if (FFEMU_APPLE2)
-        field(&y, x, w, "FDD", 0, "Cyl %u, %s", cyl,
-              sel ? "enabled" : "not enabled");
-    else
-        field(&y, x, w, "FDD", 0, "Cyl %u, side %u, %s", cyl, side,
-              sel ? "selected" : "not selected");
+    put(y, x, w, 0, "FDD");
+    c = piece(y, x + 10, x + w, gray, "Cyl ");
+    c = piece(y, c, x + w, green, "%u", cyl);
+    if (!FFEMU_APPLE2) {
+        c = piece(y, c, x + w, gray, ", side ");
+        c = piece(y, c, x + w, green, "%u", side);
+    }
+    c = piece(y, c, x + w, gray, ", ");
+    piece(y++, c, x + w, green, "%s%s", sel ? "" : "not ",
+          FFEMU_APPLE2 ? "enabled" : "selected");
     field(&y, x, w, "Floppy", image ? BRIGHT(CP_path) : DARK_GRAY, "%s",
           image ? image : "None");
     y++;
 
     usb_get_info(&usb);
     if (usb.inserted) {
-        /* The FF.CFG that the firmware reads follows, as a path. */
         char size[32];
-        int n = (usb.kind == USB_dir)
-            ? snprintf(line, sizeof(line),
-                       "%u file%s, %u dir%s%s%s", usb.nr_files,
-                       (usb.nr_files == 1) ? "" : "s", usb.nr_dirs,
-                       (usb.nr_dirs == 1) ? "" : "s",
-                       (usb.nr_skipped || usb.nr_case_dups)
-                       ? ", some left out" : "",
-                       usb.ff_cfg[0] ? "," : "")
-            : snprintf(line, sizeof(line), "%s %s%s",
-                       size_text(usb.image_bytes, size, sizeof(size)),
-                       (usb.kind == USB_image) ? "image" : "disk",
-                       usb.ff_cfg[0] ? "," : "");
-        field(&y, x, w, "USB drive", BRIGHT(CP_good), "%s",
-              line);
-        if (usb.ff_cfg[0] && (10 + n + 1 < w))
-            put(y - 1, x + 10 + n + 1, w - 10 - n - 1,
-                BRIGHT(CP_path), "%s", usb.ff_cfg);
+        put(y, x, w, 0, "USB drive");
+        c = x + 10;
+        if (usb.kind == USB_dir) {
+            c = piece(y, c, x + w, green, "%u", usb.nr_files);
+            c = piece(y, c, x + w, gray, " file%s, ",
+                      (usb.nr_files == 1) ? "" : "s");
+            c = piece(y, c, x + w, green, "%u", usb.nr_dirs);
+            c = piece(y, c, x + w, gray, " dir%s",
+                      (usb.nr_dirs == 1) ? "" : "s");
+            if (usb.nr_skipped || usb.nr_case_dups) {
+                c = piece(y, c, x + w, gray, ", ");
+                c = piece(y, c, x + w, green, "some left out");
+            }
+        } else {
+            c = piece(y, c, x + w, green, "%s",
+                      size_text(usb.image_bytes, size, sizeof(size)));
+            c = piece(y, c, x + w, gray, " %s",
+                      (usb.kind == USB_image) ? "image" : "disk");
+        }
+        /* The FF.CFG that the firmware reads follows, as a path. */
+        if (usb.ff_cfg[0] && (c + 3 < x + w)) {
+            c = piece(y, c, x + w, gray, ", ");
+            piece(y, c, x + w, BRIGHT(CP_path), "%s", usb.ff_cfg);
+        }
+        y++;
     } else {
-        field(&y, x, w, "USB drive", BRIGHT(CP_bad),
-              "Ejected");
+        field(&y, x, w, "USB drive", DARK_GRAY, "Ejected");
     }
     left_path(y++, x, w, tilde(usb_path_name, path, sizeof(path)));
     /* Why the drive could not be inserted, if it could not, in place of the
@@ -620,11 +649,19 @@ static int flash_top;
 /* The keys that page a window at (@x) of @w, at the right end of its bottom
  * frame @y: PgUp/PgDn, after modifier @mod and a '+' unless it is NULL.
  * Returns the columns taken, or 0 if they do not fit. */
-static int page_keys(int y, int x, int w, bool dim, const char *mod)
+/* The paging keys of the Flash mem window, and of the FF.CFG window, which
+ * takes them with Ctrl, pressed a moment ago, until these times. */
+static uint64_t flash_up_lit, flash_down_lit, ff_cfg_up_lit, ff_cfg_down_lit;
+
+static int page_keys(int y, int x, int w, bool dim, uint64_t up_lit,
+                     uint64_t down_lit, const char *mod)
 {
     int m = mod ? strlen(mod) : 0, n = 11 + (mod ? m + 1 : 0);
     int sx = x + w - 2 - n;
-    attr_t key = dim ? COLOR_PAIR(CP_value) : BRIGHT(CP_value);
+    uint64_t now = emu_time_ns();
+    bool up = now < up_lit, down = now < down_lit;
+    attr_t key = dim ? COLOR_PAIR(CP_key) : BRIGHT(CP_key);
+    attr_t on = COLOR_PAIR(CP_ctl_on);
     attr_t text = dim ? DARK_GRAY : COLOR_PAIR(CP_text);
 
     if (sx <= x + 2)
@@ -632,13 +669,13 @@ static int page_keys(int y, int x, int w, bool dim, const char *mod)
     pane_right = -1;
     put(y, sx, 1, text, " ");
     if (mod != NULL) {
-        put(y, sx + 1, m, key, "%s", mod);
+        put(y, sx + 1, m, (up || down) ? on : key, "%s", mod);
         put(y, sx + 1 + m, 1, text, "+");
         sx += m + 1;
     }
-    put(y, sx + 1, 4, key, "PgUp");
+    put(y, sx + 1, 4, up ? on : key, "PgUp");
     put(y, sx + 5, 1, text, "/");
-    put(y, sx + 6, 4, key, "PgDn");
+    put(y, sx + 6, 4, down ? on : key, "PgDn");
     put(y, sx + 10, 1, text, " ");
     return n;
 }
@@ -694,7 +731,8 @@ static void draw_flash(int y, int x, int w)
                  flash_top + PANE_ROWS < nr_lines);
 
     /* The keys that page, in the bottom right corner. */
-    page_keys(y + PANE_ROWS + 1, x, w, false, NULL);
+    page_keys(y + PANE_ROWS + 1, x, w, false, flash_up_lit, flash_down_lit,
+              NULL);
 }
 
 /*
@@ -746,7 +784,7 @@ static void usb_port(int y, int x, int w)
     if (!usb.inserted)
         attr = DARK_GRAY;
     else if (access_at && (now - access_at < USB_ACCESS_SHOWN_NS))
-        attr = BRIGHT(CP_value);
+        attr = COLOR_PAIR(CP_value);
     else
         attr = COLOR_PAIR(CP_text);
 
@@ -760,7 +798,7 @@ static void usb_port(int y, int x, int w)
     if (usb.inserted)
         put(y + 3, x, w, BRIGHT(CP_good), "Inserted");
     else
-        put(y + 3, x, w, BRIGHT(CP_bad), "Ejected");
+        put(y + 3, x, w, DARK_GRAY, "Ejected");
 }
 
 static void picture(int y, int x, int w)
@@ -773,13 +811,18 @@ static void picture(int y, int x, int w)
 #define BTN(active) (((active) || !ui_latched()) ? CTL(active) \
                      : COLOR_PAIR(CP_ctl_latch))
 
-    put(y, x + 16, w - 16, CTL(r & UI_ROTARY_ccw), " ^ ");
-    put(y + 1, x + 2, w - 2, BTN(b & EMU_B_LEFT), " < ");
-    put(y + 1, x + 8, w - 8, BTN(b & EMU_B_RIGHT), " > ");
+    /* The buttons and the knob in parentheses, round as on the Gotek; the
+     * arrows right of the knob's middle, as its rim moves there: up when
+     * turned anticlockwise, down when clockwise. */
+    put(y, x + 17, w - 17, CTL(r & UI_ROTARY_ccw), "^");
+    put(y + 1, x + 2, w - 2, 0, "( )");
+    put(y + 1, x + 3, w - 3, BTN(b & EMU_B_LEFT), "<");
+    put(y + 1, x + 8, w - 8, 0, "( )");
+    put(y + 1, x + 9, w - 9, BTN(b & EMU_B_RIGHT), ">");
     put(y + 1, x + 14, w - 14, 0, "(");
     put(y + 1, x + 15, w - 15, BTN(b & EMU_B_SELECT), "Ent");
     put(y + 1, x + 18, w - 18, 0, ")");
-    put(y + 2, x + 16, w - 16, CTL(r & UI_ROTARY_cw), " v ");
+    put(y + 2, x + 17, w - 17, CTL(r & UI_ROTARY_cw), "v");
 #undef BTN
 #undef CTL
 
@@ -827,14 +870,29 @@ static int keys_width(void)
     return w + 2;
 }
 
+/* The keys pressed a moment ago, lit as the latch key is while its mode
+ * lasts: those listed in the Controls window, and those of its FDD rows. */
+static uint64_t key_lit_until[KEY_ACT_nr], fdd_lit_until[FDD_ACT_nr];
+
+static uint64_t lit_end(void)
+{
+    return emu_time_ns() + (uint64_t)config.hold_ms * 1000000u;
+}
+
+static attr_t key_attr(bool lit)
+{
+    return lit ? COLOR_PAIR(CP_ctl_on) : BRIGHT(CP_key);
+}
+
 /* The signals of the host computer on the floppy interface, each lit while
  * active as on the schematics, whatever its voltage, with the keys that
  * change them below, at (@y,@x) in @w columns. */
 static void fdd_panel(int y, int x, int w)
 {
 #define SIGNAL(on) (COLOR_PAIR((on) ? CP_signal : CP_off))
+#define KEY(act) key_attr(now < fdd_lit_until[act])
     unsigned int in = emu_in_fdd;
-    attr_t key = BRIGHT(CP_value);
+    uint64_t now = emu_time_ns();
     char ph[5];
     int i, c;
 
@@ -855,26 +913,30 @@ static void fdd_panel(int y, int x, int w)
         }
         put(y, x + 35, w - 35, BRIGHT(CP_good), "%s",
             ui_fdd_phase_text(ui_fdd_phases(), ph));
-        put(y + 1, x + 10, w - 10, key, "[");
-        put(y + 1, x + 15, w - 15, key, "-");
+        put(y + 1, x + 10, w - 10, KEY(FDD_ACT_sel), "[");
+        put(y + 1, x + 15, w - 15, KEY(FDD_ACT_phase_out), "-");
         put(y + 1, x + 16, w - 16, 0, "/");
-        put(y + 1, x + 17, w - 17, key, "+");
+        put(y + 1, x + 17, w - 17, KEY(FDD_ACT_phase_in), "+");
         put(y + 1, x + 19, w - 19, 0, "Step");
-        put(y + 1, x + 27, w - 27, key, "\\");
+        put(y + 1, x + 27, w - 27, KEY(FDD_ACT_release), "\\");
         put(y + 1, x + 29, w - 29, 0, "Release");
     } else {
         static const char * const name[5] = {
             "D_S", "M_O", "DIR", "STP", "SID" };
         static const char * const keys[5] = { "[", "]", "-", "+", "\\" };
+        static const int acts[5] = {
+            FDD_ACT_sel, FDD_ACT_motor, FDD_ACT_dir, FDD_ACT_step,
+            FDD_ACT_side };
         bool on[5] = {
             in & EMU_FDD_SEL, in & EMU_FDD_MOTOR, in & EMU_FDD_DIR,
             ui_fdd_stepping(), in & EMU_FDD_SIDE };
         for (i = 0; i < 5; i++) {
             c = 9 + 6 * i;
             put(y, x + c, w - c, SIGNAL(on[i]), "%s", name[i]);
-            put(y + 1, x + c + 1, w - c - 1, key, "%s", keys[i]);
+            put(y + 1, x + c + 1, w - c - 1, KEY(acts[i]), "%s", keys[i]);
         }
     }
+#undef KEY
 #undef SIGNAL
 }
 
@@ -897,9 +959,9 @@ static void draw_keys(int y, int x, int w)
     /* The latch key lights up while its mode lasts. */
     for (i = 0; i < ARRAY_SIZE(device_keys); i++) {
         int act = device_keys[i].act;
-        bool lit = (act == KEY_ACT_latch) && ui_latched();
-        put(y, x, w, lit ? COLOR_PAIR(CP_ctl_on)
-            : BRIGHT(CP_value), "%s", key_label[act]);
+        bool lit = ((act == KEY_ACT_latch) && ui_latched())
+            || (emu_time_ns() < key_lit_until[act]);
+        put(y, x, w, key_attr(lit), "%s", key_label[act]);
         put(y++, x + col + 1, w - col - 1, 0, "%s", device_keys[i].what);
     }
 }
@@ -1186,7 +1248,8 @@ static void draw_ff_cfg(int y, int x, int w, int h)
 
     /* The arrows that say there is more take the end of the bottom frame. */
     if (nr_lines > rows)
-        keys = page_keys(y + h - 1, x, w, !usb.inserted, "Ctrl");
+        keys = page_keys(y + h - 1, x, w, !usb.inserted, ff_cfg_up_lit,
+                         ff_cfg_down_lit, "Ctrl");
     path_label(y + h - 1, x, keys ? w - keys - 1 : w, gray, path);
     scroll_marks(y, x, h, !usb.inserted, ff_cfg_top > 0,
                  ff_cfg_top + rows < nr_lines);
@@ -2390,12 +2453,15 @@ static void handle_key(int key)
     if ((key == key_ctrl_pgup) || (key == key_ctrl_pgdn)) {
         int step = (ff_cfg_rows > 1) ? ff_cfg_rows - 1 : 1;
         ff_cfg_top += (key == key_ctrl_pgdn) ? step : -step;
+        *((key == key_ctrl_pgdn) ? &ff_cfg_down_lit : &ff_cfg_up_lit) =
+            lit_end();
         return;
     }
 
     if ((key == KEY_PPAGE) || (key == KEY_NPAGE)) {
         /* A page less a line, which stays in view. */
         flash_top += (key == KEY_NPAGE) ? PANE_ROWS - 1 : 1 - PANE_ROWS;
+        *((key == KEY_NPAGE) ? &flash_down_lit : &flash_up_lit) = lit_end();
         return;
     }
 
@@ -2413,6 +2479,8 @@ static void handle_key(int key)
 
     act = fdd_key(key);
     if (act >= 0) {
+        if (ui_fdd_has(act))
+            fdd_lit_until[act] = lit_end();
         ui_fdd_action(act);
         return;
     }
@@ -2420,6 +2488,7 @@ static void handle_key(int key)
     for (i = 0; i < KEY_ACT_nr; i++) {
         if (key != key_code[i])
             continue;
+        key_lit_until[i] = lit_end();
         if (i == KEY_ACT_quit) {
             dialog = DLG_quit;
             dialog_button = 0;
@@ -2467,10 +2536,10 @@ static void *tui_thread(void *unused)
         init_pair(CP_hotkey, COLOR_RED, COLOR_WHITE);
         init_pair(CP_warn, COLOR_WHITE, COLOR_RED);
         init_pair(CP_good, COLOR_GREEN, COLOR_BLUE);
-        init_pair(CP_ctl_off, COLOR_BLUE, COLOR_WHITE);
+        init_pair(CP_ctl_off, (COLORS >= 16) ? 9 : COLOR_RED, COLOR_BLUE);
         init_pair(CP_ctl_latch, COLOR_RED, COLOR_WHITE);
         /* Bright yellow is color 11 where the terminal has 16 colors. */
-        init_pair(CP_ctl_on, COLOR_BLACK, (COLORS >= 16) ? 11 : COLOR_YELLOW);
+        init_pair(CP_ctl_on, COLOR_RED, (COLORS >= 16) ? 11 : COLOR_YELLOW);
         init_pair(CP_crop, COLOR_GREEN, COLOR_BLUE);
         init_pair(CP_note, COLOR_RED, COLOR_BLACK);
         init_pair(CP_focus, COLOR_WHITE, COLOR_BLUE);
@@ -2480,18 +2549,18 @@ static void *tui_thread(void *unused)
         init_pair(CP_button_on, COLOR_WHITE, COLOR_GREEN);
         init_pair(CP_shadow, COLOR_BLACK, COLOR_BLACK);
         init_pair(CP_dark, (COLORS >= 16) ? 8 : COLOR_BLACK, COLOR_BLUE);
-        init_pair(CP_bad, COLOR_RED, COLOR_BLUE);
         init_pair(CP_off, COLOR_WHITE, (COLORS >= 16) ? 8 : COLOR_BLACK);
         init_pair(CP_scroll, COLOR_BLUE, COLOR_CYAN);
         init_pair(CP_raw, COLOR_MAGENTA, COLOR_BLUE);
         init_pair(CP_bar_crop, COLOR_GREEN, COLOR_WHITE);
-        init_pair(CP_dlg_hot, COLOR_YELLOW, COLOR_WHITE);
+        init_pair(CP_dlg_hot, COLOR_RED, COLOR_WHITE);
         init_pair(CP_cluster, COLOR_BLACK, COLOR_CYAN);
         init_pair(CP_cluster_hi, COLOR_WHITE, COLOR_CYAN);
-        init_pair(CP_cluster_hot, COLOR_YELLOW, COLOR_CYAN);
+        init_pair(CP_cluster_hot, COLOR_RED, COLOR_CYAN);
         init_pair(CP_input, COLOR_WHITE, COLOR_BLUE);
         init_pair(CP_button_def, COLOR_CYAN, COLOR_GREEN);
         init_pair(CP_signal, COLOR_BLACK, COLOR_YELLOW);
+        init_pair(CP_key, COLOR_RED, COLOR_BLUE);
         for (i = 1; i < CP_nr; i++)
             bright_twin(i);
     }
