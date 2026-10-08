@@ -10,8 +10,6 @@
 #ifndef FFEMU_HOST_H
 #define FFEMU_HOST_H
 
-#define FFEMU_VERSION "1.0"
-
 #include <stdbool.h>
 #include "emu.h"
 
