@@ -71,9 +71,17 @@ const struct image_type image_type[] = {
 #elif TARGET == TARGET_apple2
 
 extern const struct image_handler hfe_image_handler;
+extern const struct image_handler nib_image_handler;
+extern const struct image_handler nic_image_handler;
+extern const struct image_handler a2dsk_image_handler;
 
 const struct image_type image_type[] = {
     { "hfe", &hfe_image_handler },
+    { "nib", &nib_image_handler },
+    { "nic", &nic_image_handler },
+    { "dsk", &a2dsk_image_handler },
+    { "do", &a2dsk_image_handler },
+    { "po", &a2dsk_image_handler },
     { "", NULL }
 };
 
@@ -213,8 +221,18 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
-    if (try_handler(im, slot, cltbl, &hfe_image_handler))
-        return;
+    char ext[sizeof(slot->type)+1];
+    const struct image_type *type;
+
+    /* Extract filename extension (if available). */
+    memcpy(ext, slot->type, sizeof(slot->type));
+    ext[sizeof(slot->type)] = '\0';
+
+    /* Apple2 image types are distinguished by extension alone. */
+    for (type = &image_type[0]; type->handler != NULL; type++)
+        if (!strcmp(ext, type->ext)
+            && try_handler(im, slot, cltbl, type->handler))
+            return;
 
     /* No handler found: bad image. */
     F_die(FR_BAD_IMAGE);

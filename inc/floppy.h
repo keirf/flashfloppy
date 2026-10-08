@@ -134,6 +134,21 @@ struct dsk_image {
     uint8_t rev;
 };
 
+struct apple2_image {
+    uint32_t trk_off;
+    uint16_t trk_pos;
+    uint16_t trk_len; /* bytes per track in the file */
+    bool_t nic; /* streamed by the sector, as .nic blocks */
+    bool_t dsk; /* sectors of 256 bytes, made into .nic blocks */
+    const uint8_t *file_sec; /* the file's sector for each physical one */
+    struct {
+        uint32_t start; /* stream bit where the write began */
+        uint16_t nr; /* nibbles decoded so far */
+        uint8_t acc, nbits; /* the nibble being decoded */
+        bool_t lost; /* more nibbles than the staging buffer holds */
+    } write;
+};
+
 struct directaccess {
     struct da_status_sector dass;
     int32_t decode_pos;
@@ -202,6 +217,7 @@ struct image {
         struct qd_image qd;
         struct img_image img;
         struct dsk_image dsk;
+        struct apple2_image a2;
         struct directaccess da;
     };
 
