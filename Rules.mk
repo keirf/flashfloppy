@@ -56,6 +56,12 @@ $(level) := y
 
 FLAGS += $(MCU_FLAG) $(TARGET_FLAG) $(LEVEL_FLAG)
 
+# fw307=y|n overrides the default support of the Apple2 phases' wiring of
+# Gotek firmware 307 (APPLE2_FW307 in src/gotek/floppy.c).
+ifneq ($(fw307),)
+FLAGS += -DAPPLE2_FW307=$(if $(filter y,$(fw307)),1,0)
+endif
+
 FLAGS += -MMD -MF .$(@F).d
 DEPS = .*.d
 

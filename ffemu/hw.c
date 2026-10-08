@@ -209,13 +209,18 @@ static void fdd_pins(uint32_t *pa, uint32_t *pb)
     if (in & EMU_FDD_SEL)
         *pa &= ~m(PA_SEL0);
     if (emu_fdd_type == EMU_FDD_TYPE_apple2) {
-        /* The stepper phases, unlike the drive enable, are active high. */
+        /* The stepper phases, unlike the drive enable, are active high.
+         * Phase 1 goes to PA9 and to pin 32, SIDE, alike: the wiring of a
+         * cable made for Oleg Odintsov's Gotek firmware 307 (gotek-sa390 at
+         * https://svn.code.sf.net/p/agat-hardware/code) as well. */
         *pa &= ~(m(PA_PHA0) | m(PA_PHA1) | m(PA_STEP));
-        *pb &= ~m(PB_DIR);
+        *pb &= ~(m(PB_DIR) | m(PB_SIDE));
         if (in & (EMU_FDD_PH0 << 0))
             *pa |= m(PA_PHA0);
-        if (in & (EMU_FDD_PH0 << 1))
+        if (in & (EMU_FDD_PH0 << 1)) {
             *pa |= m(PA_PHA1);
+            *pb |= m(PB_SIDE);
+        }
         if (in & (EMU_FDD_PH0 << 2))
             *pb |= m(PB_DIR);
         if (in & (EMU_FDD_PH0 << 3))

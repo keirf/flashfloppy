@@ -209,6 +209,15 @@ delay. The type is kept in the settings as `fdd-type`. In `ffemu` and
 `ffemu-apple2` the firmware has no such choice, so there is no dialog, and the
 type is always Step/Dir or always Apple2.
 
+The Apple2 type drives the phases as a "universal" cable does, one that serves
+the stock Apple2 firmware, Oleg Odintsov's Gotek firmware 307 for the Agat (the
+gotek-sa390 project of https://svn.code.sf.net/p/agat-hardware/code) and this
+one alike: at the MCU, PH0 on PA10, PH1 on PA9 and on pin 32 at the same time,
+PH2 and PH3 on the DIR and STEP pins. That is hard-coded: ffemu is for the user
+interface, not for trying wirings, so the firmware's second pin set, PH1 on pin
+32 alone, is never what it sees, and the standard set always wins its boot-time
+detection.
+
 `=` also works as `+`, and `/` as `\`, which is the key that types it on a
 Russian layout, as do the keys of `[` and `]`. The drive selected or enabled is
 the default. The signals survive a power cycle of the device (Home), as the
