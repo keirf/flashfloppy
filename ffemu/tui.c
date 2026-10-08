@@ -21,6 +21,8 @@
 #include <wchar.h>
 #include <sys/stat.h>
 
+#include "version.h"
+
 #include "host.h"
 
 static pthread_t thread;
