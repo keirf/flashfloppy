@@ -44,6 +44,9 @@ FW_SRCS += display/display.c display/lcd_stm32f105.c display/led_7seg.c
 FW_SRCS += gotek/board.c gotek/speaker.c floppy.c
 FW_SRCS += image/image.c image/adf.c image/dsk.c image/hfe.c image/img.c
 FW_SRCS += image/da.c image/dummy.c image/mfm.c
+ifeq ($(TARGET),multi)
+FW_SRCS += image/nib.c
+endif
 EMU_FW_SRCS := hw.c stubs.c
 # Display fonts, generated from fonts/ as in src/display/Makefile.
 FONTS := 6x13 8x16

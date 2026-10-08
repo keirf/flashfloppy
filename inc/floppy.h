@@ -18,9 +18,9 @@
 
 /* Apple2 mode: the host steps the head with four stepper phases in place of
  * STEP and DIR, WDATA toggles at each flux reversal, WRPROT is inverted, and
- * HFE is the only image format. The apple2 target (and its bootloader) is
- * always in this mode; the multi target detects it at boot, and serves a
- * Shugart host otherwise. */
+ * the images are those of apple2_image_type[]. The apple2 target (and its
+ * bootloader) is always in this mode; the multi target detects it at boot,
+ * and serves a Shugart host otherwise. */
 #if (TARGET == TARGET_apple2) || defined(APPLE2_BOOTLOADER)
 #define apple2_mode TRUE
 #elif TARGET == TARGET_multi
@@ -165,6 +165,21 @@ struct dsk_image {
     uint8_t rev;
 };
 
+struct nib_image {
+    uint32_t trk_off;
+    uint16_t trk_pos;
+    uint16_t trk_len; /* bytes per track in the file */
+    bool_t nic; /* streamed by the sector, as .nic blocks */
+    bool_t dsk; /* sectors of 256 bytes, made into .nic blocks */
+    const uint8_t *file_sec; /* the file's sector for each physical one */
+    struct {
+        uint32_t start; /* stream bit where the write began */
+        uint16_t nr; /* nibbles decoded so far */
+        uint8_t acc, nbits; /* the nibble being decoded */
+        bool_t lost; /* more nibbles than the staging buffer holds */
+    } write;
+};
+
 struct directaccess {
     struct da_status_sector dass;
     int32_t decode_pos;
@@ -233,6 +248,7 @@ struct image {
         struct qd_image qd;
         struct img_image img;
         struct dsk_image dsk;
+        struct nib_image nib;
         struct directaccess da;
     };
 
@@ -259,6 +275,14 @@ extern const struct image_type {
     char ext[8];
     const struct image_handler *handler;
 } image_type[];
+
+/* The types served in Apple2 mode: a list of the multi target's own, or
+ * all of image_type[] in the apple2 target. */
+#if TARGET == TARGET_multi
+extern const struct image_type apple2_image_type[];
+#else
+#define apple2_image_type image_type
+#endif
 
 /* Is given file valid to open as an image? */
 bool_t image_valid(FILINFO *fp);

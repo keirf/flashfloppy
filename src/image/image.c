@@ -68,6 +68,24 @@ const struct image_type image_type[] = {
     { "", NULL }
 };
 
+#if TARGET == TARGET_multi
+
+extern const struct image_handler nib_image_handler;
+extern const struct image_handler nic_image_handler;
+extern const struct image_handler a2dsk_image_handler;
+
+const struct image_type apple2_image_type[] = {
+    { "hfe", &hfe_image_handler },
+    { "nib", &nib_image_handler },
+    { "nic", &nic_image_handler },
+    { "dsk", &a2dsk_image_handler },
+    { "do", &a2dsk_image_handler },
+    { "po", &a2dsk_image_handler },
+    { "", NULL }
+};
+
+#endif
+
 #elif TARGET == TARGET_apple2
 
 extern const struct image_handler hfe_image_handler;
@@ -99,9 +117,27 @@ unsigned int image_nr_hidden;
 void image_log_hidden(void)
 {
     if (image_nr_hidden != 0)
-        printk("%u HFE(s) >1.25MB hidden\n", image_nr_hidden);
+        printk("%u image(s) hidden by size\n", image_nr_hidden);
     image_nr_hidden = 0;
 }
+
+/* Whether an image of an Apple2 format can hold the one side of 35 to 40
+ * tracks an Apple2 disk has, told by its size alone, which costs no file
+ * access during a folder scan. A sector image has 16 sectors of 256 bytes
+ * per track; one of the Agat may end in a 128-byte trailer naming the
+ * disk. */
+static bool_t apple2_size_valid(const struct image_handler *handler,
+                                uint32_t size)
+{
+    if (handler == &hfe_image_handler)
+        return size <= HFE_APPLE2_MAX;
+    if (handler == &a2dsk_image_handler)
+        return !((size % 4096) & ~128u)
+            && (size / 4096 >= 35) && (size / 4096 <= 40);
+    return TRUE;
+}
+#else
+#define apple2_size_valid(handler, size) TRUE
 #endif
 
 bool_t image_valid(FILINFO *fp)
@@ -118,23 +154,22 @@ bool_t image_valid(FILINFO *fp)
 
     /* Check valid extension. */
     filename_extension(fp->fname, ext, sizeof(ext));
-    if (apple2_detected && !strcmp(ext, "hfe")
-        && (fp->fsize > HFE_APPLE2_MAX)) {
-        /* Too large for the 40 tracks of one side an Apple2 disk has. */
-        image_nr_hidden++;
-        return FALSE;
-    }
-    if (apple2_detected) {
-        /* HFE is the only Apple2 format. */
-        return !strcmp(ext, "hfe");
-    } else if (((TARGET == TARGET_shugart) || (TARGET == TARGET_multi))
-               && !strcmp(ext, "adf")) {
+    if (!apple2_mode
+        && ((TARGET == TARGET_shugart) || (TARGET == TARGET_multi))
+        && !strcmp(ext, "adf")) {
         return (ff_cfg.host == HOST_acorn) || !(fp->fsize % (2*11*512));
     } else {
-        const struct image_type *type;
-        for (type = &image_type[0]; type->handler != NULL; type++)
-            if (!strcmp(ext, type->ext))
-                return TRUE;
+        const struct image_type *type = apple2_mode
+            ? &apple2_image_type[0] : &image_type[0];
+        for (; type->handler != NULL; type++) {
+            if (strcmp(ext, type->ext))
+                continue;
+            if (apple2_mode && !apple2_size_valid(type->handler, fp->fsize)) {
+                image_nr_hidden++;
+                return FALSE;
+            }
+            return TRUE;
+        }
     }
 
     return FALSE;
@@ -191,10 +226,12 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
     ext[sizeof(slot->type)] = '\0';
 
     if (apple2_mode) {
-        /* HFE is the only Apple2 format. */
-        if (!try_handler(im, slot, cltbl, &hfe_image_handler))
-            F_die(FR_BAD_IMAGE);
-        return;
+        /* The Apple2 formats are told apart by extension alone. */
+        for (type = &apple2_image_type[0]; type->handler != NULL; type++)
+            if (!strcmp(ext, type->ext)
+                && try_handler(im, slot, cltbl, type->handler))
+                return;
+        F_die(FR_BAD_IMAGE);
     }
 
     /* Use the extension as a hint to the correct image handler. */

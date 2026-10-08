@@ -29,16 +29,17 @@ the source tree. It runs the shugart firmware, which serves a Shugart host.
 apple2 firmware: it serves an Apple2 host and lists only HFE images.
 `TARGET=multi` builds `out/ffemu-multi/ffemu-multi`, which runs the multi
 firmware: it serves a Shugart host and an Apple2 host alike, detecting which
-one it is connected to as it boots, and in its Apple2 mode lists only HFE
-images. In all three, the board and floppy code is that of the release, which
-keeps the rotary encoder where a debug build puts two stepper phases. The
-programs keep their settings and logs apart, in `ffemu/`, `ffemu-apple2/` and
-`ffemu-multi/` of the directories below. The build needs a C compiler,
-`objcopy`, Python 3 (for the font and configuration generators of the firmware
-build) and the wide-character "ncurses" library with its headers:
-`ncurses-devel` on Cygwin/MSYS2, `libncurses-dev` on Debian and Ubuntu. On
-Cygwin/MSYS2 everything but the runtime DLL is linked statically, so the
-program built there also runs in any Git Bash.
+one it is connected to as it boots, and in its Apple2 mode lists only the
+Apple2 images, HFE, .nib, .nic, .dsk, .do and .po. In all three, the board and
+floppy code is that of the release, which keeps the rotary encoder where a
+debug build puts two stepper phases. The programs keep their settings and logs
+apart, in `ffemu/`, `ffemu-apple2/` and `ffemu-multi/` of the directories
+below. The build needs a C compiler, `objcopy`, Python 3 (for the font and
+configuration generators of the firmware build) and the wide-character
+"ncurses" library with its headers: `ncurses-devel` on Cygwin/MSYS2,
+`libncurses-dev` on Debian and Ubuntu. On Cygwin/MSYS2 everything but the
+runtime DLL is linked statically, so the program built there also runs in any
+Git Bash.
 
 ## Running
 

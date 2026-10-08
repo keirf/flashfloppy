@@ -12,6 +12,7 @@ OBJS-$(multi) += img.o
 OBJS-$(multi) += da.o
 OBJS-$(multi) += dummy.o
 OBJS-$(multi) += mfm.o
+OBJS-$(multi) += nib.o
 
 OBJS-$(shugart) += adf.o
 OBJS-$(shugart) += dsk.o

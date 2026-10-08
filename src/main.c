@@ -246,7 +246,8 @@ static void display_write_slot(bool_t nav_mode)
     if (slot_type("v9t9")) {
         snprintf(typename, sizeof(typename), "T99");
     } else if (!(cfg.slot.attributes & AM_DIR)) {
-        for (type = &image_type[0]; type->handler != NULL; type++)
+        type = apple2_mode ? &apple2_image_type[0] : &image_type[0];
+        for (; type->handler != NULL; type++)
             if (slot_type(type->ext))
                 break;
         if (type->handler != NULL) {
