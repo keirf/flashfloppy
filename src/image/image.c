@@ -89,6 +89,21 @@ const struct image_type image_type[] = {
 #endif
 
 
+/* An Apple2 disk has at most 40 tracks on one side, which an HFE holds in
+ * well under this; a larger one is a disk of another kind. */
+#define HFE_APPLE2_MAX (1280*1024)
+
+unsigned int image_nr_hidden;
+
+#if TARGET == TARGET_multi
+void image_log_hidden(void)
+{
+    if (image_nr_hidden != 0)
+        printk("%u HFE(s) >1.25MB hidden\n", image_nr_hidden);
+    image_nr_hidden = 0;
+}
+#endif
+
 bool_t image_valid(FILINFO *fp)
 {
     char ext[8];
@@ -103,6 +118,12 @@ bool_t image_valid(FILINFO *fp)
 
     /* Check valid extension. */
     filename_extension(fp->fname, ext, sizeof(ext));
+    if (apple2_detected && !strcmp(ext, "hfe")
+        && (fp->fsize > HFE_APPLE2_MAX)) {
+        /* Too large for the 40 tracks of one side an Apple2 disk has. */
+        image_nr_hidden++;
+        return FALSE;
+    }
     if (apple2_detected) {
         /* HFE is the only Apple2 format. */
         return !strcmp(ext, "hfe");

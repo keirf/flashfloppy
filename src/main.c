@@ -886,6 +886,7 @@ complete:
     qsort_p(p_ent, nr, native_dir_cmp);
 
     F_closedir(&fs->dp);
+    image_log_hidden();
 
     volume_cache_init(ent, p_ent);
     cfg.sorted = p_ent;
@@ -1683,6 +1684,7 @@ static void native_get_slot_map(bool_t sorted_only)
         while (native_dir_next())
             cfg.max_slot_nr++;
         F_closedir(&fs->dp);
+        image_log_hidden();
     }
 
     /* Adjust max_slot_nr. Must be at least one 'slot'. */
