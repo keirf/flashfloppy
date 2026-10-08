@@ -14,7 +14,9 @@
 
 /* Input pins: DIR=PB0, STEP=PA1, SELA=PA0, SELB=PA3, WGATE=PB9, SIDE=PB4, 
  *             MOTOR=PA15/PB15 */
-#if TARGET == TARGET_apple2
+#define pin_dir     0 /* PB0 */
+#define pin_step    1 /* PA1 */
+/* Apple2 mode: stepper phases, two of them on the pins of DIR and STEP. */
 #if LEVEL != LEVEL_debug
 #define pin_pha0   10 /* PA10 - (aka UART RX (PCB silk J4)) */
 #define pin_pha1    9 /* PA9  - (aka UART TX) */
@@ -24,10 +26,6 @@
 #endif
 #define pin_pha2    0 /* PB0 */
 #define pin_pha3    1 /* PA1 */
-#elif TARGET == TARGET_shugart
-#define pin_dir     0 /* PB0 */
-#define pin_step    1 /* PA1 */
-#endif
 #define pin_sel0    0 /* PA0 */
 #define pin_sel1    3 /* PA3 */
 static uint8_t pin_wgate = 9; /* PB9 */
@@ -58,12 +56,15 @@ DEFINE_IRQ(dma_wdata_irq, "IRQ_wdata_dma");
 #define dma_rdata_irq DMA1_CH3_IRQ
 DEFINE_IRQ(dma_rdata_irq, "IRQ_rdata_dma");
 
-/* Head step handling. */
-#if TARGET == TARGET_apple2
+/* Head step handling: polled stepper phases in Apple2 mode, else the STEP
+ * interrupt. */
+#if TARGET_SUPPORTS_APPLE2
 static struct timer step_timer;
 static void POLL_step(void *unused);
-#elif TARGET == TARGET_shugart
+#endif
+#if TARGET == TARGET_shugart
 void IRQ_28(void) __attribute__((alias("IRQ_STEP_changed"))); /* TMR2 */
+#define STEP_IRQ 28
 #endif
 
 /* EXTI IRQs. */
@@ -72,17 +73,18 @@ void IRQ_7(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI1 */
 void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
 void IRQ_23(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI9_5 */
 void IRQ_40(void) __attribute__((alias("IRQ_MOTOR_CHGRST_rotary"))); /* EXTI15_10 */
-#if WDATA_TOGGLE
+#if TARGET_SUPPORTS_APPLE2
 void IRQ_27(void) __attribute__((alias("IRQ_wdata_capture"))); /* TMR1_CC */
+#define WDATA_IRQ 27
 #endif
 #define MOTOR_CHGRST_IRQ 40
 static const struct exti_irq exti_irqs[] = {
-#if WDATA_TOGGLE
-    /* WDATA */ { 27, FLOPPY_IRQ_WGATE_PRI, 0 },
+#if TARGET_SUPPORTS_APPLE2
+    /* WDATA */ { WDATA_IRQ, FLOPPY_IRQ_WGATE_PRI, 0 },
 #endif
-    /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
+    /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 },
 #if TARGET == TARGET_shugart
-    /* STEP */ { 28, FLOPPY_IRQ_STEP_PRI, m(2) /* dummy */ },
+    /* STEP */ { STEP_IRQ, FLOPPY_IRQ_STEP_PRI, m(2) /* dummy */ },
 #endif
     /* WGATE */ {  7, FLOPPY_IRQ_WGATE_PRI, 0 },
     /* SIDE */ { 10, TIMER_IRQ_PRI, 0 }, 
@@ -118,8 +120,13 @@ static void dma_rd_set_active(bool_t active)
 
 bool_t floppy_ribbon_is_reversed(void)
 {
-#if TARGET == TARGET_shugart
-    time_t t_start = time_now();
+    time_t t_start;
+
+    /* An Apple2 host holds these inputs low itself. */
+    if (apple2_mode)
+        return FALSE;
+
+    t_start = time_now();
 
     /* If ribbon is reversed then most/all inputs are grounded. 
      * Check SEL plus three inputs which are supposed only to pulse. */
@@ -130,7 +137,6 @@ bool_t floppy_ribbon_is_reversed(void)
         if (time_since(t_start) > time_ms(1000))
             return TRUE;
     }
-#endif
 
     return FALSE;
 }
@@ -155,9 +161,8 @@ static void board_floppy_init(void)
     gpio->crl = (gpio->crl & ~(0xfu<<((pin)<<2)))       \
         | (((mode)&0xfu)<<((pin)<<2))
 
-#if TARGET == TARGET_shugart
-    gpio_configure_pin(gpioa, pin_step, GPI_bus);
-#endif
+    if (!apple2_mode)
+        gpio_configure_pin(gpioa, pin_step, GPI_bus);
     gpio_configure_pin(gpio_data, pin_wdata, GPI_bus);
     gpio_configure_pin(gpio_data, pin_rdata, GPO_bus);
 
@@ -168,10 +173,10 @@ static void board_floppy_init(void)
         | (((mode)&0x3u)<<((pin)<<1));
 #define afio syscfg
 
-#if TARGET == TARGET_shugart
-    gpio_set_af(gpioa, pin_step, 1);
-    gpio_configure_pin(gpioa, pin_step, AFI(PUPD_none));
-#endif
+    if (!apple2_mode) {
+        gpio_set_af(gpioa, pin_step, 1);
+        gpio_configure_pin(gpioa, pin_step, AFI(PUPD_none));
+    }
 
     gpio_set_af(gpio_data, pin_wdata, 1);
     gpio_configure_pin(gpio_data, pin_wdata, AFI(PUPD_none));
@@ -197,14 +202,18 @@ static void board_floppy_init(void)
         pin_wgate = 1; /* PB1 */
     }
 
-#if TARGET == TARGET_apple2
-    gpio_configure_pin(gpioa, pin_pha0,  GPI_bus);
-    gpio_configure_pin(gpioa, pin_pha1,  GPI_bus);
-    gpio_configure_pin(gpiob, pin_pha2,  GPI_bus);
-    gpio_configure_pin(gpioa, pin_pha3,  GPI_bus);
-    timer_init(&step_timer, POLL_step, NULL);
-    timer_set(&step_timer, time_now());
-#elif TARGET == TARGET_shugart
+#if TARGET_SUPPORTS_APPLE2
+    if (apple2_mode) {
+        gpio_configure_pin(gpioa, pin_pha0,  GPI_bus);
+        gpio_configure_pin(gpioa, pin_pha1,  GPI_bus);
+        gpio_configure_pin(gpiob, pin_pha2,  GPI_bus);
+        gpio_configure_pin(gpioa, pin_pha3,  GPI_bus);
+        timer_init(&step_timer, POLL_step, NULL);
+        timer_set(&step_timer, time_now());
+    } else {
+        gpio_configure_pin(gpiob, pin_dir,   GPI_bus);
+    }
+#else
     gpio_configure_pin(gpiob, pin_dir,   GPI_bus);
 #endif
     gpio_configure_pin(gpioa, pin_sel0,  GPI_bus);
@@ -352,7 +361,7 @@ static void update_SELA_irq(bool_t amiga_hd_id)
 #endif
 }
 
-#if TARGET == TARGET_apple2
+#if TARGET_SUPPORTS_APPLE2
 
 static void POLL_step(void *unused)
 {
@@ -420,7 +429,9 @@ out:
     timer_set(&step_timer, step_timer.deadline + time_ms(1));
 }
 
-#elif TARGET == TARGET_shugart
+#endif
+
+#if TARGET == TARGET_shugart
 
 static bool_t drive_is_writing(void)
 {
@@ -580,7 +591,7 @@ static void IRQ_CHGRST(struct drive *drv)
     }
 }
 
-#if WDATA_TOGGLE
+#if TARGET_SUPPORTS_APPLE2
 static void IRQ_wdata_capture(void)
 {
     /* Clear WDATA-captured flag. */

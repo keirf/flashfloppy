@@ -77,7 +77,7 @@ void emu_irq_vector(unsigned int nr)
     case 33: IRQ_33(); break; /* I2C2 event */
     case 34: IRQ_34(); break; /* I2C2 error */
     case 40: IRQ_40(); break; /* EXTI15_10 */
-#if TARGET == TARGET_apple2
+#if TARGET_SUPPORTS_APPLE2
     case 27: IRQ_27(); break; /* TIM1 capture: WDATA */
 #else
     case 28: IRQ_28(); break; /* TIM2: STEP */

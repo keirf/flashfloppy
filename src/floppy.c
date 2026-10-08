@@ -124,9 +124,8 @@ static void drive_change_output(
     case outp_trk0:   pin = pin_26; break;
     case outp_wrprot:
         pin = pin_28;
-#if TARGET == TARGET_apple2
-        assert ^= 1;
-#endif
+        if (apple2_mode)
+            assert ^= 1;
         break;
     default:
         _drive_change_output(drv, outp, assert);

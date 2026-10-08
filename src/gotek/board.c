@@ -84,11 +84,9 @@ unsigned int board_get_buttons(void)
         x &= _rbit32(gpioc->idr) >> 23;
     x = ~x & 7;
 
-#if (TARGET == TARGET_apple2) || defined(APPLE2_BOOTLOADER)
     /* Apple 2: QFN32 select pin PA10 is reassigned as stepper phase #0. */
-    if (mcu_package == MCU_QFN32)
+    if (apple2_mode && (mcu_package == MCU_QFN32))
         return x;
-#endif
     if (has_kc30_header) {
         /* KC30 Select pin, Artery models only: 
          *  PF6/PH2 = Select; except QFN32: PA10 = Select. */

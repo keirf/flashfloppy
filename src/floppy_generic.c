@@ -262,11 +262,7 @@ static void timer_dma_init(void)
     tim_rdata->ccmr1 = (TIM_CCMR1_CC2S(TIM_CCS_OUTPUT) |
                         TIM_CCMR1_OC2M(TIM_OCM_PWM1));
     tim_rdata->ccer = TIM_CCER_CC2E | ((O_TRUE==0) ? TIM_CCER_CC2P : 0);
-#if TARGET == TARGET_apple2
-    tim_rdata->ccr2 = sampleclk_ns(1000);
-#else
-    tim_rdata->ccr2 = sampleclk_ns(400);
-#endif
+    tim_rdata->ccr2 = sampleclk_ns(apple2_mode ? 1000 : 400);
     tim_rdata->dier = TIM_DIER_UDE;
     tim_rdata->cr2 = 0;
 
@@ -368,7 +364,7 @@ static void wdata_stop(void)
     write->dma_end = ARRAY_SIZE(dma_wr->buf) - dma_wdata.cndtr;
     image->wr_prod++;
 
-#if TARGET == TARGET_shugart || TARGET == TARGET_apple2
+#if TARGET == TARGET_shugart || TARGET_SUPPORTS_APPLE2
     if (!ff_cfg.index_suppression && ff_cfg.write_drain != WDRAIN_realtime) {
         /* Opportunistically insert an INDEX pulse ahead of writeback. */
         drive_change_output(drv, outp_index, TRUE);
