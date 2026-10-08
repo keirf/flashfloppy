@@ -1,6 +1,6 @@
 # ffemu
 
-Runs the FlashFloppy user interface in a terminal, with no Gotek hardware. Windows (Git Bash / Cygwin / MSYS2) and Linux are supported. The firmware's own code (`src/main.c`, the display driver, FatFS, the image handlers) is compiled for the host and draws on an emulated OLED display, reads an emulated USB flash drive, and takes the keyboard for its buttons and rotary encoder. It is intended to help UI/UX development of FlashFloppy - working on menus, display layout and fonts without flashing a device.
+Runs the FlashFloppy user interface in a terminal, with no Gotek hardware. Windows (Git Bash / Cygwin / MSYS2) and Linux are supported. The firmware's own code (`src/main.c`, the display driver, FatFS, the image handlers) is compiled for the host and draws on an emulated OLED display, reads an emulated USB drive, and takes the keyboard for its buttons and rotary encoder. It is intended to help UI/UX development of FlashFloppy - working on menus, display layout and fonts without flashing a device.
 
 Nothing is connected to the floppy interface: an image can be selected and is opened, so a bad image is reported as on the device, but no data flows and the track number stays at 0.
 
@@ -14,7 +14,7 @@ The program is `out/ffemu/ffemu` under `<path>`, which defaults to the top of th
 
     ffemu [<directory> | <image> | <disk>]
 
-The USB flash drive holds the files and folders of `<directory>`, by default the current one, as a FAT32 volume. File contents are read from the host when the firmware asks for them. Alternatively, the drive is read from an image file of a whole drive (as `dd` makes it, with or without a partition table, FAT12, FAT16 or FAT32), or from a disk itself, such as a real USB flash drive: `/dev/sdb` on Linux, or `/dev/sdb` for `\\.\PhysicalDrive1` on Cygwin/MSYS2. Reading a disk needs `sudo` on Linux, which leaves the settings and the log in the home of the user who ran it, and a terminal started as administrator on Windows; ffemu says so when it is denied.
+The USB drive holds the files and folders of `<directory>`, by default the current one, as a FAT32 volume. File contents are read from the host when the firmware asks for them. Alternatively, the drive is read from an image file of a whole drive (as `dd` makes it, with or without a partition table, FAT12, FAT16 or FAT32), or from a disk itself, such as a real USB drive: `/dev/sdb` on Linux, or `/dev/sdb` for `\\.\PhysicalDrive1` on Cygwin/MSYS2. Reading a disk needs `sudo` on Linux, which leaves the settings and the log in the home of the user who ran it, and a terminal started as administrator on Windows; ffemu says so when it is denied.
 
 The firmware does write to the drive (it keeps the last selected image in `IMAGE_A.CFG`). Such writes never reach the host files, the image or the disk: they go to a temporary file and last until the drive is removed. They survive a power cycle, as on a real drive, provided that the files of the directory, or the image, have not changed in between. Status names the `FF.CFG` that the firmware reads: the one in folder `FF` if the drive has that folder, even when that one is missing, else the one in the root; names match in any letter case.
 
