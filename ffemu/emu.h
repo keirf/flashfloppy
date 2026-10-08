@@ -58,7 +58,7 @@ void emu_i2c_dev_write(uint8_t b);
 uint8_t emu_i2c_dev_read(void);
 void emu_i2c_dev_stop(void);
 
-/* USB flash drive: 512-byte sectors of a FAT volume (fatimg.c). */
+/* USB drive: 512-byte sectors of a FAT volume (fatimg.c). */
 int emu_usb_inserted(void);
 int emu_usb_read(void *buf, uint32_t sector, unsigned int count);
 int emu_usb_write(const void *buf, uint32_t sector, unsigned int count);
