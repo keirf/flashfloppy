@@ -205,7 +205,8 @@ void led_size(unsigned int nr_digits, unsigned int font, unsigned int *w,
 void led_pixels(const struct led_view *v, unsigned int font,
                 const uint8_t **lit, const uint8_t **all, unsigned int *w,
                 unsigned int *h);
-/* The digits of @v as text, a point after a digit whose point is lit,
+/* The digits of @v as text, a point after a digit whose point is lit, a
+ * digit lit only in its lower loop as the stepper phases on and a blank,
  * '?' for a pattern that is no digit or letter of the firmware's. */
 void led_text(const struct led_view *v, char *buf, size_t size);
 

@@ -235,7 +235,12 @@ void led_7seg_write_string(const char *p)
     unsigned int i;
 
     for (i = 0; ((c = *p++) != '\0') && (i < sizeof(d)); i++) {
-        if ((c >= '0') && (c <= '9')) {
+        if ((TARGET == TARGET_multi) && (c == '.')) {
+            /* Lights the decimal point of the preceding digit. */
+            if (i != 0)
+                d[i-1] |= 0x80;
+            i--;
+        } else if ((c >= '0') && (c <= '9')) {
             d[i] = digits[c - '0'];
         } else if ((c >= 'a') && (c <= 'z')) {
             d[i] = letters[c - 'a'];
@@ -243,6 +248,9 @@ void led_7seg_write_string(const char *p)
             d[i] = letters[c - 'A'];
         } else if (c == '-') {
             d[i] = 0x40;
+        } else if ((TARGET == TARGET_multi) && (c & 0x80)) {
+            /* Segments a to g as bits 0 to 6: the stepper phases. */
+            d[i] = c & 0x7f;
         } else {
             d[i] = 0;
         }

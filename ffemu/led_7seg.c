@@ -286,6 +286,16 @@ void led_text(const struct led_view *v, char *buf, size_t size)
     for (i = 0; (i < v->nr_digits) && (n + 7 < size); i++) {
         uint8_t s = v->on ? v->seg[i] & 0x7f : 0;
         char c = '?';
+        if (s && !(s & ~0x5c)) {
+            /* Only the lower loop lit, d, e, g and c: the stepper phases
+             * 0 to 3 as the firmware's Apple2 mode shows them. */
+            static const uint8_t phase[4] = { 0x08, 0x10, 0x40, 0x04 };
+            for (j = 0; j < 4; j++)
+                if (s & phase[j])
+                    buf[n++] = '0' + j;
+            buf[n++] = ' ';
+            continue;
+        }
         if (s == 0)
             c = ' ';
         for (j = 0; j < ARRAY_SIZE(digits); j++)

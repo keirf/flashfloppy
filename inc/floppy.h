@@ -44,6 +44,13 @@ void apple2_detect(unsigned int ms);
 #define apple2_detected FALSE
 #endif
 
+/* The stepper phases on in Apple2 mode, debounced, as bits 0 to 3. */
+#if TARGET == TARGET_multi
+extern uint8_t apple2_phases;
+#else
+#define apple2_phases 0
+#endif
+
 #define WDATA_TOGGLE apple2_mode
 
 #define FINTF_SHUGART     0
@@ -308,7 +315,7 @@ void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
 void floppy_set_cyl(uint8_t unit, uint8_t cyl);
 struct track_info {
-    uint8_t cyl, side:1, sel:1, writing:1, in_da_mode:1;
+    uint8_t cyl, side:1, sel:1, writing:1, in_da_mode:1, phases:4;
 };
 void floppy_get_track(struct track_info *ti);
 void floppy_set_fintf_mode(void);

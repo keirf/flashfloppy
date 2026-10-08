@@ -77,7 +77,7 @@ static uint8_t _bl;
 static uint8_t i2c_addr;
 static uint8_t i2c_dead;
 static uint8_t i2c_row;
-static bool_t is_oled_display;
+bool_t is_oled_display;
 static uint8_t oled_height;
 /* The font that lcd_columns is sized for. FF.CFG may change
  * ff_cfg.oled_font before it resets the system. */
@@ -257,7 +257,15 @@ static unsigned int osd_prep_buffer(void)
     for (row = 0; row < rows; row++) {
         p = text[(order >> (row * DORD_shift)) & DORD_row];
         memcpy(q, p, lcd_columns);
+#if TARGET == TARGET_multi
+        /* The OLED's phase spinner goes as a blank: FF OSD has no glyph
+         * for it. */
+        for (i = 0; i < lcd_columns; i++, q++)
+            if (*q & 0x80)
+                *q = ' ';
+#else
         q += lcd_columns;
+#endif
     }
 
     if (i2c_addr == 0)
@@ -671,6 +679,8 @@ fail:
     return FALSE;
 }
 
+#include "oled_spinner.c"
+
 extern const uint8_t oled_font_6x13[];
 static void oled_convert_text_row_6x13(char *pc)
 {
@@ -683,6 +693,13 @@ static void oled_convert_text_row_6x13(char *pc)
     q++;
 
     for (i = 0; i < lcd_columns; i++) {
+        if ((TARGET == TARGET_multi) && ((uint8_t)*pc >= 0x80)) {
+            oled_spinner(q, w, *pc & 0xf, oled_spinner_11, 11);
+            pc += 2;
+            q += 2*w;
+            i++;
+            continue;
+        }
         if ((c = *pc++ - 0x20) > 0x5e)
             c = '.' - 0x20;
         p = &oled_font_6x13[c * w * 2];
@@ -706,6 +723,13 @@ static void oled_convert_text_row_8x16(char *pc)
     const unsigned int w = 8;
 
     for (i = 0; i < lcd_columns; i++) {
+        if ((TARGET == TARGET_multi) && ((uint8_t)*pc >= 0x80)) {
+            oled_spinner(q, w, *pc & 0xf, oled_spinner_14, 14);
+            pc += 2;
+            q += 2*w;
+            i++;
+            continue;
+        }
         if ((c = *pc++ - 0x20) > 0x5e)
             c = '.' - 0x20;
         p = &oled_font_8x16[c * w * 2];

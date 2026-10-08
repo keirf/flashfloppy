@@ -143,6 +143,7 @@ void lcd_write(int col, int row, int min, const char *str);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
 extern uint8_t lcd_columns, lcd_rows;
+extern bool_t is_oled_display;
 
 /* FF OSD (On Screen Display) */
 extern bool_t has_osd;

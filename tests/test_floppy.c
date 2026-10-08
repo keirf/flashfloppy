@@ -157,6 +157,20 @@ TEST(floppy_apple2_steps_fw307)
     CHECK_EQ(track(), 1);
 }
 
+TEST(floppy_apple2_phases_shown)
+{
+    apple2_boot(FALSE);
+    set_phases(6, FALSE);
+    clock_run_ms(3);
+    CHECK_EQ(apple2_phases, 6);
+    /* Deselected: no phases, no steps. */
+    pin_set(PA, 0, TRUE);
+    clock_run_ms(3);
+    CHECK_EQ(apple2_phases, 0);
+    seek(4);
+    CHECK_EQ(track(), 0);
+}
+
 /* A Shugart host steps by a pulse on STEP, inward while DIR is low. */
 static void shugart_boot(void)
 {
