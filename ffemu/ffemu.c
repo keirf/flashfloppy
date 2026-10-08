@@ -11,6 +11,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <langinfo.h>
@@ -24,7 +25,7 @@
 
 #include "host.h"
 
-const char *usb_path = ".", *usb_path_name = ".";
+const char *usb_path, *usb_path_name;
 
 const char *size_text(uint64_t bytes, char *buf, size_t size)
 {
@@ -304,9 +305,12 @@ static void usage(FILE *f)
             "Runs the FlashFloppy user interface in the terminal, with no "
             "Gotek hardware,\n"
             "for the %s firmware.\n"
-            "The USB drive holds the files of <directory>, by default "
-            "the current\n"
-            "one, or is read from an image file or a disk such as %s.\n"
+            "The USB drive holds the files of <directory>, or is read "
+            "from an image\n"
+            "file or a disk such as %s.\n"
+            "Without an argument, it is the USB drive attached, if "
+            "there is one; if\n"
+            "there are more, they are listed, each with its disk to give.\n"
             "Whatever the firmware writes to it never reaches these.\n"
             "\n"
             "Settings: %s\n"
@@ -353,8 +357,23 @@ int main(int argc, char **argv)
         usage(help ? stdout : stderr);
         return help ? 0 : 2;
     }
-    if (argc == 2)
+    if (argc == 2) {
         usb_path = argv[1];
+    } else {
+        static char dev[32];
+        char line[256];
+        int nr = usb_disk_find(dev, sizeof(dev), line, sizeof(line), NULL);
+        if (nr != 1) {
+            fprintf(stderr, nr ? "ffemu: %d USB drives; give one of "
+                    "these disks:\n"
+                    : "ffemu: no USB drive attached; give a "
+                    "directory, an image or a disk\n", nr);
+            usb_disk_find(dev, sizeof(dev), line, sizeof(line), stderr);
+            return 2;
+        }
+        host_log("USB drive attached: %s", line);
+        usb_path = dev;
+    }
     if (stat(usb_path, &st) != 0) {
         fprintf(stderr, "ffemu: %s: %s\n", usb_path, strerror(errno));
         return 2;
@@ -370,7 +389,7 @@ int main(int argc, char **argv)
         if (image < 0) {
             e = errno;
             fprintf(stderr, "ffemu: %s: %s\n", usb_path, strerror(e));
-            if (S_ISBLK(st.st_mode) && ((e == EACCES) || (e == EPERM)))
+            if (S_ISBLK(st.st_mode) && ((e == EACCES) || (e == EPERM))) {
                 fprintf(stderr, "ffemu: to read a disk, run it %s\n",
 #ifdef __CYGWIN__
                         "in a terminal started as administrator"
@@ -378,6 +397,13 @@ int main(int argc, char **argv)
                         "with sudo"
 #endif
                     );
+#ifdef __CYGWIN__
+                /* Windows lets anyone read a volume on removable media. */
+                if (!isdigit((unsigned char)usb_path[strlen(usb_path) - 1]))
+                    fprintf(stderr, "ffemu: or, for a USB drive, give "
+                            "its partition, such as %s1\n", usb_path);
+#endif
+            }
             return 2;
         }
         close(image);

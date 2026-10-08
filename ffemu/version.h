@@ -8,4 +8,4 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define FFEMU_VERSION "1.0+"
+#define FFEMU_VERSION "1.2"
