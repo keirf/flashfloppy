@@ -20,6 +20,7 @@
 #endif
 
 #include <stdbool.h>
+#include <stdio.h>
 #include "emu.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -140,6 +141,16 @@ const char *usb_ff_cfg_text(void);
 /* Writes the drive as the firmware sees it to file @path; if that fails,
  * says why in @err. */
 bool usb_save(const char *path, char *err, size_t size);
+
+/*
+ * usbdisk.c
+ */
+
+/* Finds the USB drives attached, and prints each to @f, unless NULL,
+ * as a line that ends with its /dev name: the first into @dev, and its line
+ * into @line. Returns their number. */
+int usb_disk_find(char *dev, size_t size, char *line, size_t line_size,
+                  FILE *f);
 
 /*
  * rc.c
