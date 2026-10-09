@@ -2743,9 +2743,12 @@ static void *tui_thread(void *unused)
     key_ctrl_pgup = ctrl_key("kPRV5", "\033[5;5~", KEY_MAX + 0x101);
     key_ctrl_pgdn = ctrl_key("kNXT5", "\033[6;5~", KEY_MAX + 0x102);
     curs_set(0);
-    /* Long enough for the rest of a key's sequence to come late, as it can
-     * over ssh to a virtual machine; a lone Esc is held back that long. */
-    set_escdelay(200);
+    /* A lone Esc is held back this long for the rest of a key's sequence:
+     * htop's 25 ms where the terminal writes it whole, 200 ms in an ssh
+     * session, which delivers it in pieces now and then; ESCDELAY, if the
+     * user set it, wins. */
+    if (getenv("ESCDELAY") == NULL)
+        set_escdelay((getenv("SSH_TTY") != NULL) ? 200 : 25);
     timeout(FRAME_MS);
 
     if (has_colors()) {
