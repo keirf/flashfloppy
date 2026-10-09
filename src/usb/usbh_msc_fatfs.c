@@ -17,47 +17,49 @@ static bool_t msc_device_connected;
 extern USB_OTG_CORE_HANDLE USB_OTG_Core;
 USBH_HOST USB_Host;
 
+/* Tracing by short names instead of __FUNCTION__ which costs a lot of flash.
+ */
 #if 1
-#define TRC_FUNC() printk("> %s\n", __FUNCTION__)
+#define TRC(name) printk("> USB %s\n", name)
 #else
-#define TRC_FUNC() ((void)0)
+#define TRC(name) ((void)0)
 #endif
 
 static void USBH_USR_Init(void)
 {
-    TRC_FUNC();
+    TRC("Init");
 }
 
 static void USBH_USR_DeInit(void)
 {
-    TRC_FUNC();
+    TRC("DeInit");
     msc_device_connected = FALSE;
 }
 
 static void USBH_USR_DeviceAttached(void)
 {
-    TRC_FUNC();
+    TRC("DeviceAttached");
 }
 
 static void USBH_USR_ResetDevice(void)
 {
-    TRC_FUNC();
+    TRC("ResetDevice");
 }
 
 static void USBH_USR_DeviceDisconnected (void)
 {
-    TRC_FUNC();
+    TRC("DeviceDisconnected");
     msc_device_connected = FALSE;
 }
 
 static void USBH_USR_OverCurrentDetected (void)
 {
-    TRC_FUNC();
+    TRC("OverCurrentDetected");
 }
 
 static void USBH_USR_DeviceSpeedDetected(uint8_t DeviceSpeed)
 {
-    TRC_FUNC();
+    TRC("DeviceSpeedDetected");
     printk("> Device speed: %s\n",
            (DeviceSpeed == HPRT0_PRTSPD_HIGH_SPEED) ? "High" :
            (DeviceSpeed == HPRT0_PRTSPD_FULL_SPEED) ? "Full" :
@@ -67,14 +69,14 @@ static void USBH_USR_DeviceSpeedDetected(uint8_t DeviceSpeed)
 static void USBH_USR_DeviceDescAvailable(void *DeviceDesc)
 {
     USBH_DevDesc_TypeDef *hs = DeviceDesc;
-    TRC_FUNC();
+    TRC("DeviceDescAvailable");
     printk(" VID : %04X\n", hs->idVendor);
     printk(" PID : %04X\n", hs->idProduct);
 }
 
 static void USBH_USR_DeviceAddressAssigned(void)
 {
-    TRC_FUNC();
+    TRC("DeviceAddressAssigned");
 }
 
 static void USBH_USR_ConfigurationDescAvailable(
@@ -84,7 +86,7 @@ static void USBH_USR_ConfigurationDescAvailable(
 {
     USBH_InterfaceDesc_TypeDef *id = itfDesc;
 
-    TRC_FUNC();
+    TRC("ConfigurationDescAvailable");
     printk("> Class connected: %02x (%s)\n",
            id->bInterfaceClass,
            (id->bInterfaceClass == 0x08) ? "MSC" :
@@ -108,12 +110,12 @@ static void USBH_USR_SerialNumString(void *SerialNumString)
 
 static void USBH_USR_EnumerationDone(void)
 {
-    TRC_FUNC();
+    TRC("EnumerationDone");
 }
 
 static USBH_USR_Status USBH_USR_UserInput(void)
 {
-    TRC_FUNC();
+    TRC("UserInput");
     return USBH_USR_RESP_OK;
 }
 
@@ -126,12 +128,12 @@ static int USBH_USR_UserApplication(void)
 
 static void USBH_USR_DeviceNotSupported(void)
 {
-    TRC_FUNC();
+    TRC("DeviceNotSupported");
 }
 
-static void USBH_USR_UnrecoveredError (void)
+static void USBH_USR_UnrecoveredError(void)
 {
-    TRC_FUNC();
+    TRC("UnrecoveredError");
     msc_device_connected = FALSE;
 }
 
