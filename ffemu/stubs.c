@@ -796,6 +796,16 @@ void emu_flash_set_oled_rows(void *cfg, unsigned int rows)
         : (t & ~DISPLAY_oled_64);
 }
 
+int emu_flash_display_auto(const void *cfg)
+{
+    return (((const struct ff_cfg *)cfg)->display_type & 3) == DISPLAY_auto;
+}
+
+void emu_flash_set_display_auto(void *cfg)
+{
+    ((struct ff_cfg *)cfg)->display_type = DISPLAY_auto;
+}
+
 /*
  * Heap: src/arena.c. The real one is what is left of the 32 kB of RAM above
  * the firmware's own data, 26.5 kB. Structures holding pointers are larger

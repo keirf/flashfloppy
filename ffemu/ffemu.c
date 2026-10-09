@@ -2,7 +2,7 @@
  * ffemu.c
  *
  * Runs the FlashFloppy user interface in a terminal, with no Gotek hardware:
- * the firmware's own code draws on an emulated OLED display and reads an
+ * the firmware's own code draws on an emulated display and reads an
  * emulated USB drive, while the keyboard stands in for the buttons and
  * the rotary encoder, and for the signals of a host computer that select the
  * drive and move its head. No data flows on the floppy interface.
@@ -423,7 +423,10 @@ int main(int argc, char **argv)
         usb_set_store(fd, layout);
     unsetenv("FFEMU_USB");
 
-    oled_init(config.display);
+    if (DISP_IS_LED(config.display))
+        led_init(config.display);
+    else
+        oled_init(config.display);
     if (usb)
         insert(state != NULL);
 

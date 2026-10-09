@@ -22,14 +22,18 @@ const char * const display_name[DISP_nr] = {
     [DISP_ssd1306_32] = "ssd1306-128x32",
     [DISP_ssd1306_64] = "ssd1306-128x64",
     [DISP_sh1106_32] = "sh1106-128x32",
-    [DISP_sh1106_64] = "sh1106-128x64"
+    [DISP_sh1106_64] = "sh1106-128x64",
+    [DISP_74hc164] = "74hc164-2digit",
+    [DISP_tm1651] = "tm1651-3digit"
 };
 
 const char * const display_label[DISP_nr] = {
     [DISP_ssd1306_32] = "OLED 128x32 on SSD1306",
     [DISP_ssd1306_64] = "OLED 128x64 on SSD1306",
     [DISP_sh1106_32] = "OLED 128x32 on SH1106",
-    [DISP_sh1106_64] = "OLED 128x64 on SH1106"
+    [DISP_sh1106_64] = "OLED 128x64 on SH1106",
+    [DISP_74hc164] = "LED 2 digits on 74HC164",
+    [DISP_tm1651] = "LED 3 digits on TM1651"
 };
 
 /* Written by the firmware thread only. The user interface reads it without a

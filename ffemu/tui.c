@@ -83,6 +83,7 @@ enum {
     CP_button_on, /* bright white on green: the highlighted button */
     CP_shadow,    /* dark gray on black: what a dialog's shadow falls on */
     CP_dark,      /* dark gray on blue: something at rest, use DARK_GRAY */
+    CP_ghost,     /* dark gray on black: the LED display's unlit segments */
     CP_off,       /* light gray on dark gray: a window with nothing to show */
     CP_scroll,    /* blue on cyan: a scroll bar */
     CP_raw,       /* bright magenta on blue: flash bytes FF.CFG cannot say */
@@ -338,117 +339,218 @@ static const char * const key_label[KEY_ACT_nr] = {
  * The display.
  */
 
-/* Size in character cells of a display of @h pixel rows, in rendering
- * style @style. */
-static void display_cells(int style, unsigned int h, int *cw, int *ch)
+/* Size in character cells of @w by @h pixels in rendering style @style. */
+static void cells(int style, unsigned int w, unsigned int h, int *cw,
+                  int *ch)
 {
     switch (style) {
     case STYLE_braille:
-        *cw = OLED_W / 2;
+        *cw = w / 2;
         *ch = h / 4;
         break;
     case STYLE_ascii:
-        *cw = OLED_W;
+        *cw = w;
         *ch = h;
         break;
     default:
-        *cw = OLED_W;
+        *cw = w;
         *ch = h / 2;
         break;
     }
 }
 
+/* The display fitted, DISP_*: config.display is the one chosen, which
+ * differs from it between the choice of another and the restart. */
+static int fitted_display;
+
+/* The font of the LED display's digits for @style. */
+static unsigned int led_font_of(int style)
+{
+    return (style == STYLE_braille) ? LED_FONT_braille
+        : (style == STYLE_ascii) ? LED_FONT_ascii : LED_FONT_half;
+}
+
+/* Size in character cells of the display fitted, in @style. */
+static void display_cells(int style, int *cw, int *ch)
+{
+    unsigned int w, h;
+
+    if (DISP_IS_LED(fitted_display)) {
+        led_size(DISP_DIGITS(fitted_display), led_font_of(style), &w, &h);
+    } else {
+        w = OLED_W;
+        h = DISP_HEIGHT(fitted_display);
+    }
+    cells(style, w, h, cw, ch);
+}
+
 /* The preferred style, unless its display does not fit the terminal: then
- * the narrowest one. */
-static int style_in_use(unsigned int h)
+ * the narrowest one, which for the LED display is ASCII. */
+static int style_in_use(void)
 {
     int cw, ch;
 
-    display_cells(config.style, h, &cw, &ch);
-    return (cw + 2 > COLS) ? STYLE_braille : config.style;
+    display_cells(config.style, &cw, &ch);
+    if (cw + 2 <= COLS)
+        return config.style;
+    return DISP_IS_LED(fitted_display) ? STYLE_ascii : STYLE_braille;
 }
 
-/* Draws the display at (@y0,@x0) in @style; @too_small if it does not fit
- * the window even so. */
-static void draw_display(int y0, int x0, int style, bool too_small,
-                         const struct oled_view *v, const uint8_t *px)
+/* The bits of cell (@x,@y) of @w-wide pixels @px in @style: the dots of a
+ * braille character, the halves of a block, or the one pixel. */
+static unsigned int cell_bits(int style, const uint8_t *px, unsigned int w,
+                              int x, int y)
+{
+    /* Dots are numbered down the left column, then the right, except for
+     * the bottom pair, which was added later. */
+    static const uint8_t dot[4][2] = {
+        { 0x01, 0x08 }, { 0x02, 0x10 }, { 0x04, 0x20 }, { 0x40, 0x80 } };
+    unsigned int i, j, bits = 0;
+
+    switch (style) {
+    case STYLE_braille:
+        for (i = 0; i < 4; i++)
+            for (j = 0; j < 2; j++)
+                if (px[(4*y + i) * w + 2*x + j])
+                    bits |= dot[i][j];
+        break;
+    case STYLE_ascii:
+        bits = px[y * w + x];
+        break;
+    default:
+        bits = px[2*y * w + x] | (px[(2*y + 1) * w + x] << 1);
+        break;
+    }
+    return bits;
+}
+
+/* Draws @w by @h pixels at (@y0,@x0) in @style: @lit in @attr, and where
+ * a cell has nothing lit, @all, the unlit segments of the LED display, in
+ * dark gray on the same black. */
+static void draw_pixels(int y0, int x0, int style, const uint8_t *lit,
+                        const uint8_t *all, unsigned int w, unsigned int h,
+                        attr_t attr)
+{
+    static const wchar_t half[4] = { L' ', 0x2580, 0x2584, 0x2588 };
+    attr_t ghost_attr = COLOR_PAIR(CP_ghost) | ((COLORS >= 16) ? 0 : A_BOLD);
+    wchar_t line[512];
+    bool ghost[ARRAY_SIZE(line)];
+    int cw, ch, x, y, run;
+
+    if (!has_colors())
+        all = NULL;
+    cells(style, w, h, &cw, &ch);
+    if (cw > (int)ARRAY_SIZE(line))
+        cw = ARRAY_SIZE(line);
+    for (y = 0; y < ch; y++) {
+        for (x = 0; x < cw; x++) {
+            unsigned int bits = cell_bits(style, lit, w, x, y);
+            ghost[x] = !bits && (all != NULL)
+                && ((bits = cell_bits(style, all, w, x, y)) != 0);
+            line[x] = (style == STYLE_braille) ? 0x2800 + bits
+                : (style == STYLE_ascii) ? (bits ? (wchar_t)ascii_pixel : L' ')
+                : half[bits];
+        }
+        /* In runs of one attribute. */
+        for (x = 0; x < cw; x = run) {
+            for (run = x + 1; (run < cw) && (ghost[run] == ghost[x]); run++)
+                continue;
+            put_wide(y0 + y, x0 + x, ghost[x] ? ghost_attr : attr, line + x,
+                     run - x);
+        }
+    }
+}
+
+static const char mismatch_note[] = " - display type mismatch";
+
+/* The frame of the display at (@y0,@x0), @cw by @ch cells inside, with
+ * @title; the end of the title in red if @mismatch, the firmware being set
+ * up for another display than the one fitted. */
+static void display_frame(int y0, int x0, int cw, int ch, const char *title,
+                          bool mismatch, attr_t attr)
+{
+    int tw = strlen(title) + 2;
+
+    frame(y0, x0, cw + 2, ch + 2, title, attr, COLOR_PAIR(CP_dframe));
+    if (mismatch && (tw <= cw + 2 - 4))
+        put(y0, x0 + (cw + 2 - tw) / 2 + 1 + strlen(title)
+            - strlen(mismatch_note), strlen(mismatch_note), BRIGHT(CP_note),
+            "%s", mismatch_note);
+}
+
+/* The rendering style and its key, for the bottom left corner of the
+ * display's frame; or that the window is too small, @too_small or when
+ * @style is not the one chosen, on the lowest line left above the status
+ * line if the bottom is cut off, over the pixels. */
+static void display_hint(int y0, int x0, int ch, int style, bool too_small)
 {
     static const char * const style_label[STYLE_nr + 1] = {
         [STYLE_braille] = "Braille",
         [STYLE_half] = "Half blocks",
         [STYLE_ascii] = "ASCII"
     };
-#define PX(x,y) px[(y)*OLED_W + (x)]
-    static const wchar_t half[4] = { L' ', 0x2580, 0x2584, 0x2588 };
-    attr_t attr = (config.display_color & 8) ? BRIGHT(CP_display)
-        : COLOR_PAIR(CP_display);
-    wchar_t line[OLED_W];
-    int cw, ch, x, y, hint_y;
-    char title[96];
-    bool mismatch = v->present && (v->driven != v->height);
-    int tw;
-#define MISMATCH " - display type mismatch"
+    char hint[64];
+    int hint_y;
 
-    display_cells(style, v->height, &cw, &ch);
-
-    snprintf(title, sizeof(title), "OLED 128x%u on %s%s%s", v->height,
-             v->chip, v->on ? "" : " - off", mismatch ? MISMATCH : "");
-    frame(y0, x0, cw + 2, ch + 2, title, attr, COLOR_PAIR(CP_dframe));
-
-    /* The firmware set up for another display than the one fitted: in red,
-     * where frame() put the end of the title. */
-    tw = strlen(title) + 2;
-    if (mismatch && (tw <= cw + 2 - 4))
-        put(y0, x0 + (cw + 2 - tw) / 2 + 1 + strlen(title) - strlen(MISMATCH),
-            strlen(MISMATCH), BRIGHT(CP_note), "%s", MISMATCH);
-
-    /* The rendering style and its key, for the bottom left corner; or that
-     * the window is too small, on the lowest line left above the status
-     * line if the bottom is cut off. */
     if (too_small)
-        snprintf(title, sizeof(title), " Window too small ");
+        snprintf(hint, sizeof(hint), " Window too small ");
     else
-        snprintf(title, sizeof(title), " %c: %s ",
+        snprintf(hint, sizeof(hint), " %c: %s ",
                  toupper(STYLE_KEYS[config.style - 1]),
                  (style == config.style) ? style_label[style]
                  : "Window too small");
     too_small = too_small || (style != config.style);
-    for (y = 0; y < ch; y++) {
-        for (x = 0; x < cw; x++) {
-            switch (style) {
-            case STYLE_braille: {
-                /* Dots are numbered down the left column, then the right,
-                 * except for the bottom pair, which was added later. */
-                static const uint8_t dot[4][2] = {
-                    { 0x01, 0x08 }, { 0x02, 0x10 },
-                    { 0x04, 0x20 }, { 0x40, 0x80 } };
-                unsigned int i, j, bits = 0;
-                for (i = 0; i < 4; i++)
-                    for (j = 0; j < 2; j++)
-                        if (PX(2*x + j, 4*y + i))
-                            bits |= dot[i][j];
-                line[x] = 0x2800 + bits;
-                break;
-            }
-            case STYLE_ascii:
-                line[x] = PX(x, y) ? L'#' : L' ';
-                break;
-            default:
-                line[x] = half[PX(x, 2*y) | (PX(x, 2*y + 1) << 1)];
-                break;
-            }
-        }
-        put_wide(y0 + 1 + y, x0 + 1, attr, line, cw);
-    }
-#undef PX
-#undef MISMATCH
-
-    /* Over the pixels if the bottom is cut off. */
     hint_y = y0 + ch + 1;
     if ((hint_y > LINES - 2) && (LINES - 2 > y0))
         hint_y = LINES - 2;
-    put(hint_y, x0 + 2, strlen(title),
-        COLOR_PAIR(too_small ? CP_note : CP_dframe), "%s", title);
+    put(hint_y, x0 + 2, strlen(hint),
+        COLOR_PAIR(too_small ? CP_note : CP_dframe), "%s", hint);
+}
+
+/* Draws the OLED at (@y0,@x0) in @style; @too_small if it does not fit the
+ * window even so. */
+static void draw_display(int y0, int x0, int style, bool too_small,
+                         const struct oled_view *v, const uint8_t *px)
+{
+    attr_t attr = (config.display_color & 8) ? BRIGHT(CP_display)
+        : COLOR_PAIR(CP_display);
+    int cw, ch;
+    char title[96];
+    bool mismatch = v->present && (v->driven != v->height);
+
+    cells(style, OLED_W, v->height, &cw, &ch);
+    snprintf(title, sizeof(title), "OLED 128x%u on %s%s%s", v->height,
+             v->chip, v->on ? "" : " - off", mismatch ? mismatch_note : "");
+    display_frame(y0, x0, cw, ch, title, mismatch, attr);
+    draw_pixels(y0 + 1, x0 + 1, style, px, NULL, OLED_W, v->height, attr);
+    display_hint(y0, x0, ch, style, too_small);
+}
+
+/* Draws the LED display at (@y0,@x0) in @style, its segments as pixels,
+ * the unlit ones faint; as a mismatch when display-type in flash keeps the
+ * firmware from looking for it. */
+static void draw_led(int y0, int x0, int style, bool too_small,
+                     const struct led_view *v)
+{
+    const uint8_t *lit, *all;
+    attr_t attr = (config.display_color & 8) ? BRIGHT(CP_display)
+        : COLOR_PAIR(CP_display);
+    uint8_t cfg[256];
+    unsigned int w, h;
+    int cw, ch;
+    char title[96];
+    bool mismatch;
+
+    emu_flash_get(cfg);
+    mismatch = !emu_flash_display_auto(cfg);
+    led_pixels(v, led_font_of(style), &lit, &all, &w, &h);
+    cells(style, w, h, &cw, &ch);
+    snprintf(title, sizeof(title), "LED %u digits on %s%s%s", v->nr_digits,
+             (v->nr_digits == 3) ? "TM1651" : "74HC164",
+             v->on ? "" : " - off", mismatch ? mismatch_note : "");
+    display_frame(y0, x0, cw, ch, title, mismatch, attr);
+    draw_pixels(y0 + 1, x0 + 1, style, lit, all, w, h, attr);
+    display_hint(y0, x0, ch, style, too_small);
 }
 
 /*
@@ -1310,16 +1412,24 @@ static void redraw(void)
 {
     static uint8_t px[OLED_W * OLED_MAX_H];
     struct oled_view v;
+    struct led_view lv;
     int style, cw, ch, dh, y, kw, sw, bottom = LINES - 1;
+    bool too_small;
 
-    oled_get_view(&v, px);
-    style = style_in_use(v.height);
-    display_cells(style, v.height, &cw, &ch);
+    style = style_in_use();
+    display_cells(style, &cw, &ch);
     dh = ch + 2;
+    too_small = (cw + 2 > COLS) || (1 + dh > bottom);
 
     erase();
 
-    draw_display(1, 0, style, (cw + 2 > COLS) || (1 + dh > bottom), &v, px);
+    if (DISP_IS_LED(fitted_display)) {
+        led_get_view(&lv);
+        draw_led(1, 0, style, too_small, &lv);
+    } else {
+        oled_get_view(&v, px);
+        draw_display(1, 0, style, too_small, &v, px);
+    }
     draw_ff_cfg(1, cw + 2, COLS - cw - 2, (1 + dh > bottom) ? bottom - 1 : dh);
     draw_bars();
 
@@ -1534,14 +1644,14 @@ static void draw_display_dialog(void)
 {
     int w = 47, y, x, i;
 
-    dialog_box(w, 12, "Display type", &y, &x);
+    dialog_box(w, 14, "Display type", &y, &x);
     for (i = 0; i < DISP_nr; i++)
         radio_row(y + 2 + i, x + 3, w - 6, i == dialog_display,
                   i == dialog_display, display_label[i]);
-    put(y + 7, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
+    put(y + 9, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
         "Changing the display restarts the device.");
-    button(y + 9, x + 10, button_attr(0), "  OK  ");
-    button(y + 9, x + w - 10 - 10, button_attr(1), "  Cancel  ");
+    button(y + 11, x + 10, button_attr(0), "  OK  ");
+    button(y + 11, x + w - 10 - 10, button_attr(1), "  Cancel  ");
 }
 
 /* The configuration in flash when the display changed, which may not suit
@@ -1562,6 +1672,23 @@ static void option_value(const void *cfg, const char *name, char *buf,
     buf[0] = '\0';
 }
 
+/* Whether display-type in @cfg suits display @d: an LED display is found
+ * only when the firmware looks for a display by itself. */
+static bool display_type_fits(const void *cfg, int d)
+{
+    return DISP_IS_LED(d) ? emu_flash_display_auto(cfg)
+        : emu_flash_display_fits(cfg, DISP_HEIGHT(d));
+}
+
+/* Sets display-type in @cfg to suit the display fitted. */
+static void fit_display_type(void *cfg)
+{
+    if (DISP_IS_LED(config.display))
+        emu_flash_set_display_auto(cfg);
+    else
+        emu_flash_set_oled_rows(cfg, DISP_HEIGHT(config.display));
+}
+
 static void draw_rows_dialog(void)
 {
     uint8_t cfg[256];
@@ -1570,7 +1697,7 @@ static void draw_rows_dialog(void)
 
     memcpy(cfg, rows_cfg, sizeof(cfg));
     option_value(cfg, "display-type", now, sizeof(now));
-    emu_flash_set_oled_rows(cfg, DISP_HEIGHT(config.display));
+    fit_display_type(cfg);
     option_value(cfg, "display-type", then, sizeof(then));
     snprintf(line1, sizeof(line1), "Flash mem has display-type = %s.", now);
     snprintf(line2, sizeof(line2), "Change it to %s?", then);
@@ -1830,7 +1957,7 @@ static void set_display(int display)
         rc_save();
     }
     emu_flash_get(rows_cfg);
-    if (!emu_flash_display_fits(rows_cfg, DISP_HEIGHT(display))) {
+    if (!display_type_fits(rows_cfg, display)) {
         dialog = DLG_rows;
         dialog_button = 0;
         return;
@@ -2353,7 +2480,8 @@ static bool fd_apply(void)
 
 /* Opens the emul dialog if display-type in flash has changed and no longer
  * suits the display fitted, while another emulated display would suit it:
- * the same chip with the other number of rows. */
+ * an OLED of the rows it names, of the same chip, or on an SSD1306 when an
+ * LED display is fitted. */
 static bool fd_offer_display(const char *old_type)
 {
     uint8_t cfg[256];
@@ -2363,13 +2491,12 @@ static bool fd_offer_display(const char *old_type)
 
     emu_flash_get(cfg);
     option_value(cfg, "display-type", type, sizeof(type));
-    if (!strcmp(type, old_type)
-        || emu_flash_display_fits(cfg, DISP_HEIGHT(config.display)))
+    if (!strcmp(type, old_type) || display_type_fits(cfg, config.display))
         return false;
     rows = emu_flash_display_fits(cfg, 64) ? 64
         : emu_flash_display_fits(cfg, 32) ? 32 : 0;
     for (d = 0; d < DISP_nr; d++)
-        if ((DISP_HEIGHT(d) == rows)
+        if (!DISP_IS_LED(d) && (DISP_HEIGHT(d) == rows)
             && (DISP_IS_SH1106(d) == DISP_IS_SH1106(config.display)))
             break;
     if (d == DISP_nr)
@@ -2660,7 +2787,7 @@ static void handle_key(int key)
         set_display(dialog_display);
         return;
     case DK_rows_yes:
-        emu_flash_set_oled_rows(rows_cfg, DISP_HEIGHT(config.display));
+        fit_display_type(rows_cfg);
         emu_flash_save(rows_cfg, emu_flash_cfg_size());
         leave(KEY_ACT_reset);
     case DK_rows_no:
@@ -2734,6 +2861,7 @@ static void *tui_thread(void *unused)
     int key, rc, i;
     wint_t ch;
 
+    fitted_display = config.display;
     initscr();
     cbreak();
     noecho();
@@ -2777,6 +2905,7 @@ static void *tui_thread(void *unused)
         init_pair(CP_button_on, COLOR_WHITE, COLOR_GREEN);
         init_pair(CP_shadow, COLOR_BLACK, COLOR_BLACK);
         init_pair(CP_dark, (COLORS >= 16) ? 8 : COLOR_BLACK, COLOR_BLUE);
+        init_pair(CP_ghost, (COLORS >= 16) ? 8 : COLOR_BLACK, COLOR_BLACK);
         init_pair(CP_off, COLOR_WHITE, (COLORS >= 16) ? 8 : COLOR_BLACK);
         init_pair(CP_scroll, COLOR_BLUE, COLOR_CYAN);
         init_pair(CP_raw, COLOR_MAGENTA, COLOR_BLUE);
