@@ -114,7 +114,7 @@ enum {
 /* Controls, Status and Flash mem are side by side, of equal height; Status
  * is never narrower than its board name needs. */
 #define STATUS_MIN_W 42
-#define PANE_ROWS 12
+#define PANE_ROWS 13
 
 /* The letters that select the rendering styles, in their order. */
 #define STYLE_KEYS "qwe"
@@ -507,6 +507,49 @@ static int piece(int y, int x, int end, attr_t attr, const char *fmt, ...)
     return x + strlen(s);
 }
 
+/* IMAGE_A.CFG, in which the firmware keeps the image selected, as the
+ * firmware sees it now: its name, then its text with the line ends shown
+ * as \r and \n, or "absent" or "empty". Read again when the drive has
+ * been written. */
+static void draw_image_a(int y, int x, int w, const struct usb_info *usb)
+{
+    static char text[300];
+    static unsigned long reads_seen = ~0ul, writes_seen;
+    static unsigned int gen_seen;
+    static bool have;
+    const char *p;
+    int c, n;
+
+    if (!usb->inserted) {
+        have = false;
+        reads_seen = ~0ul;
+    } else if ((reads_seen == ~0ul) || (usb->nr_writes != writes_seen)
+               || (usb->ff_cfg_gen != gen_seen)) {
+        have = usb_read_text("IMAGE_A CFG", text, sizeof(text));
+        reads_seen = usb->nr_reads;
+        writes_seen = usb->nr_writes;
+        gen_seen = usb->ff_cfg_gen;
+    }
+
+    c = piece(y, x, x + w, BRIGHT(CP_path), "IMAGE_A.CFG ");
+    if (!have || (strspn(text, " \t\r\n") == strlen(text))) {
+        piece(y, c, x + w, DARK_GRAY, have ? "empty" : "absent");
+        return;
+    }
+    for (p = text; *p != '\0'; p += n) {
+        n = strcspn(p, "\r\n");
+        if (n != 0) {
+            c = piece(y, c, x + w, BRIGHT(CP_value), "%.*s", n, p);
+            continue;
+        }
+        c = piece(y, c, x + w, BRIGHT(CP_raw), (*p == '\r') ? "\\r" : "\\n");
+        n = 1;
+    }
+    /* Cut short: the mark, which the pieces beyond the edge do not draw. */
+    if ((c > x + w) && (pane_right >= 0))
+        put_wide(y, pane_right, BRIGHT(CP_crop), L">", 1);
+}
+
 static void draw_status(int y, int x, int w)
 {
     struct usb_info usb;
@@ -581,6 +624,7 @@ static void draw_status(int y, int x, int w)
         field(&y, x, w, "USB drive", DARK_GRAY, "Ejected");
     }
     left_path(y++, x, w, tilde(usb_path_name, path, sizeof(path)));
+    draw_image_a(y++, x, w, &usb);
     /* Why the drive could not be inserted, if it could not, in place of the
      * gap below. */
     if (!usb.inserted && usb.error[0])

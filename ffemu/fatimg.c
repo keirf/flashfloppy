@@ -1113,7 +1113,17 @@ struct vol {
     unsigned int spc, type; /* type: 12, 16 or 32 */
     uint32_t cached;        /* the FAT sector in @buf */
     uint8_t buf[SEC];
+    bool live;              /* as the firmware sees it: with its writes */
 };
+
+static bool get_sectors(struct image *im, uint8_t *p, uint32_t sec,
+                        unsigned int count);
+
+static bool vol_read(struct vol *v, uint8_t *b, uint32_t sec)
+{
+    return v->live ? get_sectors(v->im, b, sec, 1)
+        : dev_read(v->im, b, sec, 1);
+}
 
 /* As check_fs() of FatFS. */
 static bool is_fat_vbr(const uint8_t *b)
@@ -1127,7 +1137,7 @@ static bool is_fat_vbr(const uint8_t *b)
         && (get16(b + 22) != 0);
 }
 
-static bool vol_open(struct vol *v, struct image *im)
+static bool vol_open(struct vol *v, struct image *im, bool live)
 {
     uint8_t b[SEC];
     uint32_t base = 0, part[4], nr_sys, total, fat_size;
@@ -1135,7 +1145,8 @@ static bool vol_open(struct vol *v, struct image *im)
 
     v->im = im;
     v->cached = ~0u;
-    if (!dev_read(im, b, 0, 1))
+    v->live = live;
+    if (!vol_read(v, b, 0))
         return false;
     if (!is_fat_vbr(b)) {
         if (get16(b + 510) != 0xaa55)
@@ -1143,7 +1154,7 @@ static bool vol_open(struct vol *v, struct image *im)
         for (i = 0; i < 4; i++)
             part[i] = get32(b + 446 + 16*i + 8);
         for (i = 0; i < 4; i++)
-            if (part[i] && dev_read(im, b, part[i], 1) && is_fat_vbr(b))
+            if (part[i] && vol_read(v, b, part[i]) && is_fat_vbr(b))
                 break;
         if (i == 4)
             return false;
@@ -1178,7 +1189,7 @@ static uint32_t vol_next(struct vol *v, uint32_t clus)
     for (i = 0; i < ((v->type == 32) ? 4 : 2); i++) {
         uint32_t sec = v->fat + (offs + i) / SEC;
         if (sec != v->cached) {
-            if (!dev_read(v->im, v->buf, sec, 1))
+            if (!vol_read(v, v->buf, sec))
                 return 0;
             v->cached = sec;
         }
@@ -1197,13 +1208,13 @@ static bool vol_sector(struct vol *v, uint32_t *clus, uint32_t k, uint8_t *b)
 {
     if (*clus == 0) {
         if (v->root_clus == 0)
-            return (k < v->nr_root) && dev_read(v->im, b, v->root + k, 1);
+            return (k < v->nr_root) && vol_read(v, b, v->root + k);
         *clus = v->root_clus;
     }
     if ((k != 0) && (k % v->spc == 0))
         *clus = vol_next(v, *clus);
     return (*clus != 0)
-        && dev_read(v->im, b, v->data + (*clus - 2) * v->spc + k % v->spc, 1);
+        && vol_read(v, b, v->data + (*clus - 2) * v->spc + k % v->spc);
 }
 
 /* The entry with short name @name in the directory at cluster @dir, 0 for
@@ -1267,7 +1278,7 @@ static void image_ff_cfg(struct image *im)
     uint32_t clus, size, k;
     char *text;
 
-    if (!vol_open(&v, im))
+    if (!vol_open(&v, im, false))
         return;
     if (vol_find(&v, 0, "FF         ", e) && (e[11] & ATTR_DIR)) {
         entry_name(e, ff);
@@ -1643,6 +1654,34 @@ void usb_get_info(struct usb_info *info)
     info->nr_reads = im->nr_reads;
     info->nr_writes = im->nr_writes;
     info->ff_cfg_gen = ff_cfg_gen;
+}
+
+bool usb_read_text(const char *name83, char *buf, size_t size)
+{
+    struct image *im = cur;
+    struct vol v;
+    uint8_t e[32], b[SEC];
+    uint32_t clus, dir = 0, len, k;
+
+    if ((im == NULL) || !vol_open(&v, im, true))
+        return false;
+    /* The firmware keeps its files in the folder FF if there is one. */
+    if (vol_find(&v, 0, "FF         ", e) && (e[11] & ATTR_DIR))
+        dir = entry_clus(&v, e);
+    if (!vol_find(&v, dir, name83, e) || (e[11] & ATTR_DIR))
+        return false;
+    len = get32(e + 28);
+    if (len > size - 1)
+        len = size - 1;
+    clus = entry_clus(&v, e);
+    for (k = 0; (k * SEC < len) && (clus != 0); k++) {
+        if (!vol_sector(&v, &clus, k, b))
+            break;
+        memcpy(buf + k * SEC, b, (len - k * SEC < SEC) ? len - k * SEC
+               : SEC);
+    }
+    buf[len] = '\0';
+    return true;
 }
 
 const char *usb_ff_cfg_text(void)

@@ -136,6 +136,11 @@ void usb_get_info(struct usb_info *info);
 /* The text of FF.CFG on a drive from an image or a disk, read when it was
  * inserted; NULL for a directory, or if it has none. */
 const char *usb_ff_cfg_text(void);
+/* The text of the file with short name @name83 (8.3, blank-padded) in the
+ * folder FF, or in the root if the drive has no such folder, as the
+ * firmware sees the drive now, its writes included; false if there is no
+ * drive or no such file. */
+bool usb_read_text(const char *name83, char *buf, size_t size);
 /* While the drive is out, usb_get_info() and usb_ff_cfg_text() tell of the
  * FF.CFG of the last drive. */
 /* Where FF.CFG is, or would be, under directory @dir, as a path relative
