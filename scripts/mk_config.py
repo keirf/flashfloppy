@@ -31,6 +31,8 @@ def main(argv):
                 val = "HOST_" + val
             elif opt == "oled-font":
                 val = "FONT_" + val
+            elif opt == "show-filename-ext":
+                val = "SHOWEXT_" + val
             elif opt == "display-type":
                 opts = []
                 for x in val.split("-"):

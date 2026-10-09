@@ -172,6 +172,10 @@ struct packed ff_cfg {
     uint8_t notify_volume;
     uint16_t hfe_rpm;
     uint8_t hfe_step;
+#define SHOWEXT_no   0
+#define SHOWEXT_yes  1
+#define SHOWEXT_auto 2
+    uint8_t show_filename_ext;
 };
 
 extern struct ff_cfg ff_cfg;
