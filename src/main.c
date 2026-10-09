@@ -1564,7 +1564,7 @@ out:
 
 clear_image_a:
     /* Error! Clear the IMAGE_A.CFG file. */
-    printk("IMAGE_A.CFG is bad: clearing it\n");
+    printk("Bad IMAGE_A.CFG: clearing\n");
     F_lseek(&fs->file, 0);
     lcd_write(0, 3, -1, "/");
     F_truncate(&fs->file);
