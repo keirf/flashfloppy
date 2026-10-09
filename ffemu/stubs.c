@@ -147,7 +147,7 @@ void flash_ff_cfg_update(void *scratch)
         return;
 
     emu_flash_save(&ff_cfg, sizeof(ff_cfg));
-    printk("Config: Written to Flash\n");
+    printk("CFG: Written to flash\n");
 }
 
 void flash_ff_cfg_erase(void)
@@ -162,10 +162,10 @@ void flash_ff_cfg_read(void)
         && (f.version == dfl_ff_cfg.version);
 
     ff_cfg = dfl_ff_cfg;
-    printk("Config: ");
+    printk("CFG: ");
     if (found) {
         unsigned int sz = min_t(unsigned int, f.size, ff_cfg.size);
-        printk("Flash (ver %u, size %u)\n", f.version, sz);
+        printk("Flash v%u %u bytes\n", f.version, sz);
         /* Copy over all options that are present in Flash. */
         if (sz > offsetof(struct ff_cfg, interface))
             memcpy(&ff_cfg.interface, &f.interface,
