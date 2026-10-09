@@ -10,7 +10,8 @@
  *
  * Modelled: GPIO inputs for the buttons, the rotary encoder and the floppy
  * interface, with their EXTI interrupts as AFIO routes them, and TIM2's
- * capture of STEP; the one-shot timer behind timer.c; the I2C master with its
+ * capture of STEP; the two GPIO lines of the 7-segment LED display; the
+ * one-shot timer behind timer.c; the I2C master with its
  * DMA channel, which carries the display traffic. The floppy data timers and
  * their DMA channels are mere registers: no data flows.
  *
@@ -140,6 +141,11 @@ uint32_t emu_stk_now(void)
 #define PB_MOTOR   12  /* on a board with KC30 header type 2, else PB15 */
 #define PB_MOTOR2  15
 
+/* The 7-segment LED display's lines, which are I2C1's on this board: the
+ * display header carries either. */
+#define PB_LED_DAT  6
+#define PB_LED_CLK  7
+
 /* EXTI PR is cleared by writing ones to it, which ordinary memory cannot
  * show: the model keeps the pending lines, with this reserved bit set, and a
  * write of the firmware's leaves it out. */
@@ -242,10 +248,27 @@ static unsigned int rot_pos;
 static uint64_t rot_next_ns;
 #define ROT_STEP_NS 1500000
 
+/* Port B's output register, as the firmware's writes to the set/reset and
+ * the reset registers leave it. */
+static uint32_t pb_odr;
+
+/* Whether port B pin @pin is high: its output bit when it is a plain
+ * output, push-pull or open-drain, which the pull-up completes; an input
+ * or an alternate function leaves the line to the pull-up. */
+static bool_t pb_high(unsigned int pin)
+{
+    unsigned int cnf = (emu_gpio[1].crl >> (pin * 4)) & 0xf;
+
+    if (((cnf & 3) == 0) || (cnf & 8))
+        return TRUE;
+    return !!(pb_odr & m(pin));
+}
+
 static void gpio_sync(uint64_t now)
 {
     unsigned int b = emu_in_buttons;
     uint32_t pa = 0xffff, pb = 0xffff, bsrr;
+    bool_t led_clk, led_dat;
 
     /* Outputs are driven through the set/reset register: a write that sets
      * the speaker pin is the start of a pulse. */
@@ -255,6 +278,10 @@ static void gpio_sync(uint64_t now)
         if (bsrr & m(PIN_SPEAKER))
             __sync_fetch_and_add(&emu_out_speaker, 1);
     }
+    bsrr = emu_gpio[1].bsrr;
+    emu_gpio[1].bsrr = 0;
+    pb_odr = ((pb_odr & ~(bsrr >> 16)) | (bsrr & 0xffff)) & ~emu_gpio[1].brr;
+    emu_gpio[1].brr = 0;
 
     if ((rot_seq == NULL) && (emu_in_rotary != 0)) {
         bool_t cw = emu_in_rotary > 0;
@@ -281,6 +308,14 @@ static void gpio_sync(uint64_t now)
     if (!(rot_state & 2))
         pa &= ~m(PIN_ROT_B);
     fdd_pins(&pa, &pb);
+
+    /* The LED display's lines as driven, DAT pulled low by it for an ACK. */
+    led_clk = pb_high(PB_LED_CLK);
+    led_dat = pb_high(PB_LED_DAT);
+    if (emu_led_sync(led_clk, led_dat) || !led_dat)
+        pb &= ~m(PB_LED_DAT);
+    if (!led_clk)
+        pb &= ~m(PB_LED_CLK);
 
     emu_gpio[0].idr = pa;
     emu_gpio[1].idr = pb;

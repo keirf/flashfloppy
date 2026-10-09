@@ -59,8 +59,8 @@ static const struct setting {
         "5000." },
     [SET_display] = {
         "display",
-        "Display type: ssd1306-128x32, ssd1306-128x64, sh1106-128x32 or "
-        "sh1106-128x64. Key 0." }
+        "Display type: ssd1306-128x32, ssd1306-128x64, sh1106-128x32, "
+        "sh1106-128x64, 74hc164-2digit or tm1651-3digit. Key 0." }
 };
 
 /* The value of setting @set as the file has it, into @buf. */

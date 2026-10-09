@@ -72,11 +72,17 @@ void flash_summary(char *buf, size_t size);
 #define OLED_W 128
 #define OLED_MAX_H 64
 
-/* The displays that ffemu can fit: the controller and the panel's height. */
+/* The displays that ffemu can fit: an OLED, by its controller and the
+ * panel's height, or a 7-segment LED display, by its controller and its
+ * digits. */
 enum { DISP_ssd1306_32, DISP_ssd1306_64, DISP_sh1106_32, DISP_sh1106_64,
-       DISP_nr };
-#define DISP_IS_SH1106(d) ((d) >= DISP_sh1106_32)
+       DISP_74hc164, DISP_tm1651, DISP_nr };
+#define DISP_IS_LED(d) ((d) >= DISP_74hc164)
+#define DISP_IS_SH1106(d) (((d) >= DISP_sh1106_32) && !DISP_IS_LED(d))
+/* Of an OLED. */
 #define DISP_HEIGHT(d) (((d) & 1) ? 64 : 32)
+/* Of an LED display. */
+#define DISP_DIGITS(d) (((d) == DISP_tm1651) ? 3 : 2)
 /* Their names in the settings file, and on the screen. */
 extern const char * const display_name[DISP_nr];
 extern const char * const display_label[DISP_nr];
@@ -96,6 +102,40 @@ struct oled_view {
 void oled_init(int display);
 /* Snapshot for drawing: @px gets OLED_MAX_H rows of OLED_W bytes, 0 or 1. */
 void oled_get_view(struct oled_view *view, uint8_t *px);
+
+/*
+ * led_7seg.c
+ */
+
+struct led_view {
+    bool present;            /* an LED display is fitted */
+    bool on;
+    unsigned int nr_digits;  /* 3 or 2 */
+    unsigned int brightness; /* 0-7, of the TM1651 */
+    unsigned int nr_updates; /* counts writes of the digits */
+    uint8_t seg[3];          /* each digit's segments: a to g, the point */
+};
+
+/* The fonts of the digits, one per rendering (led_7seg_font.h). */
+enum { LED_FONT_ascii, LED_FONT_half, LED_FONT_braille };
+/* The character of a lit pixel in the ASCII rendering (led_7seg_font.h). */
+extern const char ascii_pixel;
+
+/* Fits display @display, DISP_74hc164 or DISP_tm1651. */
+void led_init(int display);
+void led_get_view(struct led_view *view);
+/* The size in pixels of @nr_digits digits in font @font. */
+void led_size(unsigned int nr_digits, unsigned int font, unsigned int *w,
+              unsigned int *h);
+/* The digits of @v as pixels in font @font: @lit the segments that are
+ * on, @all every segment, each @w by @h bytes, 0 or 1, in buffers of
+ * this module's that the next call reuses. */
+void led_pixels(const struct led_view *v, unsigned int font,
+                const uint8_t **lit, const uint8_t **all, unsigned int *w,
+                unsigned int *h);
+/* The digits of @v as text, a point after a digit whose point is lit,
+ * '?' for a pattern that is no digit or letter of the firmware's. */
+void led_text(const struct led_view *v, char *buf, size_t size);
 
 /*
  * fatimg.c

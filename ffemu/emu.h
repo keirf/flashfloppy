@@ -61,6 +61,10 @@ void emu_i2c_dev_write(uint8_t b);
 uint8_t emu_i2c_dev_read(void);
 void emu_i2c_dev_stop(void);
 
+/* The 7-segment LED display on two GPIO lines (led_7seg.c): given the levels
+ * the firmware drives on CLK and DAT, 1 while the display pulls DAT low. */
+int emu_led_sync(int clk, int dat);
+
 /* USB drive: 512-byte sectors of a FAT volume (fatimg.c). */
 int emu_usb_inserted(void);
 int emu_usb_read(void *buf, uint32_t sector, unsigned int count);
@@ -150,5 +154,9 @@ int emu_flash_display_fits(const void *cfg, unsigned int rows);
 /* Sets display-type in @cfg for an OLED of @rows rows, keeping what else it
  * says about an OLED. */
 void emu_flash_set_oled_rows(void *cfg, unsigned int rows);
+/* Whether display-type in @cfg lets the firmware look for a display by
+ * itself, which is how it finds an LED display; and setting it so. */
+int emu_flash_display_auto(const void *cfg);
+void emu_flash_set_display_auto(void *cfg);
 
 #endif /* FFEMU_EMU_H */
