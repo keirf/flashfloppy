@@ -280,7 +280,7 @@ void floppy_set_fintf_mode(void)
     /* Default to Amiga-DD identity until HD image is mounted. */
     update_amiga_id(drv, FALSE);
 
-    printk("Interface: %s (pin2=%s%s, pin34=%s%s)\n",
+    printk("Intf %s: pin2=%s%s pin34=%s%s\n",
            fintf_name[mode],
            pin02_inverted ? "not-" : "", outp_name[pin02] ?: "?",
            pin34_inverted ? "not-" : "", outp_name[pin34] ?: "?");
