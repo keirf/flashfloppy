@@ -1026,6 +1026,22 @@ static void find_ff_cfg(const char *dir, char *buf, size_t size)
     }
 }
 
+void usb_ff_cfg_place(const char *dir, char *buf, size_t size)
+{
+    char path[4096], ff[8], cfg[8];
+
+    if (find_entry(dir, "FF", true, ff, sizeof(ff))) {
+        snprintf(path, sizeof(path), "%s/%s", dir, ff);
+        if (!find_entry(path, "FF.CFG", false, cfg, sizeof(cfg)))
+            snprintf(cfg, sizeof(cfg), "FF.CFG");
+        snprintf(buf, size, "%s/%s", ff, cfg);
+    } else if (find_entry(dir, "FF.CFG", false, cfg, sizeof(cfg))) {
+        snprintf(buf, size, "%s", cfg);
+    } else {
+        snprintf(buf, size, "FF.CFG");
+    }
+}
+
 static struct image *build_image(const char *dir, const struct stat *st)
 {
     struct image *im = xalloc(sizeof(*im));

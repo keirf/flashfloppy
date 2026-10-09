@@ -138,9 +138,21 @@ void usb_get_info(struct usb_info *info);
 const char *usb_ff_cfg_text(void);
 /* While the drive is out, usb_get_info() and usb_ff_cfg_text() tell of the
  * FF.CFG of the last drive. */
+/* Where FF.CFG is, or would be, under directory @dir, as a path relative
+ * to it: in the folder FF if there is one, else in @dir itself. */
+void usb_ff_cfg_place(const char *dir, char *buf, size_t size);
 /* Writes the drive as the firmware sees it to file @path; if that fails,
  * says why in @err. */
 bool usb_save(const char *path, char *err, size_t size);
+
+/*
+ * cfgfile.c
+ */
+
+/* Writes FF.CFG on the USB drive from configuration @cfg, as the flash
+ * memory keeps one: every option, or only those that differ from the
+ * defaults. Says what it did, or why it could not, in @msg. */
+bool ff_cfg_write(const void *cfg, bool all, char *msg, size_t size);
 
 /*
  * usbdisk.c
@@ -151,6 +163,9 @@ bool usb_save(const char *path, char *err, size_t size);
  * into @line. Returns their number. */
 int usb_disk_find(char *dev, size_t size, char *line, size_t line_size,
                   FILE *f);
+/* Where the system has disk @dev, or its first partition, mounted, as a
+ * directory into @buf; false if nowhere. */
+bool usb_disk_mount(const char *dev, char *buf, size_t size);
 
 /*
  * rc.c
