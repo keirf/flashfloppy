@@ -265,6 +265,9 @@ static const char * const rotary_name[] = {
 static const char * const display_on_name[] = {
     [DISPON_no] = "no", [DISPON_yes] = "yes", [DISPON_sel] = "sel"
 };
+static const char * const show_filename_ext_name[] = {
+    [SHOWEXT_no] = "no", [SHOWEXT_yes] = "yes", [SHOWEXT_auto] = "auto"
+};
 static const char * const font_name[] = {
     [FONT_6x13] = "6x13", [FONT_8x16] = "8x16"
 };
@@ -504,6 +507,7 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
     case OPT_sort_priority: k = LOOKUP(s, sort_priority_name); break;
     case OPT_nav_mode: k = LOOKUP(s, nav_mode_name); break;
     case OPT_display_on_activity: k = LOOKUP(s, display_on_name); break;
+    case OPT_show_filename_ext: k = LOOKUP(s, show_filename_ext_name); break;
     case OPT_oled_font: k = LOOKUP(s, font_name); break;
     case OPT_motor_delay:
         if (!strcmp(s, "ignore")) {
@@ -647,6 +651,7 @@ static unsigned int format_option(unsigned int i, const struct ff_cfg *f,
     case OPT_sort_priority: name = NAMED(v, sort_priority_name); break;
     case OPT_nav_mode: name = NAMED(v, nav_mode_name); break;
     case OPT_display_on_activity: name = NAMED(v, display_on_name); break;
+    case OPT_show_filename_ext: name = NAMED(v, show_filename_ext_name); break;
     case OPT_oled_font: name = NAMED(v, font_name); break;
     case OPT_motor_delay:
         if (v == MOTOR_ignore)
