@@ -131,8 +131,13 @@ enum {
 /* The dialog on screen, if any, its highlighted button (0 is the first),
  * and the display that the display dialog has selected. */
 static enum {
-    DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul
+    DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul,
+    DLG_message
 } dialog;
+/* The message box over a dialog: what it says, and the dialog it returns
+ * to when closed. */
+static char msg_title[32], msg_text[256];
+static int msg_return;
 static int dialog_button;
 static int dialog_display;
 static void draw_dialog(void);
@@ -1327,9 +1332,11 @@ static void shadow(int y, int x, int w, int h)
 static void button(int y, int x, attr_t attr, const char *text)
 {
     static const wchar_t right[] = { 0x2584, 0 };
-    wchar_t below[16];
+    wchar_t below[64];
     int i, n = strlen(text);
 
+    if (n > (int)ARRAY_SIZE(below))
+        n = ARRAY_SIZE(below);
     put(y, x, n, attr, "%s", text);
     if (plain())
         return; /* half blocks, which ASCII has nothing for */
@@ -1393,6 +1400,52 @@ static void message_box(const char *title, const char *msg)
 
     colored_box(w, 5, title, COLOR_PAIR(CP_warn), BRIGHT(CP_warn), &y, &x);
     put(y + 2, x + 4, w - 5, BRIGHT(CP_warn), "%s", msg);
+}
+
+/* Opens the red message box with @title and @text, a sentence, over dialog
+ * @back, to which Enter or Esc returns. */
+static void show_message(int back, const char *title, const char *text)
+{
+    size_t n = strlen(text);
+
+    snprintf(msg_title, sizeof(msg_title), "%s", title);
+    snprintf(msg_text, sizeof(msg_text), "%s%s", text,
+             (n && (text[n - 1] == '.')) ? "" : ".");
+    msg_return = back;
+    dialog = DLG_message;
+}
+
+/* The message box, as the one of a dialog that does not fit: the text
+ * wrapped at blanks to fit the window. */
+static void draw_message_box(void)
+{
+    const char *lines[8], *p = msg_text;
+    int len[8], nr = 0, width = 0, i, y, x, w, max;
+
+    max = (COLS - 12 < 70) ? COLS - 12 : 70;
+    if (max < 16)
+        max = 16;
+    while ((*p != '\0') && (nr < (int)ARRAY_SIZE(lines))) {
+        int n = strlen(p), cut;
+        if (n > max) {
+            for (cut = max; (cut > 0) && (p[cut] != ' '); cut--)
+                ;
+            n = (cut > 0) ? cut : max;
+        }
+        lines[nr] = p;
+        len[nr++] = n;
+        if (n > width)
+            width = n;
+        p += n;
+        while (*p == ' ')
+            p++;
+    }
+    w = width + 8;
+    colored_box(w, nr + 4, msg_title, COLOR_PAIR(CP_warn), BRIGHT(CP_warn),
+                &y, &x);
+    for (i = 0; i < nr; i++)
+        put(y + 2 + i, x + 4, len[i], BRIGHT(CP_warn), "%.*s", len[i],
+            lines[i]);
 }
 
 /* The face of button @nr of a dialog: green, or white when highlighted. */
@@ -1535,6 +1588,12 @@ static void draw_dialog(void)
         break;
     case DLG_emul:
         draw_emul_dialog();
+        break;
+    case DLG_message:
+        /* Over the dialog it came from. */
+        if (msg_return == DLG_flash)
+            draw_flash_dialog();
+        draw_message_box();
         break;
     }
 }
@@ -1742,7 +1801,10 @@ static void set_display(int display)
  * into flash and power-cycles the device.
  */
 
-enum { FV_radio, FV_check, FV_input, FV_ok, FV_cancel };
+enum { FV_radio, FV_check, FV_input, FV_ok, FV_cancel, FV_save_all,
+       FV_save_changed };
+/* The buttons, the last entries of fviews[], on one row. */
+#define FD_BUTTONS 4
 
 /* The width of each column, so that the dialog with its shadow fits 99
  * columns; and in each, where the fields of input lines start. */
@@ -1842,6 +1904,14 @@ static struct fview {
       "Write the changed options into flash, and power-cycle the device",
       { NULL }, false, false },
     { FV_cancel, 0, NULL, NULL, "Close, leaving flash as it is",
+      { NULL }, false, false },
+    { FV_save_all, 0, NULL, NULL,
+      "Write FF.CFG on the USB drive with every option as shown here, the "
+      "old file kept as .BAK; flash stays as it is",
+      { NULL }, false, false },
+    { FV_save_changed, 0, NULL, NULL,
+      "Write FF.CFG on the USB drive with the options shown here that differ "
+      "from flash, the old file kept as .BAK; flash stays as it is",
       { NULL }, false, false }
 };
 #define FD_NR ARRAY_SIZE(fviews)
@@ -1858,7 +1928,8 @@ static const char * const fd_opts[] = {
 static char fd_orig[ARRAY_SIZE(fd_opts)][64];
 
 static int fd_focus, fd_w, fd_h;
-static char fd_error[160];
+/* What the last Save did, on the bottom line until the next key. */
+static char fd_note[160];
 
 /* @s without its '~' marks, into @buf. */
 static const char *unmarked(const char *s, char *buf, size_t size)
@@ -2099,6 +2170,23 @@ static void fd_step(int dir)
     while (fd_disabled(fd_focus));
 }
 
+/* Whether fview @i is one of the buttons. */
+static bool fd_is_button(int i)
+{
+    return i >= (int)FD_NR - FD_BUTTONS;
+}
+
+static const char *fd_button_text(int type)
+{
+    switch (type) {
+    case FV_ok: return "   OK   ";
+    case FV_cancel: return " Cancel ";
+    case FV_save_all: return " Save all to FF.CFG ";
+    case FV_save_changed: return " Save diff-from-flash to FF.CFG ";
+    }
+    return "";
+}
+
 static void fd_layout(void)
 {
     int col_y[3] = { 5, 5, 5 }, col_x[3], h = 0, i, n;
@@ -2120,7 +2208,7 @@ static void fd_layout(void)
 
     for (i = 0; i < (int)FD_NR; i++) {
         v = &fviews[i];
-        if ((v->type == FV_ok) || (v->type == FV_cancel))
+        if (fd_is_button(i))
             continue;
         v->x = col_x[v->col];
         v->y = col_y[v->col];
@@ -2131,9 +2219,21 @@ static void fd_layout(void)
     }
     fd_w = col_x[2] + fd_col_w[2] + 2;
     fd_h = h + 5;
-    fviews[FD_NR - 2].y = fviews[FD_NR - 1].y = fd_h - 4;
-    fviews[FD_NR - 2].x = fd_w / 2 - 14;
-    fviews[FD_NR - 1].x = fd_w / 2 + 4;
+    /* OK and Cancel at the bottom, the two FF.CFG buttons one over the
+     * other at the right, among the controls, below the third column's
+     * fields. */
+    n = fd_h - 8;
+    if (n < col_y[2]) {
+        fd_h += col_y[2] - n;
+        n = col_y[2];
+    }
+    fviews[FD_NR - 4].y = fviews[FD_NR - 3].y = fd_h - 4;
+    fviews[FD_NR - 4].x = fd_w / 2 - 14;
+    fviews[FD_NR - 3].x = fd_w / 2 + 4;
+    fviews[FD_NR - 2].y = n;
+    fviews[FD_NR - 1].y = n + 2;
+    fviews[FD_NR - 2].x = fviews[FD_NR - 1].x =
+        fd_w - 3 - strlen(fd_button_text(FV_save_changed));
 }
 
 static void fd_open(void)
@@ -2159,15 +2259,16 @@ static void fd_open(void)
     }
     fd_layout();
     fd_focus = 0;
-    fd_error[0] = '\0';
     dialog = DLG_flash;
 }
 
 /* Writes the options changed into flash: TRUE if any were, FALSE if none
- * were or one cannot be, which @fd_error then says. */
-static bool fd_apply(void)
+ * were or one cannot be, which a message box then says. */
+/* The configuration in flash with the dialog's edits applied, into @cfg:
+ * 1 if an edit changed it, 0 if none did, -1 for a value that its option
+ * does not take, which a message box reports. */
+static int fd_edited(uint8_t *cfg)
 {
-    uint8_t cfg[256];
     char value[80];
     bool changed = false;
     unsigned int i, j;
@@ -2180,20 +2281,30 @@ static bool fd_apply(void)
             || (!fd_orig[i][0] && !strcmp(value, "\"\"")))
             continue;
         if (emu_flash_set_option(cfg, fd_opts[i], value) != EMU_SET_ok) {
-            snprintf(fd_error, sizeof(fd_error),
-                     "%s = %s: not a value that it takes", fd_opts[i],
-                     value);
+            char text[160];
+            snprintf(text, sizeof(text), "%s = %s: not a value that it takes",
+                     fd_opts[i], value);
+            show_message(DLG_flash, "Flash mem", text);
             for (j = 0; j < FD_NR; j++)
                 if (fviews[j].opt && !strcmp(fviews[j].opt, fd_opts[i]))
                     break;
             fd_focus = j;
-            return false;
+            return -1;
         }
         changed = true;
     }
-    if (changed)
-        emu_flash_save(cfg, emu_flash_cfg_size());
     return changed;
+}
+
+/* Writes the dialog's edits into flash; whether any changed it. */
+static bool fd_apply(void)
+{
+    uint8_t cfg[256];
+
+    if (fd_edited(cfg) != 1)
+        return false;
+    emu_flash_save(cfg, emu_flash_cfg_size());
+    return true;
 }
 
 /* Opens the emul dialog if display-type in flash has changed and no longer
@@ -2262,7 +2373,6 @@ static void fd_key(int key)
         return;
     }
 
-    fd_error[0] = '\0';
     switch (key) {
     case 27:
         dialog = DLG_none;
@@ -2278,13 +2388,28 @@ static void fd_key(int key)
             dialog = DLG_none;
             return;
         }
+        if ((v->type == FV_save_all) || (v->type == FV_save_changed)) {
+            /* The file says what the dialog shows, edits included, and
+             * nothing else moves: flash waits for OK, and the firmware
+             * reads the file when the drive is next inserted. */
+            if (fd_edited(cfg) < 0)
+                return;
+            if (!ff_cfg_write(cfg, v->type == FV_save_all, fd_note,
+                              sizeof(fd_note))) {
+                show_message(DLG_flash, "FF.CFG", fd_note);
+                fd_note[0] = '\0';
+                return;
+            }
+            host_log("%s", fd_note);
+            return;
+        }
         emu_flash_get(cfg);
         option_value(cfg, "display-type", old_type, sizeof(old_type));
         if (fd_apply()) {
             dialog = DLG_none;
             if (!fd_offer_display(old_type))
                 leave(KEY_ACT_reset);
-        } else if (!fd_error[0]) {
+        } else if (dialog != DLG_message) {
             dialog = DLG_none;
         }
         return;
@@ -2301,8 +2426,11 @@ static void fd_key(int key)
             fd_step(1);
         return;
     case KEY_LEFT: case KEY_RIGHT:
-        if ((v->type == FV_ok) || (v->type == FV_cancel))
-            fd_focus = (v->type == FV_ok) ? FD_NR - 1 : FD_NR - 2;
+        if (fd_is_button(fd_focus)) {
+            int first = FD_NR - FD_BUTTONS, k = fd_focus - first;
+            k = (k + ((key == KEY_RIGHT) ? 1 : FD_BUTTONS - 1)) % FD_BUTTONS;
+            fd_focus = first + k;
+        }
         return;
     case ' ':
         if (v->type == FV_check) {
@@ -2410,22 +2538,28 @@ static void draw_flash_dialog(void)
             break;
         }
         case FV_ok:
+            /* The default button, unless another button has the focus. */
             button(y, x, focused ? BRIGHT(CP_button_on)
-                   : (fd_focus == (int)FD_NR - 1) ? COLOR_PAIR(CP_button)
-                   : BRIGHT(CP_button_def), "   OK   ");
+                   : fd_is_button(fd_focus) ? COLOR_PAIR(CP_button)
+                   : BRIGHT(CP_button_def), fd_button_text(v->type));
             break;
         case FV_cancel:
+        case FV_save_all:
+        case FV_save_changed:
             button(y, x, focused ? BRIGHT(CP_button_on)
-                   : COLOR_PAIR(CP_button), " Cancel ");
+                   : COLOR_PAIR(CP_button), fd_button_text(v->type));
             break;
         }
     }
 
-    /* What the option in focus is, or what is wrong, on the bottom line. */
+    /* What the control in focus is, on the bottom line; or what the last
+     * Save did, in green. */
     put(LINES - 1, 0, COLS, COLOR_PAIR(CP_bar), "%*s", COLS, "");
-    put(LINES - 1, 1, COLS - 2, fd_error[0] ? COLOR_PAIR(CP_hotkey)
-        : COLOR_PAIR(CP_bar), "%s",
-        fd_error[0] ? fd_error : fviews[fd_focus].help);
+    if (fd_note[0] != '\0')
+        put(LINES - 1, 1, COLS - 2, BRIGHT(CP_bar_crop), "%s", fd_note);
+    else
+        put(LINES - 1, 1, COLS - 2, COLOR_PAIR(CP_bar), "%s",
+            fviews[fd_focus].help);
 }
 
 /* The FDD action of @key, or -1: the keys under the signals in the Controls
@@ -2463,6 +2597,11 @@ static void handle_key(int key)
         return;
     }
 
+    if (dialog == DLG_message) {
+        if ((key == '\n') || (key == 27) || (key == ' '))
+            dialog = msg_return;
+        return;
+    }
     if (dialog == DLG_flash) {
         fd_key(key);
         return;

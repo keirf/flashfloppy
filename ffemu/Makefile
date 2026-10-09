@@ -46,11 +46,13 @@ FONTS := 6x13 8x16
 
 # The host half: everything that touches the host operating system.
 HOST_SRCS := ffemu.c cpu.c ssd1306.c fatimg.c rc.c tui.c script.c usbdisk.c
+HOST_SRCS += cfgfile.c
 
 FW_OBJS := $(patsubst %.c,$(OUT)/fw/%.o,$(FW_SRCS))
 FW_OBJS += $(patsubst %.c,$(OUT)/emu/%.o,$(EMU_FW_SRCS))
 FW_OBJS += $(patsubst %,$(OUT)/gen/oled_font_%.o,$(FONTS))
 HOST_OBJS := $(patsubst %.c,$(OUT)/host/%.o,$(HOST_SRCS))
+HOST_OBJS += $(OUT)/gen/ff_cfg_example.o
 
 # -funsigned-char: as on ARM, which the firmware is written for.
 FW_CFLAGS := -std=gnu99 -O1 -g -funsigned-char -fno-builtin
@@ -97,6 +99,12 @@ $(OUT)/ff_cfg_defaults.h: $(ROOT)/examples/FF.CFG $(ROOT)/scripts/mk_config.py
 	$(Q)$(PYTHON) $(ROOT)/scripts/mk_config.py $< $@
 
 $(OUT)/fw/main.o $(OUT)/emu/stubs.o: $(OUT)/ff_cfg_defaults.h
+
+# The firmware's example FF.CFG, which documents every option, built in for
+# writing FF.CFG from the flash memory.
+$(OUT)/gen/ff_cfg_example.c: $(ROOT)/examples/FF.CFG mk_text.py
+	@mkdir -p $(dir $@)
+	$(Q)$(PYTHON) mk_text.py $< $@ ff_cfg_example
 
 $(OUT)/gen/oled_font_%.c: $(ROOT)/fonts/%.bdf $(ROOT)/scripts/mk_font.py
 	@mkdir -p $(dir $@)

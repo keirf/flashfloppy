@@ -208,6 +208,29 @@ static void where_mounted(struct disk *d)
 
 #endif /* !__CYGWIN__ */
 
+bool usb_disk_mount(const char *dev, char *buf, size_t size)
+{
+    struct disk d[MAX_DISKS];
+    unsigned int nr = list_disks(d, MAX_DISKS), i;
+    const char *name = strncmp(dev, "/dev/", 5) ? dev : dev + 5;
+
+    for (i = 0; i < nr; i++) {
+        if (strcmp(name, d[i].name) && strcmp(name, d[i].part))
+            continue;
+        where_mounted(&d[i]);
+        if (!d[i].where[0])
+            return false;
+#ifdef __CYGWIN__
+        /* The first drive letter, as a path that the C library takes. */
+        snprintf(buf, size, "%c:/", d[i].where[0]);
+#else
+        snprintf(buf, size, "%s", d[i].where);
+#endif
+        return true;
+    }
+    return false;
+}
+
 int usb_disk_find(char *dev, size_t size, char *line, size_t line_size,
                   FILE *f)
 {
