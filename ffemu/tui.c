@@ -2440,6 +2440,9 @@ static struct fview {
     { FV_radio, 0, "oled-~f~ont", "oled-font",
       "Font of the OLED display",
       { "6x13", "8x16" }, false, true },
+    { FV_radio, 0, "s~h~ow-filename-ext", "show-filename-ext",
+      "Whether to show floppy filename extensions",
+      { "no", "yes", "auto" }, false, true },
     { FV_input, 0, "~d~isplay-order", "display-order",
       "Rows top down: 0=name, 1=status, 2=info, 3=folder, 7=blank, "
       "d=double-height; e.g. \"3,0d,1\"", { NULL }, false, false },
@@ -2529,7 +2532,8 @@ static struct fview {
 
 /* The options that the dialog edits, and their values when it opened. */
 static const char * const fd_opts[] = {
-    "display-type", "oled-font", "display-order", "display-off-secs",
+    "display-type", "oled-font", "show-filename-ext", "display-order",
+    "display-off-secs",
     "display-scroll-rate", "display-scroll-pause", "nav-scroll-rate",
     "nav-scroll-pause", "nav-mode", "folder-sort", "sort-priority",
     "nav-loop", "autoselect-file-secs", "autoselect-folder-secs",
@@ -3228,6 +3232,13 @@ static const struct {
     { "oled-font", "8x16",
       "Makes 16 columns; ignores \"narrow\" and \"narrower\" suffixes to "
       "\"display-type\"" },
+    { "show-filename-ext", "no",
+      "Never show floppy filename extensions" },
+    { "show-filename-ext", "yes",
+      "Always show floppy filename extensions" },
+    { "show-filename-ext", "auto",
+      "Show extensions only for duplicate names in sorted folders; in "
+      "unsorted ones always show them" },
     { "nav-mode", "default",
       "Works as \"native\" unless HXCSDFE.CFG overrides" },
     { "nav-mode", "indexed",
