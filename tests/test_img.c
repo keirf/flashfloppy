@@ -298,7 +298,7 @@ TEST(img_write_flux)
     drive_reset();
     make_img(&pc720);
     drive_add("PC720.IMG", img, img_size(&pc720));
-    floppy_boot();
+    floppy_boot(FALSE);
     floppy_insert_image("PC720.IMG");
 
     floppy_head(10, 1);

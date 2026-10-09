@@ -2,12 +2,12 @@
  * rc.c
  *
  * Settings, kept in ffemurc in ${XDG_CONFIG_HOME:-~/.config}/ffemu/ (or
- * /ffemu-apple2/): lines of "name = value", a '#' starting a comment line.
- * The file is written with the defaults and a comment on each setting when
- * it does not exist, and a setting changed from the keyboard is written back
- * into it, other lines kept as they are. Its last section, [Flash mem],
- * mirrors the emulated flash memory, and is written anew whenever the flash
- * changes.
+ * /ffemu-apple2/, /ffemu-multi/): lines of "name = value", a '#' starting a
+ * comment line. The file is written with the defaults and a comment on each
+ * setting when it does not exist, and a setting changed from the keyboard
+ * is written back into it, other lines kept as they are. Its last section,
+ * [Flash mem], mirrors the emulated flash memory, and is written anew
+ * whenever the flash changes.
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
@@ -41,7 +41,8 @@ static const char * const color_name[8] = {
 #define BRIGHT "bright-"
 
 enum { SET_style, SET_display_color, SET_hold_ms, SET_display, SET_lcd_rom,
-       SET_oled_8x16, SET_nr };
+       SET_oled_8x16,
+       SET_fdd_type, SET_nr };
 
 static const struct setting {
     const char *name, *comment;
@@ -73,7 +74,12 @@ static const struct setting {
         "oled-8x16",
         "The OLED's 8x16 font: font (the firmware's own) or synth (made from "
         "the 6x13 one, bold, as the firmware built with "
-        "oled_font_8x16_synth=y draws it). Key 0." }
+        "oled_font_8x16_synth=y draws it). Key 0." },
+    [SET_fdd_type] = {
+        "fdd-type",
+        "FDD type, the computer on the floppy cable: step-dir (Shugart, PC "
+        "and the like) or apple2 (stepper phases); the shugart firmware "
+        "takes step-dir only, the apple2 firmware apple2 only. Key 8." }
 };
 
 /* The value of setting @set as the file has it, into @buf. */
@@ -98,6 +104,9 @@ static const char *value_of(int set, char *buf, size_t size)
         break;
     case SET_oled_8x16:
         snprintf(buf, size, "%s", config.oled_synth ? "synth" : "font");
+        break;
+    case SET_fdd_type:
+        snprintf(buf, size, "%s", fdd_type_name[config.fdd_type]);
         break;
     }
     return buf;
@@ -238,6 +247,14 @@ static bool parse_line(char *line)
             return false;
         config.oled_synth = !strcmp(value, "synth");
         return true;
+    case SET_fdd_type:
+        for (i = 0; i < FDD_TYPE_nr; i++) {
+            if (!strcmp(value, fdd_type_name[i])) {
+                config.fdd_type = i;
+                return true;
+            }
+        }
+        return false;
     }
 
     return false;
@@ -541,6 +558,8 @@ void rc_load(void)
     config.oled_synth = false;
     config.display_color = 8 | 6; /* bright cyan */
     config.hold_ms = 150;
+    config.fdd_type = (FFEMU_APPLE2 || FFEMU_MULTI) ? EMU_FDD_TYPE_apple2
+        : EMU_FDD_TYPE_step_dir;
 
     if ((xdg != NULL) && (xdg[0] != '\0'))
         snprintf(config.path, sizeof(config.path),

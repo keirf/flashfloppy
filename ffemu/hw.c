@@ -78,9 +78,10 @@ void emu_irq_vector(unsigned int nr)
     case 34: IRQ_34(); break; /* I2C2 error */
     case 40: IRQ_40(); break; /* EXTI15_10 */
 #if TARGET_SUPPORTS_APPLE2
-    case 27: IRQ_27(); break; /* TIM1 capture: WDATA */
-#else
-    case 28: IRQ_28(); break; /* TIM2: STEP */
+    case 27: IRQ_27(); break; /* TIM1 capture: WDATA, in Apple2 mode */
+#endif
+#if (TARGET == TARGET_shugart) || (TARGET == TARGET_multi)
+    case 28: IRQ_28(); break; /* TIM2: STEP, in Step/Dir mode */
 #endif
     case 43: IRQ_43(); break; /* the floppy interface's soft IRQ */
     default:
@@ -133,10 +134,10 @@ uint32_t emu_stk_now(void)
 
 /* The floppy interface: port A and port B pins. */
 #define PA_SEL0     0
-#define PA_STEP     1  /* Shugart; Apple2 phase 3 */
+#define PA_STEP     1  /* Step/Dir; Apple2 phase 3 */
 #define PA_PHA1     9  /* Apple2, as in the release */
 #define PA_PHA0    10  /* Apple2, as in the release */
-#define PB_DIR      0  /* Shugart; Apple2 phase 2 */
+#define PB_DIR      0  /* Step/Dir; Apple2 phase 2 */
 #define PB_SIDE     4
 #define PB_MOTOR   12  /* on a board with KC30 header type 2, else PB15 */
 #define PB_MOTOR2  15
@@ -207,20 +208,20 @@ static void fdd_pins(uint32_t *pa, uint32_t *pb)
 
     if (in & EMU_FDD_SEL)
         *pa &= ~m(PA_SEL0);
-#if TARGET == TARGET_apple2
-    /* The stepper phases, unlike the drive enable, are active high. */
-    *pa &= ~(m(PA_PHA0) | m(PA_PHA1) | m(PA_STEP));
-    *pb &= ~m(PB_DIR);
-    if (in & (EMU_FDD_PH0 << 0))
-        *pa |= m(PA_PHA0);
-    if (in & (EMU_FDD_PH0 << 1))
-        *pa |= m(PA_PHA1);
-    if (in & (EMU_FDD_PH0 << 2))
-        *pb |= m(PB_DIR);
-    if (in & (EMU_FDD_PH0 << 3))
-        *pa |= m(PA_STEP);
-    (void)step_ends;
-#else
+    if (emu_fdd_type == EMU_FDD_TYPE_apple2) {
+        /* The stepper phases, unlike the drive enable, are active high. */
+        *pa &= ~(m(PA_PHA0) | m(PA_PHA1) | m(PA_STEP));
+        *pb &= ~m(PB_DIR);
+        if (in & (EMU_FDD_PH0 << 0))
+            *pa |= m(PA_PHA0);
+        if (in & (EMU_FDD_PH0 << 1))
+            *pa |= m(PA_PHA1);
+        if (in & (EMU_FDD_PH0 << 2))
+            *pb |= m(PB_DIR);
+        if (in & (EMU_FDD_PH0 << 3))
+            *pa |= m(PA_STEP);
+        return;
+    }
     if (step_low)
         *pa &= ~m(PA_STEP);
     if (in & EMU_FDD_DIR)
@@ -236,7 +237,6 @@ static void fdd_pins(uint32_t *pa, uint32_t *pb)
         if (emu_tim[1].dier & TIM_DIER_CC2IE)
             emu_irqx_set_pending(28);
     }
-#endif
 }
 
 /* The encoder rests at 3 and outputs a Gray code. One detent is four

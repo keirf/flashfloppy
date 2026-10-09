@@ -75,7 +75,8 @@ void bits_rotate(uint8_t *dst, const uint8_t *src, uint32_t nr_bits,
  */
 
 /* No image inserted, no timers, no interrupts, the clock at 0, every input
- * high as pulled up, the floppy interface being active low. */
+ * high as pulled up: the floppy interface is active low but for the Apple2
+ * stepper phases. */
 void board_reset(void);
 /* An input pin of port A (0) or B (1). */
 void pin_set(unsigned int port, unsigned int pin, bool_t high);
@@ -89,13 +90,14 @@ void irqs_run(void);
 void irq_raise(unsigned int x);
 extern unsigned int nr_speaker_pulses;
 
-/* The floppy code booted for a Shugart host, and the drive selected. */
-void floppy_boot(void);
+/* The floppy code booted for a Shugart host, or for an Apple2 host whose
+ * stepper phases are at rest, and the drive selected. */
+void floppy_boot(bool_t apple2);
 /* Inserts a file of the drive into the floppy code: the disk passes its
  * index now, and every 200 ms after. */
 void floppy_insert_image(const char *name);
-/* The head at cylinder @cyl as the floppy code counts them, and side @head
- * selected. */
+/* The head at cylinder @cyl as the floppy code counts them, in half tracks
+ * for an Apple2 host, and side @head selected. */
 void floppy_head(unsigned int cyl, unsigned int head);
 /* The host writes @nr_cells bit cells, MSB first, from @start ticks of the
  * WDATA timer past the index: WGATE asserted there, a flux reversal on WDATA

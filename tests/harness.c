@@ -152,6 +152,7 @@ void drive_reset(void)
     nr_files = 0;
 
     ff_cfg = dfl_ff_cfg;
+    apple2_mode = FALSE;
 }
 
 #define CLUS_SZ (CLUS_SECS*SECSZ)

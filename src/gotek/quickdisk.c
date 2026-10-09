@@ -59,6 +59,7 @@ static const struct exti_irq exti_irqs[] = {
     /* RESET */ { 28, TIMER_IRQ_PRI, 0 },
     /* Rotary */ { 40, TIMER_IRQ_PRI, 0 }
 };
+#define exti_irq_wanted(e) TRUE
 
 bool_t floppy_ribbon_is_reversed(void)
 {

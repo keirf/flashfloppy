@@ -155,25 +155,26 @@ static void print_fdd(void)
     unsigned int in = emu_in_fdd, cyl, side;
     const char *image;
     char ph[5], kept[5];
-    int sel;
+    int apple2, sel;
 
-    if (FFEMU_APPLE2)
-        printf("fdd: %s, phases %s, kept %s\n",
+    if (emu_fdd_type == EMU_FDD_TYPE_apple2)
+        printf("fdd: apple2, %s, phases %s, kept %s\n",
                (in & EMU_FDD_SEL) ? "D_E" : "d_e",
                ui_fdd_phase_text(in, ph),
                ui_fdd_phase_text(ui_fdd_phases(), kept));
     else
-        printf("fdd: %s %s %s %s\n", (in & EMU_FDD_SEL) ? "D_S" : "d_s",
+        printf("fdd: step-dir, %s %s %s %s\n",
+               (in & EMU_FDD_SEL) ? "D_S" : "d_s",
                (in & EMU_FDD_MOTOR) ? "M_O" : "m_o",
                (in & EMU_FDD_DIR) ? "DIR" : "dir",
                (in & EMU_FDD_SIDE) ? "SID" : "sid");
-    emu_fdd_status(&cyl, &side, &sel, &image);
-    if (FFEMU_APPLE2)
-        printf("drive: cyl %u, %senabled, floppy %s\n", cyl,
+    emu_fdd_status(&apple2, &cyl, &side, &sel, &image);
+    if (apple2)
+        printf("drive: apple2, cyl %u, %senabled, floppy %s\n", cyl,
                sel ? "" : "not ", image ? image : "none");
     else
-        printf("drive: cyl %u, side %u, %sselected, floppy %s\n", cyl, side,
-               sel ? "" : "not ", image ? image : "none");
+        printf("drive: step-dir, cyl %u, side %u, %sselected, floppy %s\n",
+               cyl, side, sel ? "" : "not ", image ? image : "none");
 }
 
 static void print_status(void)
@@ -272,6 +273,24 @@ static void *script_thread(void *arg_sleep_ms)
             if ((i == KEY_ACT_reset) || (i == KEY_ACT_relaunch)
                 || (i == KEY_ACT_quit))
                 park();
+        } else if (sscanf(line, "fdd-type %63s", arg) == 1) {
+            for (i = 0; i < FDD_TYPE_nr; i++)
+                if (!strcmp(arg, fdd_type_name[i]))
+                    break;
+            if ((i == FDD_TYPE_nr)
+                || (FFEMU_APPLE2 && (i != EMU_FDD_TYPE_apple2))
+                || (!FFEMU_APPLE2 && !FFEMU_MULTI
+                    && (i != EMU_FDD_TYPE_step_dir))) {
+                fprintf(stderr, "ffemu: no such FDD type here: %s\n", arg);
+                continue;
+            }
+            /* As the dialog does: the device detects the type at boot. */
+            ui_fdd_set_type(i);
+            config.fdd_type = i;
+            rc_save();
+            fflush(NULL);
+            ui_action(KEY_ACT_reset);
+            park();
         } else if (!strcmp(line, "dump")) {
             dump_display();
         } else if (!strcmp(line, "log")) {

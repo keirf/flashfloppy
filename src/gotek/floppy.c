@@ -62,7 +62,7 @@ DEFINE_IRQ(dma_rdata_irq, "IRQ_rdata_dma");
 static struct timer step_timer;
 static void POLL_step(void *unused);
 #endif
-#if TARGET == TARGET_shugart
+#if (TARGET == TARGET_shugart) || (TARGET == TARGET_multi)
 void IRQ_28(void) __attribute__((alias("IRQ_STEP_changed"))); /* TMR2 */
 #define STEP_IRQ 28
 #endif
@@ -83,7 +83,7 @@ static const struct exti_irq exti_irqs[] = {
     /* WDATA */ { WDATA_IRQ, FLOPPY_IRQ_WGATE_PRI, 0 },
 #endif
     /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 },
-#if TARGET == TARGET_shugart
+#if (TARGET == TARGET_shugart) || (TARGET == TARGET_multi)
     /* STEP */ { STEP_IRQ, FLOPPY_IRQ_STEP_PRI, m(2) /* dummy */ },
 #endif
     /* WGATE */ {  7, FLOPPY_IRQ_WGATE_PRI, 0 },
@@ -91,6 +91,23 @@ static const struct exti_irq exti_irqs[] = {
     /* WGATE */ { 23, FLOPPY_IRQ_WGATE_PRI, 0 },
     /* MTR/CHGRST */ { 40, TIMER_IRQ_PRI, 0 }
 };
+
+#if TARGET == TARGET_multi
+/* WDATA toggles are captured in Apple2 mode only, and STEP is a stepper
+ * phase there. */
+static bool_t exti_irq_wanted(const struct exti_irq *e)
+{
+    switch (e->irq) {
+    case WDATA_IRQ:
+        return apple2_mode;
+    case STEP_IRQ:
+        return !apple2_mode;
+    }
+    return TRUE;
+}
+#else
+#define exti_irq_wanted(e) TRUE
+#endif
 
 /* Subset of output pins which are active (O_TRUE). */
 extern uint32_t gpio_out_active;
@@ -116,6 +133,46 @@ static void dma_rd_set_active(bool_t active)
     else
         __sync_fetch_and_and(&gpio_out_active, ~m(GPIO_OUT_DMA_RD_ACTIVE));
 }
+#endif
+
+#if TARGET == TARGET_multi
+
+bool_t apple2_mode;
+
+/* An Apple2 host holds all four stepper phases low at power-on, and raises
+ * at most two of them while it seeks. A Shugart host leaves PA9 and PA10
+ * high: nothing but the pull-up is on them, except on QFN32, where they are
+ * the JC strap and the KC30 Select button. So we are on an Apple2 if at
+ * least three of the four phase inputs are low in at least a quarter of
+ * the samples: a host at rest may hold one phase on, and a Shugart host
+ * leaves at most DIR low. */
+void apple2_detect(unsigned int ms)
+{
+    time_t t = time_now();
+    unsigned int i, low[4] = { 0 };
+
+    for (i = 0; i < ms; i++) {
+        uint16_t idr_a = gpioa->idr, idr_b = gpiob->idr;
+        low[0] += !(idr_a & m(pin_pha0));
+        low[1] += !(idr_a & m(pin_pha1));
+        low[2] += !(idr_b & m(pin_pha2));
+        low[3] += !(idr_a & m(pin_pha3));
+        delay_from(t, time_ms(i + 1));
+    }
+
+    apple2_mode = ((low[0] >= ms/4) + (low[1] >= ms/4)
+                   + (low[2] >= ms/4) + (low[3] >= ms/4)) >= 3;
+
+#if LEVEL == LEVEL_debug
+    /* Phases 0 and 1 are on the KC30 rotary pins: no encoder then. */
+    if (apple2_mode)
+        has_kc30_header = 0;
+#endif
+
+    printk("Apple2 %s (%u/%u/%u/%u %ums)\n",
+           apple2_mode ? "on" : "off", low[0], low[1], low[2], low[3], ms);
+}
+
 #endif
 
 bool_t floppy_ribbon_is_reversed(void)
@@ -431,7 +488,7 @@ out:
 
 #endif
 
-#if TARGET == TARGET_shugart
+#if (TARGET == TARGET_shugart) || (TARGET == TARGET_multi)
 
 static bool_t drive_is_writing(void)
 {

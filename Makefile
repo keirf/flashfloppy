@@ -22,6 +22,7 @@ prod-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=prod
 	$(MAKE) target mcu=$* target=shugart level=prod
 	$(MAKE) target mcu=$* target=apple2 level=prod
+	$(MAKE) target mcu=$* target=multi level=prod
 	$(MAKE) target mcu=$* target=quickdisk level=prod
 	$(MAKE) target mcu=$* target=bl_update level=prod
 	$(MAKE) target mcu=$* target=io_test level=prod
@@ -30,6 +31,7 @@ debug-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=debug
 	$(MAKE) target mcu=$* target=shugart level=debug
 	$(MAKE) target mcu=$* target=apple2 level=debug
+	$(MAKE) target mcu=$* target=multi level=debug
 	$(MAKE) target mcu=$* target=quickdisk level=debug
 	$(MAKE) target mcu=$* target=bl_update level=debug
 	$(MAKE) target mcu=$* target=io_test level=debug
@@ -38,6 +40,7 @@ logfile-%: FORCE
 	$(MAKE) target mcu=$* target=bootloader level=logfile
 	$(MAKE) target mcu=$* target=shugart level=logfile
 	$(MAKE) target mcu=$* target=apple2 level=logfile
+	$(MAKE) target mcu=$* target=multi level=logfile
 	$(MAKE) target mcu=$* target=quickdisk level=logfile
 
 apple2-bootloader-%: FORCE
@@ -49,7 +52,7 @@ all-%: FORCE prod-% debug-% logfile-% ;
 ffemu-%: FORCE
 	$(MAKE) -C $(ROOT)/ffemu O=$(O) TARGET=$*
 
-ffemu: FORCE ffemu-shugart ffemu-apple2 ;
+ffemu: FORCE ffemu-shugart ffemu-apple2 ffemu-multi ;
 
 # The unit tests, on a PC: see tests/Makefile. They are compiled with the
 # firmware, and "make test" runs them.
@@ -96,8 +99,14 @@ _legacy_dist: FORCE
 	  $(t)/alt/apple2/$(PROJ)-apple2-$(VER).upd \
 	  $(OUT)/$(mcu)/$(level)/apple2/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/alt/multi/$(PROJ)-multi-$(VER).upd \
+	  $(OUT)/$(mcu)/$(level)/multi/target.bin & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/apple2/logfile/$(PROJ)-apple2-logfile-$(VER).upd \
 	  $(OUT)/$(mcu)/logfile/apple2/target.bin & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
+	  $(t)/alt/multi/logfile/$(PROJ)-multi-logfile-$(VER).upd \
+	  $(OUT)/$(mcu)/logfile/multi/target.bin & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py old \
 	  $(t)/alt/quickdisk/$(PROJ)-quickdisk-$(VER).upd \
 	  $(OUT)/$(mcu)/$(level)/quickdisk/target.bin & \
@@ -126,8 +135,14 @@ _dist: FORCE
 	  $(t)/alt/apple2/$(PROJ)-apple2-$(VER).upd \
 	  $(OUT)/$(mcu)/$(level)/apple2/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/multi/$(PROJ)-multi-$(VER).upd \
+	  $(OUT)/$(mcu)/$(level)/multi/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/apple2/logfile/$(PROJ)-apple2-logfile-$(VER).upd \
 	  $(OUT)/$(mcu)/logfile/apple2/target.bin $(mcu) & \
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
+	  $(t)/alt/multi/logfile/$(PROJ)-multi-logfile-$(VER).upd \
+	  $(OUT)/$(mcu)/logfile/multi/target.bin $(mcu) & \
 	$(PYTHON) $(ROOT)/scripts/mk_update.py new \
 	  $(t)/alt/quickdisk/$(PROJ)-quickdisk-$(VER).upd \
 	  $(OUT)/$(mcu)/$(level)/quickdisk/target.bin $(mcu) & \
@@ -156,6 +171,7 @@ dist: FORCE all
 	mkdir -p $(t)/alt/logfile
 	mkdir -p $(t)/alt/io-test
 	mkdir -p $(t)/alt/apple2/logfile
+	mkdir -p $(t)/alt/multi/logfile
 	mkdir -p $(t)/alt/quickdisk/logfile
 	$(MAKE) _legacy_dist mcu=stm32f105 level=$(level) t=$(t)
 	$(MAKE) _dist mcu=stm32f105 n=at415-st105 level=$(level) t=$(t)

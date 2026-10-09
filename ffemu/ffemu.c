@@ -223,11 +223,35 @@ static uint64_t step_until;
  * phase 0 alone, through phases 0 and 1, to phase 1 alone, and on. */
 static unsigned int phase_pos;
 
+const char * const fdd_type_name[FDD_TYPE_nr] = {
+    [EMU_FDD_TYPE_step_dir] = "step-dir",
+    [EMU_FDD_TYPE_apple2] = "apple2"
+};
+const char * const fdd_type_label[FDD_TYPE_nr] = {
+    [EMU_FDD_TYPE_step_dir] = "Step/Dir",
+    [EMU_FDD_TYPE_apple2] = "Apple2"
+};
+
+void ui_fdd_set_type(int type)
+{
+    if (FFEMU_APPLE2)
+        type = EMU_FDD_TYPE_apple2;
+    else if (!FFEMU_MULTI)
+        type = EMU_FDD_TYPE_step_dir;
+    emu_fdd_type = type;
+    /* As connected to a computer that has just selected the drive; Step/Dir
+     * steps go inward. */
+    emu_in_fdd = EMU_FDD_SEL
+        | ((type == EMU_FDD_TYPE_apple2) ? 0 : EMU_FDD_DIR);
+    phase_pos = 0;
+}
+
 bool ui_fdd_has(int act)
 {
     if (act == FDD_ACT_sel)
         return true;
-    return FFEMU_APPLE2 ? (act >= FDD_ACT_phase_in) : (act < FDD_ACT_phase_in);
+    return (emu_fdd_type == EMU_FDD_TYPE_apple2)
+        ? (act >= FDD_ACT_phase_in) : (act < FDD_ACT_phase_in);
 }
 
 unsigned int ui_fdd_phases(void)
@@ -368,6 +392,8 @@ static void usage(FILE *f)
             "  key <action>: select, left, right, cw, ccw, remove, insert, "
             "reset or quit,\n"
             "    or on the floppy interface: %s\n"
+            "  fdd-type <%s|%s>: the computer on the cable, which restarts "
+            "the device\n"
             "  sleep <ms>: let the firmware run\n"
             "  dump: print the display\n"
             "  log: print the firmware's console output so far\n"
@@ -380,7 +406,8 @@ static void usage(FILE *f)
 #else
             "/dev/sdb",
 #endif
-            config.path, fdd);
+            config.path, fdd, fdd_type_name[EMU_FDD_TYPE_step_dir],
+            fdd_type_name[EMU_FDD_TYPE_apple2]);
 }
 
 int main(int argc, char **argv)
@@ -398,6 +425,7 @@ int main(int argc, char **argv)
 
     cpu_init(argv);
     rc_load();
+    ui_fdd_set_type(config.fdd_type);
 
     if ((argc > 2) || ((argc == 2) && (argv[1][0] == '-'))) {
         bool help = (argc == 2) && (!strcmp(argv[1], "-h")

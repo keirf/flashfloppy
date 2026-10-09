@@ -123,6 +123,7 @@ void IRQ_10(void);
 void IRQ_12(void);
 void IRQ_13(void);
 void IRQ_23(void);
+void IRQ_27(void);
 void IRQ_28(void);
 void IRQ_40(void);
 void IRQ_43(void);
@@ -185,6 +186,7 @@ void irqs_run(void)
         case 12: IRQ_12(); break;
         case 13: IRQ_13(); break;
         case 23: IRQ_23(); break;
+        case 27: IRQ_27(); break;
         case 28: IRQ_28(); break;
         case 40: IRQ_40(); break;
         case 43: IRQ_43(); break;
@@ -319,9 +321,20 @@ uint32_t arena_avail(void)
 /* When the image was inserted, which the floppy code takes as the index. */
 static time_t index_time;
 
-void floppy_boot(void)
+void floppy_boot(bool_t apple2)
 {
     board_reset();
+    if (apple2) {
+        /* The stepper phases at rest: all off, their pins low. */
+        pin_set(PA, 10, FALSE);
+        pin_set(PA, 9, FALSE);
+        pin_set(PB, 0, FALSE);
+        pin_set(PA, 1, FALSE);
+    }
+    apple2_detect(200);
+    if (apple2_mode != apple2)
+        ft_abort(__FILE__, __LINE__, "Apple2 mode %s",
+                 apple2_mode ? "on" : "off");
     floppy_init();
     floppy_set_cyl(0, 0);
     pin_set(PA, 0, FALSE);

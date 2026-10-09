@@ -21,6 +21,7 @@
 #define TARGET_shugart    4
 #define TARGET_apple2     5
 #define TARGET_quickdisk  6
+#define TARGET_multi      7
 
 /* LEVEL */
 #define LEVEL_prod     1

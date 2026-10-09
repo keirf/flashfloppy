@@ -17,24 +17,28 @@ Written with the help of Claude.
 
 ## Building
 
-    make -C ffemu [O=<path>] [TARGET=shugart|apple2]
+    make -C ffemu [O=<path>] [TARGET=shugart|apple2|multi]
 
-The plain `make` at the top of the tree builds both programs as well, along
-with the firmware and with the same `O=`, so that a firmware change that breaks
-ffemu fails the regular build.
+The plain `make` at the top of the tree builds the three programs as well,
+along with the firmware and with the same `O=`, so that a firmware change that
+breaks ffemu fails the regular build.
 
 The program is `out/ffemu/ffemu` under `<path>`, which defaults to the top of
-the source tree. `TARGET=apple2` builds `out/ffemu-apple2/ffemu-apple2`
-instead, which runs the Apple2 firmware: it lists only HFE images, and its
-board code is that of the release, which keeps the rotary encoder where the
-Apple2 debug build puts two stepper phases. The two programs keep their
-settings and logs apart, in `ffemu/` and `ffemu-apple2/` of the directories
-below. The build needs a C compiler, `objcopy`, Python 3 (for the font and
-configuration generators of the firmware build) and the wide-character
-"ncurses" library with its headers: `ncurses-devel` on Cygwin/MSYS2,
-`libncurses-dev` on Debian and Ubuntu. On Cygwin/MSYS2 everything but the
-runtime DLL is linked statically, so the program built there also runs in any
-Git Bash.
+the source tree. It runs the shugart firmware, which serves a Shugart host.
+`TARGET=apple2` builds `out/ffemu-apple2/ffemu-apple2` instead, which runs the
+apple2 firmware: it serves an Apple2 host and lists only HFE images.
+`TARGET=multi` builds `out/ffemu-multi/ffemu-multi`, which runs the multi
+firmware: it serves a Shugart host and an Apple2 host alike, detecting which
+one it is connected to as it boots, and in its Apple2 mode lists only HFE
+images. In all three, the board and floppy code is that of the release, which
+keeps the rotary encoder where a debug build puts two stepper phases. The
+programs keep their settings and logs apart, in `ffemu/`, `ffemu-apple2/` and
+`ffemu-multi/` of the directories below. The build needs a C compiler,
+`objcopy`, Python 3 (for the font and configuration generators of the firmware
+build) and the wide-character "ncurses" library with its headers:
+`ncurses-devel` on Cygwin/MSYS2, `libncurses-dev` on Debian and Ubuntu. On
+Cygwin/MSYS2 everything but the runtime DLL is linked statically, so the
+program built there also runs in any Git Bash.
 
 ## Running
 
@@ -180,15 +184,15 @@ it included, stays.
 
 ## The floppy interface
 
-The FDD rows of the Controls pane show the kind of controller on the other side
-of the cable, `Step/Dir` or `Apple2`, and the signals that it sends to the
-drive, each lit in dark yellow while it is active as on the schematics,
-whatever its voltage, with the key that changes it below:
+The FDD rows of the Controls pane show the FDD type, the kind of controller on
+the other side of the cable, `Step/Dir` or `Apple2`, and the signals that it
+sends to the drive, each lit in dark yellow while it is active as on the
+schematics, whatever its voltage, with the key that changes it below:
 
-- Shugart: `[` toggles D_S (drive select), `]` M_O (motor on), `-` DIR (step
-  direction: active, as at the start, steps inward to higher tracks), `+` sends
-  a STP (step) pulse, which stays lit for a moment, and `\` toggles SID (side
-  select).
+- Step/Dir (Shugart, PC and the like): `[` toggles D_S (drive select), `]` M_O
+  (motor on), `-` DIR (step direction: active, as at the start, steps inward to
+  higher tracks), `+` sends a STP (step) pulse, which stays lit for a moment,
+  and `\` toggles SID (side select).
 - Apple2: `[` toggles D_E (drive enable), and `+` and `-` move the stepper
   phases PH0 to PH3 to their next or previous state in the cycle a computer
   goes through: phase 0 alone, phases 0 and 1, phase 1 alone, and so on. The
@@ -197,13 +201,24 @@ whatever its voltage, with the key that changes it below:
   between seeks; the state they were in is kept, shown in bright green to the
   right of the phases, and the next press goes on from it.
 
+In `ffemu-multi`, key `8` opens the FDD type dialog, which chooses between the
+two and power-cycles the device, since the firmware detects the type as it
+boots: it is on an Apple2 if at least three of the four phases are held low, as
+an Apple2 does at power-on, for at least a quarter of its 200 ms "5v settle"
+delay. The type is kept in the settings as `fdd-type`. In `ffemu` and
+`ffemu-apple2` the firmware has no such choice, so there is no dialog, and the
+type is always Step/Dir or always Apple2.
+
 `=` also works as `+`, and `/` as `\`, which is the key that types it on a
 Russian layout, as do the keys of `[` and `]`. The drive selected or enabled is
 the default. The signals survive a power cycle of the device (Home), as the
-computer's would; Ctrl+Home puts them back to the defaults. The Status pane
-shows the cylinder and the side as the firmware sees them, and, as Floppy, the
-image mounted; the firmware's display shows them as on the device, and the
-beeper sounds each step, unless `step-volume` is 0.
+computer's would; Ctrl+Home or a change of the FDD type puts them back to the
+defaults. The Status pane shows the drive as the firmware sees it, labeled with
+the mode that the firmware detected, `Step/Dir` or `Apple2`: the cylinder and
+the side, and, as Floppy, the image mounted; the firmware's display shows them
+as on the device, and the beeper sounds each step, unless `step-volume` is 0.
+The firmware's banner, shown while no USB drive is in, ends in `A2` in the
+Apple2 mode.
 
 The firmware's own floppy code, `src/floppy.c` with what it includes, runs in
 ffemu against models of the pins, of their EXTI interrupts and of the timer
@@ -306,12 +321,13 @@ to standard output, which is how it can be tested without a terminal:
 The commands are `key <action>`, the action being `select`, `left`, `right`,
 `cw`, `ccw`, `remove`, `insert`, `reset` (Home), `relaunch` (Ctrl+Home), `quit`
 or `latch`, or on the floppy interface `sel`, `motor`, `dir`, `step` or `side`
-for Shugart, and `sel`, `phase-in`, `phase-out` or `release` for Apple2,
-`sleep <ms>`, `dump` (the display as text: an LCD as its rows of characters
-between bars), `log` (the firmware's console output so far), `status`, `flash`
-(the `[Flash mem]` section as the flash memory is now), and `save <file>`,
-which writes the USB drive as the firmware sees it, its writes included, to an
-image file.
+for Step/Dir, and `sel`, `phase-in`, `phase-out` or `release` for Apple2,
+`fdd-type <step-dir|apple2>`, which in `ffemu-multi` sets the FDD type and
+power-cycles the device as the dialog does, `sleep <ms>`, `dump` (the display
+as text: an LCD as its rows of characters between bars), `log` (the firmware's
+console output so far), `status`, `flash` (the `[Flash mem]` section as the
+flash memory is now), and `save <file>`, which writes the USB drive as the
+firmware sees it, its writes included, to an image file.
 
 ## How it works
 
@@ -322,8 +338,10 @@ image file.
   interface needs: GPIO inputs for the buttons, the rotary encoder and the
   floppy interface, with their EXTI interrupts as AFIO routes them, the two
   GPIO lines of the LED display, TIM2 capturing STEP, the one-shot timer of
-  `src/timer.c`, and the I2C master with its DMA channel. The I2C bus also runs
-  on a thread of its own, beside the firmware, as the hardware does, so that an
+  `src/timer.c`, and the I2C master with its DMA channel. The floppy signals go
+  to the pins of the FDD type in use: STEP and DIR, or the four stepper phases
+  on the release's pins, PA10, PA9, PB0 and PA1. The I2C bus also runs on a
+  thread of its own, beside the firmware, as the hardware does, so that an
   interrupt handler that waits for the bus is released whatever the firmware's
   thread is doing.
 - `stubs.c`: stand-ins for MCU bring-up, the serial console, the configuration

@@ -136,11 +136,15 @@ enum {
 /* The key that opens the dialog to edit the configuration in flash. */
 #define FLASH_KEY '9'
 
+/* The key that opens the dialog to choose the FDD type: the computer on the
+ * cable. Only in the multi program, whose firmware detects it at boot. */
+#define FDD_TYPE_KEY '8'
+
 /* The dialog on screen, if any, its highlighted button (0 is the first),
- * and the display that the display dialog has selected. */
+ * and the display or the FDD type that its dialog has selected. */
 static enum {
     DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul,
-    DLG_message, DLG_fdfile, DLG_unpack, DLG_write
+    DLG_fdd_type, DLG_message, DLG_fdfile, DLG_unpack, DLG_write
 } dialog;
 /* The message box over a dialog: what it says, and the dialog it returns
  * to when closed. */
@@ -154,6 +158,7 @@ static int dialog_display;
 static int dialog_lcd_rom, dialog_focus;
 static bool dialog_oled_synth;
 enum { DF_display, DF_rom, DF_synth, DF_ok, DF_cancel, DF_nr };
+static int dialog_fdd_type;
 static void draw_dialog(void);
 static void draw_fdfile_dialog(void);
 static void draw_unpack_dialog(void);
@@ -917,7 +922,7 @@ static void draw_status(int y, int x, int w)
     unsigned int cyl, side;
     const char *image;
     attr_t gray = COLOR_PAIR(CP_text), green = BRIGHT(CP_good);
-    int sel, c;
+    int apple2, sel, c;
 
     frame(y, x, w, PANE_ROWS + 2, "Status", COLOR_PAIR(CP_text),
           COLOR_PAIR(CP_text));
@@ -935,19 +940,21 @@ static void draw_status(int y, int x, int w)
     field(&y, x, w, "Board", 0, "%s", emu_board_name());
     y++;
 
-    /* The drive as the firmware sees it: values and states in green, words
-     * and punctuation in gray, as for the USB drive below. */
-    emu_fdd_status(&cyl, &side, &sel, &image);
-    put(y, x, w, 0, "FDD");
+    /* The drive as the firmware sees it, labeled with the mode it detected:
+     * values and states in green, words and punctuation in gray, as for the
+     * USB drive below. */
+    emu_fdd_status(&apple2, &cyl, &side, &sel, &image);
+    put(y, x, w, green, "%s", fdd_type_label[apple2 ? EMU_FDD_TYPE_apple2
+                                             : EMU_FDD_TYPE_step_dir]);
     c = piece(y, x + 10, x + w, gray, "Cyl ");
     c = piece(y, c, x + w, green, "%u", cyl);
-    if (!FFEMU_APPLE2) {
+    if (!apple2) {
         c = piece(y, c, x + w, gray, ", side ");
         c = piece(y, c, x + w, green, "%u", side);
     }
     c = piece(y, c, x + w, gray, ", ");
     piece(y++, c, x + w, green, "%s%s", sel ? "" : "not ",
-          FFEMU_APPLE2 ? "enabled" : "selected");
+          apple2 ? "enabled" : "selected");
     field(&y, x, w, "Floppy", image ? BRIGHT(CP_path) : DARK_GRAY, "%s",
           image ? image : "None");
     y++;
@@ -1299,15 +1306,15 @@ static void fdd_panel(int y, int x, int w)
 #define KEY(act) key_attr(now < fdd_lit_until[act])
     unsigned int in = emu_in_fdd;
     uint64_t now = emu_time_ns();
+    bool apple2 = emu_fdd_type == EMU_FDD_TYPE_apple2;
     char ph[5];
     int i, c;
 
     put(y, x, w, 0, "FDD:");
     /* The kind of controller on the other side of the cable. */
-    put(y + 1, x, w, BRIGHT(CP_good), "%s",
-        FFEMU_APPLE2 ? "Apple2" : "Step/Dir");
+    put(y + 1, x, w, BRIGHT(CP_good), "%s", fdd_type_label[emu_fdd_type]);
 
-    if (FFEMU_APPLE2) {
+    if (apple2) {
         static const char * const name[5] = {
             "D_E", "PH0", "PH1", "PH2", "PH3" };
         /* Closer than the Shugart ones, for the kept state of the phases,
@@ -1567,6 +1574,10 @@ static void draw_key_bar(void)
     put(LINES - 1, x + 2, COLS, COLOR_PAIR(CP_hotkey), "Shift");
     put(LINES - 1, x + 7, COLS, COLOR_PAIR(CP_bar), "+]");
     x = hotkey(x + 8, COLOR_KEYS, "Color");
+    if (FFEMU_MULTI) {
+        snprintf(keys, sizeof(keys), "%c", FDD_TYPE_KEY);
+        x = hotkey(x, keys, "FDD");
+    }
     snprintf(keys, sizeof(keys), "%c", FLASH_KEY);
     x = hotkey(x, keys, "Flash mem");
     snprintf(keys, sizeof(keys), "%c", DISPLAY_KEY);
@@ -1998,6 +2009,29 @@ static void draw_display_dialog(void)
             "As firmware built with oled_font_8x16_synth draws it");
 }
 
+/* The FDD types to choose from, as radio buttons: what the keyboard stands
+ * in for on the cable, which the firmware detects when it boots. */
+static void draw_fdd_type_dialog(void)
+{
+    static const char * const what[FDD_TYPE_nr] = {
+        [EMU_FDD_TYPE_step_dir] = "Shugart (Beta Disk), IBM PC and the like",
+        [EMU_FDD_TYPE_apple2] = "Apple Disk II, Pravetz/Agat (Izot) 140K"
+    };
+    char text[96];
+    int w = 68, y, x, i;
+
+    dialog_box(w, 10, "FDD type", &y, &x);
+    for (i = 0; i < FDD_TYPE_nr; i++) {
+        snprintf(text, sizeof(text), "%s: %s", fdd_type_label[i], what[i]);
+        radio_row(y + 2 + i, x + 3, w - 6, i == dialog_fdd_type,
+                  i == dialog_fdd_type, text);
+    }
+    put(y + 5, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
+        "Changing the FDD type restarts the device.");
+    button(y + 7, x + 18, button_attr(0), "  OK  ");
+    button(y + 7, x + w - 18 - 10, button_attr(1), "  Cancel  ");
+}
+
 /* The configuration in flash when the display changed, which may not suit
  * the new one: the rows dialog offers to fix it. */
 static uint8_t rows_cfg[256];
@@ -2170,6 +2204,9 @@ static void draw_dialog(void)
     case DLG_emul:
         draw_emul_dialog();
         break;
+    case DLG_fdd_type:
+        draw_fdd_type_dialog();
+        break;
     case DLG_fdfile:
         draw_fdfile_dialog();
         break;
@@ -2193,8 +2230,8 @@ static void draw_dialog(void)
 /* What a key did in a dialog. */
 enum {
     DK_none, DK_taken, DK_quit, DK_display, DK_rows_yes, DK_rows_no,
-    DK_emul_yes, DK_emul_no, DK_fdfile_yes, DK_fdfile_no, DK_unpack,
-    DK_write
+    DK_emul_yes, DK_emul_no, DK_fdd_type, DK_fdfile_yes, DK_fdfile_no,
+    DK_unpack, DK_write
 };
 
 /* The Display type dialog's keys: Tab and Shift+Tab move the focus over
@@ -2266,6 +2303,11 @@ static int dialog_key(int key)
             dialog_button = 1;
             key = '\n';
         }
+    } else if (dialog == DLG_fdd_type) {
+        if ((key == KEY_UP) && (dialog_fdd_type > 0))
+            dialog_fdd_type--;
+        else if ((key == KEY_DOWN) && (dialog_fdd_type < FDD_TYPE_nr - 1))
+            dialog_fdd_type++;
     }
 
     /* The fdfile dialog goes back to the Flash mem dialog on Esc, its edits
@@ -2307,7 +2349,7 @@ static int dialog_key(int key)
     if (key == 27)
         dialog = DLG_none;
     if (key == '\n') {
-        int done = DK_quit;
+        int done = (dialog == DLG_quit) ? DK_quit : DK_fdd_type;
         dialog = DLG_none;
         return (dialog_button == 0) ? done : DK_taken;
     }
@@ -2479,6 +2521,18 @@ static void set_display(int display)
     }
     if (rows_restart)
         leave(KEY_ACT_reset);
+}
+
+/* Makes the computer on the cable one of FDD type @type, if another than it
+ * is, and power-cycles the device, which detects the type as it boots. */
+static void set_fdd_type(int type)
+{
+    if (type == config.fdd_type)
+        return;
+    ui_fdd_set_type(type);
+    config.fdd_type = type;
+    rc_save();
+    leave(KEY_ACT_reset);
 }
 
 /*
@@ -3867,17 +3921,19 @@ static void draw_flash_dialog(void)
  * types there. */
 static int fdd_key(int key)
 {
+    bool apple2 = emu_fdd_type == EMU_FDD_TYPE_apple2;
+
     switch (key) {
     case '[':
         return FDD_ACT_sel;
     case ']':
         return FDD_ACT_motor;
     case '-':
-        return FFEMU_APPLE2 ? FDD_ACT_phase_out : FDD_ACT_dir;
+        return apple2 ? FDD_ACT_phase_out : FDD_ACT_dir;
     case '+': case '=':
-        return FFEMU_APPLE2 ? FDD_ACT_phase_in : FDD_ACT_step;
+        return apple2 ? FDD_ACT_phase_in : FDD_ACT_step;
     case '\\': case '/':
-        return FFEMU_APPLE2 ? FDD_ACT_release : FDD_ACT_side;
+        return apple2 ? FDD_ACT_release : FDD_ACT_side;
     }
     return -1;
 }
@@ -3947,6 +4003,9 @@ static void handle_key(int key)
         leave(KEY_ACT_reset);
     case DK_emul_no:
         leave(KEY_ACT_reset);
+    case DK_fdd_type:
+        set_fdd_type(dialog_fdd_type);
+        return;
     case DK_fdfile_yes: {
         const char *values[EMU_OPTIONS_MAX];
         char msg[160];
@@ -4001,6 +4060,13 @@ static void handle_key(int key)
         dialog_lcd_rom = config.lcd_rom;
         dialog_oled_synth = config.oled_synth;
         dialog_focus = DF_display;
+        return;
+    }
+
+    if ((key == FDD_TYPE_KEY) && FFEMU_MULTI) {
+        dialog = DLG_fdd_type;
+        dialog_button = 0;
+        dialog_fdd_type = config.fdd_type;
         return;
     }
 

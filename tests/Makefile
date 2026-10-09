@@ -51,7 +51,9 @@ FW_CFLAGS += -Wall -Werror -Wno-format -Wno-unused-value
 FW_CFLAGS += -iquote $(ROOT)/inc -iquote $(EMU) -iquote $(TESTS)
 FW_CFLAGS += -iquote $(OUT)
 FW_CFLAGS += -include $(EMU)/decls.h
-FW_CFLAGS += -DMCU=MCU_stm32f105 -DTARGET=TARGET_shugart -DLEVEL=LEVEL_debug
+# The multi target, which has the shugart target's image handlers, the
+# Apple2 ones and the detection of the host.
+FW_CFLAGS += -DMCU=MCU_stm32f105 -DTARGET=TARGET_multi -DLEVEL=LEVEL_debug
 FW_CFLAGS += -MMD -MP $(EXTRA_CFLAGS)
 
 HOST_CFLAGS := -std=gnu11 -O1 -g -Wall -Werror -MMD -MP $(EXTRA_CFLAGS)
@@ -76,6 +78,10 @@ $(OUT)/ff_cfg_defaults.h: $(ROOT)/examples/FF.CFG $(ROOT)/scripts/mk_config.py
 	$(Q)$(PYTHON) $(ROOT)/scripts/mk_config.py $< $@
 
 $(OUT)/test/harness.o: $(OUT)/ff_cfg_defaults.h
+
+# As in ffemu/Makefile: the floppy code of the logfile level keeps the Apple2
+# stepper phases on the release's pins.
+$(OUT)/fw/floppy.o: FW_CFLAGS += -ULEVEL -DLEVEL=LEVEL_logfile
 
 $(OUT)/fw/%.o: $(ROOT)/src/%.c
 	@echo CC $*.c

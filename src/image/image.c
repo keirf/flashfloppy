@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#if TARGET == TARGET_shugart
+#if (TARGET == TARGET_shugart) || (TARGET == TARGET_multi)
 
 extern const struct image_handler adf_image_handler;
 extern const struct image_handler atr_image_handler;
@@ -103,7 +103,11 @@ bool_t image_valid(FILINFO *fp)
 
     /* Check valid extension. */
     filename_extension(fp->fname, ext, sizeof(ext));
-    if ((TARGET == TARGET_shugart) && !strcmp(ext, "adf")) {
+    if (apple2_detected) {
+        /* HFE is the only Apple2 format. */
+        return !strcmp(ext, "hfe");
+    } else if (((TARGET == TARGET_shugart) || (TARGET == TARGET_multi))
+               && !strcmp(ext, "adf")) {
         return (ff_cfg.host == HOST_acorn) || !(fp->fsize % (2*11*512));
     } else {
         const struct image_type *type;
@@ -144,7 +148,7 @@ static bool_t try_handler(struct image *im, struct slot *slot,
     return handler->open(im);
 }
 
-#if TARGET == TARGET_shugart
+#if (TARGET == TARGET_shugart) || (TARGET == TARGET_multi)
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
@@ -164,6 +168,13 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
     /* Extract filename extension (if available). */
     memcpy(ext, slot->type, sizeof(slot->type));
     ext[sizeof(slot->type)] = '\0';
+
+    if (apple2_mode) {
+        /* HFE is the only Apple2 format. */
+        if (!try_handler(im, slot, cltbl, &hfe_image_handler))
+            F_die(FR_BAD_IMAGE);
+        return;
+    }
 
     /* Use the extension as a hint to the correct image handler. */
     for (type = &image_type[0]; type->handler != NULL; type++)
@@ -282,7 +293,7 @@ bool_t image_setup_track(
 {
     const struct image_handler *h = im->track_handler;
 
-#if TARGET == TARGET_shugart
+#if (TARGET == TARGET_shugart) || (TARGET == TARGET_multi)
     if (!in_da_mode(im, track>>1)) {
         /* If we are exiting D-A mode then need to re-read the config file. */
         if (h == &da_image_handler)

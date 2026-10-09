@@ -37,11 +37,10 @@
 volatile unsigned int emu_in_buttons;
 volatile int emu_in_rotary;
 volatile unsigned int emu_out_speaker;
-/* As connected to a computer that has just selected the drive; Shugart
- * steps go inward. */
-volatile unsigned int emu_in_fdd = EMU_FDD_SEL
-    | (FFEMU_APPLE2 ? 0 : EMU_FDD_DIR);
+/* Set up by ui_fdd_set_type() once the settings say what the computer is. */
+volatile unsigned int emu_in_fdd;
 volatile unsigned int emu_in_step;
+volatile int emu_fdd_type;
 volatile int emu_oled_synth_8x16;
 
 char log_ring[LOG_SIZE];
@@ -476,9 +475,10 @@ static void load_log_tail(const char *path)
 }
 
 /* The console also goes to console.log in ${XDG_STATE_HOME:-~/.local/state}
- * /ffemu/ (or /ffemu-apple2/), begun anew on every start and power cycle,
- * the previous one becoming console.bak, replacing the one before it; after
- * a reset of the firmware's own, both go on after LOG_FW_RESET. */
+ * /ffemu/ (or /ffemu-apple2/, /ffemu-multi/), begun anew on every start and
+ * power cycle, the previous one becoming console.bak, replacing the one
+ * before it; after a reset of the firmware's own, both go on after
+ * LOG_FW_RESET. */
 static void open_log(void)
 {
     const char *state = getenv("XDG_STATE_HOME"), *home = user_home();

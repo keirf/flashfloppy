@@ -14,9 +14,15 @@
 #ifndef FFEMU_NAME
 #define FFEMU_NAME "ffemu"
 #endif
-/* 1 where the firmware is that of the Apple2 target. */
+/* 1 where the firmware is that of the apple2 target, which has the Apple2
+ * mode alone. */
 #ifndef FFEMU_APPLE2
 #define FFEMU_APPLE2 0
+#endif
+/* 1 where the firmware is that of the multi target, which detects the
+ * Apple2 mode from the signals; the shugart firmware has none. */
+#ifndef FFEMU_MULTI
+#define FFEMU_MULTI 0
 #endif
 
 #include <stdbool.h>
@@ -334,11 +340,18 @@ enum {
     KEY_ACT_nr
 };
 
+/* The names of the FDD types, EMU_FDD_TYPE_*, in the settings file and on
+ * the screen. */
+#define FDD_TYPE_nr 2
+extern const char * const fdd_type_name[FDD_TYPE_nr];
+extern const char * const fdd_type_label[FDD_TYPE_nr];
+
 struct config {
     int style;              /* STYLE_* */
     int display;            /* DISP_*: the display fitted */
     int lcd_rom;            /* LCD_ROM_*: the LCD's character ROM */
     bool oled_synth;        /* the OLED's 8x16 font made from the 6x13 one */
+    int fdd_type;           /* EMU_FDD_TYPE_*: the computer on the cable */
     int display_color;      /* a curses color, plus 8 if bright */
     unsigned int hold_ms;   /* how long a key press holds a button down */
     char path[512];         /* where the settings file is, or would be */
@@ -402,7 +415,11 @@ enum {
     FDD_ACT_nr
 };
 extern const char * const fdd_action_name[FDD_ACT_nr];
-/* Whether the firmware's target has action @act. */
+/* Makes the computer on the cable one of FDD type @type, EMU_FDD_TYPE_*, with
+ * its signals as at power-on; the shugart firmware takes Step/Dir only, and
+ * the apple2 firmware Apple2 only. */
+void ui_fdd_set_type(int type);
+/* Whether the FDD type in use has action @act. */
 bool ui_fdd_has(int act);
 /* Performs FDD_ACT_* @act. User interface thread only. */
 void ui_fdd_action(int act);

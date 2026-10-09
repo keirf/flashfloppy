@@ -1073,13 +1073,14 @@ bool_t floppy_handle(void)
     return rc;
 }
 
-void emu_fdd_status(unsigned int *cyl, unsigned int *side, int *sel,
-                    const char **name)
+void emu_fdd_status(int *apple2, unsigned int *cyl, unsigned int *side,
+                    int *sel, const char **name)
 {
     struct track_info ti;
 
     /* From another thread, which may see a mount half done. */
     floppy_get_track(&ti);
+    *apple2 = apple2_mode;
     *cyl = ti.cyl;
     *side = ti.side;
     *sel = ti.sel;
@@ -1095,6 +1096,8 @@ const char *emu_fw_target(void)
 {
 #if TARGET == TARGET_apple2
     return "Apple2";
+#elif TARGET == TARGET_multi
+    return "Multi";
 #else
     return "Shugart";
 #endif

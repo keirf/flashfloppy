@@ -3141,11 +3141,12 @@ static void noinline banner(void)
 #endif
         led_7seg_write_string(
 #if LEVEL == LEVEL_logfile
-            "LOG"
+            apple2_detected ? "A2L" : "LOG"
 #elif TARGET == TARGET_quickdisk
             (led_7seg_nr_digits() == 3) ? "Q"sep_ch"D" : "QD"
 #else
-            (led_7seg_nr_digits() == 3) ? "F"sep_ch"F" : "FF"
+            apple2_detected ? ((led_7seg_nr_digits() == 3) ? "A"sep_ch"2" : "A2")
+            : (led_7seg_nr_digits() == 3) ? "F"sep_ch"F" : "FF"
 #endif
             );
 #undef sep_ch
@@ -3161,11 +3162,11 @@ static void noinline banner(void)
 #endif
         snprintf(msg[0], sizeof(msg[0]), "%s%s", fw_ver,
 #if LEVEL == LEVEL_logfile
-                 " Log"
+                 apple2_detected ? " A2L" : " Log"
 #elif TARGET == TARGET_quickdisk
                  " QD"
 #else
-                 ""
+                 apple2_detected ? " A2" : ""
 #endif
             );
         snprintf(msg[1], sizeof(msg[1]), "%9s %dkB", msg[0], ram_kb);
@@ -3312,7 +3313,11 @@ int main(void)
     console_init();
     board_init();
     console_crash_on_input();
+#if TARGET == TARGET_multi
+    apple2_detect(200); /* 5v settle */
+#else
     delay_ms(200); /* 5v settle */
+#endif
 
     printk("\n** FlashFloppy %s\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
