@@ -1621,15 +1621,14 @@ static void show_message(int back, const char *title, const char *text)
 
 /* The message box, as the one of a dialog that does not fit: the text
  * wrapped at blanks to fit the window. */
-static void draw_message_box(void)
+/* Wraps @p at blanks into lines of at most @max characters: up to @nr_max
+ * of them, their starts in @lines and lengths in @len; returns how many. */
+static int wrap_text(const char *p, int max, const char **lines, int *len,
+                     int nr_max)
 {
-    const char *lines[8], *p = msg_text;
-    int len[8], nr = 0, width = 0, i, y, x, w, max;
+    int nr = 0;
 
-    max = (COLS - 12 < 70) ? COLS - 12 : 70;
-    if (max < 16)
-        max = 16;
-    while ((*p != '\0') && (nr < (int)ARRAY_SIZE(lines))) {
+    while ((*p != '\0') && (nr < nr_max)) {
         int n = strlen(p), cut;
         if (n > max) {
             for (cut = max; (cut > 0) && (p[cut] != ' '); cut--)
@@ -1638,12 +1637,25 @@ static void draw_message_box(void)
         }
         lines[nr] = p;
         len[nr++] = n;
-        if (n > width)
-            width = n;
         p += n;
         while (*p == ' ')
             p++;
     }
+    return nr;
+}
+
+static void draw_message_box(void)
+{
+    const char *lines[8];
+    int len[8], nr, width = 0, i, y, x, w, max;
+
+    max = (COLS - 12 < 70) ? COLS - 12 : 70;
+    if (max < 16)
+        max = 16;
+    nr = wrap_text(msg_text, max, lines, len, ARRAY_SIZE(lines));
+    for (i = 0; i < nr; i++)
+        if (len[i] > width)
+            width = len[i];
     w = width + 8;
     colored_box(w, nr + 4, msg_title, COLOR_PAIR(CP_warn), BRIGHT(CP_warn),
                 &y, &x);
@@ -2438,11 +2450,13 @@ static void fd_value(const char *opt, char *buf, size_t size)
     }
 }
 
-/* What the dialog edits, above its columns. */
-static const char * const fd_explanation[2] = {
-    "Here are settings stored in the device flash memory.",
-    "The values are overwritten by FF.CFG on start."
-};
+/* What the dialog edits, above its columns: one paragraph, wrapped to the
+ * dialog's width. */
+static const char fd_explanation[] =
+    "Here are settings stored in the device flash memory. The values are "
+    "overwritten by FF.CFG on start. Only options supported by ffemu are "
+    "offered here.";
+#define FD_EXPL_MAX 4
 
 /* Whether fview @i is disabled: the display-type suffixes, which only an
  * OLED display type has, while another is chosen. */
@@ -2483,13 +2497,18 @@ static const char *fd_button_text(int type)
 
 static void fd_layout(void)
 {
-    int col_y[3] = { 5, 5, 5 }, col_x[3], h = 0, i, n;
+    const char *lines[FD_EXPL_MAX];
+    int col_y[3], col_x[3], len[FD_EXPL_MAX], h = 0, i, n;
     char label[40];
     struct fview *v;
 
     col_x[0] = 2;
     col_x[1] = col_x[0] + fd_col_w[0] + 2;
     col_x[2] = col_x[1] + fd_col_w[1] + 2;
+    fd_w = col_x[2] + fd_col_w[2] + 2;
+    /* The paragraph starts on row 2; the columns a row below it. */
+    col_y[0] = col_y[1] = col_y[2] = 3
+        + wrap_text(fd_explanation, fd_w - 4, lines, len, FD_EXPL_MAX);
     fd_field[0] = fd_field[1] = fd_field[2] = 0;
     for (i = 0; i < (int)FD_NR; i++) {
         v = &fviews[i];
@@ -2511,7 +2530,6 @@ static void fd_layout(void)
         if (col_y[v->col] > h)
             h = col_y[v->col];
     }
-    fd_w = col_x[2] + fd_col_w[2] + 2;
     fd_h = h + 5;
     /* OK and Cancel at the bottom, the two FF.CFG buttons one over the
      * other at the right, among the controls, below the third column's
@@ -2938,9 +2956,14 @@ static void draw_flash_dialog(void)
         return;
     }
     dialog_box(fd_w, fd_h, "Flash mem", &y0, &x0);
-    for (i = 0; i < (int)ARRAY_SIZE(fd_explanation); i++)
-        put(y0 + 2 + i, x0 + 2, fd_w - 4, COLOR_PAIR(CP_dialog), "%s",
-            fd_explanation[i]);
+    {
+        const char *lines[FD_EXPL_MAX];
+        int len[FD_EXPL_MAX], n;
+        n = wrap_text(fd_explanation, fd_w - 4, lines, len, FD_EXPL_MAX);
+        for (i = 0; i < n; i++)
+            put(y0 + 2 + i, x0 + 2, len[i], COLOR_PAIR(CP_dialog), "%.*s",
+                len[i], lines[i]);
+    }
     for (i = 0; i < (int)FD_NR; i++) {
         struct fview *v = &fviews[i];
         bool focused = (i == fd_focus), off = fd_disabled(i);
