@@ -133,7 +133,7 @@ enum {
  * and the display that the display dialog has selected. */
 static enum {
     DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul,
-    DLG_message
+    DLG_message, DLG_fdfile
 } dialog;
 /* The message box over a dialog: what it says, and the dialog it returns
  * to when closed. */
@@ -142,6 +142,7 @@ static int msg_return;
 static int dialog_button;
 static int dialog_display;
 static void draw_dialog(void);
+static void draw_fdfile_dialog(void);
 static void draw_flash_dialog(void);
 
 #define FRAME_MS 20
@@ -1832,6 +1833,9 @@ static void draw_dialog(void)
     case DLG_emul:
         draw_emul_dialog();
         break;
+    case DLG_fdfile:
+        draw_fdfile_dialog();
+        break;
     case DLG_message:
         /* Over the dialog it came from. */
         if (msg_return == DLG_flash)
@@ -1844,7 +1848,7 @@ static void draw_dialog(void)
 /* What a key did in a dialog. */
 enum {
     DK_none, DK_taken, DK_quit, DK_display, DK_rows_yes, DK_rows_no,
-    DK_emul_yes, DK_emul_no
+    DK_emul_yes, DK_emul_no, DK_fdfile_yes, DK_fdfile_no
 };
 
 /* Gives @key to the dialog, if one is open. */
@@ -1859,7 +1863,8 @@ static int dialog_key(int key)
         return DK_taken;
     }
 
-    if ((dialog == DLG_quit) || (dialog == DLG_rows) || (dialog == DLG_emul)) {
+    if ((dialog == DLG_quit) || (dialog == DLG_rows) || (dialog == DLG_emul)
+        || (dialog == DLG_fdfile)) {
         if ((key == 'y') || (key == 'Y')) {
             dialog_button = 0;
             key = '\n';
@@ -1871,6 +1876,18 @@ static int dialog_key(int key)
         dialog_display--;
     } else if ((key == KEY_DOWN) && (dialog_display < DISP_nr - 1)) {
         dialog_display++;
+    }
+
+    /* The fdfile dialog goes back to the Flash mem dialog on Esc, its edits
+     * kept. */
+    if (dialog == DLG_fdfile) {
+        if ((key != 27) && (key != '\n'))
+            return DK_taken;
+        if (key == 27) {
+            dialog = DLG_flash;
+            return DK_taken;
+        }
+        return (dialog_button == 0) ? DK_fdfile_yes : DK_fdfile_no;
     }
 
     /* The rows and emul dialogs have no way back: the display or the flash
@@ -2543,14 +2560,75 @@ static int fd_edited(uint8_t *cfg)
 }
 
 /* Writes the dialog's edits into flash; whether any changed it. */
-static bool fd_apply(void)
-{
-    uint8_t cfg[256];
+/* The options OK changes that FF.CFG on the drive sets to another value,
+ * which would undo the change on the next boot, for the fdfile dialog; the
+ * configuration to write once it has asked what to do about them, and
+ * display-type as it was, for the emul dialog. */
+static bool fd_offer_display(const char *old_type);
 
-    if (fd_edited(cfg) != 1)
-        return false;
+#define FDF_MAX 4
+static struct {
+    const char *opt;
+    char value[64], file[64];
+} fdf[FDF_MAX];
+static int fdf_nr;
+static bool fdf_writable;
+static uint8_t fdf_cfg[256];
+static char fdf_old_type[64];
+
+static void fd_check_file(const uint8_t *cfg)
+{
+    struct usb_info usb;
+    char text[80], value[64], file[64];
+    unsigned int i;
+
+    fdf_nr = 0;
+    for (i = 0; (i < ARRAY_SIZE(fd_opts)) && (fdf_nr < FDF_MAX); i++) {
+        fd_value(fd_opts[i], text, sizeof(text));
+        if (!strcmp(text, fd_orig[i]))
+            continue;
+        option_value(cfg, fd_opts[i], value, sizeof(value));
+        if (!ff_cfg_file_option(fd_opts[i], file, sizeof(file))
+            || !strcmp(file, value))
+            continue;
+        fdf[fdf_nr].opt = fd_opts[i];
+        snprintf(fdf[fdf_nr].value, sizeof(fdf[fdf_nr].value), "%s", value);
+        snprintf(fdf[fdf_nr].file, sizeof(fdf[fdf_nr].file), "%s", file);
+        fdf_nr++;
+    }
+    usb_get_info(&usb);
+    fdf_writable = (usb.kind != USB_image);
+}
+
+/* Writes @cfg into flash and power-cycles the device, unless display-type
+ * no longer suits the display fitted, which the emul dialog takes up. */
+static void fd_commit(const uint8_t *cfg)
+{
     emu_flash_save(cfg, emu_flash_cfg_size());
-    return true;
+    dialog = DLG_none;
+    if (!fd_offer_display(fdf_old_type))
+        leave(KEY_ACT_reset);
+}
+
+static void draw_fdfile_dialog(void)
+{
+    const char *head = fdf_writable
+        ? "FF.CFG on the drive sets, and would restore on boot:"
+        : "FF.CFG in the drive's image sets, and will restore on boot:";
+    const char *ask = fdf_writable ? "Change it in FF.CFG as well?"
+        : "Write flash anyway?";
+    int w = strlen(head) + 8, h = 7 + fdf_nr, y, x, i;
+
+    dialog_box(w, h, "Flash mem", &y, &x);
+    put(y + 2, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", head);
+    for (i = 0; i < fdf_nr; i++)
+        put(y + 3 + i, x + 6, w - 7, COLOR_PAIR(CP_dialog), "%s = %s",
+            fdf[i].opt, fdf[i].file);
+    put(y + 3 + fdf_nr, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", ask);
+    button(y + h - 3, x + w / 2 - 12, button_attr(0),
+           fdf_writable ? "  Yes  " : "  OK  ");
+    button(y + h - 3, x + w / 2 + 4, button_attr(1),
+           fdf_writable ? "  No  " : " Back ");
 }
 
 /* Opens the emul dialog if display-type in flash has changed and no longer
@@ -2609,7 +2687,6 @@ static void fd_key(int key)
     struct fview *v = &fviews[fd_focus];
     int n = (v->type == FV_radio) || (v->type == FV_check) ? fd_rows(v) : 0;
     uint8_t cfg[256];
-    char old_type[64];
     unsigned int i;
 
     /* Only the message is on the screen: nothing to edit blindly. */
@@ -2650,13 +2727,25 @@ static void fd_key(int key)
             return;
         }
         emu_flash_get(cfg);
-        option_value(cfg, "display-type", old_type, sizeof(old_type));
-        if (fd_apply()) {
-            dialog = DLG_none;
-            if (!fd_offer_display(old_type))
-                leave(KEY_ACT_reset);
-        } else if (dialog != DLG_message) {
-            dialog = DLG_none;
+        option_value(cfg, "display-type", fdf_old_type,
+                     sizeof(fdf_old_type));
+        {
+            int r = fd_edited(cfg);
+            if (r < 0)
+                return;
+            if (r == 0) {
+                dialog = DLG_none;
+                return;
+            }
+            /* FF.CFG on the drive would undo an edit on the next boot. */
+            fd_check_file(cfg);
+            if (fdf_nr != 0) {
+                memcpy(fdf_cfg, cfg, sizeof(fdf_cfg));
+                dialog = DLG_fdfile;
+                dialog_button = 0;
+                return;
+            }
+            fd_commit(cfg);
         }
         return;
     case KEY_UP:
@@ -2883,6 +2972,24 @@ static void handle_key(int key)
         leave(KEY_ACT_reset);
     case DK_emul_no:
         leave(KEY_ACT_reset);
+    case DK_fdfile_yes: {
+        char msg[160];
+        int i;
+        if (fdf_writable) {
+            for (i = 0; i < fdf_nr; i++) {
+                ff_cfg_set_option(fdf[i].opt, fdf[i].value, msg, sizeof(msg));
+                host_log("%s", msg);
+            }
+        }
+        fd_commit(fdf_cfg);
+        return;
+    }
+    case DK_fdfile_no:
+        if (fdf_writable)
+            fd_commit(fdf_cfg);
+        else
+            dialog = DLG_flash;
+        return;
     }
 
     if ((key == key_ctrl_pgup) || (key == key_ctrl_pgdn)) {
