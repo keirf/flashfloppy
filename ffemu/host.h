@@ -198,6 +198,15 @@ bool usb_save(const char *path, char *err, size_t size);
  * memory keeps one: every option, or only those that differ from the
  * defaults. Says what it did, or why it could not, in @msg. */
 bool ff_cfg_write(const void *cfg, bool all, char *msg, size_t size);
+/* The value of option @name in the drive's FF.CFG, as the firmware sees the
+ * file now, into @value; false if there is no drive, file or such line. */
+bool ff_cfg_file_option(const char *name, char *value, size_t size);
+/* Sets option @name to @value in the drive's FF.CFG, where it has a line
+ * for it, on a drive made from a directory or a disk the system has
+ * mounted: the line rewritten in place, the old file kept as .BAK. Says
+ * what it did, or why it could not, in @msg. */
+bool ff_cfg_set_option(const char *name, const char *value, char *msg,
+                       size_t size);
 
 /*
  * usbdisk.c

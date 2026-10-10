@@ -116,31 +116,69 @@ static unsigned int generate(FILE *f, const uint8_t *cfg,
     return nr;
 }
 
-bool ff_cfg_write(const void *cfg, bool all, char *msg, size_t size)
+/* Where the drive's FF.CFG is, or would be, on the system: its directory
+ * @dir and its place @place in it, "FF.CFG" or in the FF folder; false,
+ * with the reason in @msg, for an image or a disk the system has not
+ * mounted. */
+static bool ff_cfg_where(char *dir, size_t dsize, char *place, size_t psize,
+                         char *msg, size_t size)
 {
     struct usb_info usb;
-    uint8_t flash[256];
-    char place[16], dir[4000], path[4096], tmp[4104], bak[4104];
-    struct stat st;
-    bool had_old;
-    unsigned int nr;
-    FILE *f;
 
     usb_get_info(&usb);
     if (usb.kind == USB_dir) {
-        snprintf(dir, sizeof(dir), "%s", usb_path);
+        snprintf(dir, dsize, "%s", usb_path);
     } else if (usb.kind == USB_image) {
         snprintf(msg, size, "FF.CFG cannot be written into an image file");
         return false;
-    } else if (!usb_disk_mount(usb_path, dir, sizeof(dir))) {
+    } else if (!usb_disk_mount(usb_path, dir, dsize)) {
         snprintf(msg, size, "%s is not mounted by the system; mount it, and "
                  "FF.CFG is written there", usb_path);
         return false;
     }
-    usb_ff_cfg_place(dir, place, sizeof(place));
+    usb_ff_cfg_place(dir, place, psize);
     /* A mount point may end in a slash already, as "J:/" does. */
     if (dir[strlen(dir) - 1] == '/')
         dir[strlen(dir) - 1] = '\0';
+    return true;
+}
+
+/* Puts @tmp in place of @path, the old file becoming @bak in place of the
+ * previous one; whether there was an old file in @had_old. */
+static bool replace_file(const char *path, const char *tmp, const char *bak,
+                         bool *had_old, char *msg, size_t size)
+{
+    struct stat st;
+
+    *had_old = (stat(path, &st) == 0);
+    if (*had_old && (remove(bak) != 0) && (errno != ENOENT)) {
+        snprintf(msg, size, "%s: %s", bak, strerror(errno));
+        remove(tmp);
+        return false;
+    }
+    if (*had_old && (rename(path, bak) != 0)) {
+        snprintf(msg, size, "%s: %s", bak, strerror(errno));
+        remove(tmp);
+        return false;
+    }
+    if (rename(tmp, path) != 0) {
+        snprintf(msg, size, "%s: %s", path, strerror(errno));
+        remove(tmp);
+        return false;
+    }
+    return true;
+}
+
+bool ff_cfg_write(const void *cfg, bool all, char *msg, size_t size)
+{
+    uint8_t flash[256];
+    char place[16], dir[4000], path[4096], tmp[4104], bak[4104];
+    bool had_old;
+    unsigned int nr;
+    FILE *f;
+
+    if (!ff_cfg_where(dir, sizeof(dir), place, sizeof(place), msg, size))
+        return false;
     snprintf(path, sizeof(path), "%s/%s", dir, place);
     snprintf(tmp, sizeof(tmp), "%s.new", path);
     snprintf(bak, sizeof(bak), "%s.BAK", path);
@@ -157,26 +195,115 @@ bool ff_cfg_write(const void *cfg, bool all, char *msg, size_t size)
         remove(tmp);
         return false;
     }
-
-    /* The old file becomes the .BAK, in place of the previous one. */
-    had_old = (stat(path, &st) == 0);
-    if (had_old && (remove(bak) != 0) && (errno != ENOENT)) {
-        snprintf(msg, size, "%s: %s", bak, strerror(errno));
-        remove(tmp);
+    if (!replace_file(path, tmp, bak, &had_old, msg, size))
         return false;
-    }
-    if (had_old && (rename(path, bak) != 0)) {
-        snprintf(msg, size, "%s: %s", bak, strerror(errno));
-        remove(tmp);
-        return false;
-    }
-    if (rename(tmp, path) != 0) {
-        snprintf(msg, size, "%s: %s", path, strerror(errno));
-        remove(tmp);
-        return false;
-    }
     snprintf(msg, size, "%s/%s written with %u option%s%s", dir, place, nr,
              (nr == 1) ? "" : "s",
              had_old ? ", the old one kept as .BAK" : "");
+    return true;
+}
+
+/* The value on option line @line of @len, after the '=' and its blanks, up
+ * to the end of the line less its blanks, into @value. */
+static void line_value(const char *line, size_t len, char *value,
+                       size_t size)
+{
+    const char *p = memchr(line, '=', len), *end = line + len;
+    size_t n;
+
+    if (p == NULL) {
+        value[0] = '\0';
+        return;
+    }
+    for (p++; (p < end) && ((*p == ' ') || (*p == '\t')); p++)
+        continue;
+    while ((end > p) && ((end[-1] == ' ') || (end[-1] == '\t')
+                         || (end[-1] == '\r')))
+        end--;
+    n = end - p;
+    if (n > size - 1)
+        n = size - 1;
+    memcpy(value, p, n);
+    value[n] = '\0';
+}
+
+bool ff_cfg_file_option(const char *name, char *value, size_t size)
+{
+    static char text[65536];
+    const char *p;
+    char lname[32];
+
+    if (!usb_read_text("FF      CFG", text, sizeof(text)))
+        return false;
+    for (p = text; *p != '\0'; p += strcspn(p, "\n"), p += (*p == '\n')) {
+        size_t len = strcspn(p, "\n");
+        if (option_line(p, len, lname, sizeof(lname))
+            && !strcmp(lname, name)) {
+            line_value(p, len, value, size);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ff_cfg_set_option(const char *name, const char *value, char *msg,
+                       size_t size)
+{
+    static char text[65536];
+    char place[16], dir[4000], path[4096], tmp[4104], bak[4104], lname[32];
+    const char *p;
+    size_t n;
+    bool had_old, found = false;
+    FILE *f;
+
+    if (!ff_cfg_where(dir, sizeof(dir), place, sizeof(place), msg, size))
+        return false;
+    snprintf(path, sizeof(path), "%s/%s", dir, place);
+    snprintf(tmp, sizeof(tmp), "%s.new", path);
+    snprintf(bak, sizeof(bak), "%s.BAK", path);
+
+    f = fopen(path, "rb");
+    if (f == NULL) {
+        snprintf(msg, size, "%s: %s", path, strerror(errno));
+        return false;
+    }
+    n = fread(text, 1, sizeof(text) - 1, f);
+    fclose(f);
+    text[n] = '\0';
+
+    f = fopen(tmp, "wb");
+    if (f == NULL) {
+        snprintf(msg, size, "%s: %s", tmp, strerror(errno));
+        return false;
+    }
+    /* The option's line rewritten, with the line end it had; the rest as
+     * it is. */
+    for (p = text; *p != '\0'; p += strcspn(p, "\n"), p += (*p == '\n')) {
+        size_t len = strcspn(p, "\n");
+        bool nl = (p[len] == '\n');
+        if (!found && option_line(p, len, lname, sizeof(lname))
+            && !strcmp(lname, name)) {
+            bool cr = len && (p[len - 1] == '\r');
+            fprintf(f, "%s = %s%s%s", name, value, cr ? "\r" : "",
+                    nl ? "\n" : "");
+            found = true;
+        } else {
+            fwrite(p, 1, len + nl, f);
+        }
+    }
+    if (fclose(f) != 0) {
+        snprintf(msg, size, "%s: %s", tmp, strerror(errno));
+        remove(tmp);
+        return false;
+    }
+    if (!found) {
+        remove(tmp);
+        snprintf(msg, size, "%s/%s has no %s line", dir, place, name);
+        return false;
+    }
+    if (!replace_file(path, tmp, bak, &had_old, msg, size))
+        return false;
+    snprintf(msg, size, "%s/%s: %s = %s%s", dir, place, name, value,
+             had_old ? ", the old file kept as .BAK" : "");
     return true;
 }

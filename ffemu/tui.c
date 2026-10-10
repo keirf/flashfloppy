@@ -1690,6 +1690,11 @@ static void draw_display_dialog(void)
 static uint8_t rows_cfg[256];
 /* Whether the display has changed, which needs a power cycle anyway. */
 static bool rows_restart;
+/* What FF.CFG on the drive says about display-type, which overrides flash
+ * on every boot: nothing, or another value, in a file that can be changed,
+ * a directory's or a mounted disk's, or not, an image's. */
+static enum { ROWS_FILE_none, ROWS_FILE_writable, ROWS_FILE_image } rows_file;
+static char rows_file_value[64];
 
 /* The value of option @name in @cfg, into @buf. */
 static void option_value(const void *cfg, const char *name, char *buf,
@@ -1720,27 +1725,63 @@ static void fit_display_type(void *cfg)
         emu_flash_set_oled_rows(cfg, DISP_HEIGHT(config.display));
 }
 
-static void draw_rows_dialog(void)
+/* Sets display-type for the display fitted into a copy of @rows_cfg, giving
+ * its value before in @now and after in @then. */
+static void rows_values(char *now, char *then, size_t size)
 {
     uint8_t cfg[256];
-    char now[64], then[64], line1[96], line2[96];
-    int w, y, x;
 
     memcpy(cfg, rows_cfg, sizeof(cfg));
-    option_value(cfg, "display-type", now, sizeof(now));
+    option_value(cfg, "display-type", now, size);
     fit_display_type(cfg);
-    option_value(cfg, "display-type", then, sizeof(then));
+    option_value(cfg, "display-type", then, size);
+}
+
+/* Looks at display-type in FF.CFG on the drive, for the rows dialog: set
+ * there to other than @then, it would undo the change on the next boot. */
+static void rows_check_file(const char *then)
+{
+    struct usb_info usb;
+
+    rows_file = ROWS_FILE_none;
+    if (!ff_cfg_file_option("display-type", rows_file_value,
+                            sizeof(rows_file_value))
+        || !strcmp(rows_file_value, then))
+        return;
+    usb_get_info(&usb);
+    rows_file = (usb.kind == USB_image) ? ROWS_FILE_image : ROWS_FILE_writable;
+}
+
+static void draw_rows_dialog(void)
+{
+    char now[64], then[64], line1[96], line2[96], line3[160];
+    int w, y, x, h = 8;
+
+    rows_values(now, then, sizeof(now));
     snprintf(line1, sizeof(line1), "Flash mem has display-type = %s.", now);
     snprintf(line2, sizeof(line2), "Change it to %s?", then);
+    line3[0] = '\0';
+    if (rows_file == ROWS_FILE_writable)
+        snprintf(line3, sizeof(line3), "FF.CFG on the drive sets %s too: it "
+                 "is changed as well.", rows_file_value);
+    else if (rows_file == ROWS_FILE_image)
+        snprintf(line3, sizeof(line3), "FF.CFG in the drive's image sets %s "
+                 "and will override this on boot.", rows_file_value);
     w = ((strlen(line1) > strlen(line2)) ? strlen(line1) : strlen(line2)) + 8;
+    if ((int)strlen(line3) + 8 > w)
+        w = strlen(line3) + 8;
     if (w < 32)
         w = 32;
+    if (line3[0] != '\0')
+        h++;
 
-    dialog_box(w, 8, "Display type", &y, &x);
+    dialog_box(w, h, "Display type", &y, &x);
     put(y + 2, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", line1);
     put(y + 3, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", line2);
-    button(y + 5, x + w / 2 - 12, button_attr(0), "  Yes  ");
-    button(y + 5, x + w / 2 + 4, button_attr(1), "  No  ");
+    if (line3[0] != '\0')
+        put(y + 4, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", line3);
+    button(y + h - 3, x + w / 2 - 12, button_attr(0), "  Yes  ");
+    button(y + h - 3, x + w / 2 + 4, button_attr(1), "  No  ");
 }
 
 /* The display that display-type in flash asks for, once the Flash mem
@@ -1989,6 +2030,9 @@ static void set_display(int display)
     }
     emu_flash_get(rows_cfg);
     if (!display_type_fits(rows_cfg, display)) {
+        char now[64], then[64];
+        rows_values(now, then, sizeof(now));
+        rows_check_file(then);
         dialog = DLG_rows;
         dialog_button = 0;
         return;
@@ -2817,10 +2861,18 @@ static void handle_key(int key)
     case DK_display:
         set_display(dialog_display);
         return;
-    case DK_rows_yes:
+    case DK_rows_yes: {
+        char then[64], msg[160];
         fit_display_type(rows_cfg);
         emu_flash_save(rows_cfg, emu_flash_cfg_size());
+        /* FF.CFG on the drive would undo it on the next boot. */
+        if (rows_file == ROWS_FILE_writable) {
+            option_value(rows_cfg, "display-type", then, sizeof(then));
+            ff_cfg_set_option("display-type", then, msg, sizeof(msg));
+            host_log("%s", msg);
+        }
         leave(KEY_ACT_reset);
+    }
     case DK_rows_no:
         if (rows_restart)
             leave(KEY_ACT_reset);
