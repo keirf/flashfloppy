@@ -69,13 +69,13 @@ enum {
     CP_path,      /* light cyan on blue */
     CP_bar,       /* black on light gray: menu bar and status line */
     CP_hotkey,    /* dark red on light gray: hotkeys in the status line */
-    CP_warn,      /* bright white on red */
+    CP_warn,      /* bright white on bright magenta: an error */
     CP_good,      /* bright green on blue */
     CP_ctl_off,   /* bright red on blue: a control at rest */
     CP_ctl_latch, /* dark red on light gray: a latchable button */
     CP_ctl_on,    /* dark red on bright yellow: a control or key in use */
     CP_crop,      /* bright green on blue: a line is cut short */
-    CP_note,      /* dark red on black: a remark in the OLED's frame */
+    CP_note,      /* magenta on black, bright: an error in a frame */
     CP_focus,     /* bright white on blue: the frame of the focused window */
     CP_dialog,    /* black on light gray: a dialog */
     CP_dlg_frame, /* bright white on light gray: the dialog's frame */
@@ -463,17 +463,27 @@ static void draw_pixels(int y0, int x0, int style, const uint8_t *lit,
 
 static const char mismatch_note[] = " - display type mismatch";
 
-/* The frame of the display at (@y0,@x0), @cw by @ch cells inside, with
- * @title; the end of the title in red if @mismatch, the firmware being set
- * up for another display than the one fitted. */
-static void display_frame(int y0, int x0, int cw, int ch, const char *title,
+/* The width of the display's frame: around @cw cells of pixels, or wider
+ * when @title needs it. */
+static int frame_width(int cw, const char *title)
+{
+    /* A space on each side of the title, two frame columns at each end. */
+    int tw = strlen(title) + 6;
+
+    return (cw + 2 > tw) ? cw + 2 : tw;
+}
+
+/* The frame of the display at (@y0,@x0), @fw wide, @ch cells of pixels
+ * tall, with @title; the end of the title in bright magenta if @mismatch,
+ * the firmware being set up for another display than the one fitted. */
+static void display_frame(int y0, int x0, int fw, int ch, const char *title,
                           bool mismatch, attr_t attr)
 {
     int tw = strlen(title) + 2;
 
-    frame(y0, x0, cw + 2, ch + 2, title, attr, COLOR_PAIR(CP_dframe));
-    if (mismatch && (tw <= cw + 2 - 4))
-        put(y0, x0 + (cw + 2 - tw) / 2 + 1 + strlen(title)
+    frame(y0, x0, fw, ch + 2, title, attr, COLOR_PAIR(CP_dframe));
+    if (mismatch && (tw <= fw - 4))
+        put(y0, x0 + (fw - tw) / 2 + 1 + strlen(title)
             - strlen(mismatch_note), strlen(mismatch_note), BRIGHT(CP_note),
             "%s", mismatch_note);
 }
@@ -504,51 +514,66 @@ static void display_hint(int y0, int x0, int ch, int style, bool too_small)
     if ((hint_y > LINES - 2) && (LINES - 2 > y0))
         hint_y = LINES - 2;
     put(hint_y, x0 + 2, strlen(hint),
-        COLOR_PAIR(too_small ? CP_note : CP_dframe), "%s", hint);
+        too_small ? BRIGHT(CP_note) : COLOR_PAIR(CP_dframe), "%s", hint);
 }
 
-/* Draws the OLED at (@y0,@x0) in @style; @too_small if it does not fit the
- * window even so. */
-static void draw_display(int y0, int x0, int style, bool too_small,
-                         const struct oled_view *v, const uint8_t *px)
+/* The OLED's title into @title, noting a mismatch, the firmware driving
+ * another display than the one fitted; whether it does. */
+static bool oled_title(const struct oled_view *v, char *title, size_t size)
 {
-    attr_t attr = (config.display_color & 8) ? BRIGHT(CP_display)
-        : COLOR_PAIR(CP_display);
-    int cw, ch;
-    char title[96];
     bool mismatch = v->present && (v->driven != v->height);
 
-    cells(style, OLED_W, v->height, &cw, &ch);
-    snprintf(title, sizeof(title), "OLED 128x%u on %s%s%s", v->height,
-             v->chip, v->on ? "" : " - off", mismatch ? mismatch_note : "");
-    display_frame(y0, x0, cw, ch, title, mismatch, attr);
-    draw_pixels(y0 + 1, x0 + 1, style, px, NULL, OLED_W, v->height, attr);
-    display_hint(y0, x0, ch, style, too_small);
+    snprintf(title, size, "OLED 128x%u on %s%s%s", v->height, v->chip,
+             v->on ? "" : " - off", mismatch ? mismatch_note : "");
+    return mismatch;
 }
 
-/* Draws the LED display at (@y0,@x0) in @style, its segments as pixels,
- * the unlit ones faint; as a mismatch when display-type in flash keeps the
- * firmware from looking for it. */
-static void draw_led(int y0, int x0, int style, bool too_small,
-                     const struct led_view *v)
+/* The LED display's title into @title, noting a mismatch, display-type in
+ * flash keeping the firmware from looking for it; whether it does. */
+static bool led_title(const struct led_view *v, char *title, size_t size)
 {
-    const uint8_t *lit, *all;
-    attr_t attr = (config.display_color & 8) ? BRIGHT(CP_display)
-        : COLOR_PAIR(CP_display);
     uint8_t cfg[256];
-    unsigned int w, h;
-    int cw, ch;
-    char title[96];
     bool mismatch;
 
     emu_flash_get(cfg);
     mismatch = !emu_flash_display_auto(cfg);
-    led_pixels(v, led_font_of(style), &lit, &all, &w, &h);
-    cells(style, w, h, &cw, &ch);
-    snprintf(title, sizeof(title), "LED %u digits on %s%s%s", v->nr_digits,
+    snprintf(title, size, "LED %u digits on %s%s%s", v->nr_digits,
              (v->nr_digits == 3) ? "TM1651" : "74HC164",
              v->on ? "" : " - off", mismatch ? mismatch_note : "");
-    display_frame(y0, x0, cw, ch, title, mismatch, attr);
+    return mismatch;
+}
+
+/* Draws the OLED at (@y0,@x0) in a frame @fw wide, in @style; @too_small
+ * if it does not fit the window even so. */
+static void draw_display(int y0, int x0, int fw, int style, bool too_small,
+                         const struct oled_view *v, const uint8_t *px,
+                         const char *title, bool mismatch)
+{
+    attr_t attr = (config.display_color & 8) ? BRIGHT(CP_display)
+        : COLOR_PAIR(CP_display);
+    int cw, ch;
+
+    cells(style, OLED_W, v->height, &cw, &ch);
+    display_frame(y0, x0, fw, ch, title, mismatch, attr);
+    draw_pixels(y0 + 1, x0 + 1, style, px, NULL, OLED_W, v->height, attr);
+    display_hint(y0, x0, ch, style, too_small);
+}
+
+/* Draws the LED display at (@y0,@x0) in a frame @fw wide, in @style, its
+ * segments as pixels, the unlit ones faint. */
+static void draw_led(int y0, int x0, int fw, int style, bool too_small,
+                     const struct led_view *v, const char *title,
+                     bool mismatch)
+{
+    const uint8_t *lit, *all;
+    attr_t attr = (config.display_color & 8) ? BRIGHT(CP_display)
+        : COLOR_PAIR(CP_display);
+    unsigned int w, h;
+    int cw, ch;
+
+    led_pixels(v, led_font_of(style), &lit, &all, &w, &h);
+    cells(style, w, h, &cw, &ch);
+    display_frame(y0, x0, fw, ch, title, mismatch, attr);
     draw_pixels(y0 + 1, x0 + 1, style, lit, all, w, h, attr);
     display_hint(y0, x0, ch, style, too_small);
 }
@@ -1413,24 +1438,30 @@ static void redraw(void)
     static uint8_t px[OLED_W * OLED_MAX_H];
     struct oled_view v;
     struct led_view lv;
-    int style, cw, ch, dh, y, kw, sw, bottom = LINES - 1;
-    bool too_small;
+    bool led = DISP_IS_LED(fitted_display), too_small, mismatch;
+    int style, cw, ch, fw, dh, y, kw, sw, bottom = LINES - 1;
+    char title[96];
 
+    if (led) {
+        led_get_view(&lv);
+        mismatch = led_title(&lv, title, sizeof(title));
+    } else {
+        oled_get_view(&v, px);
+        mismatch = oled_title(&v, title, sizeof(title));
+    }
     style = style_in_use();
     display_cells(style, &cw, &ch);
+    fw = frame_width(cw, title);
     dh = ch + 2;
-    too_small = (cw + 2 > COLS) || (1 + dh > bottom);
+    too_small = (fw > COLS) || (1 + dh > bottom);
 
     erase();
 
-    if (DISP_IS_LED(fitted_display)) {
-        led_get_view(&lv);
-        draw_led(1, 0, style, too_small, &lv);
-    } else {
-        oled_get_view(&v, px);
-        draw_display(1, 0, style, too_small, &v, px);
-    }
-    draw_ff_cfg(1, cw + 2, COLS - cw - 2, (1 + dh > bottom) ? bottom - 1 : dh);
+    if (led)
+        draw_led(1, 0, fw, style, too_small, &lv, title, mismatch);
+    else
+        draw_display(1, 0, fw, style, too_small, &v, px, title, mismatch);
+    draw_ff_cfg(1, fw, COLS - fw, (1 + dh > bottom) ? bottom - 1 : dh);
     draw_bars();
 
     /* Controls as wide as they need, then Status and Flash mem sharing the
@@ -2890,14 +2921,15 @@ static void *tui_thread(void *unused)
         init_pair(CP_path, COLOR_CYAN, COLOR_BLUE);
         init_pair(CP_bar, COLOR_BLACK, COLOR_WHITE);
         init_pair(CP_hotkey, COLOR_RED, COLOR_WHITE);
-        init_pair(CP_warn, COLOR_WHITE, COLOR_RED);
+        init_pair(CP_warn, COLOR_WHITE,
+                  (COLORS >= 16) ? 8 + COLOR_MAGENTA : COLOR_MAGENTA);
         init_pair(CP_good, COLOR_GREEN, COLOR_BLUE);
         init_pair(CP_ctl_off, (COLORS >= 16) ? 9 : COLOR_RED, COLOR_BLUE);
         init_pair(CP_ctl_latch, COLOR_RED, COLOR_WHITE);
         /* Bright yellow is color 11 where the terminal has 16 colors. */
         init_pair(CP_ctl_on, COLOR_RED, (COLORS >= 16) ? 11 : COLOR_YELLOW);
         init_pair(CP_crop, COLOR_GREEN, COLOR_BLUE);
-        init_pair(CP_note, COLOR_RED, COLOR_BLACK);
+        init_pair(CP_note, COLOR_MAGENTA, COLOR_BLACK);
         init_pair(CP_focus, COLOR_WHITE, COLOR_BLUE);
         init_pair(CP_dialog, COLOR_BLACK, COLOR_WHITE);
         init_pair(CP_dlg_frame, COLOR_WHITE, COLOR_WHITE);
