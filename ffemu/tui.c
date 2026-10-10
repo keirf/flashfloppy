@@ -91,6 +91,8 @@ enum {
     CP_cluster,   /* black on cyan: radio buttons and check boxes */
     CP_cluster_hi, /* bright white on cyan: the one of them in focus */
     CP_cluster_hot, /* bright red on cyan: a hotkey among them */
+    CP_cluster_off, /* dark gray on cyan: them, disabled */
+    CP_dlg_off,   /* dark gray on light gray: a disabled control's label */
     CP_input,     /* bright white on blue: an input line */
     CP_button_def, /* bright cyan on green: the default button */
     CP_signal,    /* black on dark yellow: an active signal of the host */
@@ -2077,6 +2079,26 @@ static const char * const fd_explanation[2] = {
     "The values are overwritten by FF.CFG on start."
 };
 
+/* Whether fview @i is disabled: the display-type suffixes, which only an
+ * OLED display type has, while another is chosen. */
+static bool fd_disabled(int i)
+{
+    const struct fview *v = &fviews[i], *r;
+
+    if ((v->type != FV_check) || !v->opt || strcmp(v->opt, "display-type"))
+        return false;
+    r = fd_find(FV_radio, "display-type");
+    return r && strncmp(fd_radio_value(r), "oled-", 5);
+}
+
+/* Moves the focus by @dir, 1 or -1, over the disabled fviews. */
+static void fd_step(int dir)
+{
+    do
+        fd_focus = (fd_focus + FD_NR + dir) % FD_NR;
+    while (fd_disabled(fd_focus));
+}
+
 static void fd_layout(void)
 {
     int col_y[3] = { 5, 5, 5 }, col_x[3], h = 0, i, n;
@@ -2246,10 +2268,10 @@ static void fd_key(int key)
         dialog = DLG_none;
         return;
     case '\t':
-        fd_focus = (fd_focus + 1) % FD_NR;
+        fd_step(1);
         return;
     case KEY_BTAB:
-        fd_focus = (fd_focus + FD_NR - 1) % FD_NR;
+        fd_step(-1);
         return;
     case '\n':
         if (v->type == FV_cancel) {
@@ -2270,13 +2292,13 @@ static void fd_key(int key)
         if ((n != 0) && (v->cur > 0))
             v->cur--;
         else if (n == 0)
-            fd_focus = (fd_focus + FD_NR - 1) % FD_NR;
+            fd_step(-1);
         return;
     case KEY_DOWN:
         if ((n != 0) && (v->cur < n - 1))
             v->cur++;
         else if (n == 0)
-            fd_focus = (fd_focus + 1) % FD_NR;
+            fd_step(1);
         return;
     case KEY_LEFT: case KEY_RIGHT:
         if ((v->type == FV_ok) || (v->type == FV_cancel))
@@ -2311,7 +2333,8 @@ static void fd_key(int key)
         if ((hotkey_of(fviews[i].label) == tolower(key))
             || (!fviews[i].label
                 && (hotkey_of(fviews[i].items[0]) == tolower(key)))) {
-            fd_focus = i;
+            if (!fd_disabled(i))
+                fd_focus = i;
             return;
         }
     }
@@ -2332,10 +2355,12 @@ static void draw_flash_dialog(void)
             fd_explanation[i]);
     for (i = 0; i < (int)FD_NR; i++) {
         struct fview *v = &fviews[i];
-        bool focused = (i == fd_focus);
+        bool focused = (i == fd_focus), off = fd_disabled(i);
+        attr_t dim = (COLORS >= 16) ? 0 : A_BOLD;
         y = y0 + v->y;
         x = x0 + v->x;
-        label = focused ? BRIGHT(CP_dlg_frame)
+        label = off ? COLOR_PAIR(CP_dlg_off) | dim
+            : focused ? BRIGHT(CP_dlg_frame)
             : COLOR_PAIR(CP_dialog);
 
         switch (v->type) {
@@ -2343,10 +2368,11 @@ static void draw_flash_dialog(void)
         case FV_check:
             if (v->label)
                 put_marked(y++, x, FD_W(v), label,
-                           BRIGHT(CP_dlg_hot), v->label);
+                           off ? label : BRIGHT(CP_dlg_hot), v->label);
             for (r = 0; r < fd_rows(v); r++, y++) {
                 int k = (v->type == FV_radio) ? r : fd_item_of_row(v, r);
-                item = (focused && (r == v->cur))
+                item = off ? COLOR_PAIR(CP_cluster_off) | dim
+                    : (focused && (r == v->cur))
                     ? BRIGHT(CP_cluster_hi)
                     : COLOR_PAIR(CP_cluster);
                 put(y, x, FD_W(v), COLOR_PAIR(CP_cluster), "%*s", FD_W(v),
@@ -2362,7 +2388,7 @@ static void draw_flash_dialog(void)
                 }
                 if (k < fd_nr_items(v))
                     put_marked(y, x + 5, FD_W(v) - 6, item,
-                               BRIGHT(CP_cluster_hot),
+                               off ? item : BRIGHT(CP_cluster_hot),
                                v->items[k]);
                 else
                     put(y, x + 5, FD_W(v) - 6, item, "%s (from flash)",
@@ -2573,6 +2599,9 @@ static void *tui_thread(void *unused)
         init_pair(CP_cluster, COLOR_BLACK, COLOR_CYAN);
         init_pair(CP_cluster_hi, COLOR_WHITE, COLOR_CYAN);
         init_pair(CP_cluster_hot, COLOR_RED, COLOR_CYAN);
+        init_pair(CP_cluster_off, (COLORS >= 16) ? 8 : COLOR_BLACK,
+                  COLOR_CYAN);
+        init_pair(CP_dlg_off, (COLORS >= 16) ? 8 : COLOR_BLACK, COLOR_WHITE);
         init_pair(CP_input, COLOR_WHITE, COLOR_BLUE);
         init_pair(CP_button_def, COLOR_CYAN, COLOR_GREEN);
         init_pair(CP_signal, COLOR_BLACK, COLOR_YELLOW);
