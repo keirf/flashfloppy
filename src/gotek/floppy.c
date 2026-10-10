@@ -101,9 +101,20 @@ extern uint32_t gpio_out_active;
 /* GPIO register to either assert or deassert active output pins. */
 extern uint32_t gpiob_setreset;
 
+#if defined(__arm__)
 /* This bitband address is used to atomically update GPIO_OUT_DMA_RD_ACTIVE */
 static volatile uint32_t *p_dma_rd_active;
 #define dma_rd_set_active(x) (*p_dma_rd_active = (x))
+#else
+/* No bitband: update the whole word atomically instead. */
+static void dma_rd_set_active(bool_t active)
+{
+    if (active)
+        __sync_fetch_and_or(&gpio_out_active, m(GPIO_OUT_DMA_RD_ACTIVE));
+    else
+        __sync_fetch_and_and(&gpio_out_active, ~m(GPIO_OUT_DMA_RD_ACTIVE));
+}
+#endif
 
 bool_t floppy_ribbon_is_reversed(void)
 {
@@ -124,15 +135,19 @@ bool_t floppy_ribbon_is_reversed(void)
     return FALSE;
 }
 
+#if defined(__arm__)
 static uint32_t *get_bitband(void *ram_addr, unsigned int bit)
 {
     uint32_t byte = (uint32_t)ram_addr - 0x20000000u;
     return (uint32_t *)(0x22000000u + (byte * 32) + (bit * 4));
 }
+#endif
 
 static void board_floppy_init(void)
 {
+#if defined(__arm__)
     p_dma_rd_active = get_bitband(&gpio_out_active, GPIO_OUT_DMA_RD_ACTIVE);
+#endif
 
 #if MCU == MCU_stm32f105
 
@@ -219,7 +234,7 @@ static void board_floppy_init(void)
     exti->ftsr = 0xffff;
     exti->imr = m(pin_wgate) | m(pin_side) | m(pin_sel0);
 
-    gpiob_setreset = (uint32_t)&gpiob->bsrr;
+    gpiob_setreset = (uint32_t)(uintptr_t)&gpiob->bsrr;
 }
 
 /* Fast speculative entry point for SELA-changed IRQ. We assume SELA has 
@@ -228,6 +243,7 @@ static void board_floppy_init(void)
  * Note that the entirety of the SELA handler is in SRAM (.data) -- not only 
  * is this faster to execute, but allows us to co-locate gpio_out_active for 
  * even faster access in the time-critical speculative entry point. */
+#if defined(__arm__)
 __attribute__((naked)) __attribute__((section(".ramfuncs"))) aligned(4)
 void IRQ_SELA_changed(void) {
     asm (
@@ -242,6 +258,7 @@ void IRQ_SELA_changed(void) {
         "gpiob_setreset:  .word 0\n" /* gpiob->b[s]rr */
         );
 }
+#endif
 
 static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
     __attribute__((used)) __attribute__((section(".ramfuncs")));
@@ -249,11 +266,25 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
     __attribute__((used)) __attribute__((section(".ramfuncs")))
     __attribute__((optimize("Ofast")));
 
+#if !defined(__arm__)
+/* Without the speculative entry point, which patches its own tail call: the
+ * main entry point alone sets up the pins, chosen by a flag. */
+uint32_t gpio_out_active, gpiob_setreset;
+static bool_t sela_amiga_hd_id;
+void IRQ_SELA_changed(void)
+{
+    if (sela_amiga_hd_id)
+        Amiga_HD_ID(gpio_out_active, gpiob_setreset);
+    else
+        _IRQ_SELA_changed(gpio_out_active);
+}
+#endif
+
 /* Intermediate SELA-changed handler for generating the Amiga HD RDY signal. */
 static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
 {
     /* If deasserting the bus, toggle pin 34 for next time we take the bus. */
-    if ((uint8_t)_gpiob_setreset == (uint8_t)(uint32_t)&gpiob->bsrr)
+    if ((uint8_t)_gpiob_setreset == (uint8_t)(uintptr_t)&gpiob->bsrr)
         gpio_out_active ^= m(pin_34);
 
     /* Continue to the main SELA-changed IRQ entry point. */
@@ -278,7 +309,7 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
         if (_gpio_out_active & m(GPIO_OUT_DMA_RD_ACTIVE))
             change_pin_mode(gpio_data, pin_rdata, AFO_bus);
         /* Speculate that, on next interrupt, SELA is deasserted. */
-        *(uint8_t *)&gpiob_setreset = (uint8_t)(uint32_t)&gpiob->bsrr;
+        *(uint8_t *)&gpiob_setreset = (uint8_t)(uintptr_t)&gpiob->bsrr;
     } else {
         /* SELA is deasserted (this drive is not selected).
          * Relinquish the bus by disabling all our asserted outputs. */
@@ -287,7 +318,7 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
         /* Set pin_rdata as quiescent (GPO_bus). */
         change_pin_mode(gpio_data, pin_rdata, GPO_bus);
         /* Speculate that, on next interrupt, SELA is asserted. */
-        *(uint8_t *)&gpiob_setreset = (uint8_t)(uint32_t)&gpiob->brr;
+        *(uint8_t *)&gpiob_setreset = (uint8_t)(uintptr_t)&gpiob->brr;
     }
 }
 
@@ -295,6 +326,7 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
  * Must be called with interrupts disabled. */
 static void update_SELA_irq(bool_t amiga_hd_id)
 {
+#if defined(__arm__)
 #define OFF 4
     uint32_t handler = amiga_hd_id ? (uint32_t)Amiga_HD_ID
         : (uint32_t)_IRQ_SELA_changed;
@@ -315,6 +347,9 @@ static void update_SELA_irq(bool_t amiga_hd_id)
         cpu_sync(); /* synchronise self-modifying code */
     }
 #undef OFF
+#else
+    sela_amiga_hd_id = amiga_hd_id;
+#endif
 }
 
 #if TARGET == TARGET_apple2
