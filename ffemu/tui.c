@@ -94,6 +94,7 @@ enum {
     CP_cluster_hot, /* bright red on cyan: a hotkey among them */
     CP_cluster_off, /* dark gray on cyan: them, disabled */
     CP_dlg_off,   /* dark gray on light gray: a disabled control's label */
+    CP_dlg_help,  /* blue on light gray: the help of the control in focus */
     CP_input,     /* bright white on blue: an input line */
     CP_button_def, /* bright cyan on green: the default button */
     CP_signal,    /* black on dark yellow: an active signal of the host */
@@ -1288,8 +1289,6 @@ static void draw_bars(void)
     const wchar_t *museum = plain() ? L"CYBER-MUSEUM, MUROM" : cyrillic;
     int name_w = strlen(name) + strlen(ver), what_w = strlen(what);
     int museum_w = wcslen(museum);
-    char keys[16];
-    int x = 0, i;
 
     pane_right = -1;
 
@@ -1303,8 +1302,25 @@ static void draw_bars(void)
     if (1 + name_w + 2 + museum_w + 1 <= COLS)
         put_wide(0, COLS - 1 - museum_w, COLOR_PAIR(CP_bar), museum,
                  museum_w);
+}
 
+/* The bottom line: the keys of the dialog open, or else of ffemu. */
+static void draw_key_bar(void)
+{
+    char keys[16];
+    int x = 0, i;
+
+    pane_right = -1;
     put(LINES - 1, 0, COLS, COLOR_PAIR(CP_bar), "%*s", COLS, "");
+    /* In a dialog, the dialog's keys, in the order of its buttons. */
+    if (dialog != DLG_none) {
+        x = hotkey(x, "Enter", "OK");
+        x = hotkey(x, "Esc", "Cancel");
+        x = hotkey(x, "Tab/Shift+Tab/</>/^/v", "Navigate");
+        if (x - 1 > COLS)
+            put(LINES - 1, COLS - 1, 1, BRIGHT(CP_bar_crop), ">");
+        return;
+    }
     /* The keys of ffemu itself; the device's are in the Controls window. */
     x = hotkey(x, key_label[KEY_ACT_quit], "Exit");
     for (i = 0; i < STYLE_nr; i++) {
@@ -1480,6 +1496,8 @@ static void redraw(void)
     draw_log(y, 0, COLS, bottom - y);
 
     draw_dialog();
+    /* Last, over a dialog or its shadow reaching it in a short window. */
+    draw_key_bar();
     refresh();
 }
 
@@ -2096,85 +2114,98 @@ static struct fview {
     char text[64];      /* an input line */
 } fviews[] = {
     { FV_radio, 0, "display-~t~ype", "display-type",
-      "Display: found by itself, or an OLED of 32 or 64 rows",
+      "Type of the display connected",
       { "auto", "oled-128x32", "oled-128x64" }, false, true },
-    { FV_check, 0, "display-type suffi~x~es", "display-type",
-      "OLED view: turned 180 degrees, flipped, narrowed to the Gotek's "
-      "cutout, inverse",
+    { FV_check, 0, "display-type suffi~x~", "display-type",
+      "Options for OLED displays",
       { "rotate", "hflip", "narrow", "narrower", "inverse", "ztech",
         "slow" }, false, true },
     { FV_radio, 0, "oled-~f~ont", "oled-font",
-      "OLED font: narrow 6x13, or wide 8x16",
+      "Font of the OLED display",
       { "6x13", "8x16" }, false, true },
     { FV_input, 0, "~d~isplay-order", "display-order",
-      "Rows top down: content 0-3, 7 for blank, d for double height; or "
-      "default", { NULL }, false, false },
+      "Rows top down: 0=name, 1=status, 2=info, 3=folder, 7=blank, "
+      "d=double-height; e.g. \"3,0d,1\"", { NULL }, false, false },
     { FV_input, 0, "display-~o~ff-secs", "display-off-secs",
-      "Display off after seconds without activity: 0 always off, 255 never",
+      "Seconds without activity before the display goes dark, 0-255: 0 is "
+      "always off, 255 never",
       { NULL }, false, false },
     { FV_input, 0, "display-scroll-~r~ate", "display-scroll-rate",
-      "Long names scroll a step every so many milliseconds, 100 or more",
+      "Milliseconds per step of a long name scroll, 100..65535: less is "
+      "faster",
       { NULL }, false, false },
     { FV_input, 0, "display-scroll-~p~ause", "display-scroll-pause",
-      "Pause at both ends of a scroll, milliseconds: 0 scrolls endlessly",
+      "Milliseconds a long name scroll rests at each end, 0..65535: 0 "
+      "scrolls without rest",
       { NULL }, false, false },
     { FV_input, 0, "nav-scroll-r~a~te", "nav-scroll-rate",
-      "While navigating, long names scroll a step every so many "
-      "milliseconds", { NULL }, false, false },
+      "Milliseconds per scroll step while browsing, 0..65535: less is faster",
+      { NULL }, false, false },
     { FV_input, 0, "nav-scroll-pa~u~se", "nav-scroll-pause",
-      "While navigating, pause before a long name scrolls, milliseconds",
+      "Milliseconds before a long name starts to scroll while browsing, "
+      "0..65535",
       { NULL }, false, false },
     { FV_radio, 1, "nav-~m~ode", "nav-mode",
-      "Navigation: native through images and folders, indexed through "
-      "DSKA0000..., default by HxC config", { "default", "indexed", "native" },
+      "How floppies are found on the USB drive",
+      { "default", "indexed", "native" },
       false, true },
     { FV_radio, 1, "folder-~s~ort", "folder-sort",
-      "Sort folders always (big ones may be cut), never (FAT order), or "
-      "small ones only", { "always", "never", "small" }, false, true },
+      "A sorted folder must fit in RAM: \"always\" cuts big ones, \"small\" "
+      "leaves big ones in FAT order",
+      { "always", "never", "small" }, false, true },
     { FV_radio, 1, "sort-pr~i~ority", "sort-priority",
-      "Folders before files, files before folders, or no difference",
+      "Where the folders go in a sorted folder: before the files, after "
+      "them, or mixed by name",
       { "folders", "files", "none" }, false, true },
     { FV_check, 1, NULL, "nav-loop",
-      "Wrap around at the first and the last slot or folder entry",
+      "Whether file/folder navigation loops from the last item to the first "
+      "one and vice versa",
       { "nav-~l~oop" }, true, true },
     { FV_input, 1, "autos~e~lect-file-secs", "autoselect-file-secs",
-      "Open the current file after so many seconds: 0 never",
+      "Seconds a highlighted floppy waits before auto-insert, 0..255: 0 "
+      "waits for a button",
       { NULL }, false, false },
     { FV_input, 1, "autoselect-folder-se~c~s", "autoselect-folder-secs",
-      "Open the current folder after so many seconds: 0 never",
+      "Seconds a highlighted folder waits before it is entered, 0..255: 0 "
+      "waits for a button",
       { NULL }, false, false },
     { FV_input, 1, "i~n~dexed-prefix", "indexed-prefix",
-      "Image name prefix in indexed mode, up to 7 characters",
+      "For \"nav-mode = indexed\", gives the prefix to the floppy numbers, "
+      "up to 7 chars or empty",
       { NULL }, false, false },
     { FV_radio, 2, "t~w~obutton-action", "twobutton-action",
-      "Two buttons: Prev/Next with both for slot 0 or eject, +10/+1, or "
-      "rotary", { "zero", "eject", "rotary", "rotary-fast", "htu" },
+      "What the two front buttons do",
+      { "zero", "eject", "rotary", "rotary-fast", "htu" },
       false, false },
     { FV_check, 2, NULL, "twobutton-action",
-      "Swap the two buttons", { "re~v~erse" }, false, true },
+      "Swap the left and right buttons", { "re~v~erse" }, false, true },
     { FV_radio, 2, "ima~g~e-on-startup", "image-on-startup",
-      "Image at startup: the last selected, static from INIT_A.CFG, or the "
-      "first", { "last", "static", "init" }, false, false },
+      "Floppy chosen on startup", { "last", "static", "init" }, false, false },
     { FV_check, 2, NULL, "ejected-on-startup",
-      "Start with the image ejected", { "e~j~ected-on-startup" }, true, true },
+      "Power up with the floppy ejected, until a button inserts it",
+      { "e~j~ected-on-startup" }, true, true },
     { FV_input, 2, "notif~y~-volume", "notify-volume",
-      "Volume of the insert, eject and slot beeps: 0 to 15",
+      "Speaker volume of the insert, eject and floppy-number beeps, 0..15: 0 "
+      "is silent",
       { NULL }, false, false },
     { FV_check, 2, NULL, "notify-volume",
-      "Beep the number of the slot when an image is mounted",
+      "Beep the floppy number when a floppy is inserted: long beeps count as "
+      "5, short - as 1",
       { "slotnr" }, false, true },
     { FV_ok, 0, NULL, NULL,
-      "Write the changed options into flash, and power-cycle the device",
+      "Write the changed options into flash and power-cycle; FF.CFG on the "
+      "drive is checked first",
       { NULL }, false, false },
-    { FV_cancel, 0, NULL, NULL, "Close, leaving flash as it is",
+    { FV_cancel, 0, NULL, NULL,
+      "Close without writing anything; flash and FF.CFG stay as they are",
       { NULL }, false, false },
     { FV_save_all, 0, NULL, NULL,
-      "Write FF.CFG on the USB drive with every option as shown here, the "
-      "old file kept as .BAK; flash stays as it is",
+      "Write all options to FF.CFG on the USB drive as shown, old one kept "
+      "as .BAK; flash unchanged",
       { NULL }, false, false },
     { FV_save_changed, 0, NULL, NULL,
-      "Write FF.CFG on the USB drive with the options shown here that differ "
-      "from flash, the old file kept as .BAK; flash stays as it is",
+      "Write the options that differ from flash to FF.CFG, old one kept as "
+      ".BAK; flash unchanged",
       { NULL }, false, false }
 };
 #define FD_NR ARRAY_SIZE(fviews)
@@ -2522,6 +2553,7 @@ static void fd_open(void)
     }
     fd_layout();
     fd_focus = 0;
+    fd_note[0] = '\0';
     dialog = DLG_flash;
 }
 
@@ -2689,6 +2721,8 @@ static void fd_key(int key)
     uint8_t cfg[256];
     unsigned int i;
 
+    fd_note[0] = '\0';
+
     /* Only the message is on the screen: nothing to edit blindly. */
     if (!fd_fits()) {
         if ((key == 27) || (key == '\n'))
@@ -2803,6 +2837,97 @@ static void fd_key(int key)
     }
 }
 
+/* The help of each radio button and check box that has one: its option, its
+ * item, and the text. */
+static const struct {
+    const char *opt, *item, *help;
+} fd_item_help[] = {
+    { "display-type", "auto",
+      "Type of the display connected: attempt detecting, including "
+      "7-segment LED" },
+    { "display-type", "oled-128x32",
+      "Type of the display connected" },
+    { "display-type", "oled-128x64",
+      "Type of the display connected" },
+    { "display-type", "rotate",
+      "Options for OLED displays: rotate the image 180 degrees, for "
+      "displays installed upside-down" },
+    { "display-type", "hflip",
+      "Options for OLED displays: mirror horizontally, for displays of "
+      "such pixel layout" },
+    { "display-type", "narrow",
+      "Options for OLED displays: for 6x13 font, show only 18 text "
+      "columns, for small case cutouts" },
+    { "display-type", "narrower",
+      "Options for OLED displays: for 6x13 font, show only 16 text "
+      "columns, for small case cutouts" },
+    { "display-type", "inverse",
+      "Options for OLED displays: invert the image, printing "
+      "black-on-bright" },
+    { "oled-font", "6x13",
+      "Makes 21 columns; with \"narrower\" suffix to \"display-type\" it "
+      "fits the smallest case cutout" },
+    { "oled-font", "8x16",
+      "Makes 16 columns; ignores \"narrow\" and \"narrower\" suffixes to "
+      "\"display-type\"" },
+    { "nav-mode", "default",
+      "Works as \"native\" unless HXCSDFE.CFG overrides" },
+    { "nav-mode", "indexed",
+      "Instead of browsing, look for fixed floppy names like DSKA0000 "
+      "(see \"indexed-prefix\")" },
+    { "nav-mode", "native",
+      "Browse actual files and folders on the storage" },
+    { "twobutton-action", "zero",
+      "Left: previous floppy, right: next floppy, hold: cycle; both "
+      "together: go to first" },
+    { "twobutton-action", "eject",
+      "Left: previous floppy, right: next floppy; both together: eject or "
+      "insert the floppy" },
+    { "twobutton-action", "rotary",
+      "Left: go to parent folder; right: select; useful when having a "
+      "rotary encoder" },
+    { "twobutton-action", "rotary-fast",
+      "Left: previous floppy, right: next floppy, hold: cycle; both "
+      "together: go to parent folder" },
+    { "twobutton-action", "htu",
+      "Enter floppy number by digits: left adds a ten, right a one; both "
+      "a hundred, hold 1s for 000" },
+    { "image-on-startup", "last",
+      "On startup, choose the floppy from IMAGE_A.CFG" },
+    { "image-on-startup", "static",
+      "On startup, choose the floppy from INIT_A.CFG" },
+    { "image-on-startup", "init",
+      "On startup, choose the first floppy in the root folder" },
+    { "display-type", "ztech",
+      "Options for OLED displays: the ZHONGJY_TECH 2.23-inch 128x32 "
+      "SSD1305 display" },
+    { "display-type", "slow",
+      "Options for OLED displays: run the I2C bus slower, if the display "
+      "blanks or garbles" },
+};
+
+/* The help of the control in focus: of the item under the cursor, for a
+ * cluster whose item has one, else the control's own. */
+static const char *fd_help(void)
+{
+    const struct fview *v = &fviews[fd_focus];
+    char item[32];
+    unsigned int i;
+    int k;
+
+    if ((v->type != FV_radio) && (v->type != FV_check))
+        return v->help;
+    k = (v->type == FV_radio) ? v->cur : fd_item_of_row(v, v->cur);
+    if (k >= fd_nr_items(v))
+        return v->help;
+    unmarked(v->items[k], item, sizeof(item));
+    for (i = 0; i < ARRAY_SIZE(fd_item_help); i++)
+        if (!strcmp(fd_item_help[i].opt, v->opt)
+            && !strcmp(fd_item_help[i].item, item))
+            return fd_item_help[i].help;
+    return v->help;
+}
+
 static void draw_flash_dialog(void)
 {
     attr_t label, item;
@@ -2887,14 +3012,17 @@ static void draw_flash_dialog(void)
         }
     }
 
-    /* What the control in focus is, on the bottom line; or what the last
-     * Save did, in green. */
-    put(LINES - 1, 0, COLS, COLOR_PAIR(CP_bar), "%*s", COLS, "");
-    if (fd_note[0] != '\0')
-        put(LINES - 1, 1, COLS - 2, BRIGHT(CP_bar_crop), "%s", fd_note);
-    else
-        put(LINES - 1, 1, COLS - 2, COLOR_PAIR(CP_bar), "%s",
-            fviews[fd_focus].help);
+    /* What the control in focus is, on the dialog's last row; or what the
+     * last Save did, in green. A text too long for the row is cut at the
+     * frame, where a bright green mark says so, as in the panes. */
+    {
+        const char *t = fd_note[0] ? fd_note : fd_help();
+        int hy = y0 + fd_h - 2, room = fd_w - 3;
+        put(hy, x0 + 2, room, fd_note[0] ? BRIGHT(CP_bar_crop)
+            : COLOR_PAIR(CP_dlg_help), "%s", t);
+        if ((int)strlen(t) > room)
+            put(hy, x0 + fd_w - 1, 1, BRIGHT(CP_bar_crop), ">");
+    }
 }
 
 /* The FDD action of @key, or -1: the keys under the signals in the Controls
@@ -3108,6 +3236,7 @@ static void *tui_thread(void *unused)
         init_pair(CP_cluster_off, (COLORS >= 16) ? 8 : COLOR_BLACK,
                   COLOR_CYAN);
         init_pair(CP_dlg_off, (COLORS >= 16) ? 8 : COLOR_BLACK, COLOR_WHITE);
+        init_pair(CP_dlg_help, COLOR_BLUE, COLOR_WHITE);
         init_pair(CP_input, COLOR_WHITE, COLOR_BLUE);
         init_pair(CP_button_def, COLOR_CYAN, COLOR_GREEN);
         init_pair(CP_signal, COLOR_BLACK, COLOR_YELLOW);
