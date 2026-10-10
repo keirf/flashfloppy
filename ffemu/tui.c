@@ -1412,6 +1412,24 @@ static void draw_quit_dialog(void)
     button(y + 4, x + w - 6 - 6, button_attr(1), "  No  ");
 }
 
+/* The radio button of a Turbo Vision cluster: a lit bullet when on. */
+static const wchar_t radio_on[] = { '(', 0x2022, ')' };
+
+/* A row of a cluster of radio buttons, @w wide at (@y,@x): the button, @on
+ * or not, and @text, highlighted as the row the cursor is on if @current. */
+static void radio_row(int y, int x, int w, bool on, bool current,
+                      const char *text)
+{
+    attr_t item = current ? BRIGHT(CP_cluster_hi) : COLOR_PAIR(CP_cluster);
+
+    put(y, x, w, COLOR_PAIR(CP_cluster), "%*s", w, "");
+    if (on)
+        put_wide(y, x + 1, item, radio_on, 3);
+    else
+        put(y, x + 1, 3, item, "( )");
+    put(y, x + 5, w - 6, item, "%s", text);
+}
+
 /* The displays to choose from, as radio buttons, and what choosing does. */
 static void draw_display_dialog(void)
 {
@@ -1419,9 +1437,8 @@ static void draw_display_dialog(void)
 
     dialog_box(w, 12, "Display type", &y, &x);
     for (i = 0; i < DISP_nr; i++)
-        put(y + 2 + i, x + 4, w - 5, COLOR_PAIR(CP_dialog)
-            | ((i == dialog_display) ? A_BOLD : 0), "(%c) %s",
-            (i == dialog_display) ? '*' : ' ', display_label[i]);
+        radio_row(y + 2 + i, x + 3, w - 6, i == dialog_display,
+                  i == dialog_display, display_label[i]);
     put(y + 7, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
         "Changing the display restarts the device.");
     button(y + 9, x + 10, button_attr(0), "  OK  ");
@@ -2302,7 +2319,6 @@ static void fd_key(int key)
 
 static void draw_flash_dialog(void)
 {
-    static const wchar_t radio_on[] = { '(', 0x2022, ')' };
     attr_t label, item;
     int y0, x0, i, r, y, x;
 
