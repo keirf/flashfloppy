@@ -475,6 +475,7 @@ int main(int argc, char **argv)
     else
         oled_init(config.display);
     hd44780_set_rom(config.lcd_rom);
+    emu_oled_synth_8x16 = config.oled_synth;
     if (usb)
         insert(state != NULL);
 

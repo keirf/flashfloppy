@@ -146,10 +146,12 @@ static char msg_title[32], msg_text[256];
 static int msg_return;
 static int dialog_button;
 static int dialog_display;
-/* The Display type dialog's character ROM, and its focus: the displays, the
- * ROMs, which only an LCD has, OK and Cancel. */
+/* The Display type dialog's character ROM and 8x16 font, and its focus: the
+ * displays, the ROMs, which only an LCD uses, the font's check box, which
+ * only an OLED uses, OK and Cancel. */
 static int dialog_lcd_rom, dialog_focus;
-enum { DF_display, DF_rom, DF_ok, DF_cancel, DF_nr };
+static bool dialog_oled_synth;
+enum { DF_display, DF_rom, DF_synth, DF_ok, DF_cancel, DF_nr };
 static void draw_dialog(void);
 static void draw_fdfile_dialog(void);
 static void draw_flash_dialog(void);
@@ -1809,13 +1811,26 @@ static void radio_row(int y, int x, int w, bool on, bool current,
     put(y, x + 5, w - 6, item, "%s", text);
 }
 
-/* The displays to choose from, as radio buttons, and the character ROM of
- * an LCD, which only changes how it is drawn and can be set whatever display
- * is chosen; what choosing does; and on the last row, as in the Flash mem
- * dialog, the help of a ROM in focus. */
+/* A check box row of a cluster, as the Flash mem dialog draws one: @on or
+ * not, highlighted if @current. */
+static void check_row(int y, int x, int w, bool on, bool current,
+                      const char *text)
+{
+    attr_t item = current ? BRIGHT(CP_cluster_hi) : COLOR_PAIR(CP_cluster);
+
+    put(y, x, w, COLOR_PAIR(CP_cluster), "%*s", w, "");
+    put(y, x + 1, 3, item, "[%c]", on ? 'X' : ' ');
+    put(y, x + 5, w - 6, item, "%s", text);
+}
+
+/* The displays to choose from, as radio buttons, the character ROM of an
+ * LCD and the 8x16 font of an OLED, which only change how it is drawn and
+ * can be set whatever display is chosen; what choosing does; and on the
+ * last row, as in the Flash mem dialog, the help of a ROM or the font in
+ * focus. */
 static void draw_display_dialog(void)
 {
-    int w = 56, h = DISP_nr + LCD_ROM_nr + 11, y, x, i;
+    int w = 56, h = DISP_nr + LCD_ROM_nr + 14, y, x, i;
 
     dialog_box(w, h, "Display type", &y, &x);
     for (i = 0; i < DISP_nr; i++)
@@ -1828,7 +1843,11 @@ static void draw_display_dialog(void)
         radio_row(y + DISP_nr + 4 + i, x + 3, w - 6, i == dialog_lcd_rom,
                   (dialog_focus == DF_rom) && (i == dialog_lcd_rom),
                   lcd_rom_label[i]);
-    put(y + DISP_nr + LCD_ROM_nr + 5, x + 3, w - 4, COLOR_PAIR(CP_dialog),
+    put(y + DISP_nr + LCD_ROM_nr + 5, x + 3, w - 6, COLOR_PAIR(CP_dialog),
+        "%s", "OLED 8x16 font");
+    check_row(y + DISP_nr + LCD_ROM_nr + 6, x + 3, w - 6, dialog_oled_synth,
+              dialog_focus == DF_synth, "Made from 6x13, bold");
+    put(y + DISP_nr + LCD_ROM_nr + 8, x + 3, w - 4, COLOR_PAIR(CP_dialog),
         "%s", "Changing the display restarts the device.");
     /* OK is the default while the focus is on no button. */
     button(y + h - 4, x + 10,
@@ -1838,6 +1857,9 @@ static void draw_display_dialog(void)
     if (dialog_focus == DF_rom)
         put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
             lcd_rom_help[dialog_lcd_rom]);
+    else if (dialog_focus == DF_synth)
+        put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
+            "As firmware built with oled_font_8x16_synth draws it");
 }
 
 /* The configuration in flash when the display changed, which may not suit
@@ -2030,10 +2052,10 @@ enum {
     DK_emul_yes, DK_emul_no, DK_fdfile_yes, DK_fdfile_no
 };
 
-/* The Display type dialog's keys: Tab and Shift+Tab move the focus, over
- * the ROMs only while an LCD is chosen; Up and Down choose in the cluster in
- * focus, Left and Right between the buttons; Enter takes the choice, unless
- * Cancel is in focus. */
+/* The Display type dialog's keys: Tab and Shift+Tab move the focus over
+ * every control; Up and Down choose in the cluster in focus, Space toggles
+ * the check box, Left and Right go between the buttons; Enter takes the
+ * choice, unless Cancel is in focus. */
 static int display_dialog_key(int key)
 {
     int step = 0, d = (key == KEY_DOWN) ? 1 : -1;
@@ -2050,6 +2072,10 @@ static int display_dialog_key(int key)
             dialog_focus = DF_cancel;
         else if (dialog_focus == DF_cancel)
             dialog_focus = DF_ok;
+        break;
+    case ' ':
+        if (dialog_focus == DF_synth)
+            dialog_oled_synth = !dialog_oled_synth;
         break;
     case KEY_UP: case KEY_DOWN:
         if ((dialog_focus == DF_display) && (dialog_display + d >= 0)
@@ -3349,6 +3375,11 @@ static void handle_key(int key)
             hd44780_set_rom(config.lcd_rom);
             rc_save();
         }
+        if (dialog_oled_synth != config.oled_synth) {
+            config.oled_synth = dialog_oled_synth;
+            emu_oled_synth_8x16 = config.oled_synth;
+            rc_save();
+        }
         set_display(dialog_display);
         return;
     case DK_rows_yes: {
@@ -3419,6 +3450,7 @@ static void handle_key(int key)
         dialog_button = 0;
         dialog_display = config.display;
         dialog_lcd_rom = config.lcd_rom;
+        dialog_oled_synth = config.oled_synth;
         dialog_focus = DF_display;
         return;
     }
