@@ -92,7 +92,7 @@ enum {
     CP_cluster,   /* black on cyan: radio buttons and check boxes */
     CP_cluster_hi, /* bright white on cyan: the one of them in focus */
     CP_cluster_hot, /* bright red on cyan: a hotkey among them */
-    CP_cluster_off, /* dark gray on cyan: them, disabled */
+    CP_cluster_off, /* light gray on dark gray: them, disabled */
     CP_dlg_off,   /* dark gray on light gray: a disabled control's label */
     CP_dlg_help,  /* blue on light gray: the help of the control in focus */
     CP_input,     /* bright white on blue: an input line */
@@ -3213,16 +3213,17 @@ static void draw_flash_dialog(void)
                     : (focused && (r == v->cur))
                     ? BRIGHT(CP_cluster_hi)
                     : COLOR_PAIR(CP_cluster);
-                put(y, x, FD_W(v), COLOR_PAIR(CP_cluster), "%*s", FD_W(v),
-                    "");
+                put(y, x, FD_W(v), off ? item : COLOR_PAIR(CP_cluster),
+                    "%*s", FD_W(v), "");
+                /* Disabled, it shows no value: FF.CFG can hold none. */
                 if (v->type == FV_radio) {
-                    if (r == v->cur)
+                    if ((r == v->cur) && !off)
                         put_wide(y, x + 1, item, radio_on, 3);
                     else
                         put(y, x + 1, 3, item, "( )");
                 } else {
-                    put(y, x + 1, 3, item, "[%c]",
-                        v->raw[0] ? '?' : (v->on >> k) & 1 ? 'X' : ' ');
+                    put(y, x + 1, 3, item, "[%c]", off ? ' '
+                        : v->raw[0] ? '?' : (v->on >> k) & 1 ? 'X' : ' ');
                 }
                 if (k < fd_nr_items(v))
                     put_marked(y, x + 5, FD_W(v) - 6, item,
@@ -3490,8 +3491,12 @@ static void *tui_thread(void *unused)
         init_pair(CP_cluster, COLOR_BLACK, COLOR_CYAN);
         init_pair(CP_cluster_hi, COLOR_WHITE, COLOR_CYAN);
         init_pair(CP_cluster_hot, COLOR_RED, COLOR_CYAN);
-        init_pair(CP_cluster_off, (COLORS >= 16) ? 8 : COLOR_BLACK,
-                  COLOR_CYAN);
+        /* With 8 colors there is no dark gray paper: dark gray on the
+         * dialog's light gray then, black made bright by bold. */
+        if (COLORS >= 16)
+            init_pair(CP_cluster_off, COLOR_WHITE, 8);
+        else
+            init_pair(CP_cluster_off, COLOR_BLACK, COLOR_WHITE);
         init_pair(CP_dlg_off, (COLORS >= 16) ? 8 : COLOR_BLACK, COLOR_WHITE);
         init_pair(CP_dlg_help, COLOR_BLUE, COLOR_WHITE);
         init_pair(CP_input, COLOR_WHITE, COLOR_BLUE);
