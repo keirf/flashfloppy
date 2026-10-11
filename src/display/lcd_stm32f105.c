@@ -764,10 +764,16 @@ static void oled_convert_text_row_6x13(char *pc)
 }
 
 #ifdef font_extra
+/* Instead of storing the 8x16 font in the flash memory, build its glyphs at
+ * runtime as a bold (shifted-by-1) version of 6x13.
+ */
+#ifndef OLED_FONT_8x16_SYNTH
+#define OLED_FONT_8x16_SYNTH 0
+#endif
 extern const uint8_t oled_font_8x16[];
 static void oled_convert_text_row_8x16(char *pc)
 {
-    unsigned int i, c;
+    unsigned int i, j, c;
     const uint8_t *p;
     uint8_t *q = buffer;
     const unsigned int w = 8;
@@ -775,9 +781,24 @@ static void oled_convert_text_row_8x16(char *pc)
     for (i = 0; i < lcd_columns; i++) {
         if ((c = *pc++ - 0x20) > 0x5e)
             c = '.' - 0x20;
-        p = &oled_font_8x16[c * w * 2];
-        memcpy(q, p, w);
-        memcpy(q+128, p+w, w);
+        /* Testing a macro at runtime allows the build system to supply a
+         * runtime condition.
+         */
+        if (OLED_FONT_8x16_SYNTH) {
+            /* The 6x13 glyph made bold by a second copy a column to the
+             * right, 7 columns by 13 rows: centered in the cell and rounded
+             * up and left, it is at the left, a row down, where the 6x13
+             * font already has it in its 16 rows. */
+            p = &oled_font_6x13[c * 6 * 2];
+            for (j = 0; j < w; j++) {
+                q[j] = ((j < 6) ? p[j] : 0) | ((j-1 < 6) ? p[j-1] : 0);
+                q[128+j] = ((j < 6) ? p[6+j] : 0) | ((j-1 < 6) ? p[5+j] : 0);
+            }
+        } else {
+            p = &oled_font_8x16[c * w * 2];
+            memcpy(q, p, w);
+            memcpy(q+128, p+w, w);
+        }
         q += w;
     }
 }
