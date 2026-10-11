@@ -1803,25 +1803,12 @@ static void radio_row(int y, int x, int w, bool on, bool current,
     put(y, x + 5, w - 6, item, "%s", text);
 }
 
-/* A row of a disabled cluster of radio buttons, in dark gray. */
-static void radio_row_off(int y, int x, int w, bool on, const char *text)
-{
-    attr_t off = COLOR_PAIR(CP_cluster_off);
-
-    put(y, x, w, COLOR_PAIR(CP_cluster), "%*s", w, "");
-    if (on)
-        put_wide(y, x + 1, off, radio_on, 3);
-    else
-        put(y, x + 1, 3, off, "( )");
-    put(y, x + 5, w - 6, off, "%s", text);
-}
-
 /* The displays to choose from, as radio buttons, and the character ROM of
- * an LCD, which only changes how it is drawn; what choosing does; and on
- * the last row, as in the Flash mem dialog, the help of a ROM in focus. */
+ * an LCD, which only changes how it is drawn and can be set whatever display
+ * is chosen; what choosing does; and on the last row, as in the Flash mem
+ * dialog, the help of a ROM in focus. */
 static void draw_display_dialog(void)
 {
-    bool lcd = DISP_IS_LCD(dialog_display);
     int w = 56, h = DISP_nr + LCD_ROM_nr + 11, y, x, i;
 
     dialog_box(w, h, "Display type", &y, &x);
@@ -1829,17 +1816,12 @@ static void draw_display_dialog(void)
         radio_row(y + 2 + i, x + 3, w - 6, i == dialog_display,
                   (dialog_focus == DF_display) && (i == dialog_display),
                   display_label[i]);
-    put(y + DISP_nr + 3, x + 3, w - 6,
-        COLOR_PAIR(lcd ? CP_dialog : CP_dlg_off), "%s", "LCD character ROM");
-    for (i = 0; i < LCD_ROM_nr; i++) {
-        if (lcd)
-            radio_row(y + DISP_nr + 4 + i, x + 3, w - 6, i == dialog_lcd_rom,
-                      (dialog_focus == DF_rom) && (i == dialog_lcd_rom),
-                      lcd_rom_label[i]);
-        else
-            radio_row_off(y + DISP_nr + 4 + i, x + 3, w - 6,
-                          i == dialog_lcd_rom, lcd_rom_label[i]);
-    }
+    put(y + DISP_nr + 3, x + 3, w - 6, COLOR_PAIR(CP_dialog), "%s",
+        "LCD character ROM");
+    for (i = 0; i < LCD_ROM_nr; i++)
+        radio_row(y + DISP_nr + 4 + i, x + 3, w - 6, i == dialog_lcd_rom,
+                  (dialog_focus == DF_rom) && (i == dialog_lcd_rom),
+                  lcd_rom_label[i]);
     put(y + DISP_nr + LCD_ROM_nr + 5, x + 3, w - 4, COLOR_PAIR(CP_dialog),
         "%s", "Changing the display restarts the device.");
     button(y + h - 4, x + 10, button_attr(0), "  OK  ");
@@ -2057,11 +2039,8 @@ static int display_dialog_key(int key)
         dialog = DLG_none;
         return (dialog_focus == DF_cancel) ? DK_taken : DK_display;
     }
-    if (step != 0) {
-        do
-            dialog_focus = (dialog_focus + DF_nr + step) % DF_nr;
-        while ((dialog_focus == DF_rom) && !DISP_IS_LCD(dialog_display));
-    }
+    if (step != 0)
+        dialog_focus = (dialog_focus + DF_nr + step) % DF_nr;
     dialog_button = (dialog_focus == DF_cancel);
     return DK_taken;
 }
