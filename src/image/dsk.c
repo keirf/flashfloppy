@@ -569,7 +569,7 @@ static bool_t dsk_write_track(struct image *im)
 
                 if (!im->dsk.decode_data_pos) {
                     crc = MFM_DAM_CRC;
-                    log("Write %d[%02x]/%u...",
+                    log("Write %u[%02x]/%u...",
                             sec_nr, tib->sib[sec_nr].r, tib->nr_secs);
                     F_lseek(&im->fp, off);
                 }
@@ -596,7 +596,7 @@ static bool_t dsk_write_track(struct image *im)
             c += 2;
             crc = crc16_ccitt(wrbuf, 2, crc);
             if (crc != 0) {
-                log("Bad CRC: %04x, %d[%02x]\n",
+                log("Bad CRC: %04x, %u[%02x]\n",
                     crc, sec_nr, tib->sib[sec_nr].r);
             }
 
