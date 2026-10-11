@@ -1685,7 +1685,7 @@ static void native_update(uint8_t slot_mode)
     if (cfg.sorted) {
 
         struct native_dirent *ent = cfg.sorted[cfg.slot_nr-i];
-        snprintf(fs->fp.fname, sizeof(fs->fp.fname), ent->name);
+        snprintf(fs->fp.fname, sizeof(fs->fp.fname), "%s", ent->name);
         fs->file.obj.fs = &fatfs;
         fs->file.dir_sect = ent->dir_sect;
         fs->file.dir_ptr = fatfs.win + ent->dir_off;
