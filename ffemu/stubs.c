@@ -796,6 +796,26 @@ void emu_flash_set_oled_rows(void *cfg, unsigned int rows)
         : (t & ~DISPLAY_oled_64);
 }
 
+int emu_flash_lcd_fits(const void *cfg, unsigned int cols, unsigned int rows)
+{
+    uint16_t t = ((const struct ff_cfg *)cfg)->display_type;
+    unsigned int c, r;
+
+    /* As the firmware sizes an LCD: from display-type, clamped, so that one
+     * it finds by itself is a 16x2. */
+    if (t & DISPLAY_oled)
+        return 0;
+    c = range_t(unsigned int, (t >> _DISPLAY_lcd_columns) & 63, 16, 40);
+    r = range_t(unsigned int, (t >> _DISPLAY_lcd_rows) & 7, 2, 4);
+    return (c == cols) && (r == rows);
+}
+
+void emu_flash_set_lcd(void *cfg, unsigned int cols, unsigned int rows)
+{
+    ((struct ff_cfg *)cfg)->display_type = DISPLAY_lcd
+        | DISPLAY_lcd_columns(cols) | DISPLAY_lcd_rows(rows);
+}
+
 int emu_flash_display_auto(const void *cfg)
 {
     return (((const struct ff_cfg *)cfg)->display_type & 3) == DISPLAY_auto;

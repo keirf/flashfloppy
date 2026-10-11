@@ -73,14 +73,21 @@ void flash_summary(char *buf, size_t size);
 #define OLED_MAX_H 64
 
 /* The displays that ffemu can fit: an OLED, by its controller and the
- * panel's height, or a 7-segment LED display, by its controller and its
- * digits. */
+ * panel's height, a character LCD, by its columns and rows, or a 7-segment
+ * LED display, by its controller and its digits. */
 enum { DISP_ssd1306_32, DISP_ssd1306_64, DISP_sh1106_32, DISP_sh1106_64,
+       DISP_lcd_16x2, DISP_lcd_20x2, DISP_lcd_20x4, DISP_lcd_40x2,
        DISP_74hc164, DISP_tm1651, DISP_nr };
+#define DISP_IS_OLED(d) ((d) <= DISP_sh1106_64)
+#define DISP_IS_LCD(d) (((d) >= DISP_lcd_16x2) && ((d) <= DISP_lcd_40x2))
 #define DISP_IS_LED(d) ((d) >= DISP_74hc164)
-#define DISP_IS_SH1106(d) (((d) >= DISP_sh1106_32) && !DISP_IS_LED(d))
+#define DISP_IS_SH1106(d) (((d) == DISP_sh1106_32) || ((d) == DISP_sh1106_64))
 /* Of an OLED. */
 #define DISP_HEIGHT(d) (((d) & 1) ? 64 : 32)
+/* Of an LCD. */
+#define DISP_LCD_COLS(d) \
+    (((d) == DISP_lcd_16x2) ? 16 : ((d) == DISP_lcd_40x2) ? 40 : 20)
+#define DISP_LCD_ROWS(d) (((d) == DISP_lcd_20x4) ? 4 : 2)
 /* Of an LED display. */
 #define DISP_DIGITS(d) (((d) == DISP_tm1651) ? 3 : 2)
 /* Their names in the settings file, and on the screen. */
@@ -102,6 +109,61 @@ struct oled_view {
 void oled_init(int display);
 /* Snapshot for drawing: @px gets OLED_MAX_H rows of OLED_W bytes, 0 or 1. */
 void oled_get_view(struct oled_view *view, uint8_t *px);
+/* The device on the I2C bus, as emu_i2c_dev_*() of emu.h: each answers
+ * only when fitted. */
+int oled_i2c_start(unsigned int addr, int rd);
+void oled_i2c_write(uint8_t b);
+uint8_t oled_i2c_read(void);
+void oled_i2c_stop(void);
+
+/*
+ * hd44780.c
+ */
+
+#define LCD_MAX_COLS 40
+#define LCD_MAX_ROWS 4
+
+/* The character ROMs that ffemu has for the LCD, by their names in the
+ * settings file and on the screen, with a line of help for each. */
+enum { LCD_ROM_cyr, LCD_ROM_a00, LCD_ROM_nr };
+extern const char * const lcd_rom_name[LCD_ROM_nr];
+extern const char * const lcd_rom_label[LCD_ROM_nr];
+extern const char * const lcd_rom_help[LCD_ROM_nr];
+
+struct lcd_view {
+    bool present;            /* an LCD is fitted */
+    bool on;                 /* the controller shows the characters */
+    bool backlight;
+    unsigned int cols, rows; /* of the module */
+    int rom;                 /* LCD_ROM_*: its character ROM */
+    unsigned int nr_updates; /* counts transactions that wrote characters */
+    uint8_t text[LCD_MAX_ROWS][LCD_MAX_COLS]; /* the characters shown */
+};
+
+/* Fits display @display, one of DISP_lcd_*. */
+void hd44780_init(int display);
+void hd44780_get_view(struct lcd_view *view);
+int hd44780_i2c_start(unsigned int addr, int rd);
+void hd44780_i2c_write(uint8_t b);
+uint8_t hd44780_i2c_read(void);
+void hd44780_i2c_stop(void);
+/* Sets the character ROM, LCD_ROM_*. */
+void hd44780_set_rom(int rom);
+/* The Unicode code point that code @c stands for in ROM @rom, a space for
+ * a blank glyph: 0 for none, a user-defined character or a glyph that no
+ * single character matches. */
+unsigned int hd44780_unicode(int rom, uint8_t c);
+/* What text shows for a code without a character: a white square, the
+ * usual mark of a missing one. */
+#define LCD_MISSING 0x25a1
+/* The size in pixels of an LCD of @nr_cols by @nr_rows characters. */
+void hd44780_size(unsigned int nr_cols, unsigned int nr_rows,
+                  unsigned int *w, unsigned int *h);
+/* The characters of @v as pixels, @w by @h bytes, 1 for a dark dot, in a
+ * buffer of this module's that the next call reuses; a character without a
+ * glyph, a user-defined one included, as a checkerboard. */
+void hd44780_pixels(const struct lcd_view *v, const uint8_t **px,
+                    unsigned int *w, unsigned int *h);
 
 /*
  * led_7seg.c
@@ -243,6 +305,7 @@ enum {
 struct config {
     int style;              /* STYLE_* */
     int display;            /* DISP_*: the display fitted */
+    int lcd_rom;            /* LCD_ROM_*: the LCD's character ROM */
     int display_color;      /* a curses color, plus 8 if bright */
     unsigned int hold_ms;   /* how long a key press holds a button down */
     char path[512];         /* where the settings file is, or would be */

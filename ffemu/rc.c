@@ -40,7 +40,8 @@ static const char * const color_name[8] = {
 };
 #define BRIGHT "bright-"
 
-enum { SET_style, SET_display_color, SET_hold_ms, SET_display, SET_nr };
+enum { SET_style, SET_display_color, SET_hold_ms, SET_display, SET_lcd_rom,
+       SET_nr };
 
 static const struct setting {
     const char *name, *comment;
@@ -60,7 +61,14 @@ static const struct setting {
     [SET_display] = {
         "display",
         "Display type: ssd1306-128x32, ssd1306-128x64, sh1106-128x32, "
-        "sh1106-128x64, 74hc164-2digit or tm1651-3digit. Key 0." }
+        "sh1106-128x64, hd44780-16x2, hd44780-20x2, hd44780-20x4, "
+        "hd44780-40x2, 74hc164-2digit or tm1651-3digit. Key 0." },
+    [SET_lcd_rom] = {
+        "lcd-rom",
+        "Character ROM of an LCD: cyr (Latin and upper- and lower-case "
+        "Cyrillic, MELT's and other Cyrillic modules; ffemu/lcd_font_cyr.h) "
+        "or a00 (Latin and Japanese, most other modules; "
+        "ffemu/lcd_font_a00.h). Key 0." }
 };
 
 /* The value of setting @set as the file has it, into @buf. */
@@ -79,6 +87,9 @@ static const char *value_of(int set, char *buf, size_t size)
         break;
     case SET_display:
         snprintf(buf, size, "%s", display_name[config.display]);
+        break;
+    case SET_lcd_rom:
+        snprintf(buf, size, "%s", lcd_rom_name[config.lcd_rom]);
         break;
     }
     return buf;
@@ -202,6 +213,14 @@ static bool parse_line(char *line)
         for (i = 0; i < DISP_nr; i++) {
             if (!strcmp(value, display_name[i])) {
                 config.display = i;
+                return true;
+            }
+        }
+        return false;
+    case SET_lcd_rom:
+        for (i = 0; i < LCD_ROM_nr; i++) {
+            if (!strcmp(value, lcd_rom_name[i])) {
+                config.lcd_rom = i;
                 return true;
             }
         }
@@ -505,6 +524,7 @@ void rc_load(void)
 
     config.style = STYLE_braille;
     config.display = DISP_ssd1306_32;
+    config.lcd_rom = LCD_ROM_cyr;
     config.display_color = 8 | 6; /* bright cyan */
     config.hold_ms = 150;
 
