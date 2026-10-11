@@ -41,9 +41,12 @@ void cpu_quit(int code, const char *msg) __attribute__((noreturn));
  * the firmware thread acts on the request at its next tick. */
 void cpu_request_restart(void);
 void cpu_request_quit(void);
+/* As a new start of the program with the same arguments: ffemu and the
+ * device both begin afresh, from the settings file. */
+void cpu_request_relaunch(void);
 /* User interface state carried over a power cycle, or NULL on a fresh start:
- * the rendering style, whether the USB drive is inserted, and how much of a
- * script's sleep is left. */
+ * the rendering style, whether the USB drive is inserted, how much of a
+ * script's sleep is left, the floppy signals and the latched buttons. */
 const char *cpu_restart_state(void);
 
 /* Firmware console output: a ring that only ever grows at log_head. */
@@ -298,7 +301,7 @@ enum {
 enum {
     KEY_ACT_select, KEY_ACT_left, KEY_ACT_right, KEY_ACT_cw, KEY_ACT_ccw,
     KEY_ACT_remove, KEY_ACT_insert, KEY_ACT_reset, KEY_ACT_quit,
-    KEY_ACT_latch,
+    KEY_ACT_latch, KEY_ACT_relaunch,
     KEY_ACT_nr
 };
 
@@ -349,6 +352,10 @@ unsigned int ui_rotary_flash(void);
 /* Latch mode, KEY_ACT_latch: a button stays down until its key comes again,
  * or until the mode ends, which releases them all. */
 bool ui_latched(void);
+/* Latch mode and the buttons it holds down, which a power cycle keeps, as
+ * fingers stay on real buttons, and back. */
+unsigned int ui_latch_save(void);
+void ui_latch_restore(unsigned int latch);
 
 /* What the host computer does on the floppy interface, each a change of its
  * signals in emu_in_fdd or a STEP pulse; the firmware's target has some of

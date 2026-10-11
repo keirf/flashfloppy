@@ -591,6 +591,17 @@ void emu_illegal(const char *file, int line)
     cpu_quit(3, msg);
 }
 
+/* The terminal's modes at the first start, for the new process. */
+static void pass_tty_mode(void)
+{
+    char hex[2*sizeof(tty_mode)+1];
+
+    if (tty_mode_saved) {
+        to_hex(hex, &tty_mode, sizeof(tty_mode));
+        setenv("FFEMU_TTY", hex, 1);
+    }
+}
+
 /* What survives a power cycle travels in the environment of the new process:
  * the configuration flash, and the state of the user interface, including
  * the signals of the host computer on the floppy interface. */
@@ -608,18 +619,15 @@ static void prepare_restart(void)
 
     usb_get_info(&usb);
     ui_fdd_save(&fdd, &phase_pos);
-    snprintf(state, sizeof(state), "%d,%d,%u,%x,%u", config.style,
-             usb.inserted, script_sleep_left(), fdd, phase_pos);
+    snprintf(state, sizeof(state), "%d,%d,%u,%x,%u,%x", config.style,
+             usb.inserted, script_sleep_left(), fdd, phase_pos,
+             ui_latch_save());
     setenv("FFEMU_STATE", state, 1);
 
     flash_to_hex(hex, sizeof(hex));
     setenv("FFEMU_FLASH", hex, 1);
 
-    if (tty_mode_saved) {
-        to_hex(hex, &tty_mode, sizeof(tty_mode));
-        setenv("FFEMU_TTY", hex, 1);
-    }
-
+    pass_tty_mode();
     fflush(NULL);
 }
 
@@ -650,6 +658,21 @@ void cpu_request_quit(void)
 {
     fflush(NULL);
     request = REQ_quit;
+}
+
+/* Only the terminal's modes go along; the store of the firmware's writes to
+ * the USB drive closes on the exec, and the new process begins its own. */
+void cpu_request_relaunch(void)
+{
+    uint32_t layout;
+    int fd;
+
+    usb_get_store(&fd, &layout);
+    if (fd >= 0)
+        fcntl(fd, F_SETFD, FD_CLOEXEC);
+    pass_tty_mode();
+    fflush(NULL);
+    request = REQ_restart;
 }
 
 void emu_reset(void)

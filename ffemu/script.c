@@ -28,7 +28,8 @@ static const char * const action_name[KEY_ACT_nr] = {
     [KEY_ACT_insert] = "insert",
     [KEY_ACT_reset] = "reset",
     [KEY_ACT_quit] = "quit",
-    [KEY_ACT_latch] = "latch"
+    [KEY_ACT_latch] = "latch",
+    [KEY_ACT_relaunch] = "relaunch"
 };
 
 static unsigned int log_printed;
@@ -268,7 +269,8 @@ static void *script_thread(void *arg_sleep_ms)
             }
             fflush(NULL);
             ui_action(i);
-            if ((i == KEY_ACT_reset) || (i == KEY_ACT_quit))
+            if ((i == KEY_ACT_reset) || (i == KEY_ACT_relaunch)
+                || (i == KEY_ACT_quit))
                 park();
         } else if (!strcmp(line, "dump")) {
             dump_display();
