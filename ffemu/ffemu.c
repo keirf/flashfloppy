@@ -65,6 +65,18 @@ bool ui_latched(void)
     return latched;
 }
 
+unsigned int ui_latch_save(void)
+{
+    return latched ? 8u | (emu_in_buttons & 7u) : 0;
+}
+
+void ui_latch_restore(unsigned int latch)
+{
+    latched = (latch & 8u) != 0;
+    if (latched)
+        __sync_fetch_and_or(&emu_in_buttons, latch & 7u);
+}
+
 static void press(unsigned int nr)
 {
     if (latched) {
@@ -149,6 +161,9 @@ void ui_action(int act)
         break;
     case KEY_ACT_reset:
         cpu_request_restart();
+        break;
+    case KEY_ACT_relaunch:
+        cpu_request_relaunch();
         break;
     case KEY_ACT_quit:
         cpu_request_quit();
@@ -368,7 +383,7 @@ int main(int argc, char **argv)
 {
     const char *state, *store = getenv("FFEMU_USB");
     int style, usb = 1, fd;
-    unsigned int sleep_ms = 0, layout, fdd, phase_pos;
+    unsigned int sleep_ms = 0, layout, fdd, phase_pos, latch;
     struct stat st;
 
     /* The display is drawn with Unicode block and Braille characters. */
@@ -441,11 +456,12 @@ int main(int argc, char **argv)
 
     state = cpu_restart_state();
     if ((state != NULL)
-        && (sscanf(state, "%d,%d,%u,%x,%u", &style, &usb, &sleep_ms, &fdd,
-                   &phase_pos) == 5)
+        && (sscanf(state, "%d,%d,%u,%x,%u,%x", &style, &usb, &sleep_ms,
+                   &fdd, &phase_pos, &latch) == 6)
         && (style >= 1) && (style <= STYLE_nr)) {
         config.style = style;
         ui_fdd_restore(fdd, phase_pos);
+        ui_latch_restore(latch);
     }
 
     if ((store != NULL) && (sscanf(store, "%d,%x", &fd, &layout) == 2))

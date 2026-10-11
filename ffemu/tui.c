@@ -340,7 +340,8 @@ static const int key_code[KEY_ACT_nr] = {
     [KEY_ACT_insert] = KEY_IC,
     [KEY_ACT_reset] = KEY_HOME,
     [KEY_ACT_quit] = 27,
-    [KEY_ACT_latch] = ' '
+    [KEY_ACT_latch] = ' ',
+    [KEY_ACT_relaunch] = -1 /* Ctrl+Home, known once curses runs */
 };
 static const char * const key_label[KEY_ACT_nr] = {
     [KEY_ACT_select] = "Enter",
@@ -352,7 +353,8 @@ static const char * const key_label[KEY_ACT_nr] = {
     [KEY_ACT_insert] = "Ins",
     [KEY_ACT_reset] = "Home",
     [KEY_ACT_quit] = "Esc",
-    [KEY_ACT_latch] = "Space"
+    [KEY_ACT_latch] = "Space",
+    [KEY_ACT_relaunch] = "Ctrl+Home"
 };
 
 /*
@@ -899,8 +901,8 @@ static void scroll_bar(int y, int x, int w, int h, bool dim, int top,
     put_wide(y + h - 2, x + w - 1, attr, down, 1);
 }
 
-/* The codes that curses gives Ctrl+PgUp and Ctrl+PgDn. */
-static int key_ctrl_pgup = -1, key_ctrl_pgdn = -1;
+/* The codes that curses gives Ctrl+PgUp, Ctrl+PgDn and Ctrl+Home. */
+static int key_ctrl_pgup = -1, key_ctrl_pgdn = -1, key_ctrl_home = -1;
 
 /* The code of the key that terminfo names @cap, or that sends @seq if it has
  * no such name; @code if curses knows neither, which it then learns. */
@@ -1108,8 +1110,9 @@ static void picture(int y, int x, int w)
     put(y + 2, x + 22, w - 22, 0, "Beeper");
 }
 
-/* The keys of the device that the picture does not show; the keys of ffemu
- * itself are on the status line. */
+/* The keys of the device that the picture does not show, and the one that
+ * resets ffemu along with it; the other keys of ffemu are on the status
+ * line. */
 static const struct {
     int act;
     const char *what;
@@ -1117,31 +1120,24 @@ static const struct {
     { KEY_ACT_latch, "Latch buttons (long/combined press)" },
     { KEY_ACT_insert, "Insert USB drive, re-reading files" },
     { KEY_ACT_remove, "Eject USB drive" },
-    { KEY_ACT_reset, "Power cycle" }
+    { KEY_ACT_reset, "Power-cycle device" },
+    { KEY_ACT_relaunch, "Reset ffemu and device" }
 };
 
 /* Columns from the USB port's left edge to the end of the beeper. */
 #define PICTURE_W 38
 
-/* The widest key name, which the descriptions line up after. */
-static unsigned int key_column(void)
-{
-    unsigned int i, col = 0;
-
-    for (i = 0; i < ARRAY_SIZE(device_keys); i++)
-        if (strlen(key_label[device_keys[i].act]) > col)
-            col = strlen(key_label[device_keys[i].act]);
-    return col;
-}
-
 /* The width of the Controls window, frame included. */
 static int keys_width(void)
 {
-    unsigned int i, col = key_column(), w = 1 + PICTURE_W;
+    unsigned int i, w = 1 + PICTURE_W;
 
-    for (i = 0; i < ARRAY_SIZE(device_keys); i++)
-        if (col + 1 + strlen(device_keys[i].what) > w)
-            w = col + 1 + strlen(device_keys[i].what);
+    for (i = 0; i < ARRAY_SIZE(device_keys); i++) {
+        unsigned int n = strlen(key_label[device_keys[i].act]) + 1
+            + strlen(device_keys[i].what);
+        if (n > w)
+            w = n;
+    }
     return w + 2;
 }
 
@@ -1217,7 +1213,7 @@ static void fdd_panel(int y, int x, int w)
 
 static void draw_keys(int y, int x, int w)
 {
-    unsigned int i, col = key_column();
+    unsigned int i;
 
     frame(y, x, w, PANE_ROWS + 2, "Controls", COLOR_PAIR(CP_text),
           BRIGHT(CP_focus));
@@ -1233,11 +1229,11 @@ static void draw_keys(int y, int x, int w)
 
     /* The latch key lights up while its mode lasts. */
     for (i = 0; i < ARRAY_SIZE(device_keys); i++) {
-        int act = device_keys[i].act;
+        int act = device_keys[i].act, n = strlen(key_label[act]) + 1;
         bool lit = ((act == KEY_ACT_latch) && ui_latched())
             || (emu_time_ns() < key_lit_until[act]);
         put(y, x, w, key_attr(lit), "%s", key_label[act]);
-        put(y++, x + col + 1, w - col - 1, 0, "%s", device_keys[i].what);
+        put(y++, x + n, w - n, 0, "%s", device_keys[i].what);
     }
 }
 
@@ -3393,13 +3389,13 @@ static void handle_key(int key)
     }
 
     for (i = 0; i < KEY_ACT_nr; i++) {
-        if (key != key_code[i])
+        if (key != ((i == KEY_ACT_relaunch) ? key_ctrl_home : key_code[i]))
             continue;
         key_lit_until[i] = lit_end();
         if (i == KEY_ACT_quit) {
             dialog = DLG_quit;
             dialog_button = 0;
-        } else if (i == KEY_ACT_reset) {
+        } else if ((i == KEY_ACT_reset) || (i == KEY_ACT_relaunch)) {
             leave(i);
         } else {
             ui_action(i);
@@ -3425,6 +3421,7 @@ static void *tui_thread(void *unused)
     prepare_fatal_seq();
     key_ctrl_pgup = ctrl_key("kPRV5", "\033[5;5~", KEY_MAX + 0x101);
     key_ctrl_pgdn = ctrl_key("kNXT5", "\033[6;5~", KEY_MAX + 0x102);
+    key_ctrl_home = ctrl_key("kHOM5", "\033[1;5H", KEY_MAX + 0x103);
     curs_set(0);
     /* A lone Esc is held back this long for the rest of a key's sequence:
      * htop's 25 ms where the terminal writes it whole, 200 ms in an ssh
