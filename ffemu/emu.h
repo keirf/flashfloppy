@@ -154,6 +154,10 @@ int emu_flash_display_fits(const void *cfg, unsigned int rows);
 /* Sets display-type in @cfg for an OLED of @rows rows, keeping what else it
  * says about an OLED. */
 void emu_flash_set_oled_rows(void *cfg, unsigned int rows);
+/* Whether display-type in @cfg has the firmware drive an LCD of @cols by
+ * @rows characters; and setting it so. */
+int emu_flash_lcd_fits(const void *cfg, unsigned int cols, unsigned int rows);
+void emu_flash_set_lcd(void *cfg, unsigned int cols, unsigned int rows);
 /* Whether display-type in @cfg lets the firmware look for a display by
  * itself, which is how it finds an LED display; and setting it so. */
 int emu_flash_display_auto(const void *cfg);

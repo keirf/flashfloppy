@@ -1,10 +1,10 @@
 /*
  * ssd1306.c
  *
- * Model of an OLED display on the I2C bus, the only slave device that ffemu
- * fits: an SSD1306 or an SH1106 controller, on a panel of 32 or 64 rows. It
- * decodes the command and data stream that the firmware sends, and keeps the
- * display RAM for the user interface to draw.
+ * Model of an OLED display on the I2C bus, one of the two slave devices that
+ * ffemu fits: an SSD1306 or an SH1106 controller, on a panel of 32 or 64
+ * rows. It decodes the command and data stream that the firmware sends, and
+ * keeps the display RAM for the user interface to draw.
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
@@ -23,6 +23,10 @@ const char * const display_name[DISP_nr] = {
     [DISP_ssd1306_64] = "ssd1306-128x64",
     [DISP_sh1106_32] = "sh1106-128x32",
     [DISP_sh1106_64] = "sh1106-128x64",
+    [DISP_lcd_16x2] = "hd44780-16x2",
+    [DISP_lcd_20x2] = "hd44780-20x2",
+    [DISP_lcd_20x4] = "hd44780-20x4",
+    [DISP_lcd_40x2] = "hd44780-40x2",
     [DISP_74hc164] = "74hc164-2digit",
     [DISP_tm1651] = "tm1651-3digit"
 };
@@ -32,6 +36,10 @@ const char * const display_label[DISP_nr] = {
     [DISP_ssd1306_64] = "OLED 128x64 on SSD1306",
     [DISP_sh1106_32] = "OLED 128x32 on SH1106",
     [DISP_sh1106_64] = "OLED 128x64 on SH1106",
+    [DISP_lcd_16x2] = "LCD 16x2 on HD44780",
+    [DISP_lcd_20x2] = "LCD 20x2 on HD44780",
+    [DISP_lcd_20x4] = "LCD 20x4 on HD44780",
+    [DISP_lcd_40x2] = "LCD 40x2 on HD44780",
     [DISP_74hc164] = "LED 2 digits on 74HC164",
     [DISP_tm1651] = "LED 3 digits on TM1651"
 };
@@ -175,7 +183,7 @@ static void data_byte(uint8_t b)
     update_end();
 }
 
-int emu_i2c_dev_start(unsigned int addr, int rd)
+int oled_i2c_start(unsigned int addr, int rd)
 {
     selected = fitted && (addr == I2C_ADDR);
     ctl = CTL_none;
@@ -183,7 +191,7 @@ int emu_i2c_dev_start(unsigned int addr, int rd)
     return selected;
 }
 
-void emu_i2c_dev_write(uint8_t b)
+void oled_i2c_write(uint8_t b)
 {
     if (!selected)
         return;
@@ -206,7 +214,7 @@ void emu_i2c_dev_write(uint8_t b)
     }
 }
 
-uint8_t emu_i2c_dev_read(void)
+uint8_t oled_i2c_read(void)
 {
     /* An SH1106 reads back its RAM, after a dummy byte. Over I2C an SSD1306
      * returns only its status: the firmware tells the two apart by that. */
@@ -215,7 +223,7 @@ uint8_t emu_i2c_dev_read(void)
     return d.on ? 0x00 : 0x40;
 }
 
-void emu_i2c_dev_stop(void)
+void oled_i2c_stop(void)
 {
     if (selected && wrote_data) {
         update_begin();

@@ -283,6 +283,35 @@ void ui_fdd_restore(unsigned int in, unsigned int pos)
     phase_pos = pos % 8;
 }
 
+/* The I2C bus, whose one slave is the display fitted, an OLED or an LCD:
+ * the device that answered the last START takes the transaction. */
+static bool i2c_lcd;
+
+int emu_i2c_dev_start(unsigned int addr, int rd)
+{
+    i2c_lcd = hd44780_i2c_start(addr, rd);
+    return i2c_lcd || oled_i2c_start(addr, rd);
+}
+
+void emu_i2c_dev_write(uint8_t b)
+{
+    if (i2c_lcd)
+        hd44780_i2c_write(b);
+    else
+        oled_i2c_write(b);
+}
+
+uint8_t emu_i2c_dev_read(void)
+{
+    return i2c_lcd ? hd44780_i2c_read() : oled_i2c_read();
+}
+
+void emu_i2c_dev_stop(void)
+{
+    hd44780_i2c_stop();
+    oled_i2c_stop();
+}
+
 static void usage(FILE *f)
 {
     char fdd[128] = "";
@@ -425,8 +454,11 @@ int main(int argc, char **argv)
 
     if (DISP_IS_LED(config.display))
         led_init(config.display);
+    else if (DISP_IS_LCD(config.display))
+        hd44780_init(config.display);
     else
         oled_init(config.display);
+    hd44780_set_rom(config.lcd_rom);
     if (usb)
         insert(state != NULL);
 

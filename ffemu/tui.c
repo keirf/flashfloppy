@@ -99,6 +99,9 @@ enum {
     CP_button_def, /* bright cyan on green: the default button */
     CP_signal,    /* black on dark yellow: an active signal of the host */
     CP_key,       /* red on blue: key names, bright, or dark where dimmed */
+    CP_lcd,       /* black on the color of the settings: the LCD, lit */
+    CP_lcd_dark,  /* black on dark gray, or blue on black: the LCD unlit */
+    CP_lcd_stub,  /* bright magenta on the LCD: a character it lacks */
     CP_nr
 };
 
@@ -142,6 +145,10 @@ static char msg_title[32], msg_text[256];
 static int msg_return;
 static int dialog_button;
 static int dialog_display;
+/* The Display type dialog's character ROM, and its focus: the displays, the
+ * ROMs, which only an LCD has, OK and Cancel. */
+static int dialog_lcd_rom, dialog_focus;
+enum { DF_display, DF_rom, DF_ok, DF_cancel, DF_nr };
 static void draw_dialog(void);
 static void draw_fdfile_dialog(void);
 static void draw_flash_dialog(void);
@@ -211,6 +218,17 @@ static void put_wide(int y, int x, attr_t attr, const wchar_t *ws, int n)
     }
     attron(attr);
     mvaddnwstr(y, x, ws, n);
+    attroff(attr);
+}
+
+/* Writes character @wc at (@y,@x) as it is, also in the ASCII rendering,
+ * whose stand-ins are for the user interface's own characters. */
+static void put_char(int y, int x, attr_t attr, wchar_t wc)
+{
+    if ((y < 0) || (y >= LINES) || (x < 0) || (x >= COLS))
+        return;
+    attron(attr);
+    mvaddnwstr(y, x, &wc, 1);
     attroff(attr);
 }
 
@@ -379,6 +397,14 @@ static void display_cells(int style, int *cw, int *ch)
 
     if (DISP_IS_LED(fitted_display)) {
         led_size(DISP_DIGITS(fitted_display), led_font_of(style), &w, &h);
+    } else if (DISP_IS_LCD(fitted_display) && (style == STYLE_ascii)) {
+        /* Plain text, with a column of the panel at each side. */
+        *cw = DISP_LCD_COLS(fitted_display) + 2;
+        *ch = DISP_LCD_ROWS(fitted_display);
+        return;
+    } else if (DISP_IS_LCD(fitted_display)) {
+        hd44780_size(DISP_LCD_COLS(fitted_display),
+                     DISP_LCD_ROWS(fitted_display), &w, &h);
     } else {
         w = OLED_W;
         h = DISP_HEIGHT(fitted_display);
@@ -387,7 +413,8 @@ static void display_cells(int style, int *cw, int *ch)
 }
 
 /* The preferred style, unless its display does not fit the terminal: then
- * the narrowest one, which for the LED display is ASCII. */
+ * the narrowest one, which for the LED display and the LCD is ASCII, the
+ * LCD's pixels in braille first if they fit. */
 static int style_in_use(void)
 {
     int cw, ch;
@@ -395,7 +422,12 @@ static int style_in_use(void)
     display_cells(config.style, &cw, &ch);
     if (cw + 2 <= COLS)
         return config.style;
-    return DISP_IS_LED(fitted_display) ? STYLE_ascii : STYLE_braille;
+    if (DISP_IS_LCD(fitted_display)) {
+        display_cells(STYLE_braille, &cw, &ch);
+        if (cw + 2 <= COLS)
+            return STYLE_braille;
+    }
+    return DISP_IS_OLED(fitted_display) ? STYLE_braille : STYLE_ascii;
 }
 
 /* The bits of cell (@x,@y) of @w-wide pixels @px in @style: the dots of a
@@ -545,6 +577,28 @@ static bool led_title(const struct led_view *v, char *title, size_t size)
     return mismatch;
 }
 
+/* Whether the LCD has white characters, on the dark blue panel, as those
+ * are made. */
+#define LCD_WHITE_INK() (config.display_color == COLOR_BLUE)
+
+/* The LCD's title into @title, noting a mismatch, display-type in flash
+ * having the firmware drive another display; whether it does. */
+static bool lcd_title(const struct lcd_view *v, char *title, size_t size)
+{
+    uint8_t cfg[256];
+    bool mismatch;
+
+    emu_flash_get(cfg);
+    mismatch = !emu_flash_lcd_fits(cfg, v->cols, v->rows);
+    const char *rom = lcd_rom_label[v->rom];
+
+    snprintf(title, size, "LCD %ux%u on HD44780, ROM %.*s%s%s%s", v->cols,
+             v->rows, (int)strcspn(rom, ":"), rom, v->on ? "" : " - off",
+             v->backlight ? "" : " - backlight off",
+             mismatch ? mismatch_note : "");
+    return mismatch;
+}
+
 /* Draws the OLED at (@y0,@x0) in a frame @fw wide, in @style; @too_small
  * if it does not fit the window even so. */
 static void draw_display(int y0, int x0, int fw, int style, bool too_small,
@@ -577,6 +631,47 @@ static void draw_led(int y0, int x0, int fw, int style, bool too_small,
     cells(style, w, h, &cw, &ch);
     display_frame(y0, x0, fw, ch, title, mismatch, attr);
     draw_pixels(y0 + 1, x0 + 1, style, lit, all, w, h, attr);
+    display_hint(y0, x0, ch, style, too_small);
+}
+
+/* Draws the LCD at (@y0,@x0) in a frame @fw wide, in @style, centered: its
+ * characters dark on the lit panel, as pixels, or in ASCII as text, each
+ * code as the Unicode character that its ROM's glyph stands for, and as a
+ * magenta white square, the usual mark of a missing character, when there
+ * is none or it is wider than a cell. */
+static void draw_lcd(int y0, int x0, int fw, int style, bool too_small,
+                     const struct lcd_view *v, const char *title,
+                     bool mismatch)
+{
+    attr_t attr = (config.display_color & 8) ? BRIGHT(CP_display)
+        : COLOR_PAIR(CP_display);
+    attr_t panel = !has_colors() ? A_REVERSE
+        : !v->backlight ? COLOR_PAIR(CP_lcd_dark)
+        : COLOR_PAIR(CP_lcd)
+        | ((LCD_WHITE_INK() && (COLORS < 16)) ? A_BOLD : 0);
+    attr_t stub = has_colors() ? COLOR_PAIR(CP_lcd_stub) : A_REVERSE | A_BOLD;
+    const uint8_t *px;
+    unsigned int w, h;
+    int cw, ch, x, r, c;
+
+    display_cells(style, &cw, &ch);
+    display_frame(y0, x0, fw, ch, title, mismatch, attr);
+    x = x0 + 1 + (fw - 2 - cw) / 2;
+    if (style == STYLE_ascii) {
+        for (r = 0; r < ch; r++) {
+            put(y0 + 1 + r, x, cw, panel, "%*s", cw, "");
+            for (c = 0; v->on && (c < (int)v->cols); c++) {
+                wchar_t wc = hd44780_unicode(v->rom, v->text[r][c]);
+                if ((wc != 0) && (wcwidth(wc) == 1))
+                    put_char(y0 + 1 + r, x + 1 + c, panel, wc);
+                else
+                    put_char(y0 + 1 + r, x + 1 + c, stub, LCD_MISSING);
+            }
+        }
+    } else {
+        hd44780_pixels(v, &px, &w, &h);
+        draw_pixels(y0 + 1, x, style, px, NULL, w, h, panel);
+    }
     display_hint(y0, x0, ch, style, too_small);
 }
 
@@ -1455,13 +1550,18 @@ static void redraw(void)
     static uint8_t px[OLED_W * OLED_MAX_H];
     struct oled_view v;
     struct led_view lv;
-    bool led = DISP_IS_LED(fitted_display), too_small, mismatch;
+    struct lcd_view cv;
+    bool led = DISP_IS_LED(fitted_display), lcd = DISP_IS_LCD(fitted_display);
+    bool too_small, mismatch;
     int style, cw, ch, fw, dh, y, kw, sw, bottom = LINES - 1;
     char title[96];
 
     if (led) {
         led_get_view(&lv);
         mismatch = led_title(&lv, title, sizeof(title));
+    } else if (lcd) {
+        hd44780_get_view(&cv);
+        mismatch = lcd_title(&cv, title, sizeof(title));
     } else {
         oled_get_view(&v, px);
         mismatch = oled_title(&v, title, sizeof(title));
@@ -1476,6 +1576,8 @@ static void redraw(void)
 
     if (led)
         draw_led(1, 0, fw, style, too_small, &lv, title, mismatch);
+    else if (lcd)
+        draw_lcd(1, 0, fw, style, too_small, &cv, title, mismatch);
     else
         draw_display(1, 0, fw, style, too_small, &v, px, title, mismatch);
     draw_ff_cfg(1, fw, COLS - fw, (1 + dh > bottom) ? bottom - 1 : dh);
@@ -1701,19 +1803,50 @@ static void radio_row(int y, int x, int w, bool on, bool current,
     put(y, x + 5, w - 6, item, "%s", text);
 }
 
-/* The displays to choose from, as radio buttons, and what choosing does. */
+/* A row of a disabled cluster of radio buttons, in dark gray. */
+static void radio_row_off(int y, int x, int w, bool on, const char *text)
+{
+    attr_t off = COLOR_PAIR(CP_cluster_off);
+
+    put(y, x, w, COLOR_PAIR(CP_cluster), "%*s", w, "");
+    if (on)
+        put_wide(y, x + 1, off, radio_on, 3);
+    else
+        put(y, x + 1, 3, off, "( )");
+    put(y, x + 5, w - 6, off, "%s", text);
+}
+
+/* The displays to choose from, as radio buttons, and the character ROM of
+ * an LCD, which only changes how it is drawn; what choosing does; and on
+ * the last row, as in the Flash mem dialog, the help of a ROM in focus. */
 static void draw_display_dialog(void)
 {
-    int w = 47, y, x, i;
+    bool lcd = DISP_IS_LCD(dialog_display);
+    int w = 56, h = DISP_nr + LCD_ROM_nr + 11, y, x, i;
 
-    dialog_box(w, 14, "Display type", &y, &x);
+    dialog_box(w, h, "Display type", &y, &x);
     for (i = 0; i < DISP_nr; i++)
         radio_row(y + 2 + i, x + 3, w - 6, i == dialog_display,
-                  i == dialog_display, display_label[i]);
-    put(y + 9, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
-        "Changing the display restarts the device.");
-    button(y + 11, x + 10, button_attr(0), "  OK  ");
-    button(y + 11, x + w - 10 - 10, button_attr(1), "  Cancel  ");
+                  (dialog_focus == DF_display) && (i == dialog_display),
+                  display_label[i]);
+    put(y + DISP_nr + 3, x + 3, w - 6,
+        COLOR_PAIR(lcd ? CP_dialog : CP_dlg_off), "%s", "LCD character ROM");
+    for (i = 0; i < LCD_ROM_nr; i++) {
+        if (lcd)
+            radio_row(y + DISP_nr + 4 + i, x + 3, w - 6, i == dialog_lcd_rom,
+                      (dialog_focus == DF_rom) && (i == dialog_lcd_rom),
+                      lcd_rom_label[i]);
+        else
+            radio_row_off(y + DISP_nr + 4 + i, x + 3, w - 6,
+                          i == dialog_lcd_rom, lcd_rom_label[i]);
+    }
+    put(y + DISP_nr + LCD_ROM_nr + 5, x + 3, w - 4, COLOR_PAIR(CP_dialog),
+        "%s", "Changing the display restarts the device.");
+    button(y + h - 4, x + 10, button_attr(0), "  OK  ");
+    button(y + h - 4, x + w - 10 - 10, button_attr(1), "  Cancel  ");
+    if (dialog_focus == DF_rom)
+        put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
+            lcd_rom_help[dialog_lcd_rom]);
 }
 
 /* The configuration in flash when the display changed, which may not suit
@@ -1740,20 +1873,27 @@ static void option_value(const void *cfg, const char *name, char *buf,
 }
 
 /* Whether display-type in @cfg suits display @d: an LED display is found
- * only when the firmware looks for a display by itself. */
+ * only when the firmware looks for a display by itself, and an LCD found so
+ * is driven as a 16x2. */
 static bool display_type_fits(const void *cfg, int d)
 {
     return DISP_IS_LED(d) ? emu_flash_display_auto(cfg)
+        : DISP_IS_LCD(d) ? emu_flash_lcd_fits(cfg, DISP_LCD_COLS(d),
+                                              DISP_LCD_ROWS(d))
         : emu_flash_display_fits(cfg, DISP_HEIGHT(d));
 }
 
 /* Sets display-type in @cfg to suit the display fitted. */
 static void fit_display_type(void *cfg)
 {
-    if (DISP_IS_LED(config.display))
+    int d = config.display;
+
+    if (DISP_IS_LED(d))
         emu_flash_set_display_auto(cfg);
+    else if (DISP_IS_LCD(d))
+        emu_flash_set_lcd(cfg, DISP_LCD_COLS(d), DISP_LCD_ROWS(d));
     else
-        emu_flash_set_oled_rows(cfg, DISP_HEIGHT(config.display));
+        emu_flash_set_oled_rows(cfg, DISP_HEIGHT(d));
 }
 
 /* Sets display-type for the display fitted into a copy of @rows_cfg, giving
@@ -1881,11 +2021,58 @@ enum {
     DK_emul_yes, DK_emul_no, DK_fdfile_yes, DK_fdfile_no
 };
 
+/* The Display type dialog's keys: Tab and Shift+Tab move the focus, over
+ * the ROMs only while an LCD is chosen; Up and Down choose in the cluster in
+ * focus, Left and Right between the buttons; Enter takes the choice, unless
+ * Cancel is in focus. */
+static int display_dialog_key(int key)
+{
+    int step = 0, d = (key == KEY_DOWN) ? 1 : -1;
+
+    switch (key) {
+    case '\t':
+        step = 1;
+        break;
+    case KEY_BTAB:
+        step = -1;
+        break;
+    case KEY_LEFT: case KEY_RIGHT:
+        if (dialog_focus == DF_ok)
+            dialog_focus = DF_cancel;
+        else if (dialog_focus == DF_cancel)
+            dialog_focus = DF_ok;
+        break;
+    case KEY_UP: case KEY_DOWN:
+        if ((dialog_focus == DF_display) && (dialog_display + d >= 0)
+            && (dialog_display + d < DISP_nr))
+            dialog_display += d;
+        else if ((dialog_focus == DF_rom) && (dialog_lcd_rom + d >= 0)
+                 && (dialog_lcd_rom + d < LCD_ROM_nr))
+            dialog_lcd_rom += d;
+        break;
+    case 27:
+        dialog = DLG_none;
+        return DK_taken;
+    case '\n':
+        dialog = DLG_none;
+        return (dialog_focus == DF_cancel) ? DK_taken : DK_display;
+    }
+    if (step != 0) {
+        do
+            dialog_focus = (dialog_focus + DF_nr + step) % DF_nr;
+        while ((dialog_focus == DF_rom) && !DISP_IS_LCD(dialog_display));
+    }
+    dialog_button = (dialog_focus == DF_cancel);
+    return DK_taken;
+}
+
 /* Gives @key to the dialog, if one is open. */
 static int dialog_key(int key)
 {
     if (dialog == DLG_none)
         return DK_none;
+    if (dialog == DLG_display)
+        return display_dialog_key(key);
 
     switch (key) {
     case KEY_LEFT: case KEY_RIGHT: case '\t': case KEY_BTAB:
@@ -1902,10 +2089,6 @@ static int dialog_key(int key)
             dialog_button = 1;
             key = '\n';
         }
-    } else if ((key == KEY_UP) && (dialog_display > 0)) {
-        dialog_display--;
-    } else if ((key == KEY_DOWN) && (dialog_display < DISP_nr - 1)) {
-        dialog_display++;
     }
 
     /* The fdfile dialog goes back to the Flash mem dialog on Esc, its edits
@@ -1937,7 +2120,7 @@ static int dialog_key(int key)
     if (key == 27)
         dialog = DLG_none;
     if (key == '\n') {
-        int done = (dialog == DLG_quit) ? DK_quit : DK_display;
+        int done = DK_quit;
         dialog = DLG_none;
         return (dialog_button == 0) ? done : DK_taken;
     }
@@ -1975,6 +2158,25 @@ static void bright_twin(int cp)
     init_pair(cp + CP_BRIGHT, ((fg >= 0) && (fg < 8)) ? fg + 8 : fg, bg);
 }
 
+/* The LCD's pairs, which have the color of the settings for the panel:
+ * the characters are dark on its light, as on a backlit LCD, or bright white
+ * on dark blue. */
+static void set_lcd_pairs(void)
+{
+    short panel = (config.display_color & 7)
+        + (((config.display_color & 8) && (COLORS >= 16)) ? 8 : 0);
+    short ink = !LCD_WHITE_INK() ? COLOR_BLACK
+        : (COLORS >= 16) ? 8 + COLOR_WHITE : COLOR_WHITE;
+
+    init_pair(CP_lcd, ink, panel);
+    if (COLORS >= 16)
+        init_pair(CP_lcd_dark, COLOR_BLACK, 8);
+    else
+        init_pair(CP_lcd_dark, COLOR_BLUE, COLOR_BLACK);
+    init_pair(CP_lcd_stub, (COLORS >= 16) ? 8 + COLOR_MAGENTA : COLOR_MAGENTA,
+              panel);
+}
+
 static void set_display_color(unsigned int zx, bool bright)
 {
     static const uint8_t color_of_zx[8] = {
@@ -1986,6 +2188,7 @@ static void set_display_color(unsigned int zx, bool bright)
     if (has_colors()) {
         init_pair(CP_display, color_of_zx[zx], COLOR_BLACK);
         bright_twin(CP_display);
+        set_lcd_pairs();
     }
     rc_save();
 }
@@ -2127,7 +2330,8 @@ static struct fview {
 } fviews[] = {
     { FV_radio, 0, "display-~t~ype", "display-type",
       "Type of the display connected",
-      { "auto", "oled-128x32", "oled-128x64" }, false, true },
+      { "auto", "oled-128x32", "oled-128x64", "lcd-16x02", "lcd-20x02",
+        "lcd-20x04", "lcd-40x02" }, false, true },
     { FV_check, 0, "display-type suffi~x~", "display-type",
       "Options for OLED displays",
       { "rotate", "hflip", "narrow", "narrower", "inverse", "ztech",
@@ -2681,27 +2885,38 @@ static void draw_fdfile_dialog(void)
            fdf_writable ? "  No  " : " Back ");
 }
 
+/* Whether display @d is one that display-type in @cfg suits, to be offered
+ * instead of the display fitted: an OLED of the same chip, on an SSD1306 if
+ * the one fitted is not an OLED, or an LCD; on the first @pass, only one of
+ * the same kind as the display fitted. */
+static bool fd_display_offered(const void *cfg, int d, int pass)
+{
+    int f = config.display;
+
+    if (DISP_IS_LED(d) || !display_type_fits(cfg, d))
+        return false;
+    if (DISP_IS_OLED(d) && (DISP_IS_SH1106(d) != DISP_IS_SH1106(f)))
+        return false;
+    return pass || (DISP_IS_OLED(d) == DISP_IS_OLED(f));
+}
+
 /* Opens the emul dialog if display-type in flash has changed and no longer
- * suits the display fitted, while another emulated display would suit it:
- * an OLED of the rows it names, of the same chip, or on an SSD1306 when an
- * LED display is fitted. */
+ * suits the display fitted, while another emulated display would suit it,
+ * of the same kind if one is. */
 static bool fd_offer_display(const char *old_type)
 {
     uint8_t cfg[256];
     char type[64];
-    unsigned int rows;
-    int d;
+    int d = DISP_nr, pass;
 
     emu_flash_get(cfg);
     option_value(cfg, "display-type", type, sizeof(type));
     if (!strcmp(type, old_type) || display_type_fits(cfg, config.display))
         return false;
-    rows = emu_flash_display_fits(cfg, 64) ? 64
-        : emu_flash_display_fits(cfg, 32) ? 32 : 0;
-    for (d = 0; d < DISP_nr; d++)
-        if (!DISP_IS_LED(d) && (DISP_HEIGHT(d) == rows)
-            && (DISP_IS_SH1106(d) == DISP_IS_SH1106(config.display)))
-            break;
+    for (pass = 0; (pass < 2) && (d == DISP_nr); pass++)
+        for (d = 0; d < DISP_nr; d++)
+            if (fd_display_offered(cfg, d, pass))
+                break;
     if (d == DISP_nr)
         return false;
     emul_display = d;
@@ -2867,6 +3082,18 @@ static const struct {
       "Type of the display connected" },
     { "display-type", "oled-128x64",
       "Type of the display connected" },
+    { "display-type", "lcd-16x02",
+      "Type of the display connected: character LCD on I2C backpack, 16 "
+      "columns, 2 rows" },
+    { "display-type", "lcd-20x02",
+      "Type of the display connected: character LCD on I2C backpack, 20 "
+      "columns, 2 rows" },
+    { "display-type", "lcd-20x04",
+      "Type of the display connected: character LCD on I2C backpack, 20 "
+      "columns, 4 rows" },
+    { "display-type", "lcd-40x02",
+      "Type of the display connected: character LCD on I2C backpack, 40 "
+      "columns, 2 rows" },
     { "display-type", "rotate",
       "Options for OLED displays: rotate the image 180 degrees, for "
       "displays installed upside-down" },
@@ -3099,6 +3326,11 @@ static void handle_key(int key)
     case DK_quit:
         leave(KEY_ACT_quit);
     case DK_display:
+        if (dialog_lcd_rom != config.lcd_rom) {
+            config.lcd_rom = dialog_lcd_rom;
+            hd44780_set_rom(config.lcd_rom);
+            rc_save();
+        }
         set_display(dialog_display);
         return;
     case DK_rows_yes: {
@@ -3167,6 +3399,8 @@ static void handle_key(int key)
         dialog = DLG_display;
         dialog_button = 0;
         dialog_display = config.display;
+        dialog_lcd_rom = config.lcd_rom;
+        dialog_focus = DF_display;
         return;
     }
 
@@ -3264,6 +3498,7 @@ static void *tui_thread(void *unused)
         init_pair(CP_button_def, COLOR_CYAN, COLOR_GREEN);
         init_pair(CP_signal, COLOR_BLACK, COLOR_YELLOW);
         init_pair(CP_key, COLOR_RED, COLOR_BLUE);
+        set_lcd_pairs();
         for (i = 1; i < CP_nr; i++)
             bright_twin(i);
     }
