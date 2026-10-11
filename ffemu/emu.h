@@ -90,6 +90,11 @@ extern volatile unsigned int emu_in_fdd;
 /* Counts the STEP pulses sent. */
 extern volatile unsigned int emu_in_step;
 
+/* The OLED's 8x16 font made from the 6x13 one, as the firmware built with
+ * oled_font_8x16_synth=y draws it: the display driver's
+ * OLED_FONT_8x16_SYNTH. */
+extern volatile int emu_oled_synth_8x16;
+
 /* Front-panel outputs, read by the user interface. */
 /* Counts the pulses sent to the speaker. */
 extern volatile unsigned int emu_out_speaker;
