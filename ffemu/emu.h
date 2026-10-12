@@ -138,7 +138,9 @@ int emu_flash_describe(char *buf, unsigned int size, char sep, int all);
 unsigned int emu_flash_cfg_size(void);
 void emu_flash_cfg_defaults(void *cfg);
 /* Its options, in the firmware's order: the name of option @i, and its value
- * in @cfg as FF.CFG would set it into @value, with what it is in @flags. */
+ * in @cfg as FF.CFG would set it into @value, with what it is in @flags; at
+ * most EMU_OPTIONS_MAX of them. */
+#define EMU_OPTIONS_MAX 64
 unsigned int emu_flash_nr_options(void);
 const char *emu_flash_option(unsigned int i, const void *cfg, char *value,
                              unsigned int size, unsigned int *flags);
@@ -154,6 +156,14 @@ int emu_flash_set_option(void *cfg, const char *name, const char *value);
 /* The configuration in flash into @cfg, or the firmware's defaults if flash
  * holds none, which returns 0. */
 int emu_flash_get(void *cfg);
+/* The configuration in FLASH.DMP, the firmware's dump of its flash area of
+ * configuration slots, @len bytes at @area: into @cfg as the firmware takes
+ * it, and the number of its slot into @slot. */
+int emu_flash_parse_dump(const void *area, unsigned int len, void *cfg,
+                         unsigned int *slot);
+#define EMU_DUMP_slot 0 /* @cfg from slot @slot */
+#define EMU_DUMP_none 1 /* no slot the firmware takes: its factory defaults */
+#define EMU_DUMP_bad 2 /* not the size of the area */
 /* Whether display-type in @cfg suits an OLED of @rows rows. */
 int emu_flash_display_fits(const void *cfg, unsigned int rows);
 /* Sets display-type in @cfg for an OLED of @rows rows, keeping what else it
