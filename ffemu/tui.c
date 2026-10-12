@@ -93,6 +93,7 @@ enum {
     CP_cluster_hi, /* bright white on cyan: the one of them in focus */
     CP_cluster_hot, /* dark red on cyan: a hotkey among them */
     CP_cluster_off, /* light gray on dark gray: them, disabled */
+    CP_cluster_dfl, /* dark gray on cyan: the mark of a factory default */
     CP_dlg_off,   /* dark gray on light gray: a disabled control's label */
     CP_dlg_help,  /* blue on light gray: the help of the control in focus */
     CP_input,     /* bright white on blue: an input line */
@@ -2310,6 +2311,7 @@ static struct fview {
     unsigned int shown; /* check boxes: the items shown */
     int cur;            /* the chosen radio button, or check box in focus */
     unsigned int on;    /* the check boxes checked */
+    unsigned int dfl;   /* the items checked or chosen by default */
     char extra[64];     /* radio buttons: a value from flash that none has */
     char raw[64];       /* a boolean that is neither yes nor no */
     char text[64];      /* an input line */
@@ -2644,8 +2646,8 @@ static void fd_value(const char *opt, char *buf, size_t size)
  * dialog's width. */
 static const char fd_explanation[] =
     "Here are settings stored in the device flash memory. The values are "
-    "overwritten by FF.CFG on start. Only options supported by ffemu are "
-    "offered here.";
+    "overwritten by FF.CFG on start. Only options used by ffemu are offered "
+    "here. Factory defaults are marked with \"=\".";
 #define FD_EXPL_MAX 4
 
 /* Whether fview @i is disabled: the display-type suffixes, which only an
@@ -2738,9 +2740,11 @@ static void fd_layout(void)
     fviews[FD_NR - 1].x = fd_w / 2 + 4;
 }
 
-static void fd_open(void)
+/* Sets the dialog up from configuration @cfg, the values of its options
+ * into @orig, if given. */
+static void fd_load_all(const uint8_t *cfg, char (*orig)[64])
 {
-    uint8_t cfg[256];
+    char value[64];
     unsigned int i;
 
     for (i = 0; i < FD_NR; i++) {
@@ -2754,11 +2758,28 @@ static void fd_open(void)
         if ((v->type == FV_check) && !strcmp(v->opt, "display-type"))
             v->shown = 0x1f;
     }
-    emu_flash_get(cfg);
     for (i = 0; i < ARRAY_SIZE(fd_opts); i++) {
-        option_value(cfg, fd_opts[i], fd_orig[i], sizeof(fd_orig[i]));
-        fd_load(fd_opts[i], fd_orig[i]);
+        option_value(cfg, fd_opts[i], orig ? orig[i] : value, sizeof(value));
+        fd_load(fd_opts[i], orig ? orig[i] : value);
     }
+}
+
+static void fd_open(void)
+{
+    uint8_t cfg[256];
+    unsigned int i;
+
+    /* The items that the firmware's defaults choose or check. */
+    emu_flash_cfg_defaults(cfg);
+    fd_load_all(cfg, NULL);
+    for (i = 0; i < FD_NR; i++) {
+        struct fview *v = &fviews[i];
+        v->dfl = (v->type == FV_check) && !v->raw[0] ? v->on
+            : (v->type == FV_radio) && (v->cur < fd_nr_items(v))
+            ? 1u << v->cur : 0;
+    }
+    emu_flash_get(cfg);
+    fd_load_all(cfg, fd_orig);
     fd_layout();
     fd_focus = 0;
     fd_note[0] = '\0';
@@ -3201,6 +3222,8 @@ static void draw_flash_dialog(void)
                     : COLOR_PAIR(CP_cluster);
                 put(y, x, FD_W(v), off ? item : COLOR_PAIR(CP_cluster),
                     "%*s", FD_W(v), "");
+                if (((v->dfl >> k) & 1) && !off)
+                    put(y, x, 1, COLOR_PAIR(CP_cluster_dfl), "=");
                 /* Disabled, it shows no value: FF.CFG can hold none. */
                 if (v->type == FV_radio) {
                     if ((r == v->cur) && !off)
@@ -3481,6 +3504,8 @@ static void *tui_thread(void *unused)
             init_pair(CP_cluster_off, COLOR_WHITE, 8);
         else
             init_pair(CP_cluster_off, COLOR_BLACK, COLOR_WHITE);
+        init_pair(CP_cluster_dfl, (COLORS >= 16) ? 8 : COLOR_BLACK,
+                  COLOR_CYAN);
         init_pair(CP_dlg_off, (COLORS >= 16) ? 8 : COLOR_BLACK, COLOR_WHITE);
         init_pair(CP_dlg_help, COLOR_BLUE, COLOR_WHITE);
         init_pair(CP_input, COLOR_WHITE, COLOR_BLUE);
