@@ -63,9 +63,11 @@ static int option_index(const void *cfg, const char *name)
  * by the one in @cfg, and unless @all the options left out, with their
  * comments, whose value is what @flash holds: the firmware keeps the flash
  * value of an option the file does not name, so the rest need no line.
- * Returns the number of options written. */
+ * The first line says that the values come from @source. Returns the
+ * number of options written. */
 static unsigned int generate(FILE *f, const uint8_t *cfg,
-                             const uint8_t *flash, bool all)
+                             const uint8_t *flash, bool all,
+                             const char *source)
 {
     const char *p = ff_cfg_example, *pending = p, *next;
     char name[32], value[80], held[80], date[32];
@@ -74,8 +76,8 @@ static unsigned int generate(FILE *f, const uint8_t *cfg,
     int i;
 
     strftime(date, sizeof(date), "%Y-%m-%d %H:%M", localtime(&now));
-    fprintf(f, "## Written by ffemu %s on %s from the flash memory: %s.\r\n"
-            "\r\n", FFEMU_VERSION, date,
+    fprintf(f, "## Written by ffemu %s on %s from %s: %s.\r\n\r\n",
+            FFEMU_VERSION, date, source,
             all ? "every option"
             : "the options that differ from flash");
 
@@ -195,7 +197,8 @@ static bool replace_file(const char *path, const char *tmp, const char *bak,
     return true;
 }
 
-bool ff_cfg_write(const void *cfg, bool all, char *msg, size_t size)
+bool ff_cfg_write(const void *cfg, bool all, const char *source, char *msg,
+                  size_t size)
 {
     uint8_t flash[256];
     char place[512], dir[4000], path[4600], tmp[4608], bak[4608];
@@ -216,7 +219,7 @@ bool ff_cfg_write(const void *cfg, bool all, char *msg, size_t size)
         return false;
     }
     emu_flash_get(flash);
-    nr = generate(f, cfg, flash, all);
+    nr = generate(f, cfg, flash, all, source);
     if (fclose(f) != 0) {
         snprintf(msg, size, "%s: %s", tmp, strerror(errno));
         remove(tmp);

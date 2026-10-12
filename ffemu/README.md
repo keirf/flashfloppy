@@ -273,14 +273,19 @@ override after the restart; then it puts the settings of the slot that the
 firmware would take from it, or no settings if it holds none, into the emulated
 flash memory, and so into the settings file, as OK puts the dialog's: the
 dialog's edits are dropped, `FF.CFG` is checked for options that it would undo,
-and the device is power-cycled. Those lines are the `[Flash mem]` section at
-the end of the file: `hex` holds the bytes of the flash memory, and the options
-follow in `FF.CFG` syntax, so that lines can be copied between the two; a
-number after `0x` stands for bytes that no `FF.CFG` value gives. On loading,
-the hex applies first and the options on top, with a warning in the console for
-an option that differs from the hex, is not in this firmware, or has a value
-that does not fit. The Flash mem pane shows the same options: those changed
-from the defaults in yellow, the rest in gray, and the raw numbers in magenta.
+and the device is power-cycled. The fourth, `Unpack FLASH.DMP to FF.CFG`,
+enabled likewise, writes every option of the dump into `FF.CFG`, where the Save
+buttons write it, the old file kept as `.BAK`, after asking in the same way,
+naming the file it takes and the one it writes; flash stays as it is, and the
+firmware reads the file at the next insertion. The emulated flash memory's
+lines in the settings file are the `[Flash mem]` section at its end: `hex`
+holds the bytes of the flash memory, and the options follow in `FF.CFG` syntax,
+so that lines can be copied between the two; a number after `0x` stands for
+bytes that no `FF.CFG` value gives. On loading, the hex applies first and the
+options on top, with a warning in the console for an option that differs from
+the hex, is not in this firmware, or has a value that does not fit. The Flash
+mem pane shows the same options: those changed from the defaults in yellow, the
+rest in gray, and the raw numbers in magenta.
 
 ## Scripting
 
