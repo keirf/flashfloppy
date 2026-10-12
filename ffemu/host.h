@@ -390,6 +390,9 @@ void ui_fdd_restore(unsigned int in, unsigned int pos);
  * it with HOST_LOG_PREFIX. */
 void host_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 #define HOST_LOG_PREFIX "ffemu: "
+/* The line where the firmware reset itself, which is no power cycle: the
+ * console goes on after it. */
+#define LOG_FW_RESET "======= Firmware reset ======="
 
 /*
  * tui.c
