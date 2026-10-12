@@ -54,6 +54,9 @@ void emu_log(const char *s);
 /* Contents of the emulated configuration flash page (cpu.c). */
 unsigned int emu_flash_load(void *buf, unsigned int size);
 void emu_flash_save(const void *buf, unsigned int size);
+/* Logs that the firmware writes FLASH.DMP, its settings in it if @settings
+ * (cpu.c). */
+void emu_flash_dumped(int settings);
 
 /* I2C slave devices (ssd1306.c). */
 int emu_i2c_dev_start(unsigned int addr, int rd); /* returns 1 on ACK */
@@ -164,6 +167,9 @@ int emu_flash_parse_dump(const void *area, unsigned int len, void *cfg,
 #define EMU_DUMP_slot 0 /* @cfg from slot @slot */
 #define EMU_DUMP_none 1 /* no slot the firmware takes: its factory defaults */
 #define EMU_DUMP_bad 2 /* not the size of the area */
+/* Whether the firmware's main menu has asked for FLASH.DMP, which the
+ * firmware writes at the next insertion of a drive. */
+int emu_flash_dump_pending(void);
 /* Whether display-type in @cfg suits an OLED of @rows rows. */
 int emu_flash_display_fits(const void *cfg, unsigned int rows);
 /* Sets display-type in @cfg for an OLED of @rows rows, keeping what else it

@@ -829,8 +829,9 @@ static int piece(int y, int x, int end, attr_t attr, const char *fmt, ...)
 
 /* IMAGE_A.CFG, in which the firmware keeps the image selected, as the
  * firmware sees it now: its name, then its text with the line ends shown
- * as \r and \n, or "absent" or "empty". Read again when the drive has
- * been written. */
+ * as \r and \n, or "empty"; all in dark gray if "absent", and the name
+ * alone while the drive is out. Read again when the drive has been
+ * written. */
 static void draw_image_a(int y, int x, int w, const struct usb_info *usb)
 {
     static char text[300];
@@ -843,17 +844,24 @@ static void draw_image_a(int y, int x, int w, const struct usb_info *usb)
     if (!usb->inserted) {
         have = false;
         reads_seen = ~0ul;
-    } else if ((reads_seen == ~0ul) || (usb->nr_writes != writes_seen)
-               || (usb->ff_cfg_gen != gen_seen)) {
+        piece(y, x, x + w, DARK_GRAY, "IMAGE_A.CFG");
+        return;
+    }
+    if ((reads_seen == ~0ul) || (usb->nr_writes != writes_seen)
+        || (usb->ff_cfg_gen != gen_seen)) {
         have = usb_read_text("IMAGE_A CFG", text, sizeof(text));
         reads_seen = usb->nr_reads;
         writes_seen = usb->nr_writes;
         gen_seen = usb->ff_cfg_gen;
     }
 
+    if (!have) {
+        piece(y, x, x + w, DARK_GRAY, "IMAGE_A.CFG absent");
+        return;
+    }
     c = piece(y, x, x + w, BRIGHT(CP_path), "IMAGE_A.CFG ");
-    if (!have || (strspn(text, " \t\r\n") == strlen(text))) {
-        piece(y, c, x + w, DARK_GRAY, have ? "empty" : "absent");
+    if (strspn(text, " \t\r\n") == strlen(text)) {
+        piece(y, c, x + w, DARK_GRAY, "empty");
         return;
     }
     for (p = text; *p != '\0'; p += n) {
@@ -868,6 +876,37 @@ static void draw_image_a(int y, int x, int w, const struct usb_info *usb)
     /* Cut short: the mark, which the pieces beyond the edge do not draw. */
     if ((c > x + w) && (pane_right >= 0))
         put_wide(y, pane_right, BRIGHT(CP_crop), L">", 1);
+}
+
+/* FLASH.DMP as the firmware sees it now: one that the firmware wrote, kept
+ * in ffemu's store of its writes alone, over the medium's own or not; the
+ * medium's own; or none, all in dark gray, and the name alone while the
+ * drive is out. Looked for again when the drive has been written. */
+static void draw_flash_dmp(int y, int x, int w, const struct usb_info *usb)
+{
+    static unsigned long writes_seen = ~0ul;
+    static unsigned int gen_seen;
+    static bool written, medium;
+    int c;
+
+    if (!usb->inserted) {
+        writes_seen = ~0ul;
+        piece(y, x, x + w, DARK_GRAY, "FLASH.DMP");
+        return;
+    }
+    if ((usb->nr_writes != writes_seen) || (usb->ff_cfg_gen != gen_seen)) {
+        written = usb_written_file("FLASH   DMP");
+        medium = usb_medium_has("FLASH   DMP");
+        writes_seen = usb->nr_writes;
+        gen_seen = usb->ff_cfg_gen;
+    }
+    if (!written && !medium) {
+        piece(y, x, x + w, DARK_GRAY, "FLASH.DMP absent");
+        return;
+    }
+    c = piece(y, x, x + w, BRIGHT(CP_path), "FLASH.DMP ");
+    piece(y, c, x + w, BRIGHT(CP_good), "%s", !written ? "exists on drive"
+          : medium ? "virtual from fw, masks drive's" : "virtual from fw");
 }
 
 static void draw_status(int y, int x, int w)
@@ -945,6 +984,7 @@ static void draw_status(int y, int x, int w)
     }
     left_path(y++, x, w, tilde(usb_path_name, path, sizeof(path)));
     draw_image_a(y++, x, w, &usb);
+    draw_flash_dmp(y++, x, w, &usb);
     /* Why the drive could not be inserted, if it could not, in place of the
      * gap below. */
     if (!usb.inserted && usb.error[0])
@@ -3168,11 +3208,17 @@ static void draw_unpack_dialog(void)
     int text, max, w, h = unpack_overridden ? 11 : 10, y, x;
 
     usb_get_info(&usb);
-    snprintf(from, sizeof(from), "From: %sFLASH.DMP on drive ",
-             usb_ff_folder() ? "FF/" : "");
-    snprintf(drive, sizeof(drive), "%s%s",
-             tilde(usb_path_name, buf, sizeof(buf)),
-             (usb.kind == USB_dir) ? "/" : "");
+    drive[0] = '\0';
+    if (usb_written_file("FLASH   DMP")) {
+        snprintf(from, sizeof(from), "From: FLASH.DMP virtually written by "
+                 "fw");
+    } else {
+        snprintf(from, sizeof(from), "From: %sFLASH.DMP on drive ",
+                 usb_ff_folder() ? "FF/" : "");
+        snprintf(drive, sizeof(drive), "%s%s",
+                 tilde(usb_path_name, buf, sizeof(buf)),
+                 (usb.kind == USB_dir) ? "/" : "");
+    }
     snprintf(rc, sizeof(rc), "%s", tilde(config.path, buf, sizeof(buf)));
 
     text = (strlen(ask) > strlen(note)) ? strlen(ask) : strlen(note);
@@ -3201,6 +3247,24 @@ static void draw_unpack_dialog(void)
     button(y + h - 3, x + w / 2 - 14, button_attr(0), fd_button_text(FV_ok));
     button(y + h - 3, x + w / 2 + 4, button_attr(1),
            fd_button_text(FV_cancel));
+}
+
+/* A warning, as soon as the firmware's main menu has asked for FLASH.DMP,
+ * that one on the drive's medium will not be the one the Flash mem dialog
+ * loads: the firmware writes its own into the store of its writes. */
+static void check_flash_dump(void)
+{
+    static bool pending;
+    bool now = emu_flash_dump_pending();
+
+    if (now && !pending && usb_medium_has("FLASH   DMP"))
+        show_message((dialog == DLG_message) ? msg_return : dialog,
+                     "FLASH.DMP", "The drive holds FLASH.DMP. At the next "
+                     "insertion the firmware writes its own over it, in "
+                     "ffemu's store of its writes only, and Unpack FLASH.DMP "
+                     "to ffemurc in the Flash mem dialog then loads that one, "
+                     "not the drive's.");
+    pending = now;
 }
 
 static void draw_fdfile_dialog(void)
@@ -3906,6 +3970,7 @@ static void *tui_thread(void *unused)
         timeout(FRAME_MS);
 
         ui_poll();
+        check_flash_dump();
         redraw();
     }
 

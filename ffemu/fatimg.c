@@ -1118,11 +1118,24 @@ struct vol {
 
 static bool get_sectors(struct image *im, uint8_t *p, uint32_t sec,
                         unsigned int count);
+/* Sector @sec of a drive made from a directory, as it was built from the
+ * files, without the firmware's writes. */
+static void built_sector(struct image *im, uint32_t sec, uint8_t *buf);
 
 static bool vol_read(struct vol *v, uint8_t *b, uint32_t sec)
 {
-    return v->live ? get_sectors(v->im, b, sec, 1)
-        : dev_read(v->im, b, sec, 1);
+    bool ok = true;
+
+    if (v->live)
+        return get_sectors(v->im, b, sec, 1);
+    /* The medium, which the firmware may be reading meanwhile. */
+    pthread_mutex_lock(&lock);
+    if (v->im->dev_fd >= 0)
+        ok = dev_read(v->im, b, sec, 1);
+    else
+        built_sector(v->im, sec, b);
+    pthread_mutex_unlock(&lock);
+    return ok;
 }
 
 /* As check_fs() of FatFS. */
@@ -1456,10 +1469,15 @@ static void read_sector(struct image *im, uint32_t sec, uint8_t *buf)
 {
     struct overlay *o = ovl_find(im, sec, false);
 
-    if (o != NULL) {
-        if (!store_read(buf, SEC, (off_t)o->rec * REC_SIZE + 4))
-            memset(buf, 0, SEC);
-    } else if (sec < RSVD_SECS) {
+    if (o == NULL)
+        built_sector(im, sec, buf);
+    else if (!store_read(buf, SEC, (off_t)o->rec * REC_SIZE + 4))
+        memset(buf, 0, SEC);
+}
+
+static void built_sector(struct image *im, uint32_t sec, uint8_t *buf)
+{
+    if (sec < RSVD_SECS) {
         memcpy(buf, im->rsvd + sec * SEC, SEC);
     } else if (sec < im->data_start) {
         uint32_t i, first = ((sec - RSVD_SECS) % im->fat_secs) * (SEC/4);
@@ -1656,19 +1674,57 @@ void usb_get_info(struct usb_info *info)
     info->ff_cfg_gen = ff_cfg_gen;
 }
 
-long usb_read_file(const char *name83, void *buf, size_t size)
+/* Opens the volume of drive @im, as the firmware sees it if @live, and
+ * finds the file with short name @name83 in the folder FF, or in the root
+ * if it has no such folder: its directory entry into @e. */
+static bool vol_file(struct vol *v, struct image *im, bool live,
+                     const char *name83, uint8_t *e)
+{
+    uint32_t dir = 0;
+
+    if ((im == NULL) || !vol_open(v, im, live))
+        return false;
+    /* The firmware keeps its files in the folder FF if there is one. */
+    if (vol_find(v, 0, "FF         ", e) && (e[11] & ATTR_DIR))
+        dir = entry_clus(v, e);
+    return vol_find(v, dir, name83, e) && !(e[11] & ATTR_DIR);
+}
+
+bool usb_medium_has(const char *name83)
+{
+    struct vol v;
+    uint8_t e[32];
+
+    return vol_file(&v, (cur != NULL) ? cur : grave, false, name83, e);
+}
+
+bool usb_written_file(const char *name83)
 {
     struct image *im = cur;
     struct vol v;
-    uint8_t e[32], b[SEC];
-    uint32_t clus, dir = 0, len, n, k;
+    uint8_t e[32];
+    uint32_t clus;
+    bool written;
 
-    if ((im == NULL) || !vol_open(&v, im, true))
-        return -1;
-    /* The firmware keeps its files in the folder FF if there is one. */
-    if (vol_find(&v, 0, "FF         ", e) && (e[11] & ATTR_DIR))
-        dir = entry_clus(&v, e);
-    if (!vol_find(&v, dir, name83, e) || (e[11] & ATTR_DIR))
+    if (!vol_file(&v, im, true, name83, e))
+        return false;
+    clus = entry_clus(&v, e);
+    if (clus < 2)
+        return false;
+    /* Its first sector, which the firmware's writes hold if it wrote it. */
+    pthread_mutex_lock(&lock);
+    written = ovl_find(im, v.data + (clus - 2) * v.spc, false) != NULL;
+    pthread_mutex_unlock(&lock);
+    return written;
+}
+
+long usb_read_file(const char *name83, void *buf, size_t size)
+{
+    struct vol v;
+    uint8_t e[32], b[SEC];
+    uint32_t clus, len, n, k;
+
+    if (!vol_file(&v, cur, true, name83, e))
         return -1;
     len = get32(e + 28);
     n = (len < size) ? len : size;

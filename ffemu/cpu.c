@@ -540,6 +540,13 @@ void emu_flash_save(const void *buf, unsigned int size)
     rc_save();
 }
 
+void emu_flash_dumped(int settings)
+{
+    host_log("FLASH.DMP virtually written by fw: %s", settings
+             ? "the flash settings in slot 0, the rest blank"
+             : "no flash settings, all slots blank");
+}
+
 /* @n bytes at @p as hex, into @buf of 2*@n+1 bytes. */
 static void to_hex(char *buf, const void *p, size_t n)
 {

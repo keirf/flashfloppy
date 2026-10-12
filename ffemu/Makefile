@@ -133,12 +133,14 @@ $(OUT)/fw/%.o: $(ROOT)/src/%.c
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
 
-# The firmware's main() must not be the entry point of the program.
+# The firmware's main() must not be the entry point of the program; its flag
+# of a pending FLASH.DMP is made global for stubs.c to see.
 $(OUT)/fw/main.o: $(ROOT)/src/main.c
 	@echo CC main.c
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
-	$(Q)$(OBJCOPY) --redefine-sym main=ff_main $@
+	$(Q)$(OBJCOPY) --redefine-sym main=ff_main \
+	    --globalize-symbol is_dump_flash_cfg_needed $@
 
 # stubs.c wraps these with what ffemu adds to them.
 $(OUT)/fw/floppy.o: $(ROOT)/src/floppy.c

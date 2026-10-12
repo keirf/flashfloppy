@@ -253,6 +253,12 @@ long usb_read_file(const char *name83, void *buf, size_t size);
 /* Whether the drive, as the firmware sees it now, has the folder FF, where
  * the firmware then keeps its files. */
 bool usb_ff_folder(void);
+/* Whether the medium of the drive, or of the last one while it is out,
+ * holds that file, the firmware's writes aside. */
+bool usb_medium_has(const char *name83);
+/* Whether the drive holds that file as the firmware wrote it, its data in
+ * ffemu's store of the firmware's writes. */
+bool usb_written_file(const char *name83);
 /* While the drive is out, usb_get_info() and usb_ff_cfg_text() tell of the
  * FF.CFG of the last drive. */
 /* Where FF.CFG is, or would be, under directory @dir, as a path relative
