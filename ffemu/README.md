@@ -58,12 +58,17 @@ there is none, it says so and asks for a directory, an image or a disk.
 
 The firmware does write to the drive (it keeps the last selected image in
 `IMAGE_A.CFG`, which Status shows as the firmware wrote it, its line ends as
-`\r` and `\n`). Such writes never reach the host files, the image or the disk:
-they go to a temporary file and last until the drive is removed. They survive a
-power cycle, as on a real drive, provided that the files of the directory, or
-the image, have not changed in between. Status names the `FF.CFG` that the
-firmware reads: the one in folder `FF` if the drive has that folder, even when
-that one is missing, else the one in the root; names match in any letter case.
+`\r` and `\n`; and the dump of its flash settings, `FLASH.DMP`, which Status
+then marks as "virtual from fw", adding "masks drive's" when the drive's medium
+holds a `FLASH.DMP` of its own; one only on the medium is marked "exists on
+drive"). Either file's name is dark gray, with "absent", when the firmware sees
+no such file, and alone while the drive is out. Such writes never reach the
+host files, the image or the disk: they go to a temporary file and last until
+the drive is removed. They survive a power cycle, as on a real drive, provided
+that the files of the directory, or the image, have not changed in between.
+Status names the `FF.CFG` that the firmware reads: the one in folder `FF` if
+the drive has that folder, even when that one is missing, else the one in the
+root; names match in any letter case.
 
 A drive made from a directory is meant to be what the firmware would find on a
 real drive with those files copied to it, so the FAT structures follow the
@@ -256,7 +261,10 @@ third, `Unpack FLASH.DMP to ffemurc`, is enabled while the drive holds
 `FLASH.DMP` beside `FF.CFG`: the settings area of a Gotek's flash memory, which
 the firmware writes there, before it reads `FF.CFG`, at the first insertion of
 a drive after "Save FLASH.DMP" in its main menu (a short press of both buttons,
-or of the select button, while no drive is in). The button asks first, naming
+or of the select button, while no drive is in). If the drive's medium holds a
+`FLASH.DMP` of its own, say one from a real Gotek, choosing that item brings a
+warning: the button will load the firmware's dump, which ffemu keeps with the
+firmware's other writes, not the medium's file. The button asks first, naming
 the file it takes and the settings file it writes, with a warning if `FF.CFG`
 on the drive sets some of the dump's options otherwise, which it would then
 override after the restart; then it puts the settings of the slot that the

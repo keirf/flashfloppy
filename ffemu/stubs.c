@@ -199,12 +199,23 @@ const void *flash_ff_cfg_area(void)
     memset(slot, 0, sizeof(*slot));
     if (emu_flash_load(&slot->ff_cfg, sizeof(slot->ff_cfg)) == 0) {
         memset(slot, 0xff, sizeof(*slot));
+        emu_flash_dumped(0);
         return area;
     }
     slot->words[SLOTW_DEAD] = 0xffff;
     crc = crc16_ccitt(slot, sizeof(*slot) - 2, 0xffff);
     slot->words[SLOTW_CRC] = htobe16(crc);
+    emu_flash_dumped(1);
     return area;
+}
+
+/* The flag that the main menu sets for the dump, static in main.c, which
+ * ffemu's build makes global (Makefile). */
+extern bool_t is_dump_flash_cfg_needed;
+
+int emu_flash_dump_pending(void)
+{
+    return is_dump_flash_cfg_needed;
 }
 
 /* The configuration in flash, or FALSE if it holds none. */
