@@ -49,7 +49,7 @@ The firmware's own floppy code, `src/floppy.c` with what it includes, runs in ff
 
 The firmware needs its timers on time to within a millisecond. Where the host sleeps only in coarser steps, as a virtual machine on a Windows host may (4 to 16 ms), ffemu keeps time by spinning, which keeps one CPU core busy, and says so in the console window.
 
-The firmware's console output (normally available in debug builds on the Gotek's UART pins) is shown in the Console pane at the bottom, among ffemu's own lines, which start with `ffemu:`, and also written to `${XDG_STATE_HOME:-~/.local/state}/ffemu/console.log` (all file paths are shown at the bottom of the respective panes). The file is recreated on every start and power cycle; the previous one is kept as `console.bak`, replacing the one before it.
+The firmware's console output (normally available in debug builds on the Gotek's UART pins) is shown in the Console pane at the bottom, among ffemu's own lines, which start with `ffemu:`, and also written to `${XDG_STATE_HOME:-~/.local/state}/ffemu/console.log` (all file paths are shown at the bottom of the respective panes). The file is recreated on every start and power cycle; the previous one is kept as `console.bak`, replacing the one before it. A reset that the firmware does by itself is no power cycle: the file and the pane go on after a green line `======= Firmware reset =======`.
 
 ## Settings
 

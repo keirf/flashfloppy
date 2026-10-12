@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sched.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #ifdef __CYGWIN__
 #include <dlfcn.h>
@@ -449,15 +450,42 @@ void emu_log(const char *s)
     }
 }
 
+/* The tail of console.log at @path into the ring, which shows it again
+ * after a reset of the firmware's own as it did before. */
+static void load_log_tail(const char *path)
+{
+    static char buf[LOG_SIZE];
+    struct stat st;
+    ssize_t n = 0, i;
+    off_t size;
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+
+    if (fd < 0)
+        return;
+    if (fstat(fd, &st) == 0) {
+        size = (st.st_size > LOG_SIZE) ? LOG_SIZE : st.st_size;
+        if (lseek(fd, st.st_size - size, SEEK_SET) >= 0)
+            n = read(fd, buf, size);
+    }
+    close(fd);
+    for (i = 0; i < n; i++)
+        log_ring[log_head++ % LOG_SIZE] = buf[i];
+    if ((n > 0) && (buf[n - 1] != '\n'))
+        emu_log("\n");
+}
+
 /* The console also goes to console.log in ${XDG_STATE_HOME:-~/.local/state}
- * /ffemu/ (or /ffemu-apple2/), begun anew on every start and power cycle;
- * the previous one becomes console.bak, replacing the one before it. */
+ * /ffemu/ (or /ffemu-apple2/), begun anew on every start and power cycle,
+ * the previous one becoming console.bak, replacing the one before it; after
+ * a reset of the firmware's own, both go on after LOG_FW_RESET. */
 static void open_log(void)
 {
     const char *state = getenv("XDG_STATE_HOME"), *home = user_home();
     static char path[600];
     char dir[512], bak[600];
+    bool fw_reset = getenv("FFEMU_FW_RESET") != NULL;
 
+    unsetenv("FFEMU_FW_RESET");
     if ((state != NULL) && (state[0] != '\0'))
         snprintf(dir, sizeof(dir), "%s/" FFEMU_NAME, state);
     else if ((home != NULL) && (home[0] != '\0'))
@@ -468,14 +496,20 @@ static void open_log(void)
 
     snprintf(path, sizeof(path), "%s/console.log", dir);
     snprintf(bak, sizeof(bak), "%s/console.bak", dir);
-    unlink(bak);
-    rename(path, bak);
+    if (!fw_reset) {
+        unlink(bak);
+        rename(path, bak);
+    }
 
-    log_fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND | O_CLOEXEC,
-                  0644);
+    log_fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC
+                  | (fw_reset ? 0 : O_TRUNC), 0644);
     if (log_fd >= 0) {
         own_file(path);
         log_file_name = path;
+    }
+    if (fw_reset) {
+        load_log_tail(path);
+        emu_log(LOG_FW_RESET "\n");
     }
 }
 
@@ -677,6 +711,8 @@ void cpu_request_relaunch(void)
 
 void emu_reset(void)
 {
+    /* The firmware's own reset, which the console goes on through. */
+    setenv("FFEMU_FW_RESET", "1", 1);
     cpu_restart();
 }
 

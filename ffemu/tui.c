@@ -1340,10 +1340,12 @@ static void draw_log(int y, int x, int w, int h)
         char *end = strchr(line, '\n');
         if (end != NULL)
             *end++ = '\0';
-        /* The emulator's own lines in green, the firmware's in yellow. */
-        put_line(y + 1 + row, x + 1, w - 2, false,
-                 strncmp(line, HOST_LOG_PREFIX, strlen(HOST_LOG_PREFIX))
-                 ? CP_value : CP_good, line, strlen(line));
+        /* The emulator's own lines, and the mark of a firmware reset, in
+         * green, the firmware's in yellow. */
+        bool own = !strncmp(line, HOST_LOG_PREFIX, strlen(HOST_LOG_PREFIX))
+            || !strcmp(line, LOG_FW_RESET);
+        put_line(y + 1 + row, x + 1, w - 2, false, own ? CP_good : CP_value,
+                 line, strlen(line));
         line = end;
     }
 }
