@@ -1899,16 +1899,34 @@ static void rows_values(char *now, char *then, size_t size)
     option_value(cfg, "display-type", then, size);
 }
 
+/* Whether FF.CFG on the drive sets option @name otherwise than @cfg has it,
+ * and so would override it on the next boot; its value there into @file. */
+static bool ff_cfg_overrides(const uint8_t *cfg, const char *name,
+                             char *file, size_t size)
+{
+    uint8_t copy[256];
+
+    if (!ff_cfg_file_option(name, file, size))
+        return false;
+    memcpy(copy, cfg, emu_flash_cfg_size());
+    /* A value that the option does not take counts too: the firmware sets
+     * the option to whatever its code makes of it. */
+    return (emu_flash_set_option(copy, name, file) != EMU_SET_ok)
+        || memcmp(copy, cfg, emu_flash_cfg_size());
+}
+
 /* Looks at display-type in FF.CFG on the drive, for the rows dialog: set
- * there to other than @then, it would undo the change on the next boot. */
-static void rows_check_file(const char *then)
+ * there to other than the change, it would undo it on the next boot. */
+static void rows_check_file(void)
 {
     struct usb_info usb;
+    uint8_t cfg[256];
 
     rows_file = ROWS_FILE_none;
-    if (!ff_cfg_file_option("display-type", rows_file_value,
-                            sizeof(rows_file_value))
-        || !strcmp(rows_file_value, then))
+    memcpy(cfg, rows_cfg, sizeof(cfg));
+    fit_display_type(cfg);
+    if (!ff_cfg_overrides(cfg, "display-type", rows_file_value,
+                          sizeof(rows_file_value)))
         return;
     usb_get_info(&usb);
     rows_file = (usb.kind == USB_image) ? ROWS_FILE_image : ROWS_FILE_writable;
@@ -2268,9 +2286,7 @@ static void set_display(int display)
     }
     emu_flash_get(rows_cfg);
     if (!display_type_fits(rows_cfg, display)) {
-        char now[64], then[64];
-        rows_values(now, then, sizeof(now));
-        rows_check_file(then);
+        rows_check_file();
         dialog = DLG_rows;
         dialog_button = 0;
         return;
@@ -2824,17 +2840,15 @@ static int fd_edited(uint8_t *cfg)
 
 /* Writes the dialog's edits into flash; whether any changed it. */
 /* The options OK changes that FF.CFG on the drive sets to another value,
- * which would undo the change on the next boot, for the fdfile dialog; the
- * configuration to write once it has asked what to do about them, and
- * display-type as it was, for the emul dialog. */
+ * which would undo the change on the next boot, all of them, for the
+ * fdfile dialog: their names and new values; the configuration to write
+ * once it has asked what to do about them, and display-type as it was, for
+ * the emul dialog. */
 static bool fd_offer_display(const char *old_type);
 
-#define FDF_MAX 4
-static struct {
-    const char *opt;
-    char value[64], file[64];
-} fdf[FDF_MAX];
-static int fdf_nr;
+static const char *fdf_name[ARRAY_SIZE(fd_opts)];
+static char fdf_value[ARRAY_SIZE(fd_opts)][64];
+static unsigned int fdf_nr;
 static bool fdf_writable;
 static uint8_t fdf_cfg[256];
 static char fdf_old_type[64];
@@ -2842,21 +2856,17 @@ static char fdf_old_type[64];
 static void fd_check_file(const uint8_t *cfg)
 {
     struct usb_info usb;
-    char text[80], value[64], file[64];
+    char text[80], file[512];
     unsigned int i;
 
     fdf_nr = 0;
-    for (i = 0; (i < ARRAY_SIZE(fd_opts)) && (fdf_nr < FDF_MAX); i++) {
+    for (i = 0; i < ARRAY_SIZE(fd_opts); i++) {
         fd_value(fd_opts[i], text, sizeof(text));
-        if (!strcmp(text, fd_orig[i]))
+        if (!strcmp(text, fd_orig[i])
+            || !ff_cfg_overrides(cfg, fd_opts[i], file, sizeof(file)))
             continue;
-        option_value(cfg, fd_opts[i], value, sizeof(value));
-        if (!ff_cfg_file_option(fd_opts[i], file, sizeof(file))
-            || !strcmp(file, value))
-            continue;
-        fdf[fdf_nr].opt = fd_opts[i];
-        snprintf(fdf[fdf_nr].value, sizeof(fdf[fdf_nr].value), "%s", value);
-        snprintf(fdf[fdf_nr].file, sizeof(fdf[fdf_nr].file), "%s", file);
+        fdf_name[fdf_nr] = fd_opts[i];
+        option_value(cfg, fd_opts[i], fdf_value[fdf_nr], sizeof(fdf_value[0]));
         fdf_nr++;
     }
     usb_get_info(&usb);
@@ -2876,18 +2886,17 @@ static void fd_commit(const uint8_t *cfg)
 static void draw_fdfile_dialog(void)
 {
     const char *head = fdf_writable
-        ? "FF.CFG on the drive sets, and would restore on boot:"
-        : "FF.CFG in the drive's image sets, and will restore on boot:";
-    const char *ask = fdf_writable ? "Change it in FF.CFG as well?"
+        ? "FF.CFG on the drive will override some of the new values after "
+          "restart."
+        : "FF.CFG in the drive's image will override some of the new values "
+          "after restart.";
+    const char *ask = fdf_writable ? "Change them in FF.CFG as well?"
         : "Write flash anyway?";
-    int w = strlen(head) + 8, h = 7 + fdf_nr, y, x, i;
+    int w = strlen(head) + 8, h = 8, y, x;
 
     dialog_box(w, h, "Flash mem", &y, &x);
     put(y + 2, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", head);
-    for (i = 0; i < fdf_nr; i++)
-        put(y + 3 + i, x + 6, w - 7, COLOR_PAIR(CP_dialog), "%s = %s",
-            fdf[i].opt, fdf[i].file);
-    put(y + 3 + fdf_nr, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", ask);
+    put(y + 3, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", ask);
     button(y + h - 3, x + w / 2 - 12, button_attr(0),
            fdf_writable ? "  Yes  " : "  OK  ");
     button(y + h - 3, x + w / 2 + 4, button_attr(1),
@@ -3365,13 +3374,14 @@ static void handle_key(int key)
     case DK_emul_no:
         leave(KEY_ACT_reset);
     case DK_fdfile_yes: {
+        const char *values[ARRAY_SIZE(fd_opts)];
         char msg[160];
-        int i;
+        unsigned int i;
         if (fdf_writable) {
-            for (i = 0; i < fdf_nr; i++) {
-                ff_cfg_set_option(fdf[i].opt, fdf[i].value, msg, sizeof(msg));
-                host_log("%s", msg);
-            }
+            for (i = 0; i < fdf_nr; i++)
+                values[i] = fdf_value[i];
+            ff_cfg_set_options(fdf_name, values, fdf_nr, msg, sizeof(msg));
+            host_log("%s", msg);
         }
         fd_commit(fdf_cfg);
         return;
