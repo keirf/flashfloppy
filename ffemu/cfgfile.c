@@ -7,7 +7,8 @@
  * from the firmware's example FF.CFG, which documents each option above its
  * line, with the values taken from flash; the previous file is kept as
  * FF.CFG.BAK. A drive made from a directory is written in that directory;
- * a real drive where the system has it mounted; an image file not at all.
+ * a real drive where the system has it mounted; for an image file, which
+ * is never written, a file beside it takes the text.
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
@@ -117,29 +118,54 @@ static unsigned int generate(FILE *f, const uint8_t *cfg,
 }
 
 /* Where the drive's FF.CFG is, or would be, on the system: its directory
- * @dir and its place @place in it, "FF.CFG" or in the FF folder; false,
- * with the reason in @msg, for an image or a disk the system has not
- * mounted. */
+ * @dir and its place @place in it, "FF.CFG" or in the FF folder; for an
+ * image, if @beside_image, the image's directory and its name followed by
+ * ".FF.CFG"; false, with the reason in @msg, for an image otherwise or a
+ * disk the system has not mounted. */
 static bool ff_cfg_where(char *dir, size_t dsize, char *place, size_t psize,
-                         char *msg, size_t size)
+                         bool beside_image, char *msg, size_t size)
 {
     struct usb_info usb;
+    const char *name;
 
     usb_get_info(&usb);
-    if (usb.kind == USB_dir) {
+    if (usb.kind == USB_image) {
+        if (!beside_image) {
+            snprintf(msg, size, "FF.CFG cannot be written into an image "
+                     "file");
+            return false;
+        }
+        name = strrchr(usb_path_name, '/');
+        name = (name != NULL) ? name + 1 : usb_path_name;
+        snprintf(dir, dsize, "%.*s", (int)(name - usb_path_name),
+                 usb_path_name);
+        snprintf(place, psize, "%s.FF.CFG", name);
+    } else if (usb.kind == USB_dir) {
         snprintf(dir, dsize, "%s", usb_path);
-    } else if (usb.kind == USB_image) {
-        snprintf(msg, size, "FF.CFG cannot be written into an image file");
-        return false;
-    } else if (!usb_disk_mount(usb_path, dir, dsize)) {
+        usb_ff_cfg_place(dir, place, psize);
+    } else if (usb_disk_mount(usb_path, dir, dsize)) {
+        usb_ff_cfg_place(dir, place, psize);
+    } else {
         snprintf(msg, size, "%s is not mounted by the system; mount it, and "
                  "FF.CFG is written there", usb_path);
         return false;
     }
-    usb_ff_cfg_place(dir, place, psize);
-    /* A mount point may end in a slash already, as "J:/" does. */
-    if (dir[strlen(dir) - 1] == '/')
+    /* A directory may end in a slash already, as "J:/" does. */
+    if ((dir[0] != '\0') && (dir[strlen(dir) - 1] == '/'))
         dir[strlen(dir) - 1] = '\0';
+    return true;
+}
+
+bool ff_cfg_target(char *dir, size_t dsize, char *place, size_t psize,
+                   bool *exists, char *msg, size_t size)
+{
+    char path[4600];
+    struct stat st;
+
+    if (!ff_cfg_where(dir, dsize, place, psize, true, msg, size))
+        return false;
+    snprintf(path, sizeof(path), "%s/%s", dir, place);
+    *exists = (stat(path, &st) == 0);
     return true;
 }
 
@@ -172,12 +198,13 @@ static bool replace_file(const char *path, const char *tmp, const char *bak,
 bool ff_cfg_write(const void *cfg, bool all, char *msg, size_t size)
 {
     uint8_t flash[256];
-    char place[16], dir[4000], path[4096], tmp[4104], bak[4104];
+    char place[512], dir[4000], path[4600], tmp[4608], bak[4608];
     bool had_old;
     unsigned int nr;
     FILE *f;
 
-    if (!ff_cfg_where(dir, sizeof(dir), place, sizeof(place), msg, size))
+    if (!ff_cfg_where(dir, sizeof(dir), place, sizeof(place), true, msg,
+                      size))
         return false;
     snprintf(path, sizeof(path), "%s/%s", dir, place);
     snprintf(tmp, sizeof(tmp), "%s.new", path);
@@ -252,14 +279,17 @@ bool ff_cfg_set_options(const char *const *names, const char *const *values,
                         unsigned int nr, char *msg, size_t size)
 {
     static char text[65536];
-    char place[16], dir[4000], path[4096], tmp[4104], bak[4104], lname[32];
+    char place[512], dir[4000], path[4600], tmp[4608], bak[4608], lname[32];
     const char *p, *end;
     unsigned int k, nr_set = 0;
     bool had_old, set[nr ? nr : 1];
     size_t n;
     FILE *f;
 
-    if (!ff_cfg_where(dir, sizeof(dir), place, sizeof(place), msg, size))
+    /* The drive's own file only: one beside an image is not what the
+     * firmware reads. */
+    if (!ff_cfg_where(dir, sizeof(dir), place, sizeof(place), false, msg,
+                      size))
         return false;
     snprintf(path, sizeof(path), "%s/%s", dir, place);
     snprintf(tmp, sizeof(tmp), "%s.new", path);

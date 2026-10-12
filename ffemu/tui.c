@@ -140,7 +140,7 @@ enum {
  * and the display that the display dialog has selected. */
 static enum {
     DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul,
-    DLG_message, DLG_fdfile, DLG_unpack
+    DLG_message, DLG_fdfile, DLG_unpack, DLG_write
 } dialog;
 /* The message box over a dialog: what it says, and the dialog it returns
  * to when closed. */
@@ -157,6 +157,7 @@ enum { DF_display, DF_rom, DF_synth, DF_ok, DF_cancel, DF_nr };
 static void draw_dialog(void);
 static void draw_fdfile_dialog(void);
 static void draw_unpack_dialog(void);
+static void draw_write_dialog(void);
 static void draw_flash_dialog(void);
 
 #define FRAME_MS 20
@@ -2172,6 +2173,10 @@ static void draw_dialog(void)
         draw_flash_dialog();
         draw_unpack_dialog();
         break;
+    case DLG_write:
+        draw_flash_dialog();
+        draw_write_dialog();
+        break;
     case DLG_message:
         /* Over the dialog it came from. */
         if (msg_return == DLG_flash)
@@ -2184,7 +2189,8 @@ static void draw_dialog(void)
 /* What a key did in a dialog. */
 enum {
     DK_none, DK_taken, DK_quit, DK_display, DK_rows_yes, DK_rows_no,
-    DK_emul_yes, DK_emul_no, DK_fdfile_yes, DK_fdfile_no, DK_unpack
+    DK_emul_yes, DK_emul_no, DK_fdfile_yes, DK_fdfile_no, DK_unpack,
+    DK_write
 };
 
 /* The Display type dialog's keys: Tab and Shift+Tab move the focus over
@@ -2270,12 +2276,14 @@ static int dialog_key(int key)
         return (dialog_button == 0) ? DK_fdfile_yes : DK_fdfile_no;
     }
 
-    /* The unpack dialog goes back to the Flash mem dialog unless OK. */
-    if (dialog == DLG_unpack) {
+    /* The unpack and write dialogs go back to the Flash mem dialog unless
+     * OK. */
+    if ((dialog == DLG_unpack) || (dialog == DLG_write)) {
+        int done = (dialog == DLG_unpack) ? DK_unpack : DK_write;
         if ((key != 27) && (key != '\n'))
             return DK_taken;
         dialog = DLG_flash;
-        return ((key == '\n') && (dialog_button == 0)) ? DK_unpack : DK_taken;
+        return ((key == '\n') && (dialog_button == 0)) ? done : DK_taken;
     }
 
     /* The rows and emul dialogs have no way back: the display or the flash
@@ -3192,20 +3200,58 @@ static void fd_load_dump(void)
     fd_write(cfg, true);
 }
 
+/* A line of a question box: @text, then @path if not NULL, shortened at
+ * its left with "..." to fit, in @attr. */
+struct qline {
+    const char *text, *path;
+    attr_t attr;
+};
+
+/* A question with OK and Cancel over the dialog under it: @title and @nr
+ * lines, the box as wide as the longest line, if the window allows. */
+static void question_box(const char *title, const struct qline *l, int nr)
+{
+    int text = 0, max, w, h = nr + 6, y, x, i, n;
+
+    for (i = 0; i < nr; i++) {
+        n = strlen(l[i].text) + (l[i].path ? path_cols(l[i].path) : 0);
+        if (n > text)
+            text = n;
+    }
+    max = (COLS - 12 < 16) ? 16 : COLS - 12;
+    if (text > max)
+        text = max;
+    w = (text + 8 < 32) ? 32 : text + 8;
+
+    dialog_box(w, h, title, &y, &x);
+    for (i = 0; i < nr; i++) {
+        put(y + 2 + i, x + 4, w - 5, l[i].attr, "%s", l[i].text);
+        if (l[i].path != NULL)
+            dots_path(y + 2 + i, x + 4 + strlen(l[i].text),
+                      text - strlen(l[i].text), l[i].attr, l[i].path);
+    }
+    button(y + h - 3, x + w / 2 - 14, button_attr(0), fd_button_text(FV_ok));
+    button(y + h - 3, x + w / 2 + 4, button_attr(1),
+           fd_button_text(FV_cancel));
+}
+
 /* The question of the Unpack button, over the Flash mem dialog: what is
  * unpacked, from where, to where, and what follows; and a warning in dark
  * red if FF.CFG on the drive would override some of it. */
 static void draw_unpack_dialog(void)
 {
-    static const char ask[] = "Unpack flash mem dump into emulated flash mem?";
-    static const char note[] = "The dialog's edits are dropped; the device "
-        "restarts.";
-    static const char warn[] = "FF.CFG on the drive will then override some "
-        "of these options after restart.";
-    static const char to[] = "To: [Flash mem] in ";
     struct usb_info usb;
     char from[48], drive[600], buf[600], rc[600];
-    int text, max, w, h = unpack_overridden ? 11 : 10, y, x;
+    const struct qline l[] = {
+        { "Unpack flash mem dump into emulated flash mem?", NULL,
+          COLOR_PAIR(CP_dialog) },
+        { from, drive, COLOR_PAIR(CP_dialog) },
+        { "To: [Flash mem] in ", rc, COLOR_PAIR(CP_dialog) },
+        { "The dialog's edits are dropped; the device restarts.", NULL,
+          COLOR_PAIR(CP_dialog) },
+        { "FF.CFG on the drive will then override some of these options "
+          "after restart.", NULL, COLOR_PAIR(CP_dlg_hot) }
+    };
 
     usb_get_info(&usb);
     drive[0] = '\0';
@@ -3220,33 +3266,72 @@ static void draw_unpack_dialog(void)
                  (usb.kind == USB_dir) ? "/" : "");
     }
     snprintf(rc, sizeof(rc), "%s", tilde(config.path, buf, sizeof(buf)));
+    question_box("Unpack FLASH.DMP", l, unpack_overridden ? 5 : 4);
+}
 
-    text = (strlen(ask) > strlen(note)) ? strlen(ask) : strlen(note);
-    if (unpack_overridden && ((int)strlen(warn) > text))
-        text = strlen(warn);
-    if ((int)strlen(from) + path_cols(drive) > text)
-        text = strlen(from) + path_cols(drive);
-    if ((int)strlen(to) + path_cols(rc) > text)
-        text = strlen(to) + path_cols(rc);
-    max = (COLS - 12 < 16) ? 16 : COLS - 12;
-    if (text > max)
-        text = max;
-    w = (text + 8 < 32) ? 32 : text + 8;
+/* The question before a Save button writes FF.CFG beside the image that
+ * the drive is made from: the button, the file's path, and whether a file
+ * is there already. */
+static int write_kind;
+static char write_path[4600];
+static bool write_exists;
 
-    dialog_box(w, h, "Unpack FLASH.DMP", &y, &x);
-    put(y + 2, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", ask);
-    put(y + 3, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", from);
-    dots_path(y + 3, x + 4 + strlen(from), text - strlen(from),
-              COLOR_PAIR(CP_dialog), drive);
-    put(y + 4, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", to);
-    dots_path(y + 4, x + 4 + strlen(to), text - strlen(to),
-              COLOR_PAIR(CP_dialog), rc);
-    put(y + 5, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", note);
-    if (unpack_overridden)
-        put(y + 6, x + 4, w - 5, COLOR_PAIR(CP_dlg_hot), "%s", warn);
-    button(y + h - 3, x + w / 2 - 14, button_attr(0), fd_button_text(FV_ok));
-    button(y + h - 3, x + w / 2 + 4, button_attr(1),
-           fd_button_text(FV_cancel));
+static void draw_write_dialog(void)
+{
+    char buf[4600];
+    const struct qline l[] = {
+        { (write_kind == FV_save_all)
+          ? "Save all options to a file next to the image?"
+          : "Save the options that differ from flash to a file next to the "
+            "image?", NULL, COLOR_PAIR(CP_dialog) },
+        { "To: ", tilde(write_path, buf, sizeof(buf)), COLOR_PAIR(CP_dialog) },
+        { "The drive is an image, which ffemu never writes: the firmware "
+          "will not see this file.", NULL, COLOR_PAIR(CP_dialog) },
+        { "The one there now is kept as .BAK.", NULL, COLOR_PAIR(CP_dialog) }
+    };
+
+    question_box((write_kind == FV_save_all) ? "Save all to FF.CFG"
+                 : "Save diff-from-flash to FF.CFG", l, write_exists ? 4 : 3);
+}
+
+/* Writes FF.CFG as Save button @kind asks: what the dialog shows, edits
+ * included, and nothing else moves: flash waits for OK, and the firmware
+ * reads the file when the drive is next inserted. */
+static void fd_save(int kind)
+{
+    uint8_t cfg[256];
+
+    if (fd_edited(cfg) < 0)
+        return;
+    if (!ff_cfg_write(cfg, kind == FV_save_all, fd_note, sizeof(fd_note))) {
+        show_message(DLG_flash, "FF.CFG", fd_note);
+        fd_note[0] = '\0';
+        return;
+    }
+    host_log("%s", fd_note);
+}
+
+/* Save button @kind pressed: FF.CFG written at once, or, for a drive made
+ * from an image, beside it once the write dialog has asked. */
+static void fd_ask_write(int kind)
+{
+    struct usb_info usb;
+    char dir[4000], place[512], msg[160];
+
+    usb_get_info(&usb);
+    if (usb.kind != USB_image) {
+        fd_save(kind);
+        return;
+    }
+    if (!ff_cfg_target(dir, sizeof(dir), place, sizeof(place), &write_exists,
+                       msg, sizeof(msg))) {
+        show_message(DLG_flash, "FF.CFG", msg);
+        return;
+    }
+    snprintf(write_path, sizeof(write_path), "%s/%s", dir, place);
+    write_kind = kind;
+    dialog = DLG_write;
+    dialog_button = 0;
 }
 
 /* A warning, as soon as the firmware's main menu has asked for FLASH.DMP,
@@ -3387,18 +3472,7 @@ static void fd_key(int key)
             return;
         }
         if ((v->type == FV_save_all) || (v->type == FV_save_changed)) {
-            /* The file says what the dialog shows, edits included, and
-             * nothing else moves: flash waits for OK, and the firmware
-             * reads the file when the drive is next inserted. */
-            if (fd_edited(cfg) < 0)
-                return;
-            if (!ff_cfg_write(cfg, v->type == FV_save_all, fd_note,
-                              sizeof(fd_note))) {
-                show_message(DLG_flash, "FF.CFG", fd_note);
-                fd_note[0] = '\0';
-                return;
-            }
-            host_log("%s", fd_note);
+            fd_ask_write(v->type);
             return;
         }
         emu_flash_get(cfg);
@@ -3801,6 +3875,9 @@ static void handle_key(int key)
         return;
     case DK_unpack:
         fd_load_dump();
+        return;
+    case DK_write:
+        fd_save(write_kind);
         return;
     }
 
