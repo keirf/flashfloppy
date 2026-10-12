@@ -250,14 +250,16 @@ the flash memory over what was there before.
 The dialog's buttons `Save all to FF.CFG` and `Save diff-from-flash to FF.CFG`
 write `FF.CFG` on the USB drive, into its `FF` folder if it has one, in the
 directory a drive was made from, or on a real drive where the system has it
-mounted (not into an image file): the firmware's example `FF.CFG` with the
-values as the dialog shows them, edits included, every option or only those
-that differ from what flash holds (the firmware keeps the flash value of an
-option a file does not name), each below its comments; the previous file is
-kept as `FF.CFG.BAK`. Nothing else happens: the dialog stays open, flash
-changes only on OK, and the firmware reads the file when the drive is next
-inserted or the device restarts; the bottom line says what was written. The
-third, `Unpack FLASH.DMP to ffemurc`, is enabled while the drive holds
+mounted; for a drive made from an image file, which ffemu never writes, they
+ask first and write a file beside the image instead, named as the image with
+`.FF.CFG` appended, which the firmware does not see: the firmware's example
+`FF.CFG` with the values as the dialog shows them, edits included, every option
+or only those that differ from what flash holds (the firmware keeps the flash
+value of an option a file does not name), each below its comments; the previous
+file is kept as `FF.CFG.BAK`. Nothing else happens: the dialog stays open,
+flash changes only on OK, and the firmware reads the file when the drive is
+next inserted or the device restarts; the bottom line says what was written.
+The third, `Unpack FLASH.DMP to ffemurc`, is enabled while the drive holds
 `FLASH.DMP` beside `FF.CFG`: the settings area of a Gotek's flash memory, which
 the firmware writes there, before it reads `FF.CFG`, at the first insertion of
 a drive after "Save FLASH.DMP" in its main menu (a short press of both buttons,
