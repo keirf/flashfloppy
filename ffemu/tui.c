@@ -1239,7 +1239,7 @@ static void draw_keys(int y, int x, int w)
 }
 
 /*
- * The firmware console window.
+ * The Console window: the firmware's console output, and ffemu's own lines.
  */
 
 /* File @name in the bottom left corner of a frame at (@y,@x) of @w, in
@@ -1316,7 +1316,7 @@ static void draw_log(int y, int x, int w, int h)
 
     if ((rows < 1) || (w < 8))
         return;
-    frame(y, x, w, h, "Firmware console", COLOR_PAIR(CP_text),
+    frame(y, x, w, h, "Console", COLOR_PAIR(CP_text),
           COLOR_PAIR(CP_text));
     path_label(y + h - 1, x, w, COLOR_PAIR(CP_text), log_file_name);
 
