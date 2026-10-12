@@ -1369,6 +1369,22 @@ static void process_ff_cfg_opts(const struct ff_cfg *old)
         system_reset(); /* hit it with a hammer */
 }
 
+/* Set from the main menu: the Flash configuration area is written to
+ * FLASH.DMP when a drive is next mounted. */
+static bool_t is_dump_flash_cfg_needed;
+
+/* Writes FLASH.DMP into the folder of FF.CFG, as Flash is before FF.CFG
+ * can change it, if the main menu asked for it. */
+static void dump_flash_cfg(void)
+{
+    if (!is_dump_flash_cfg_needed)
+        return;
+    is_dump_flash_cfg_needed = FALSE;
+    F_open(&fs->file, "FLASH.DMP", FA_CREATE_ALWAYS|FA_WRITE);
+    F_write(&fs->file, flash_ff_cfg_area(), FLASH_PAGE_SIZE, NULL);
+    F_close(&fs->file);
+}
+
 static void cfg_init(void)
 {
     struct ff_cfg old_ff_cfg = ff_cfg;
@@ -1387,6 +1403,8 @@ static void cfg_init(void)
 
     fr = f_chdir("FF");
     cfg.cfg_cdir = fatfs.cdir;
+
+    dump_flash_cfg();
 
     memset(&cfg.imgcfg, 0, sizeof(cfg.imgcfg));
     fr = F_try_open(&fs->file, "IMG.CFG", FA_READ);
@@ -2955,6 +2973,7 @@ static void main_menu(void)
         "Factory Reset",
         "Update Firmware",
         "Configure FF OSD",
+        "Save FLASH.DMP",
         "Exit",
     };
 
@@ -3011,7 +3030,13 @@ static void main_menu(void)
             case 3: /* Configure FF OSD */
                 ff_osd_configure();
                 break;
-            case 4: /* Exit */
+            case 4: /* Save FLASH.DMP */
+                /* Written once a drive is mounted, which none is now. */
+                is_dump_flash_cfg_needed = TRUE;
+                lcd_write(0, 1, -1, "Insert USB drive");
+                delay_ms(1500);
+                goto out;
+            case 5: /* Exit */
                 goto out;
             }
         }

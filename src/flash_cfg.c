@@ -137,6 +137,11 @@ void flash_ff_cfg_read(void)
     }
 }
 
+const void *flash_ff_cfg_area(void)
+{
+    return SLOT_BASE;
+}
+
 /*
  * Local variables:
  * mode: C
