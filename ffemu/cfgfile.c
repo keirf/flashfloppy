@@ -232,28 +232,31 @@ bool ff_cfg_file_option(const char *name, char *value, size_t size)
     static char text[65536];
     const char *p;
     char lname[32];
+    bool found = false;
 
     if (!usb_read_text("FF      CFG", text, sizeof(text)))
         return false;
+    /* The last line counts, as the firmware reads them all in turn. */
     for (p = text; *p != '\0'; p += strcspn(p, "\n"), p += (*p == '\n')) {
         size_t len = strcspn(p, "\n");
         if (option_line(p, len, lname, sizeof(lname))
             && !strcmp(lname, name)) {
             line_value(p, len, value, size);
-            return true;
+            found = true;
         }
     }
-    return false;
+    return found;
 }
 
-bool ff_cfg_set_option(const char *name, const char *value, char *msg,
-                       size_t size)
+bool ff_cfg_set_options(const char *const *names, const char *const *values,
+                        unsigned int nr, char *msg, size_t size)
 {
     static char text[65536];
     char place[16], dir[4000], path[4096], tmp[4104], bak[4104], lname[32];
-    const char *p;
+    const char *p, *end;
+    unsigned int k, nr_set = 0;
+    bool had_old, set[nr ? nr : 1];
     size_t n;
-    bool had_old, found = false;
     FILE *f;
 
     if (!ff_cfg_where(dir, sizeof(dir), place, sizeof(place), msg, size))
@@ -267,43 +270,64 @@ bool ff_cfg_set_option(const char *name, const char *value, char *msg,
         snprintf(msg, size, "%s: %s", path, strerror(errno));
         return false;
     }
-    n = fread(text, 1, sizeof(text) - 1, f);
+    n = fread(text, 1, sizeof(text), f);
     fclose(f);
-    text[n] = '\0';
+    if (n == sizeof(text)) {
+        snprintf(msg, size, "%s is too long to rewrite", path);
+        return false;
+    }
+    end = text + n;
 
     f = fopen(tmp, "wb");
     if (f == NULL) {
         snprintf(msg, size, "%s: %s", tmp, strerror(errno));
         return false;
     }
-    /* The option's line rewritten, with the line end it had; the rest as
-     * it is. */
-    for (p = text; *p != '\0'; p += strcspn(p, "\n"), p += (*p == '\n')) {
-        size_t len = strcspn(p, "\n");
-        bool nl = (p[len] == '\n');
-        if (!found && option_line(p, len, lname, sizeof(lname))
-            && !strcmp(lname, name)) {
-            bool cr = len && (p[len - 1] == '\r');
-            fprintf(f, "%s = %s%s%s", name, value, cr ? "\r" : "",
-                    nl ? "\n" : "");
-            found = true;
+    /* Every line of each option rewritten, with the line end it had, since
+     * the firmware takes the last; the rest as it is. */
+    memset(set, 0, sizeof(set));
+    for (p = text; p < end; ) {
+        const char *nl = memchr(p, '\n', end - p);
+        size_t len = (nl != NULL) ? (size_t)(nl - p) : (size_t)(end - p);
+        bool cr = len && (p[len - 1] == '\r');
+        k = nr;
+        if (option_line(p, len, lname, sizeof(lname)))
+            for (k = 0; (k < nr) && strcmp(lname, names[k]); k++)
+                continue;
+        if (k < nr) {
+            fprintf(f, "%s = %s%s%s", names[k], values[k], cr ? "\r" : "",
+                    (nl != NULL) ? "\n" : "");
+            nr_set += !set[k];
+            set[k] = true;
         } else {
-            fwrite(p, 1, len + nl, f);
+            fwrite(p, 1, len + (nl != NULL), f);
         }
+        p += len + (nl != NULL);
     }
     if (fclose(f) != 0) {
         snprintf(msg, size, "%s: %s", tmp, strerror(errno));
         remove(tmp);
         return false;
     }
-    if (!found) {
+    if (nr_set == 0) {
         remove(tmp);
-        snprintf(msg, size, "%s/%s has no %s line", dir, place, name);
+        snprintf(msg, size, "%s/%s has no line for %s", dir, place,
+                 (nr == 1) ? names[0] : "any of those options");
         return false;
     }
     if (!replace_file(path, tmp, bak, &had_old, msg, size))
         return false;
-    snprintf(msg, size, "%s/%s: %s = %s%s", dir, place, name, value,
-             had_old ? ", the old file kept as .BAK" : "");
+    if (nr == 1)
+        snprintf(msg, size, "%s/%s: %s = %s%s", dir, place, names[0],
+                 values[0], had_old ? ", the old file kept as .BAK" : "");
+    else
+        snprintf(msg, size, "%s/%s: %u options set%s", dir, place, nr_set,
+                 had_old ? ", the old file kept as .BAK" : "");
     return true;
+}
+
+bool ff_cfg_set_option(const char *name, const char *value, char *msg,
+                       size_t size)
+{
+    return ff_cfg_set_options(&name, &value, 1, msg, size);
 }
