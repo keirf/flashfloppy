@@ -87,11 +87,11 @@ enum {
     CP_off,       /* light gray on dark gray: a window with nothing to show */
     CP_scroll,    /* blue on cyan: a scroll bar */
     CP_raw,       /* bright magenta on blue: flash bytes FF.CFG cannot say */
-    CP_bar_crop,  /* bright green on light gray: the status line is cut */
-    CP_dlg_hot,   /* bright red on light gray: a hotkey in a dialog */
+    CP_bar_crop,  /* green on light gray: Flash mem note; bright: line cut */
+    CP_dlg_hot,   /* dark red on light gray: a hotkey in a dialog */
     CP_cluster,   /* black on cyan: radio buttons and check boxes */
     CP_cluster_hi, /* bright white on cyan: the one of them in focus */
-    CP_cluster_hot, /* bright red on cyan: a hotkey among them */
+    CP_cluster_hot, /* dark red on cyan: a hotkey among them */
     CP_cluster_off, /* light gray on dark gray: them, disabled */
     CP_dlg_off,   /* dark gray on light gray: a disabled control's label */
     CP_dlg_help,  /* blue on light gray: the help of the control in focus */
@@ -1762,11 +1762,18 @@ static void draw_message_box(void)
             lines[i]);
 }
 
-/* The face of button @nr of a dialog: green, or white when highlighted. */
+/* The face of a button: its text bright white when it has the focus, else
+ * light cyan if it is the default one, which Enter presses, else black. */
+static attr_t button_face(bool focused, bool dflt)
+{
+    return focused ? BRIGHT(CP_button_on)
+        : dflt ? BRIGHT(CP_button_def) : COLOR_PAIR(CP_button);
+}
+
+/* The face of button @nr of a dialog of buttons alone. */
 static attr_t button_attr(int nr)
 {
-    return (dialog_button == nr) ? BRIGHT(CP_button_on)
-        : COLOR_PAIR(CP_button);
+    return button_face(dialog_button == nr, false);
 }
 
 static void draw_quit_dialog(void)
@@ -1820,8 +1827,11 @@ static void draw_display_dialog(void)
                   lcd_rom_label[i]);
     put(y + DISP_nr + LCD_ROM_nr + 5, x + 3, w - 4, COLOR_PAIR(CP_dialog),
         "%s", "Changing the display restarts the device.");
-    button(y + h - 4, x + 10, button_attr(0), "  OK  ");
-    button(y + h - 4, x + w - 10 - 10, button_attr(1), "  Cancel  ");
+    /* OK is the default while the focus is on no button. */
+    button(y + h - 4, x + 10,
+           button_face(dialog_focus == DF_ok, dialog_focus < DF_ok), "  OK  ");
+    button(y + h - 4, x + w - 10 - 10,
+           button_face(dialog_focus == DF_cancel, false), "  Cancel  ");
     if (dialog_focus == DF_rom)
         put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
             lcd_rom_help[dialog_lcd_rom]);
@@ -2274,7 +2284,8 @@ static void set_display(int display)
 
 enum { FV_radio, FV_check, FV_input, FV_ok, FV_cancel, FV_save_all,
        FV_save_changed };
-/* The buttons, the last entries of fviews[], on one row. */
+/* The buttons, the last entries of fviews[], in the order of Tab: the two
+ * FF.CFG ones, which stand above, then OK and Cancel. */
 #define FD_BUTTONS 4
 
 /* The width of each column, so that the dialog with its shadow fits 99
@@ -2383,13 +2394,6 @@ static struct fview {
       "Beep the floppy number when a floppy is inserted: long beeps count as "
       "5, short - as 1",
       { "slotnr" }, false, true },
-    { FV_ok, 0, NULL, NULL,
-      "Write the changed options into flash and power-cycle; FF.CFG on the "
-      "drive is checked first",
-      { NULL }, false, false },
-    { FV_cancel, 0, NULL, NULL,
-      "Close without writing anything; flash and FF.CFG stay as they are",
-      { NULL }, false, false },
     { FV_save_all, 0, NULL, NULL,
       "Write all options to FF.CFG on the USB drive as shown, old one kept "
       "as .BAK; flash unchanged",
@@ -2397,6 +2401,13 @@ static struct fview {
     { FV_save_changed, 0, NULL, NULL,
       "Write the options that differ from flash to FF.CFG, old one kept as "
       ".BAK; flash unchanged",
+      { NULL }, false, false },
+    { FV_ok, 0, NULL, NULL,
+      "Write the changed options into flash and power-cycle; FF.CFG on the "
+      "drive is checked first",
+      { NULL }, false, false },
+    { FV_cancel, 0, NULL, NULL,
+      "Close without writing anything; flash and FF.CFG stay as they are",
       { NULL }, false, false }
 };
 #define FD_NR ARRAY_SIZE(fviews)
@@ -2718,13 +2729,13 @@ static void fd_layout(void)
         fd_h += col_y[2] - n;
         n = col_y[2];
     }
-    fviews[FD_NR - 4].y = fviews[FD_NR - 3].y = fd_h - 4;
-    fviews[FD_NR - 4].x = fd_w / 2 - 14;
-    fviews[FD_NR - 3].x = fd_w / 2 + 4;
-    fviews[FD_NR - 2].y = n;
-    fviews[FD_NR - 1].y = n + 2;
-    fviews[FD_NR - 2].x = fviews[FD_NR - 1].x =
+    fviews[FD_NR - 4].y = n;
+    fviews[FD_NR - 3].y = n + 2;
+    fviews[FD_NR - 4].x = fviews[FD_NR - 3].x =
         fd_w - 3 - strlen(fd_button_text(FV_save_changed));
+    fviews[FD_NR - 2].y = fviews[FD_NR - 1].y = fd_h - 4;
+    fviews[FD_NR - 2].x = fd_w / 2 - 14;
+    fviews[FD_NR - 1].x = fd_w / 2 + 4;
 }
 
 static void fd_open(void)
@@ -3181,7 +3192,7 @@ static void draw_flash_dialog(void)
         case FV_check:
             if (v->label)
                 put_marked(y++, x, FD_W(v), label,
-                           off ? label : BRIGHT(CP_dlg_hot), v->label);
+                           off ? label : COLOR_PAIR(CP_dlg_hot), v->label);
             for (r = 0; r < fd_rows(v); r++, y++) {
                 int k = (v->type == FV_radio) ? r : fd_item_of_row(v, r);
                 item = off ? COLOR_PAIR(CP_cluster_off) | dim
@@ -3202,7 +3213,7 @@ static void draw_flash_dialog(void)
                 }
                 if (k < fd_nr_items(v))
                     put_marked(y, x + 5, FD_W(v) - 6, item,
-                               off ? item : BRIGHT(CP_cluster_hot),
+                               off ? item : COLOR_PAIR(CP_cluster_hot),
                                v->items[k]);
                 else
                     put(y, x + 5, FD_W(v) - 6, item, "%s (from flash)",
@@ -3217,34 +3228,31 @@ static void draw_flash_dialog(void)
             int len = strlen(v->text);
             const char *t = v->text + ((len > room) ? len - room : 0);
             put_marked(y, x, fd_field[v->col] - 1, label,
-                       BRIGHT(CP_dlg_hot), v->label);
+                       COLOR_PAIR(CP_dlg_hot), v->label);
             put(y, fx, fw, BRIGHT(CP_input), " %-*s", fw - 1, t);
             if (focused)
                 put(y, fx + 1 + strlen(t), 1, COLOR_PAIR(CP_ctl_on), " ");
             break;
         }
         case FV_ok:
-            /* The default button, unless another button has the focus. */
-            button(y, x, focused ? BRIGHT(CP_button_on)
-                   : fd_is_button(fd_focus) ? COLOR_PAIR(CP_button)
-                   : BRIGHT(CP_button_def), fd_button_text(v->type));
-            break;
         case FV_cancel:
         case FV_save_all:
-        case FV_save_changed:
-            button(y, x, focused ? BRIGHT(CP_button_on)
-                   : COLOR_PAIR(CP_button), fd_button_text(v->type));
+        case FV_save_changed: {
+            /* OK is the default while the focus is on no button. */
+            bool dflt = (v->type == FV_ok) && !fd_is_button(fd_focus);
+            button(y, x, button_face(focused, dflt), fd_button_text(v->type));
             break;
+        }
         }
     }
 
     /* What the control in focus is, on the dialog's last row; or what the
-     * last Save did, in green. A text too long for the row is cut at the
-     * frame, where a bright green mark says so, as in the panes. */
+     * last Save did, in dark green. A text too long for the row is cut at
+     * the frame, where a bright green mark says so, as in the panes. */
     {
         const char *t = fd_note[0] ? fd_note : fd_help();
         int hy = y0 + fd_h - 2, room = fd_w - 3;
-        put(hy, x0 + 2, room, fd_note[0] ? BRIGHT(CP_bar_crop)
+        put(hy, x0 + 2, room, fd_note[0] ? COLOR_PAIR(CP_bar_crop)
             : COLOR_PAIR(CP_dlg_help), "%s", t);
         if ((int)strlen(t) > room)
             put(hy, x0 + fd_w - 1, 1, BRIGHT(CP_bar_crop), ">");
