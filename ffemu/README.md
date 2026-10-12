@@ -251,15 +251,26 @@ that differ from what flash holds (the firmware keeps the flash value of an
 option a file does not name), each below its comments; the previous file is
 kept as `FF.CFG.BAK`. Nothing else happens: the dialog stays open, flash
 changes only on OK, and the firmware reads the file when the drive is next
-inserted or the device restarts; the bottom line says what was written. Those
-lines are the `[Flash mem]` section at the end of the file: `hex` holds the
-bytes of the flash memory, and the options follow in `FF.CFG` syntax, so that
-lines can be copied between the two; a number after `0x` stands for bytes that
-no `FF.CFG` value gives. On loading, the hex applies first and the options on
-top, with a warning in the console for an option that differs from the hex, is
-not in this firmware, or has a value that does not fit. The Flash mem pane
-shows the same options: those changed from the defaults in yellow, the rest in
-gray, and the raw numbers in magenta.
+inserted or the device restarts; the bottom line says what was written. The
+third, `Unpack FLASH.DMP to ffemurc`, is enabled while the drive holds
+`FLASH.DMP` beside `FF.CFG`: the settings area of a Gotek's flash memory, which
+the firmware writes there, before it reads `FF.CFG`, at the first insertion of
+a drive after "Save FLASH.DMP" in its main menu (a short press of both buttons,
+or of the select button, while no drive is in). The button asks first, naming
+the file it takes and the settings file it writes, with a warning if `FF.CFG`
+on the drive sets some of the dump's options otherwise, which it would then
+override after the restart; then it puts the settings of the slot that the
+firmware would take from it, or no settings if it holds none, into the emulated
+flash memory, and so into the settings file, as OK puts the dialog's: the
+dialog's edits are dropped, `FF.CFG` is checked for options that it would undo,
+and the device is power-cycled. Those lines are the `[Flash mem]` section at
+the end of the file: `hex` holds the bytes of the flash memory, and the options
+follow in `FF.CFG` syntax, so that lines can be copied between the two; a
+number after `0x` stands for bytes that no `FF.CFG` value gives. On loading,
+the hex applies first and the options on top, with a warning in the console for
+an option that differs from the hex, is not in this firmware, or has a value
+that does not fit. The Flash mem pane shows the same options: those changed
+from the defaults in yellow, the rest in gray, and the raw numbers in magenta.
 
 ## Scripting
 

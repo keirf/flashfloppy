@@ -175,13 +175,35 @@ void flash_ff_cfg_read(void)
     }
 }
 
-/* The firmware's Flash configuration area: blank, as erased flash, since
- * the emulated flash keeps its settings in the settings file. */
+/* The slots of the flash area, as flash_cfg.c lays them out: 64 words
+ * each, the last but one 0xffff unless the slot is deleted, the last a CRC
+ * over the whole slot. */
+#define SLOTW_NR 64
+#define SLOTW_DEAD (SLOTW_NR - 2)
+#define SLOTW_CRC (SLOTW_NR - 1)
+union cfg_slot {
+    struct ff_cfg ff_cfg;
+    uint16_t words[SLOTW_NR];
+};
+#define SLOT_NR (FLASH_PAGE_SIZE / sizeof(union cfg_slot))
+
+/* The area that the firmware writes to FLASH.DMP: the configuration in
+ * flash, if it holds one, in the first slot, the others blank. */
 const void *flash_ff_cfg_area(void)
 {
-    static uint8_t area[FLASH_PAGE_SIZE];
+    static union cfg_slot area[SLOT_NR];
+    union cfg_slot *slot = &area[0];
+    uint16_t crc;
 
     memset(area, 0xff, sizeof(area));
+    memset(slot, 0, sizeof(*slot));
+    if (emu_flash_load(&slot->ff_cfg, sizeof(slot->ff_cfg)) == 0) {
+        memset(slot, 0xff, sizeof(*slot));
+        return area;
+    }
+    slot->words[SLOTW_DEAD] = 0xffff;
+    crc = crc16_ccitt(slot, sizeof(*slot) - 2, 0xffff);
+    slot->words[SLOTW_CRC] = htobe16(crc);
     return area;
 }
 
@@ -199,6 +221,7 @@ enum {
 #undef x
     OPT_nr
 };
+_Static_assert(OPT_nr <= EMU_OPTIONS_MAX, "EMU_OPTIONS_MAX is too small");
 
 static const struct {
     const char *name;
@@ -777,6 +800,39 @@ int emu_flash_get(void *cfg)
         return 1;
     *f = dfl_ff_cfg;
     return 0;
+}
+
+int emu_flash_parse_dump(const void *area, unsigned int len, void *cfg,
+                         unsigned int *slot)
+{
+    union cfg_slot s;
+    struct ff_cfg *f = cfg;
+    unsigned int i, sz;
+
+    if (len != SLOT_NR * sizeof(s))
+        return EMU_DUMP_bad;
+    /* As flash_cfg.c finds its slot: the first neither deleted nor blank
+     * whose version and CRC are good; a blank one ends the search. */
+    for (i = 0; i < SLOT_NR; i++) {
+        memcpy(&s, (const uint8_t *)area + i * sizeof(s), sizeof(s));
+        if (s.words[SLOTW_DEAD] != 0xffff)
+            continue;
+        if (s.words[0] == 0xffff)
+            break;
+        if ((s.ff_cfg.version != dfl_ff_cfg.version)
+            || crc16_ccitt(&s, sizeof(s), 0xffff))
+            continue;
+        /* The options it holds over the defaults, as the firmware takes
+         * them at boot. */
+        *f = dfl_ff_cfg;
+        sz = min_t(unsigned int, s.ff_cfg.size, sizeof(*f));
+        if (sz > offsetof(struct ff_cfg, interface))
+            memcpy(&f->interface, &s.ff_cfg.interface,
+                   sz - offsetof(struct ff_cfg, interface));
+        *slot = i;
+        return EMU_DUMP_slot;
+    }
+    return EMU_DUMP_none;
 }
 
 int emu_flash_display_fits(const void *cfg, unsigned int rows)

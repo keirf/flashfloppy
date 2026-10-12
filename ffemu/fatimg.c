@@ -1656,32 +1656,49 @@ void usb_get_info(struct usb_info *info)
     info->ff_cfg_gen = ff_cfg_gen;
 }
 
-bool usb_read_text(const char *name83, char *buf, size_t size)
+long usb_read_file(const char *name83, void *buf, size_t size)
 {
     struct image *im = cur;
     struct vol v;
     uint8_t e[32], b[SEC];
-    uint32_t clus, dir = 0, len, k;
+    uint32_t clus, dir = 0, len, n, k;
 
     if ((im == NULL) || !vol_open(&v, im, true))
-        return false;
+        return -1;
     /* The firmware keeps its files in the folder FF if there is one. */
     if (vol_find(&v, 0, "FF         ", e) && (e[11] & ATTR_DIR))
         dir = entry_clus(&v, e);
     if (!vol_find(&v, dir, name83, e) || (e[11] & ATTR_DIR))
-        return false;
+        return -1;
     len = get32(e + 28);
-    if (len > size - 1)
-        len = size - 1;
+    n = (len < size) ? len : size;
     clus = entry_clus(&v, e);
-    for (k = 0; (k * SEC < len) && (clus != 0); k++) {
+    for (k = 0; (k * SEC < n) && (clus != 0); k++) {
         if (!vol_sector(&v, &clus, k, b))
             break;
-        memcpy(buf + k * SEC, b, (len - k * SEC < SEC) ? len - k * SEC
-               : SEC);
+        memcpy((uint8_t *)buf + k * SEC, b, (n - k * SEC < SEC)
+               ? n - k * SEC : SEC);
     }
-    buf[len] = '\0';
+    return len;
+}
+
+bool usb_read_text(const char *name83, char *buf, size_t size)
+{
+    long len = usb_read_file(name83, buf, size - 1);
+
+    if (len < 0)
+        return false;
+    buf[((size_t)len < size - 1) ? (size_t)len : size - 1] = '\0';
     return true;
+}
+
+bool usb_ff_folder(void)
+{
+    struct vol v;
+    uint8_t e[32];
+
+    return (cur != NULL) && vol_open(&v, cur, true)
+        && vol_find(&v, 0, "FF         ", e) && (e[11] & ATTR_DIR);
 }
 
 const char *usb_ff_cfg_text(void)

@@ -140,7 +140,7 @@ enum {
  * and the display that the display dialog has selected. */
 static enum {
     DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul,
-    DLG_message, DLG_fdfile
+    DLG_message, DLG_fdfile, DLG_unpack
 } dialog;
 /* The message box over a dialog: what it says, and the dialog it returns
  * to when closed. */
@@ -156,6 +156,7 @@ static bool dialog_oled_synth;
 enum { DF_display, DF_rom, DF_synth, DF_ok, DF_cancel, DF_nr };
 static void draw_dialog(void);
 static void draw_fdfile_dialog(void);
+static void draw_unpack_dialog(void);
 static void draw_flash_dialog(void);
 
 #define FRAME_MS 20
@@ -783,6 +784,32 @@ static void left_path(int y, int x, int w, const char *path)
     }
     put_wide(y, x - 1, BRIGHT(CP_crop), cut, 1);
     put_wide(y, x, BRIGHT(CP_path), ws + n - w, w);
+}
+
+/* The columns that @path takes. */
+static int path_cols(const char *path)
+{
+    size_t n = mbstowcs(NULL, path, 0);
+
+    return (n == (size_t)-1) ? (int)strlen(path) : (int)n;
+}
+
+/* @path at (@y,@x) in @attr, or "..." and its end in @w columns if it is
+ * too long: where no frame is at hand for a mark. */
+static void dots_path(int y, int x, int w, attr_t attr, const char *path)
+{
+    wchar_t ws[600];
+    size_t n = mbstowcs(ws, path, ARRAY_SIZE(ws) - 1);
+
+    if ((n == (size_t)-1) || (w < 1))
+        return;
+    if ((int)n <= w) {
+        put_wide(y, x, attr, ws, n);
+        return;
+    }
+    put(y, x, w, attr, "...");
+    if (w > 3)
+        put_wide(y, x + 3, attr, ws + n - (w - 3), w - 3);
 }
 
 /* A piece of a line at (@y,@x) in @attr, which ends at column @end at the
@@ -2101,6 +2128,10 @@ static void draw_dialog(void)
     case DLG_fdfile:
         draw_fdfile_dialog();
         break;
+    case DLG_unpack:
+        draw_flash_dialog();
+        draw_unpack_dialog();
+        break;
     case DLG_message:
         /* Over the dialog it came from. */
         if (msg_return == DLG_flash)
@@ -2113,7 +2144,7 @@ static void draw_dialog(void)
 /* What a key did in a dialog. */
 enum {
     DK_none, DK_taken, DK_quit, DK_display, DK_rows_yes, DK_rows_no,
-    DK_emul_yes, DK_emul_no, DK_fdfile_yes, DK_fdfile_no
+    DK_emul_yes, DK_emul_no, DK_fdfile_yes, DK_fdfile_no, DK_unpack
 };
 
 /* The Display type dialog's keys: Tab and Shift+Tab move the focus over
@@ -2197,6 +2228,14 @@ static int dialog_key(int key)
             return DK_taken;
         }
         return (dialog_button == 0) ? DK_fdfile_yes : DK_fdfile_no;
+    }
+
+    /* The unpack dialog goes back to the Flash mem dialog unless OK. */
+    if (dialog == DLG_unpack) {
+        if ((key != 27) && (key != '\n'))
+            return DK_taken;
+        dialog = DLG_flash;
+        return ((key == '\n') && (dialog_button == 0)) ? DK_unpack : DK_taken;
     }
 
     /* The rows and emul dialogs have no way back: the display or the flash
@@ -2397,10 +2436,10 @@ static void set_display(int display)
  */
 
 enum { FV_radio, FV_check, FV_input, FV_ok, FV_cancel, FV_save_all,
-       FV_save_changed };
-/* The buttons, the last entries of fviews[], in the order of Tab: the two
- * FF.CFG ones, which stand above, then OK and Cancel. */
-#define FD_BUTTONS 4
+       FV_save_changed, FV_save_dump };
+/* The buttons, the last entries of fviews[], in the order of Tab: the three
+ * Save ones, which stand above, then OK and Cancel. */
+#define FD_BUTTONS 5
 
 /* The width of each column, so that the dialog with its shadow fits 99
  * columns; and in each, where the fields of input lines start. */
@@ -2519,6 +2558,9 @@ static struct fview {
     { FV_save_changed, 0, NULL, NULL,
       "Write the options that differ from flash to FF.CFG, old one kept as "
       ".BAK; flash unchanged",
+      { NULL }, false, false },
+    { FV_save_dump, 0, NULL, NULL,
+      "Put the settings in FLASH.DMP into flash and ffemurc, and power-cycle",
       { NULL }, false, false },
     { FV_ok, 0, NULL, NULL,
       "Write the changed options into flash and power-cycle; FF.CFG on the "
@@ -2767,12 +2809,40 @@ static const char fd_explanation[] =
     "here. Factory defaults are marked with \"=\".";
 #define FD_EXPL_MAX 4
 
+/* Whether the drive held FLASH.DMP when last looked at, and the drive's
+ * writes and FF.CFG generation then; ~0 for none yet. */
+static bool fd_dump;
+static unsigned long fd_dump_writes = ~0ul;
+static unsigned int fd_dump_gen;
+
+/* Whether the drive holds FLASH.DMP, beside FF.CFG, as the firmware sees
+ * it: looked for again when the drive has been written. */
+static bool fd_dump_present(void)
+{
+    struct usb_info usb;
+
+    usb_get_info(&usb);
+    if (!usb.inserted) {
+        fd_dump_writes = ~0ul;
+        return fd_dump = false;
+    }
+    if ((usb.nr_writes != fd_dump_writes) || (usb.ff_cfg_gen != fd_dump_gen)) {
+        fd_dump = usb_read_file("FLASH   DMP", NULL, 0) >= 0;
+        fd_dump_writes = usb.nr_writes;
+        fd_dump_gen = usb.ff_cfg_gen;
+    }
+    return fd_dump;
+}
+
 /* Whether fview @i is disabled: the display-type suffixes, which only an
- * OLED display type has, while another is chosen. */
+ * OLED display type has, while another is chosen; the FLASH.DMP button
+ * while the drive holds no such file. */
 static bool fd_disabled(int i)
 {
     const struct fview *v = &fviews[i], *r;
 
+    if (v->type == FV_save_dump)
+        return !fd_dump_present();
     if ((v->type != FV_check) || !v->opt || strcmp(v->opt, "display-type"))
         return false;
     r = fd_find(FV_radio, "display-type");
@@ -2800,6 +2870,7 @@ static const char *fd_button_text(int type)
     case FV_cancel: return " Cancel ";
     case FV_save_all: return " Save all to FF.CFG ";
     case FV_save_changed: return " Save diff-from-flash to FF.CFG ";
+    case FV_save_dump: return " Unpack FLASH.DMP to ffemurc ";
     }
     return "";
 }
@@ -2840,18 +2911,18 @@ static void fd_layout(void)
             h = col_y[v->col];
     }
     fd_h = h + 5;
-    /* OK and Cancel at the bottom, the two FF.CFG buttons one over the
-     * other at the right, among the controls, below the third column's
-     * fields. */
-    n = fd_h - 8;
+    /* OK and Cancel at the bottom, the three Save buttons one over another
+     * at the right, among the controls, below the third column's fields. */
+    n = fd_h - 10;
     if (n < col_y[2]) {
         fd_h += col_y[2] - n;
         n = col_y[2];
     }
-    fviews[FD_NR - 4].y = n;
-    fviews[FD_NR - 3].y = n + 2;
-    fviews[FD_NR - 4].x = fviews[FD_NR - 3].x =
-        fd_w - 3 - strlen(fd_button_text(FV_save_changed));
+    for (i = 0; i < 3; i++) {
+        fviews[FD_NR - 5 + i].y = n + 2 * i;
+        fviews[FD_NR - 5 + i].x =
+            fd_w - 3 - strlen(fd_button_text(FV_save_changed));
+    }
     fviews[FD_NR - 2].y = fviews[FD_NR - 1].y = fd_h - 4;
     fviews[FD_NR - 2].x = fd_w / 2 - 14;
     fviews[FD_NR - 1].x = fd_w / 2 + 4;
@@ -2900,6 +2971,7 @@ static void fd_open(void)
     fd_layout();
     fd_focus = 0;
     fd_note[0] = '\0';
+    fd_dump_writes = ~0ul;
     dialog = DLG_flash;
 }
 
@@ -2945,27 +3017,39 @@ static int fd_edited(uint8_t *cfg)
  * the emul dialog. */
 static bool fd_offer_display(const char *old_type);
 
-static const char *fdf_name[ARRAY_SIZE(fd_opts)];
-static char fdf_value[ARRAY_SIZE(fd_opts)][64];
+static const char *fdf_name[EMU_OPTIONS_MAX];
+static char fdf_value[EMU_OPTIONS_MAX][64];
 static unsigned int fdf_nr;
 static bool fdf_writable;
 static uint8_t fdf_cfg[256];
 static char fdf_old_type[64];
+/* Whether flash is to hold no settings, as a dump with none has it. */
+static bool fdf_erase;
 
-static void fd_check_file(const uint8_t *cfg)
+/* The options of @cfg that FF.CFG on the drive sets otherwise, among those
+ * that the dialog's edits change, or among all if @all, as for a dump. */
+static void fd_check_file(const uint8_t *cfg, bool all)
 {
     struct usb_info usb;
     char text[80], file[512];
-    unsigned int i;
+    const char *name;
+    unsigned int i, flags;
+    unsigned int nr = all ? emu_flash_nr_options() : ARRAY_SIZE(fd_opts);
 
     fdf_nr = 0;
-    for (i = 0; i < ARRAY_SIZE(fd_opts); i++) {
-        fd_value(fd_opts[i], text, sizeof(text));
-        if (!strcmp(text, fd_orig[i])
-            || !ff_cfg_overrides(cfg, fd_opts[i], file, sizeof(file)))
+    for (i = 0; i < nr; i++) {
+        if (all) {
+            name = emu_flash_option(i, cfg, text, sizeof(text), &flags);
+        } else {
+            name = fd_opts[i];
+            fd_value(name, text, sizeof(text));
+            if (!strcmp(text, fd_orig[i]))
+                continue;
+        }
+        if (!ff_cfg_overrides(cfg, name, file, sizeof(file)))
             continue;
-        fdf_name[fdf_nr] = fd_opts[i];
-        option_value(cfg, fd_opts[i], fdf_value[fdf_nr], sizeof(fdf_value[0]));
+        fdf_name[fdf_nr] = name;
+        option_value(cfg, name, fdf_value[fdf_nr], sizeof(fdf_value[0]));
         fdf_nr++;
     }
     usb_get_info(&usb);
@@ -2976,10 +3060,147 @@ static void fd_check_file(const uint8_t *cfg)
  * no longer suits the display fitted, which the emul dialog takes up. */
 static void fd_commit(const uint8_t *cfg)
 {
-    emu_flash_save(cfg, emu_flash_cfg_size());
+    emu_flash_save(cfg, fdf_erase ? 0 : emu_flash_cfg_size());
     dialog = DLG_none;
     if (!fd_offer_display(fdf_old_type))
         leave(KEY_ACT_reset);
+}
+
+/* What OK goes on with once @cfg holds what flash is to: the question of
+ * the fdfile dialog if FF.CFG on the drive would undo some of it on the
+ * next boot, else the write and the power cycle. Every option counts if
+ * @all, as for a dump, else those that the dialog's edits change. */
+static void fd_write(const uint8_t *cfg, bool all)
+{
+    fd_check_file(cfg, all);
+    if (fdf_nr != 0) {
+        memcpy(fdf_cfg, cfg, sizeof(fdf_cfg));
+        dialog = DLG_fdfile;
+        dialog_button = 0;
+        return;
+    }
+    fd_commit(cfg);
+}
+
+/* The configuration in FLASH.DMP on the drive into @cfg, or the defaults if
+ * it holds none: EMU_DUMP_slot, with the slot in @slot, or EMU_DUMP_none;
+ * EMU_DUMP_bad, with the file's length in @len; or -1 for no file. */
+static int fd_read_dump(uint8_t *cfg, unsigned int *slot, long *len)
+{
+    uint8_t area[4096];
+    int r;
+
+    *len = usb_read_file("FLASH   DMP", area, sizeof(area));
+    if (*len < 0)
+        return -1;
+    r = emu_flash_parse_dump(area, *len, cfg, slot);
+    if (r == EMU_DUMP_none)
+        emu_flash_cfg_defaults(cfg);
+    return r;
+}
+
+/* Whether FF.CFG on the drive sets some option of the dump otherwise, and
+ * so would override it after the restart, for the unpack dialog to warn. */
+static bool unpack_overridden;
+
+static bool fd_dump_overridden(void)
+{
+    uint8_t cfg[256];
+    char value[80], file[512];
+    unsigned int slot, i, flags;
+    long len;
+    int r = fd_read_dump(cfg, &slot, &len);
+
+    if ((r < 0) || (r == EMU_DUMP_bad))
+        return false;
+    for (i = 0; i < emu_flash_nr_options(); i++)
+        if (ff_cfg_overrides(cfg, emu_flash_option(i, cfg, value,
+                                                   sizeof(value), &flags),
+                             file, sizeof(file)))
+            return true;
+    return false;
+}
+
+/* Puts the settings in FLASH.DMP on the drive into flash as OK puts the
+ * dialog's: they set the dialog up, its edits dropped, and fd_write() goes
+ * on with them; a file of another size gets a message box. */
+static void fd_load_dump(void)
+{
+    uint8_t flash[256], cfg[256];
+    char text[160];
+    unsigned int slot;
+    long len;
+    int r = fd_read_dump(cfg, &slot, &len);
+
+    if (r < 0)
+        return;
+    if (r == EMU_DUMP_bad) {
+        snprintf(text, sizeof(text), "FLASH.DMP holds %ld bytes, not a dump "
+                 "of the flash settings.", len);
+        show_message(DLG_flash, "FLASH.DMP", text);
+        return;
+    }
+    if (r == EMU_DUMP_none)
+        host_log("FLASH.DMP holds no settings: flash is to hold none");
+    else
+        host_log("FLASH.DMP: the settings in its slot %u go into flash",
+                 slot);
+    emu_flash_get(flash);
+    option_value(flash, "display-type", fdf_old_type, sizeof(fdf_old_type));
+    fd_load_all(cfg, NULL);
+    fdf_erase = (r == EMU_DUMP_none);
+    fd_write(cfg, true);
+}
+
+/* The question of the Unpack button, over the Flash mem dialog: what is
+ * unpacked, from where, to where, and what follows; and a warning in dark
+ * red if FF.CFG on the drive would override some of it. */
+static void draw_unpack_dialog(void)
+{
+    static const char ask[] = "Unpack flash mem dump into emulated flash mem?";
+    static const char note[] = "The dialog's edits are dropped; the device "
+        "restarts.";
+    static const char warn[] = "FF.CFG on the drive will then override some "
+        "of these options after restart.";
+    static const char to[] = "To: [Flash mem] in ";
+    struct usb_info usb;
+    char from[48], drive[600], buf[600], rc[600];
+    int text, max, w, h = unpack_overridden ? 11 : 10, y, x;
+
+    usb_get_info(&usb);
+    snprintf(from, sizeof(from), "From: %sFLASH.DMP on drive ",
+             usb_ff_folder() ? "FF/" : "");
+    snprintf(drive, sizeof(drive), "%s%s",
+             tilde(usb_path_name, buf, sizeof(buf)),
+             (usb.kind == USB_dir) ? "/" : "");
+    snprintf(rc, sizeof(rc), "%s", tilde(config.path, buf, sizeof(buf)));
+
+    text = (strlen(ask) > strlen(note)) ? strlen(ask) : strlen(note);
+    if (unpack_overridden && ((int)strlen(warn) > text))
+        text = strlen(warn);
+    if ((int)strlen(from) + path_cols(drive) > text)
+        text = strlen(from) + path_cols(drive);
+    if ((int)strlen(to) + path_cols(rc) > text)
+        text = strlen(to) + path_cols(rc);
+    max = (COLS - 12 < 16) ? 16 : COLS - 12;
+    if (text > max)
+        text = max;
+    w = (text + 8 < 32) ? 32 : text + 8;
+
+    dialog_box(w, h, "Unpack FLASH.DMP", &y, &x);
+    put(y + 2, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", ask);
+    put(y + 3, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", from);
+    dots_path(y + 3, x + 4 + strlen(from), text - strlen(from),
+              COLOR_PAIR(CP_dialog), drive);
+    put(y + 4, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", to);
+    dots_path(y + 4, x + 4 + strlen(to), text - strlen(to),
+              COLOR_PAIR(CP_dialog), rc);
+    put(y + 5, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", note);
+    if (unpack_overridden)
+        put(y + 6, x + 4, w - 5, COLOR_PAIR(CP_dlg_hot), "%s", warn);
+    button(y + h - 3, x + w / 2 - 14, button_attr(0), fd_button_text(FV_ok));
+    button(y + h - 3, x + w / 2 + 4, button_attr(1),
+           fd_button_text(FV_cancel));
 }
 
 static void draw_fdfile_dialog(void)
@@ -3095,6 +3316,12 @@ static void fd_key(int key)
             dialog = DLG_none;
             return;
         }
+        if (v->type == FV_save_dump) {
+            unpack_overridden = fd_dump_overridden();
+            dialog = DLG_unpack;
+            dialog_button = 0;
+            return;
+        }
         if ((v->type == FV_save_all) || (v->type == FV_save_changed)) {
             /* The file says what the dialog shows, edits included, and
              * nothing else moves: flash waits for OK, and the firmware
@@ -3121,15 +3348,8 @@ static void fd_key(int key)
                 dialog = DLG_none;
                 return;
             }
-            /* FF.CFG on the drive would undo an edit on the next boot. */
-            fd_check_file(cfg);
-            if (fdf_nr != 0) {
-                memcpy(fdf_cfg, cfg, sizeof(fdf_cfg));
-                dialog = DLG_fdfile;
-                dialog_button = 0;
-                return;
-            }
-            fd_commit(cfg);
+            fdf_erase = false;
+            fd_write(cfg, false);
         }
         return;
     case KEY_UP:
@@ -3147,7 +3367,10 @@ static void fd_key(int key)
     case KEY_LEFT: case KEY_RIGHT:
         if (fd_is_button(fd_focus)) {
             int first = FD_NR - FD_BUTTONS, k = fd_focus - first;
-            k = (k + ((key == KEY_RIGHT) ? 1 : FD_BUTTONS - 1)) % FD_BUTTONS;
+            int step = (key == KEY_RIGHT) ? 1 : FD_BUTTONS - 1;
+            do
+                k = (k + step) % FD_BUTTONS;
+            while (fd_disabled(first + k));
             fd_focus = first + k;
         }
         return;
@@ -3387,6 +3610,10 @@ static void draw_flash_dialog(void)
             button(y, x, button_face(focused, dflt), fd_button_text(v->type));
             break;
         }
+        case FV_save_dump:
+            button(y, x, off ? COLOR_PAIR(CP_cluster_off) | dim
+                   : button_face(focused, false), fd_button_text(v->type));
+            break;
         }
     }
 
@@ -3490,7 +3717,7 @@ static void handle_key(int key)
     case DK_emul_no:
         leave(KEY_ACT_reset);
     case DK_fdfile_yes: {
-        const char *values[ARRAY_SIZE(fd_opts)];
+        const char *values[EMU_OPTIONS_MAX];
         char msg[160];
         unsigned int i;
         if (fdf_writable) {
@@ -3507,6 +3734,9 @@ static void handle_key(int key)
             fd_commit(fdf_cfg);
         else
             dialog = DLG_flash;
+        return;
+    case DK_unpack:
+        fd_load_dump();
         return;
     }
 

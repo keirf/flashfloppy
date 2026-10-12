@@ -247,6 +247,12 @@ const char *usb_ff_cfg_text(void);
  * firmware sees the drive now, its writes included; false if there is no
  * drive or no such file. */
 bool usb_read_text(const char *name83, char *buf, size_t size);
+/* The same file's first @size bytes, into @buf: its length, or -1 if there
+ * is no drive or no such file. */
+long usb_read_file(const char *name83, void *buf, size_t size);
+/* Whether the drive, as the firmware sees it now, has the folder FF, where
+ * the firmware then keeps its files. */
+bool usb_ff_folder(void);
 /* While the drive is out, usb_get_info() and usb_ff_cfg_text() tell of the
  * FF.CFG of the last drive. */
 /* Where FF.CFG is, or would be, under directory @dir, as a path relative
