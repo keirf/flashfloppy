@@ -180,6 +180,8 @@ extern const struct ff_cfg dfl_ff_cfg;
 void flash_ff_cfg_update(void *scratch);
 void flash_ff_cfg_erase(void);
 void flash_ff_cfg_read(void);
+/* The Flash area that holds the configuration slots: FLASH_PAGE_SIZE bytes. */
+const void *flash_ff_cfg_area(void);
 
 /*
  * Local variables:
