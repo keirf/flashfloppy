@@ -270,6 +270,39 @@ static void put(int y, int x, int w, attr_t attr, const char *fmt, ...)
         put_wide(y, pane_right, BRIGHT(CP_crop), cut, 1);
 }
 
+/* Message @text at (@y,@x) in @attr and @w columns, its user's string
+ * between MSG_USER marks shortened at its left with "..." if the whole is
+ * too long; true if it is too long all the same, and cut at its end. */
+static bool put_message(int y, int x, int w, attr_t attr, const char *text)
+{
+    static char user[4200];
+    static wchar_t ws[4200];
+    const char *a = strchr(text, MSG_USER);
+    const char *b = a ? strchr(a + 1, MSG_USER) : NULL;
+    int head, tail, room;
+    size_t n;
+
+    if (b == NULL) {
+        put(y, x, w, attr, "%s", text);
+        return (int)strlen(text) > w;
+    }
+    head = a - text;
+    tail = strlen(b + 1);
+    snprintf(user, sizeof(user), "%.*s", (int)(b - a - 1), a + 1);
+    n = mbstowcs(ws, user, ARRAY_SIZE(ws) - 1);
+    room = w - head - tail;
+    if ((n != (size_t)-1) && ((int)n > room) && (room > 3)) {
+        put(y, x, head, attr, "%.*s", head, text);
+        put(y, x + head, 3, attr, "...");
+        put_wide(y, x + head + 3, attr, ws + n - (room - 3), room - 3);
+        put(y, x + head + room, tail, attr, "%s", b + 1);
+        return false;
+    }
+    put(y, x, w, attr, "%.*s%s%s", head, text, user, b + 1);
+    return head + ((n == (size_t)-1) ? (int)strlen(user) : (int)n) + tail
+        > w;
+}
+
 /* A window of @w by @h cells, with a title centered in its top edge, its
  * inside filled with blanks of @interior and its edges drawn in @attr. The
  * window with the keyboard focus has a double-line frame, as in Turbo
@@ -2471,7 +2504,7 @@ static char fd_orig[ARRAY_SIZE(fd_opts)][64];
 
 static int fd_focus, fd_w, fd_h;
 /* What the last Save did, on the bottom line until the next key. */
-static char fd_note[160];
+static char fd_note[4200];
 
 /* @s without its '~' marks, into @buf. */
 static const char *unmarked(const char *s, char *buf, size_t size)
@@ -3311,14 +3344,15 @@ static void draw_flash_dialog(void)
     }
 
     /* What the control in focus is, on the dialog's last row; or what the
-     * last Save did, in dark green. A text too long for the row is cut at
-     * the frame, where a bright green mark says so, as in the panes. */
+     * last Save did, in dark green, its path shortened to fit. A text too
+     * long for the row all the same is cut at the frame, where a bright
+     * green mark says so, as in the panes. */
     {
         const char *t = fd_note[0] ? fd_note : fd_help();
         int hy = y0 + fd_h - 2, room = fd_w - 3;
-        put(hy, x0 + 2, room, fd_note[0] ? COLOR_PAIR(CP_bar_crop)
-            : COLOR_PAIR(CP_dlg_help), "%s", t);
-        if ((int)strlen(t) > room)
+        if (put_message(hy, x0 + 2, room, fd_note[0]
+                        ? COLOR_PAIR(CP_bar_crop) : COLOR_PAIR(CP_dlg_help),
+                        t))
             put(hy, x0 + fd_w - 1, 1, BRIGHT(CP_bar_crop), ">");
     }
 }

@@ -197,8 +197,8 @@ bool ff_cfg_write(const void *cfg, bool all, char *msg, size_t size)
     }
     if (!replace_file(path, tmp, bak, &had_old, msg, size))
         return false;
-    snprintf(msg, size, "%s/%s written with %u option%s%s", dir, place, nr,
-             (nr == 1) ? "" : "s",
+    snprintf(msg, size, "%c%s/%s%c written with %u option%s%s", MSG_USER,
+             dir, place, MSG_USER, nr, (nr == 1) ? "" : "s",
              had_old ? ", the old one kept as .BAK" : "");
     return true;
 }
