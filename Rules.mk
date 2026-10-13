@@ -59,6 +59,9 @@ CFLAGS += $(CFLAGS-y) $(FLAGS) -include decls.h
 AFLAGS += $(AFLAGS-y) $(FLAGS) -include build_enums.h -D__ASSEMBLY__
 LDFLAGS += $(LDFLAGS-y) $(FLAGS) -Wl,--gc-sections
 
+# Reduce space wasted on alignment padding between sections.
+LDFLAGS += -Wl,--sort-section=alignment
+
 SRCDIR := $(shell $(PYTHON) $(ROOT)/scripts/srcdir.py $(CURDIR) $(ROOT))
 include $(SRCDIR)/Makefile
 
