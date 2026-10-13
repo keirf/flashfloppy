@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Turns a text file into a C source holding it as a string constant, byte for byte.
+"""Turns a text file into a C source holding it as a string constant, byte for
+byte.
 
 Usage: mk_text.py <text file> <output .c> <symbol>
 """
