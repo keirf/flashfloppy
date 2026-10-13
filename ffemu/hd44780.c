@@ -323,7 +323,7 @@ void hd44780_size(unsigned int nr_cols, unsigned int nr_rows,
 }
 
 void hd44780_pixels(const struct lcd_view *v, const uint8_t **px,
-                    unsigned int *w, unsigned int *h)
+                    const uint8_t **dots, unsigned int *w, unsigned int *h)
 {
     /* What a character without a glyph here shows: a checkerboard. */
     static const char * const stub[FONT_H] = {
@@ -331,12 +331,20 @@ void hd44780_pixels(const struct lcd_view *v, const uint8_t **px,
     };
     static uint8_t buf[(MARGIN_X + LCD_MAX_COLS * PITCH_X + 1)
                        * PANEL_H(LCD_MAX_ROWS)];
+    static uint8_t dot_buf[sizeof(buf)];
     unsigned int r, c, x, y, top;
 
     hd44780_size(v->cols, v->rows, w, h);
     top = (*h - INK_H(v->rows)) / 2;
     memset(buf, 0, *w * *h);
+    memset(dot_buf, 0, *w * *h);
     *px = buf;
+    *dots = dot_buf;
+    for (r = 0; r < v->rows; r++)
+        for (c = 0; c < v->cols; c++)
+            for (y = 0; y < FONT_H; y++)
+                memset(&dot_buf[(top + r * PITCH_Y + y) * *w + MARGIN_X
+                                + c * PITCH_X], 1, FONT_W);
     if (!v->on)
         return;
     for (r = 0; r < v->rows; r++) {

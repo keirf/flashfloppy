@@ -164,9 +164,10 @@ void hd44780_size(unsigned int nr_cols, unsigned int nr_rows,
                   unsigned int *w, unsigned int *h);
 /* The characters of @v as pixels, @w by @h bytes, 1 for a dark dot, in a
  * buffer of this module's that the next call reuses; a character without a
- * glyph, a user-defined one included, as a checkerboard. */
+ * glyph, a user-defined one included, as a checkerboard; and @dots, 1 for
+ * every dot of the character cells, lit or not. */
 void hd44780_pixels(const struct lcd_view *v, const uint8_t **px,
-                    unsigned int *w, unsigned int *h);
+                    const uint8_t **dots, unsigned int *w, unsigned int *h);
 
 /*
  * led_7seg.c
