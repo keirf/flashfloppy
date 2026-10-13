@@ -59,6 +59,12 @@ CFLAGS += $(CFLAGS-y) $(FLAGS) -include decls.h
 AFLAGS += $(AFLAGS-y) $(FLAGS) -include build_enums.h -D__ASSEMBLY__
 LDFLAGS += $(LDFLAGS-y) $(FLAGS) -Wl,--gc-sections
 
+# The STM32F105 debug firmware is short of Flash: placing the sections by
+# alignment, largest first, leaves almost no padding between them.
+ifeq ($(mcu)-$(level),stm32f105-debug)
+LDFLAGS += -Wl,--sort-section=alignment
+endif
+
 SRCDIR := $(shell $(PYTHON) $(ROOT)/scripts/srcdir.py $(CURDIR) $(ROOT))
 include $(SRCDIR)/Makefile
 
