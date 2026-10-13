@@ -26,6 +26,7 @@ struct native_dirent {
     uint32_t dir_sect;
     uint16_t dir_off;
     uint8_t attr;
+    uint8_t base_len; /* length of name up to the dot of its extension */
     char name[0];
 };
 
@@ -762,6 +763,22 @@ int strcmp_lower(const char *s1, const char *s2)
     return 0;
 }
 
+/* Compares the names of two entries up to the dots of their extensions,
+ * letter case aside. */
+static int native_base_cmp(const struct native_dirent *da,
+                           const struct native_dirent *db)
+{
+    unsigned int i;
+    int diff;
+
+    for (i = 0; (i < da->base_len) && (i < db->base_len); i++)
+        if ((diff = __tolower(da->name[i]) - __tolower(db->name[i])) != 0)
+            return diff;
+    return da->base_len - db->base_len;
+}
+
+/* Sorts by base name, then by extension: "GAME.DSK" before "GAME 2.DSK",
+ * which a comparison of whole names would reverse. */
 static int native_dir_cmp(const void *a, const void *b)
 {
     const struct native_dirent *da = a;
@@ -774,7 +791,8 @@ static int native_dir_cmp(const void *a, const void *b)
             return (da->attr & AM_DIR) ? 1 : -1;
         }
     }
-    return strcmp_lower(da->name, db->name);
+    return native_base_cmp(da, db)
+        ?: strcmp_lower(da->name + da->base_len, db->name + db->base_len);
 }
 
 /* Returns -1 if not read & sorted. */
@@ -784,6 +802,7 @@ static int native_read_and_sort_dir(void)
     struct native_dirent *ent = arena_alloc(0);
     char *start = arena_alloc(0);
     char *end = start + arena_avail();
+    char *dot;
     int nr;
 
     if (ff_cfg.folder_sort == SORT_never)
@@ -803,6 +822,9 @@ static int native_read_and_sort_dir(void)
         ent->dir_off = fs->fp.dir_ptr - fatfs.win;
         ent->attr = fs->fp.fattrib;
         strcpy(ent->name, fs->fp.fname);
+        /* A folder's name has no extension. */
+        dot = (ent->attr & AM_DIR) ? NULL : strrchr(ent->name, '.');
+        ent->base_len = dot ? dot - ent->name : strlen(ent->name);
         ent = (struct native_dirent *)(
             ((uintptr_t)ent + sizeof(*ent) + strlen(ent->name) + 1 + 3) & ~3);
     }
