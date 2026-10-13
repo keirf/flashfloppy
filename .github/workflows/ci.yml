@@ -20,6 +20,9 @@ jobs:
     - name: Dependency packages (pip)
       run: python3 -m pip install --user crcmod intelhex
 
+    - name: Unit tests
+      run: make -j4 test
+
     - name: Build dist
       run: |
         export VER=${{ steps.vars.outputs.sha_short }}
