@@ -15,7 +15,7 @@ jobs:
     - name: Dependency packages (apt)
       run: |
         sudo apt update
-        sudo apt -y install git gcc-arm-none-eabi python3-pip srecord stm32flash zip unzip wget
+        sudo apt -y install git gcc-arm-none-eabi python3-pip srecord stm32flash zip unzip wget libncurses-dev
 
     - name: Dependency packages (pip)
       run: python3 -m pip install --user crcmod intelhex
