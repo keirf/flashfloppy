@@ -206,6 +206,8 @@ void floppy_cancel(void)
     drv->index_suppressed = FALSE;
     drv->image = image = NULL;
     drv->inserted = FALSE;
+    drv->unit = 0;
+    drv->dual = FALSE;
     index.fake_fired = FALSE;
     barrier(); /* /then/ cancel index.timer_deassert */
     timer_cancel(&index.timer_deassert);
@@ -290,8 +292,10 @@ void floppy_set_max_cyl(void)
 {
     struct drive *drv = &drive;
     IRQ_global_disable();
-    if (drv->cyl > ff_cfg.max_cyl)
-        drv->cyl = ff_cfg.max_cyl;
+    if (drv->drives[0].cyl > ff_cfg.max_cyl)
+        drv->drives[0].cyl = ff_cfg.max_cyl;
+    if (drv->drives[1].cyl > ff_cfg.max_cyl)
+        drv->drives[1].cyl = ff_cfg.max_cyl;
     IRQ_global_enable();
 }
 
@@ -337,7 +341,7 @@ void floppy_init(void)
     motor_chgrst_setup_exti();
 }
 
-void floppy_insert(unsigned int unit, struct slot *slot)
+void floppy_insert(unsigned int unit, struct slot *slot, struct slot *slot2)
 {
     struct image *im;
     struct drive *drv = &drive;
@@ -345,7 +349,7 @@ void floppy_insert(unsigned int unit, struct slot *slot)
     /* Report only significant prefetch times (> 10ms). */
     max_prefetch_us = 10000;
 
-    floppy_mount(slot);
+    floppy_mount(slot, slot2);
     im = image;
 
     if (im->write_bc_ticks < sampleclk_ns(1500))
@@ -524,7 +528,11 @@ static bool_t dma_rd_handle(struct drive *drv)
         /* fall through */
 
     case DMA_active:
-        floppy_read_data(drv);
+        /* Unit switch invalidates cur_track to ~0; stop until reloaded. */
+        if (drive.image->cur_track == (uint16_t)~0)
+            rdata_stop();
+        else
+            floppy_read_data(drv);
         break;
 
     case DMA_stopping:
@@ -543,10 +551,10 @@ static bool_t dma_rd_handle(struct drive *drv)
 
 void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 {
-    if (unit == 0) {
+    if (unit < 2) {
         struct drive *drv = &drive;
-        drv->cyl = cyl;
-        if (cyl == 0)
+        drv->drives[unit].cyl = cyl;
+        if ((unit == drv->unit) && (cyl == 0))
             drive_change_output(drv, outp_trk0, TRUE);
     }
 }
@@ -554,11 +562,12 @@ void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 void floppy_get_track(struct track_info *ti)
 {
     bool_t active = dma_wr != NULL;
-    ti->cyl = drive.cyl;
+    ti->cyl = drive.drives[drive.unit].cyl;
     ti->side = active ? drive.head & (drive.image->nr_sides - 1) : 0;
     ti->sel = drive.sel;
     ti->writing = (active && dma_wr->state != DMA_inactive);
     ti->in_da_mode = active ? in_da_mode(drive.image, ti->cyl) : FALSE;
+    ti->unit = drive.unit;
 }
 
 static bool_t index_is_suppressed(struct drive *drv)
@@ -613,10 +622,10 @@ static void drive_step_timer(void *_drv)
         break;
     case STEP_latched:
         speaker_pulse();
-        drv->cyl += drv->step.inward ? 1 : -1;
+        drv->drives[drv->unit].cyl += drv->step.inward ? 1 : -1;
         timer_set(&drv->step.timer,
                   drv->step.start + time_ms(ff_cfg.head_settle_ms));
-        if (drv->cyl == 0)
+        if (drv->drives[drv->unit].cyl == 0)
             drive_change_output(drv, outp_trk0, TRUE);
         /* New state last, as that lets hi-pri IRQ start another step. */
         barrier();

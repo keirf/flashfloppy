@@ -178,8 +178,8 @@ const static struct raw_type {
 
 static FSIZE_t im_size(struct image *im)
 {
-    return (f_size(&im->fp) < im->img.base_off) ? 0
-        : (f_size(&im->fp) - im->img.base_off);
+    return (f_size(im->fp) < im->img.base_off) ? 0
+        : (f_size(im->fp) - im->img.base_off);
 }
 
 static unsigned int enc_sec_sz(struct image *im, struct raw_sec *sec)
@@ -633,7 +633,7 @@ static bool_t atr_open(struct image *im)
     struct raw_trk *trk;
     uint8_t *trk_map;
 
-    F_read(&im->fp, &header, sizeof(header), NULL);
+    F_read(im->fp, &header, sizeof(header), NULL);
     if (le16toh(header.sig) != 0x0296)
         return FALSE;
     sz = (unsigned int)le16toh(header.size_lo) << 4;
@@ -817,7 +817,7 @@ static bool_t pc98fdi_open(struct image *im)
         uint32_t cyls;
     } header;
     struct simple_layout layout = dfl_simple_layout;
-    F_read(&im->fp, &header, sizeof(header), NULL);
+    F_read(im->fp, &header, sizeof(header), NULL);
     if (le32toh(header.density) == 0x30) {
         layout.rpm = 300;
         layout.gap3 = 84;
@@ -858,8 +858,8 @@ static void bpb_read(struct image *im, struct bpb *bpb)
         510, 11, 24, 26, 19, 17, 22 };
 
     for (i = 0; i < ARRAY_SIZE(offs); i++) {
-        F_lseek(&im->fp, offs[i]);
-        F_read(&im->fp, x, 2, NULL);
+        F_lseek(im->fp, offs[i]);
+        F_read(im->fp, x, 2, NULL);
         *x = le16toh(*x);
         x++;
     }
@@ -972,8 +972,8 @@ static bool_t trd_open(struct image *im)
     unsigned int tot_secs, tot_trks;
 
     /* Interrogate TR-DOS geometry info. */
-    F_lseek(&im->fp, 0x8e0);
-    F_read(&im->fp, &geometry, sizeof(geometry), NULL);
+    F_lseek(im->fp, 0x8e0);
+    F_read(im->fp, &geometry, sizeof(geometry), NULL);
     if (geometry.id != 0x10)
         return FALSE;
 
@@ -1089,7 +1089,7 @@ static bool_t sdu_open(struct image *im)
     struct simple_layout layout = dfl_simple_layout;
 
     /* Read basic (cyls, heads, spt) geometry from the image header. */
-    F_read(&im->fp, &header, sizeof(header), NULL);
+    F_read(im->fp, &header, sizeof(header), NULL);
     im->nr_cyls = le16toh(header.max.c);
     im->nr_sides = le16toh(header.max.h);
     layout.nr_sectors = le16toh(header.max.s);
@@ -1143,7 +1143,7 @@ static bool_t ti99_open(struct image *im)
         return FALSE;
 
     /* Check for Volume Information Block in sector 0. */
-    F_read(&im->fp, &vib, sizeof(vib), NULL);
+    F_read(im->fp, &vib, sizeof(vib), NULL);
     have_vib = !strncmp(vib.id, "DSK", 3);
 
     layout.interleave = 4;
@@ -1267,10 +1267,10 @@ static bool_t jvc_open(struct image *im)
     unsigned int bps, bpc;
     struct simple_layout layout = dfl_simple_layout;
 
-    im->img.base_off = f_size(&im->fp) & 255;
+    im->img.base_off = f_size(im->fp) & 255;
 
     /* Check the image header. */
-    F_read(&im->fp, &jvc,
+    F_read(im->fp, &jvc,
            min_t(unsigned, im->img.base_off, sizeof(jvc)), NULL);
     if (jvc.attr || ((jvc.sides != 1) && (jvc.sides != 2)) || (jvc.spt == 0))
         return FALSE;
@@ -1322,7 +1322,7 @@ static bool_t vdk_open(struct image *im)
     };
 
     /* Check the image header. */
-    F_read(&im->fp, &vdk, sizeof(vdk), NULL);
+    F_read(im->fp, &vdk, sizeof(vdk), NULL);
     if (strncmp(vdk.id, "dk", 2) || le16toh(vdk.hlen < 12))
         return FALSE;
 
@@ -2091,7 +2091,7 @@ static bool_t raw_write_track(struct image *im)
                     crc = (im->sync == SYNC_fm) ? FM_DAM_CRC : MFM_DAM_CRC;
                     log("Write %u[%02x]/%u...",
                             sec_nr, sec->r, trk->nr_sectors);
-                    F_lseek(&im->fp, off);
+                    F_lseek(im->fp, off);
                 }
 
                 t = time_now();
@@ -2099,7 +2099,7 @@ static bool_t raw_write_track(struct image *im)
                 c += nr;
                 crc = crc16_ccitt(wrbuf, nr, crc);
                 process_data(im, wrbuf, nr);
-                F_write(&im->fp, wrbuf, nr, NULL);
+                F_write(im->fp, wrbuf, nr, NULL);
                 printk(" %u us", time_diff(t, time_now()) / TIME_MHZ);
                 im->img.decode_data_pos += nr;
                 if (im->img.decode_data_pos < sec_sz)
@@ -2202,8 +2202,8 @@ static void img_fetch_data(struct image *im)
             im->img.trk_sec = 0;
     }
 
-    F_lseek(&im->fp, im->img.trk_off + off);
-    F_read(&im->fp, buf, len, NULL);
+    F_lseek(im->fp, im->img.trk_off + off);
+    F_read(im->fp, buf, len, NULL);
     process_data(im, buf, len);
 
     rd->prod++;

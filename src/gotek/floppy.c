@@ -13,7 +13,8 @@
 #define O_TRUE  0
 
 /* Input pins: DIR=PB0, STEP=PA1, SELA=PA0, SELB=PA3, WGATE=PB9, SIDE=PB4, 
- *             MOTOR=PA15/PB15 */
+ *             MOTOR=PA15/PB15
+ * Dual drive: SELA selects image A, SELB selects image B (indexed DSKA/DSKB). */
 #if TARGET == TARGET_apple2
 #if LEVEL != LEVEL_debug
 #define pin_pha0   10 /* PA10 - (aka UART RX (PCB silk J4)) */
@@ -69,6 +70,7 @@ void IRQ_28(void) __attribute__((alias("IRQ_STEP_changed"))); /* TMR2 */
 /* EXTI IRQs. */
 void IRQ_6(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI0 */
 void IRQ_7(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI1 */
+void IRQ_9(void) __attribute__((alias("IRQ_SELA_changed"))); /* EXTI3 */
 void IRQ_10(void) __attribute__((alias("IRQ_SIDE_changed"))); /* EXTI4 */
 void IRQ_23(void) __attribute__((alias("IRQ_WGATE_rotary"))); /* EXTI9_5 */
 void IRQ_40(void) __attribute__((alias("IRQ_MOTOR_CHGRST_rotary"))); /* EXTI15_10 */
@@ -80,7 +82,8 @@ static const struct exti_irq exti_irqs[] = {
 #if WDATA_TOGGLE
     /* WDATA */ { 27, FLOPPY_IRQ_WGATE_PRI, 0 },
 #endif
-    /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 }, 
+    /* SELA */ {  6, FLOPPY_IRQ_SEL_PRI, 0 },
+    /* SELB */ {  9, FLOPPY_IRQ_SEL_PRI, 0 },
 #if TARGET == TARGET_shugart
     /* STEP */ { 28, FLOPPY_IRQ_STEP_PRI, m(2) /* dummy */ },
 #endif
@@ -112,7 +115,7 @@ bool_t floppy_ribbon_is_reversed(void)
 
     /* If ribbon is reversed then most/all inputs are grounded. 
      * Check SEL plus three inputs which are supposed only to pulse. */
-    while (!(gpioa->idr & (m(pin_sel0) | m(pin_step) | m(pin_wdata)))
+    while (!(gpioa->idr & (m(pin_sel0) | m(pin_sel1) | m(pin_step) | m(pin_wdata)))
            && !(gpiob->idr & m(pin_wgate))) {
         /* If all four inputs are LOW for a full second, conclude that 
          * the ribbon is reversed. */
@@ -193,14 +196,16 @@ static void board_floppy_init(void)
     gpio_configure_pin(gpiob, pin_dir,   GPI_bus);
 #endif
     gpio_configure_pin(gpioa, pin_sel0,  GPI_bus);
+    gpio_configure_pin(gpioa, pin_sel1,  GPI_pull_up);
     gpio_configure_pin(gpiob, pin_wgate, GPI_bus);
     gpio_configure_pin(gpiob, pin_side,  GPI_bus);
 
-    /* PA[15:13], PB[12], PC[11:10], PB[9:1], PA[0] */
+    /* PA[15:13], PB[12], PC[11:10], PB[9:1], PA[3], PA[0]
+     * EXTI3 routed to PA3 (SELB); EXTI0 to PA0 (SELA). */
     afio->exticr[4-1] = 0x0001;
     afio->exticr[3-1] = 0x2211;
     afio->exticr[2-1] = 0x1111;
-    afio->exticr[1-1] = 0x1110;
+    afio->exticr[1-1] = 0x0110;
 
     if (gotek_enhanced()) {
         gpio_configure_pin(gpioa, pin_sel1,  GPI_bus);
@@ -217,7 +222,7 @@ static void board_floppy_init(void)
 
     exti->rtsr = 0xffff;
     exti->ftsr = 0xffff;
-    exti->imr = m(pin_wgate) | m(pin_side) | m(pin_sel0);
+    exti->imr = m(pin_wgate) | m(pin_side) | m(pin_sel0) | m(pin_sel1);
 
     gpiob_setreset = (uint32_t)&gpiob->bsrr;
 }
@@ -265,28 +270,52 @@ static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
  * speculative entry point for the next interrupt. */
 static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
 {
-    /* Latch SELA. */
-    exti->pr = m(pin_sel0);
-    drive.sel = !(gpioa->idr & m(pin_sel0));
+    uint16_t idr = gpioa->idr;
+    bool_t sel0 = !(idr & m(pin_sel0));
+    bool_t sel1 = !(idr & m(pin_sel1));
+    uint8_t unit;
+
+    /* Latch SELA and SELB. */
+    exti->pr = m(pin_sel0) | m(pin_sel1);
+    drive.sel = sel0 || sel1;
 
     if (drive.sel) {
-        /* SELA is asserted (this drive is selected). 
-         * Immediately re-enable all our asserted outputs. */
+        /* Prefer drive A if both are asserted (hosts should never do this). */
+        unit = sel0 ? 0 : 1;
+        if (drive.unit != unit) {
+            drive.unit = unit;
+            /* TRK0 follows this unit's cyl even with no disk mounted. */
+            if (drive.drives[unit].cyl == 0) {
+                drive.outp |= m(outp_trk0);
+                gpio_out_active |= m(pin_26);
+            } else {
+                drive.outp &= ~m(outp_trk0);
+                gpio_out_active &= ~m(pin_26);
+            }
+            _gpio_out_active = gpio_out_active;
+
+            /* Image switch only when media is mounted. */
+            if (drive.image) {
+                if (drive.dual)
+                    drive.image->fp = &drive.image->filesp[unit];
+                drive.image->cur_track = ~0;
+            }
+        }
+        /* Selected: immediately re-enable all our asserted outputs. */
         gpiob->brr = _gpio_out_active & 0xffff;
         gpioa->brr = _gpio_out_active >> 16;
         /* Set pin_rdata as timer output (AFO_bus). */
         if (_gpio_out_active & m(GPIO_OUT_DMA_RD_ACTIVE))
             change_pin_mode(gpio_data, pin_rdata, AFO_bus);
-        /* Speculate that, on next interrupt, SELA is deasserted. */
+        /* Speculate that, on next interrupt, select is deasserted. */
         *(uint8_t *)&gpiob_setreset = (uint8_t)(uint32_t)&gpiob->bsrr;
     } else {
-        /* SELA is deasserted (this drive is not selected).
-         * Relinquish the bus by disabling all our asserted outputs. */
+        /* Not selected: relinquish the bus by disabling asserted outputs. */
         gpiob->bsrr = _gpio_out_active & 0xffff;
         gpioa->bsrr = _gpio_out_active >> 16;
         /* Set pin_rdata as quiescent (GPO_bus). */
         change_pin_mode(gpio_data, pin_rdata, GPO_bus);
-        /* Speculate that, on next interrupt, SELA is asserted. */
+        /* Speculate that, on next interrupt, select is asserted. */
         *(uint8_t *)&gpiob_setreset = (uint8_t)(uint32_t)&gpiob->brr;
     }
 }
@@ -332,7 +361,7 @@ static void POLL_step(void *unused)
     idr_b = gpiob->idr;
 
     /* Bail if drive not selected. */
-    if (idr_a & m(pin_sel0)) {
+    if ((idr_a & m(pin_sel0)) && (idr_a & m(pin_sel1))) {
         _pha = 0;
         goto out;
     }
@@ -351,7 +380,7 @@ static void POLL_step(void *unused)
 
     /* Rotate the phase bitmap so that the current phase is at bit 0. Note 
      * that the current phase is directly related to the current cylinder. */
-    pha = ((pha | (pha << 4)) >> (drv->cyl & 3)) & 0xf;
+    pha = ((pha | (pha << 4)) >> (drv->drives[drv->unit].cyl & 3)) & 0xf;
 
     /* Conditions to action a head step:
      *  (1) Only one phase is asserted;
@@ -359,12 +388,12 @@ static void POLL_step(void *unused)
      *  (3) We haven't hit a cylinder hard limit. */
     switch (pha) {
     case m(1): /* Phase +1 only */
-        if (drv->cyl == ff_cfg.max_cyl)
+        if (drv->drives[drv->unit].cyl == ff_cfg.max_cyl)
             goto out;
         drv->step.inward = TRUE;
         break;
     case m(3): /* Phase -1 only */
-        if (drv->cyl == 0)
+        if (drv->drives[drv->unit].cyl == 0)
             goto out;
         drv->step.inward = FALSE;
         break;
@@ -411,8 +440,8 @@ static void IRQ_STEP_changed(void)
     /* Clear STEP-changed flag. */
     (void)tim2->ccr2;
 
-    /* Bail if drive not selected. */
-    if (idr_a & m(pin_sel0))
+    /* Bail if neither drive is selected. */
+    if ((idr_a & m(pin_sel0)) && (idr_a & m(pin_sel1)))
         return;
 
     /* Deassert DSKCHG if a disk is inserted. */
@@ -427,7 +456,7 @@ static void IRQ_STEP_changed(void)
 
     /* Latch the step direction and check bounds (0 <= cyl <= 255). */
     drv->step.inward = !(idr_b & m(pin_dir));
-    if (drv->cyl == (drv->step.inward ? ff_cfg.max_cyl : 0))
+    if (drv->drives[drv->unit].cyl == (drv->step.inward ? ff_cfg.max_cyl : 0))
         return;
 
     /* Valid step request for this drive: start the step operation. */
@@ -484,7 +513,8 @@ static void IRQ_WGATE(void)
         return;
 
     if ((gpiob->idr & m(pin_wgate))      /* WGATE off? */
-        || (gpioa->idr & m(pin_sel0))) { /* Not selected? */
+        || ((gpioa->idr & m(pin_sel0))
+            && (gpioa->idr & m(pin_sel1)))) { /* Not selected? */
         wdata_stop();
     } else {
         rdata_stop();

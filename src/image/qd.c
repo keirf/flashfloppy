@@ -26,7 +26,7 @@ static bool_t qd_open(struct image *im)
 {
     struct disk_header dh;
 
-    F_read(&im->fp, &dh, sizeof(dh), NULL);
+    F_read(im->fp, &dh, sizeof(dh), NULL);
     if (strncmp(&dh.sig[3], "QD", 2))
         return FALSE;
 
@@ -41,7 +41,7 @@ static bool_t qd_open(struct image *im)
     volume_cache_init(im->bufs.read_data.p + 8*512,
                       im->bufs.read_data.p + im->bufs.read_data.len);
     if (im->bufs.read_data.len < (64*1024))
-        volume_cache_metadata_only(&im->fp);
+        volume_cache_metadata_only(im->fp);
 
     /* There is only one track: Seek to it. */
     qd_seek_track(im, 0);
@@ -53,8 +53,8 @@ static void qd_seek_track(struct image *im, uint16_t track)
 {
     struct track_header thdr;
 
-    F_lseek(&im->fp, im->qd.tb*512 + (track/2)*16);
-    F_read(&im->fp, &thdr, sizeof(thdr), NULL);
+    F_lseek(im->fp, im->qd.tb*512 + (track/2)*16);
+    F_read(im->fp, &thdr, sizeof(thdr), NULL);
 
     /* Byte offset and length of track data. */
     im->qd.trk_off = le32toh(thdr.offset);
@@ -120,8 +120,8 @@ static bool_t qd_read_track(struct image *im)
     if (rd->prod == rd->cons) {
         nr_sec = min_t(unsigned int, batch_secs,
                        (im->qd.trk_len+511 - im->qd.trk_pos) / 512);
-        F_lseek(&im->fp, im->qd.trk_off + im->qd.trk_pos);
-        F_read(&im->fp, buf, nr_sec*512, NULL);
+        F_lseek(im->fp, im->qd.trk_off + im->qd.trk_pos);
+        F_read(im->fp, buf, nr_sec*512, NULL);
         rd->cons = 0;
         rd->prod = nr_sec;
         im->qd.trk_pos += nr_sec * 512;
@@ -239,9 +239,9 @@ static bool_t qd_write_track(struct image *im)
         im->qd.write_batch.len = min_t(
             uint32_t, batch_secs * 512,
             ((im->qd.trk_len + 511) & ~511) - im->qd.write_batch.off);
-        F_lseek(&im->fp, im->qd.trk_off + im->qd.write_batch.off);
-        F_read(&im->fp, wrbuf, im->qd.write_batch.len, NULL);
-        F_lseek(&im->fp, im->qd.trk_off + im->qd.write_batch.off);
+        F_lseek(im->fp, im->qd.trk_off + im->qd.write_batch.off);
+        F_read(im->fp, wrbuf, im->qd.write_batch.len, NULL);
+        F_lseek(im->fp, im->qd.trk_off + im->qd.write_batch.off);
     }
 
     for (;;) {
@@ -295,7 +295,7 @@ static bool_t qd_write_track(struct image *im)
                im->qd.write_batch.off,
                im->qd.write_batch.off + im->qd.write_batch.len - 1,
                im->qd.write_batch.len);
-        F_write(&im->fp, wrbuf, im->qd.write_batch.len, NULL);
+        F_write(im->fp, wrbuf, im->qd.write_batch.len, NULL);
         printk("%u us\n", time_diff(t, time_now()) / TIME_MHZ);
         im->qd.write_batch.len = 0;
         im->qd.write_batch.dirty = FALSE;
