@@ -19,6 +19,10 @@ Written with the help of Claude.
 
     make -C ffemu [O=<path>] [TARGET=shugart|apple2]
 
+The plain `make` at the top of the tree builds both programs as well, along
+with the firmware and with the same `O=`, so that a firmware change that breaks
+ffemu fails the regular build.
+
 The program is `out/ffemu/ffemu` under `<path>`, which defaults to the top of
 the source tree. `TARGET=apple2` builds `out/ffemu-apple2/ffemu-apple2`
 instead, which runs the Apple2 firmware: it lists only HFE images, and its
