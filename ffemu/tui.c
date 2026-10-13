@@ -3221,6 +3221,9 @@ static void draw_flash_dialog(void)
 {
     attr_t label, item;
     int y0, x0, i, r, y, x;
+    /* A letter moves the focus only while the dialog has the keys and the
+     * focus is on no text field, which takes letters as text. */
+    bool hot = (dialog == DLG_flash) && (fviews[fd_focus].type != FV_input);
 
     if (!fd_fits()) {
         message_box("Flash mem", "Window too small for dialog.");
@@ -3250,7 +3253,8 @@ static void draw_flash_dialog(void)
         case FV_check:
             if (v->label)
                 put_marked(y++, x, FD_W(v), label,
-                           off ? label : COLOR_PAIR(CP_dlg_hot), v->label);
+                           (off || !hot) ? label : COLOR_PAIR(CP_dlg_hot),
+                           v->label);
             for (r = 0; r < fd_rows(v); r++, y++) {
                 int k = (v->type == FV_radio) ? r : fd_item_of_row(v, r);
                 item = off ? COLOR_PAIR(CP_cluster_off) | dim
@@ -3273,8 +3277,8 @@ static void draw_flash_dialog(void)
                 }
                 if (k < fd_nr_items(v))
                     put_marked(y, x + 5, FD_W(v) - 6, item,
-                               off ? item : COLOR_PAIR(CP_cluster_hot),
-                               v->items[k]);
+                               (off || !hot) ? item
+                               : COLOR_PAIR(CP_cluster_hot), v->items[k]);
                 else
                     put(y, x + 5, FD_W(v) - 6, item, "%s (from flash)",
                         v->extra);
@@ -3288,7 +3292,7 @@ static void draw_flash_dialog(void)
             int len = strlen(v->text);
             const char *t = v->text + ((len > room) ? len - room : 0);
             put_marked(y, x, fd_field[v->col] - 1, label,
-                       COLOR_PAIR(CP_dlg_hot), v->label);
+                       hot ? COLOR_PAIR(CP_dlg_hot) : label, v->label);
             put(y, fx, fw, BRIGHT(CP_input), " %-*s", fw - 1, t);
             if (focused)
                 put(y, fx + 1 + strlen(t), 1, COLOR_PAIR(CP_ctl_on), " ");
