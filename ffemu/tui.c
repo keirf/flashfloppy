@@ -103,6 +103,8 @@ enum {
     CP_lcd,       /* black on the color of the settings: the LCD, lit */
     CP_lcd_dark,  /* black on dark gray, or blue on black: the LCD unlit */
     CP_lcd_stub,  /* bright magenta on the LCD: a character it lacks */
+    CP_lcd_dot,   /* the LCD's unlit dots, faint, on its panel */
+    CP_lcd_inkdot, /* the LCD's ink on its unlit dots */
     CP_nr
 };
 
@@ -615,9 +617,9 @@ static bool led_title(const struct led_view *v, char *title, size_t size)
     return mismatch;
 }
 
-/* Whether the LCD has white characters, on the dark blue panel, as those
- * are made. */
-#define LCD_WHITE_INK() (config.display_color == COLOR_BLUE)
+/* Whether the LCD has white characters, on a blue panel, dark or bright, as
+ * those are made. */
+#define LCD_WHITE_INK() ((config.display_color & 7) == COLOR_BLUE)
 
 /* The LCD's title into @title, noting a mismatch, display-type in flash
  * having the firmware drive another display; whether it does. */
@@ -672,6 +674,32 @@ static void draw_led(int y0, int x0, int fw, int style, bool too_small,
     display_hint(y0, x0, ch, style, too_small);
 }
 
+/* The lit LCD in half blocks with 16 colors, @px over @dots: the dots that
+ * are not lit show faintly, as on a real panel. */
+static void draw_lcd_half(int y0, int x0, const uint8_t *px,
+                          const uint8_t *dots, unsigned int w, unsigned int h)
+{
+    enum { PANEL, DOT, INK };
+    unsigned int x, y;
+
+    for (y = 0; y < h; y += 2) {
+        for (x = 0; x < w; x++) {
+            unsigned int i = y * w + x, j = i + w;
+            int top = px[i] ? INK : dots[i] ? DOT : PANEL;
+            int bottom = (y + 1 >= h) ? PANEL
+                : px[j] ? INK : dots[j] ? DOT : PANEL;
+            int fg = (top > bottom) ? top : bottom;
+            int bg = (top > bottom) ? bottom : top;
+            attr_t attr = (fg == DOT) ? COLOR_PAIR(CP_lcd_dot)
+                : (bg == DOT) ? COLOR_PAIR(CP_lcd_inkdot)
+                : COLOR_PAIR(CP_lcd);
+            wchar_t wc = (top == bottom) ? ((top == PANEL) ? L' ' : 0x2588)
+                : (top == fg) ? 0x2580 : 0x2584;
+            put_char(y0 + y / 2, x0 + x, attr, wc);
+        }
+    }
+}
+
 /* Draws the LCD at (@y0,@x0) in a frame @fw wide, in @style, centered: its
  * characters dark on the lit panel, as pixels, or in ASCII as text, each
  * code as the Unicode character that its ROM's glyph stands for, and as a
@@ -688,7 +716,7 @@ static void draw_lcd(int y0, int x0, int fw, int style, bool too_small,
         : COLOR_PAIR(CP_lcd)
         | ((LCD_WHITE_INK() && (COLORS < 16)) ? A_BOLD : 0);
     attr_t stub = has_colors() ? COLOR_PAIR(CP_lcd_stub) : A_REVERSE | A_BOLD;
-    const uint8_t *px;
+    const uint8_t *px, *dots;
     unsigned int w, h;
     int cw, ch, x, r, c;
 
@@ -707,8 +735,11 @@ static void draw_lcd(int y0, int x0, int fw, int style, bool too_small,
             }
         }
     } else {
-        hd44780_pixels(v, &px, &w, &h);
-        draw_pixels(y0 + 1, x, style, px, NULL, w, h, panel);
+        hd44780_pixels(v, &px, &dots, &w, &h);
+        if ((style == STYLE_half) && (COLORS >= 16) && v->backlight)
+            draw_lcd_half(y0 + 1, x, px, dots, w, h);
+        else
+            draw_pixels(y0 + 1, x, style, px, NULL, w, h, panel);
     }
     display_hint(y0, x0, ch, style, too_small);
 }
@@ -2240,6 +2271,11 @@ static void set_lcd_pairs(void)
         init_pair(CP_lcd_dark, COLOR_BLUE, COLOR_BLACK);
     init_pair(CP_lcd_stub, (COLORS >= 16) ? 8 + COLOR_MAGENTA : COLOR_MAGENTA,
               panel);
+    /* The unlit dots: the panel's color with the other brightness. */
+    if (COLORS >= 16) {
+        init_pair(CP_lcd_dot, panel ^ 8, panel);
+        init_pair(CP_lcd_inkdot, ink, panel ^ 8);
+    }
 }
 
 static void set_display_color(unsigned int zx, bool bright)
