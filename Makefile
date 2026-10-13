@@ -50,7 +50,11 @@ ffemu-%: FORCE
 
 ffemu: FORCE ffemu-shugart ffemu-apple2 ;
 
-all: FORCE all-stm32f105 all-at32f435 apple2-bootloader-stm32f105 ffemu;
+tests: FORCE
+	$(MAKE) -C $(ROOT)/tests O=$(O) all
+
+all: FORCE all-stm32f105 all-at32f435 apple2-bootloader-stm32f105 ffemu \
+    tests ;
 
 clean: FORCE
 	rm -rf $(OUT)
