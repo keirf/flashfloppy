@@ -394,6 +394,9 @@ void ui_fdd_restore(unsigned int in, unsigned int pos);
  * it with HOST_LOG_PREFIX. */
 void host_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 #define HOST_LOG_PREFIX "ffemu: "
+/* Before and after a user's string in a message, such as a path: whatever
+ * shows the message may shorten that part to fit, and drops the marks. */
+#define MSG_USER '\x1f'
 /* The line where the firmware reset itself, which is no power cycle: the
  * console goes on after it. */
 #define LOG_FW_RESET "======= Firmware reset ======="

@@ -46,12 +46,16 @@ static uint64_t reinsert_at;
 
 void host_log(const char *fmt, ...)
 {
-    char msg[512];
+    char msg[512], *p, *q;
     va_list ap;
 
     va_start(ap, fmt);
     vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
+    for (p = q = msg; *p; p++)
+        if (*p != MSG_USER)
+            *q++ = *p;
+    *q = '\0';
 
     emu_log(HOST_LOG_PREFIX);
     emu_log(msg);
