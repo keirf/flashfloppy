@@ -4,6 +4,8 @@ Runs the FlashFloppy user interface in a terminal, with no Gotek hardware. Windo
 
 On the floppy interface, the keyboard also stands in for the host computer's signals that select the drive and move its head, so that the track display can be watched as a computer would drive it. An image can be selected and is opened, so a bad image is reported as on the device, but no data flows.
 
+Written with the help of Claude.
+
 ## Building
 
     make -C ffemu [O=<path>] [TARGET=shugart|apple2]
