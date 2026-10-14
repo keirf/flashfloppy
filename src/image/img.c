@@ -1802,7 +1802,12 @@ static uint32_t calc_start_pos(struct image *im)
     if (bc < 0)
         bc += im->tracklen_bc;
 
-    im->img.crc = 0xffff;
+    /* Best-effort initialisation of data CRC in case we start within a
+     * sector's first data chunk. If we start within a subsequent chunk, or
+     * within the data CRC field itself, then we are resigned to getting the
+     * data CRC (harmlessly) wrong. */
+    im->img.crc = (im->sync == SYNC_fm) ? FM_DAM_CRC : MFM_DAM_CRC;
+
     im->img.trk_sec = im->img.rd_sec_pos = im->img.decode_data_pos = 0;
     decode_off = bc / 16;
     if (decode_off < im->img.idx_sz) {

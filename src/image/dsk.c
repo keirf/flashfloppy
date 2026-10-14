@@ -196,8 +196,12 @@ static uint32_t calc_start_pos(struct image *im)
     uint32_t decode_off;
     unsigned int i;
 
-    /* Calculate start position within the track. */
-    im->dsk.crc = 0xffff;
+    /* Best-effort initialisation of data CRC in case we start within a
+     * sector's first data chunk. If we start within a subsequent chunk, or
+     * within the data CRC field itself, or if the data mark is abnormal, then
+     * we are resigned to getting the data CRC (harmlessly) wrong. */
+    im->dsk.crc = MFM_DAM_CRC;
+
     im->dsk.trk_pos = im->dsk.rd_sec_pos = im->dsk.decode_data_pos = 0;
     decode_off = im->cur_bc / 16;
     if (decode_off < im->dsk.idx_sz) {
