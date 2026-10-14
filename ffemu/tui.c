@@ -2488,10 +2488,10 @@ static void set_display(int display)
  */
 
 enum { FV_radio, FV_check, FV_input, FV_ok, FV_cancel, FV_save_all,
-       FV_save_changed, FV_save_dump, FV_dump_cfg };
-/* The buttons, the last entries of fviews[], in the order of Tab: the two
+       FV_save_nondefault, FV_save_changed, FV_save_dump, FV_dump_cfg };
+/* The buttons, the last entries of fviews[], in the order of Tab: the three
  * Save and two Unpack ones, which stand above, then OK and Cancel. */
-#define FD_BUTTONS 6
+#define FD_BUTTONS 7
 
 /* The width of each column, so that the dialog with its shadow fits 99
  * columns; and in each, where the fields of input lines start. */
@@ -2606,6 +2606,10 @@ static struct fview {
     { FV_save_all, 0, NULL, NULL,
       "Write all options to FF.CFG on the USB drive as shown, old one kept "
       "as .BAK; flash unchanged",
+      { NULL }, false, false },
+    { FV_save_nondefault, 0, NULL, NULL,
+      "Write options that differ from defaults or flash to FF.CFG, old one as "
+      ".BAK; flash unchanged",
       { NULL }, false, false },
     { FV_save_changed, 0, NULL, NULL,
       "Write the options that differ from flash to FF.CFG, old one kept as "
@@ -2925,6 +2929,7 @@ static const char *fd_button_text(int type)
     case FV_ok: return "   OK   ";
     case FV_cancel: return " Cancel ";
     case FV_save_all: return " Save all to FF.CFG ";
+    case FV_save_nondefault: return " Save diff-from-defaults to FF.CFG ";
     case FV_save_changed: return " Save diff-from-flash to FF.CFG ";
     case FV_save_dump: return " Unpack FLASH.DMP to ffemurc ";
     case FV_dump_cfg: return " Unpack FLASH.DMP to FF.CFG ";
@@ -2978,7 +2983,7 @@ static void fd_layout(void)
     for (i = 0; i < FD_BUTTONS - 2; i++) {
         fviews[FD_NR - FD_BUTTONS + i].y = n + 2 * i;
         fviews[FD_NR - FD_BUTTONS + i].x =
-            fd_w - 3 - strlen(fd_button_text(FV_save_changed));
+            fd_w - 3 - strlen(fd_button_text(FV_save_nondefault));
     }
     fviews[FD_NR - 2].y = fviews[FD_NR - 1].y = fd_h - 4;
     fviews[FD_NR - 2].x = fd_w / 2 - 14;
@@ -3323,6 +3328,10 @@ static void draw_write_dialog(void)
     } else if (write_kind == FV_save_all) {
         title = "Save all to FF.CFG";
         ask = "Save all options to a file next to the image?";
+    } else if (write_kind == FV_save_nondefault) {
+        title = "Save diff-from-defaults to FF.CFG";
+        ask = "Save the options that differ from the defaults or from flash to "
+            "a file next to the image?";
     } else {
         title = "Save diff-from-flash to FF.CFG";
         ask = "Save the options that differ from flash to a file next to the "
@@ -3367,7 +3376,9 @@ static void fd_save(int kind)
     } else if (fd_edited(cfg) < 0) {
         return;
     }
-    if (!ff_cfg_write(cfg, kind != FV_save_changed,
+    if (!ff_cfg_write(cfg, (kind == FV_save_changed) ? FF_CFG_changed
+                      : (kind == FV_save_nondefault) ? FF_CFG_nondefault
+                      : FF_CFG_all,
                       (kind == FV_dump_cfg) ? "FLASH.DMP" : "the flash memory",
                       fd_note, sizeof(fd_note))) {
         show_message(DLG_flash, "FF.CFG", fd_note);
@@ -3550,8 +3561,8 @@ static void fd_key(int key)
             dialog_button = 0;
             return;
         }
-        if ((v->type == FV_save_all) || (v->type == FV_save_changed)
-            || (v->type == FV_dump_cfg)) {
+        if ((v->type == FV_save_all) || (v->type == FV_save_nondefault)
+            || (v->type == FV_save_changed) || (v->type == FV_dump_cfg)) {
             fd_ask_write(v->type);
             return;
         }
@@ -3822,6 +3833,7 @@ static void draw_flash_dialog(void)
         case FV_ok:
         case FV_cancel:
         case FV_save_all:
+        case FV_save_nondefault:
         case FV_save_changed: {
             /* OK is the default while the focus is on no button. */
             bool dflt = (v->type == FV_ok) && !fd_is_button(fd_focus);

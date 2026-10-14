@@ -1,14 +1,15 @@
 /*
  * cfgfile.c
  *
- * Writes FF.CFG on the USB drive from the configuration in the emulated
- * flash memory, as the Flash mem dialog's buttons ask: every option, or
- * only those that differ from the defaults. The file is generated afresh
- * from the firmware's example FF.CFG, which documents each option above its
- * line, with the values taken from flash; the previous file is kept as
- * FF.CFG.BAK. A drive made from a directory is written in that directory;
- * a real drive where the system has it mounted; for an image file, which
- * is never written, a file beside it takes the text.
+ * Writes FF.CFG on the USB drive from a configuration as the emulated flash
+ * memory keeps one, as the Flash mem dialog's buttons ask: every option,
+ * those that differ from the defaults or from flash, or only those that
+ * differ from flash. The file is generated afresh from the firmware's
+ * example FF.CFG, which documents each option above its line, with the
+ * values of that configuration; the previous file is kept as FF.CFG.BAK.
+ * A drive made from a directory is written in that directory; a real drive
+ * where the system has it mounted; for an image file, which is never
+ * written, a file beside it takes the text.
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
@@ -59,25 +60,31 @@ static int option_index(const void *cfg, const char *name)
 }
 
 /* Writes the file to @f: the example's lines, each option's value replaced
- * by the one in @cfg, and unless @all the options left out, with their
- * comments, whose value is what @flash holds: the firmware keeps the flash
- * value of an option the file does not name, so the rest need no line.
- * The first line says that the values come from @source. Returns the
- * number of options written. */
+ * by the one in @cfg, and but for FF_CFG_all the options of @set alone,
+ * with their comments: the firmware keeps the flash value of an option the
+ * file does not name, so an option whose value is what @flash holds needs
+ * no line, and FF_CFG_nondefault leaves out only those that hold the
+ * default too. The first line says that the values come from @source.
+ * Returns the number of options written. */
 static unsigned int generate(FILE *f, const uint8_t *cfg,
-                             const uint8_t *flash, bool all,
+                             const uint8_t *flash, enum ff_cfg_set set,
                              const char *source)
 {
     const char *p = ff_cfg_example, *pending = p, *next;
-    char name[32], value[80], held[80], date[32];
+    char name[32], value[80], held[80], dflt[80], date[32];
     unsigned int nr = 0, flags, hflags, len;
+    uint8_t dfl[256];
     time_t now = time(NULL);
+    bool all = (set == FF_CFG_all), write;
     int i;
 
+    emu_flash_cfg_defaults(dfl);
     strftime(date, sizeof(date), "%Y-%m-%d %H:%M", localtime(&now));
     fprintf(f, "## Written by ffemu %s on %s from %s: %s.\r\n\r\n",
             emu_fw_version(), date, source,
             all ? "every option"
+            : (set == FF_CFG_nondefault)
+            ? "the options that differ from the defaults or from flash"
             : "the options that differ from flash");
 
     /* @pending is where the comment lines above the next option begin. */
@@ -91,7 +98,10 @@ static unsigned int generate(FILE *f, const uint8_t *cfg,
             if (i >= 0) {
                 emu_flash_option(i, cfg, value, sizeof(value), &flags);
                 emu_flash_option(i, flash, held, sizeof(held), &hflags);
-                if (all || strcmp(value, held)) {
+                emu_flash_option(i, dfl, dflt, sizeof(dflt), &hflags);
+                write = all || strcmp(value, held)
+                    || ((set == FF_CFG_nondefault) && strcmp(value, dflt));
+                if (write) {
                     fwrite(pending, 1, p - pending, f);
                     if (flags & EMU_OPT_hex_only)
                         fprintf(f, "# %s: a value FF.CFG cannot give, kept in "
@@ -196,8 +206,8 @@ static bool replace_file(const char *path, const char *tmp, const char *bak,
     return true;
 }
 
-bool ff_cfg_write(const void *cfg, bool all, const char *source, char *msg,
-                  size_t size)
+bool ff_cfg_write(const void *cfg, enum ff_cfg_set set, const char *source,
+                  char *msg, size_t size)
 {
     uint8_t flash[256];
     char place[512], dir[4000], path[4600], tmp[4608], bak[4608];
@@ -218,7 +228,7 @@ bool ff_cfg_write(const void *cfg, bool all, const char *source, char *msg,
         return false;
     }
     emu_flash_get(flash);
-    nr = generate(f, cfg, flash, all, source);
+    nr = generate(f, cfg, flash, set, source);
     if (fclose(f) != 0) {
         snprintf(msg, size, "%s: %s", tmp, strerror(errno));
         remove(tmp);

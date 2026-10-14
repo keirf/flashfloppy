@@ -272,13 +272,18 @@ bool usb_save(const char *path, char *err, size_t size);
  * cfgfile.c
  */
 
+/* The options that ff_cfg_write() writes: every one; those whose value
+ * differs from the defaults or from the flash memory's; or only those that
+ * differ from the flash memory's. */
+enum ff_cfg_set { FF_CFG_all, FF_CFG_nondefault, FF_CFG_changed };
+
 /* Writes FF.CFG on the USB drive from configuration @cfg, as the flash
  * memory keeps one, which comes from @source, as the file's first line
- * says: every option, or only those that differ from the flash memory's;
- * for a drive made from an image, into a file beside the image instead.
- * Says what it did, or why it could not, in @msg. */
-bool ff_cfg_write(const void *cfg, bool all, const char *source, char *msg,
-                  size_t size);
+ * says: the options of @set; for a drive made from an image, into a file
+ * beside the image instead. Says what it did, or why it could not, in
+ * @msg. */
+bool ff_cfg_write(const void *cfg, enum ff_cfg_set set, const char *source,
+                  char *msg, size_t size);
 /* Where ff_cfg_write() would write: the directory @dir and the file's place
  * @place in it, and whether a file is there already in @exists; false, with
  * the reason in @msg, for a disk that the system has not mounted. */
