@@ -100,6 +100,13 @@ $(OUT)/ff_cfg_defaults.h: $(ROOT)/examples/FF.CFG $(ROOT)/scripts/mk_config.py
 
 $(OUT)/fw/main.o $(OUT)/emu/stubs.o: $(OUT)/ff_cfg_defaults.h
 
+.PHONY: FORCE
+$(OUT)/led_ver.h: FORCE
+	@mkdir -p $(dir $@)
+	$(Q)$(PYTHON) $(ROOT)/scripts/mk_led_ver.py "$(VER)" $@
+
+$(OUT)/fw/main.o: $(OUT)/led_ver.h
+
 # The firmware's example FF.CFG, which documents every option, built in for
 # writing FF.CFG from the flash memory.
 $(OUT)/gen/ff_cfg_example.c: $(ROOT)/examples/FF.CFG mk_text.py
