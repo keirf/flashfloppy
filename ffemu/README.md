@@ -243,23 +243,32 @@ writes to flash memory. Also there is a TUI dialog to edit those values right
 in the emulated flash memory; in it, a dark gray `=` at the left of a radio
 button marks the factory default, the value the firmware has when its flash
 memory holds no settings, and at the left of a check box, that it is checked by
-default. Note that if the USB drive contains `FF.CFG`, settings in it will be
-read by the firmware on start or restart, and will immediately be written to
-the flash memory over what was there before.
+default. The dialog offers only the options that matter to what ffemu
+emulates; the others keep their values. Its last row explains the control or
+the value under the cursor. Note that if the USB drive contains `FF.CFG`,
+settings in it will be read by the firmware on start or restart, and will
+immediately be written to the flash memory over what was there before. So OK,
+which writes the dialog's values to flash and power-cycles the device, first
+checks `FF.CFG` on the drive: if the file sets some of them otherwise, ffemu
+asks whether to change them in `FF.CFG` as well, or, for a drive made from an
+image, which it never writes, whether to write flash anyway.
 
-The dialog's buttons `Save all to FF.CFG` and `Save diff-from-flash to FF.CFG`
-write `FF.CFG` on the USB drive, into its `FF` folder if it has one, in the
-directory a drive was made from, or on a real drive where the system has it
-mounted; for a drive made from an image file, which ffemu never writes, they
-ask first and write a file beside the image instead, named as the image with
-`.FF.CFG` appended, which the firmware does not see: the firmware's example
-`FF.CFG` with the values as the dialog shows them, edits included, every option
-or only those that differ from what flash holds (the firmware keeps the flash
-value of an option a file does not name), each below its comments; the previous
-file is kept as `FF.CFG.BAK`. Nothing else happens: the dialog stays open,
-flash changes only on OK, and the firmware reads the file when the drive is
-next inserted or the device restarts; the bottom line says what was written.
-The third, `Unpack FLASH.DMP to ffemurc`, is enabled while the drive holds
+The dialog's buttons `Save all to FF.CFG`, `Save diff-from-defaults to FF.CFG`
+and `Save diff-from-flash to FF.CFG` write `FF.CFG` on the USB drive, into its
+`FF` folder if it has one, in the directory a drive was made from, or on a real
+drive where the system has it mounted; for a drive made from an image file,
+which ffemu never writes, they ask first and write a file beside the image
+instead, named as the image with `.FF.CFG` appended, which the firmware does
+not see: the firmware's example `FF.CFG` with the values as the dialog shows
+them, edits included, each below its comments: every option; those that differ
+from the defaults or from what flash holds, which once OK has written flash are
+the options set otherwise than by default; or only those that differ from what
+flash holds, since the firmware keeps the flash value of an option a file does
+not name. The previous file is kept as `FF.CFG.BAK`. Nothing else happens: the
+dialog stays open, flash changes only on OK, and the firmware reads the file
+when the drive is next inserted or the device restarts; the bottom line says
+what was written.
+The fourth, `Unpack FLASH.DMP to ffemurc`, is enabled while the drive holds
 `FLASH.DMP` beside `FF.CFG`: the settings area of a Gotek's flash memory, which
 the firmware writes there, before it reads `FF.CFG`, at the first insertion of
 a drive after "Save FLASH.DMP" in its main menu (a short press of both buttons,
@@ -273,7 +282,7 @@ override after the restart; then it puts the settings of the slot that the
 firmware would take from it, or no settings if it holds none, into the emulated
 flash memory, and so into the settings file, as OK puts the dialog's: the
 dialog's edits are dropped, `FF.CFG` is checked for options that it would undo,
-and the device is power-cycled. The fourth, `Unpack FLASH.DMP to FF.CFG`,
+and the device is power-cycled. The fifth, `Unpack FLASH.DMP to FF.CFG`,
 enabled likewise, writes every option of the dump into `FF.CFG`, where the Save
 buttons write it, the old file kept as `.BAK`, after asking in the same way,
 naming the file it takes and the one it writes; flash stays as it is, and the
@@ -348,7 +357,9 @@ with the host C library. Only `emu.h` is shared between the two.
 - The LCD's user-defined characters, its cursor, and a PCF8574A backpack, at
   0x3f, which the firmware would find just as well.
 - FF OSD.
-- Getting `IMAGE_A.CFG` written by the firmware.
+- The firmware's writes reaching the host files, the image or the disk:
+  `IMAGE_A.CFG`, `FLASH.DMP` and the like are kept aside until the drive is
+  removed.
 - FAT16 on a USB drive made from a directory, which is always FAT32; an image
   or a disk may be FAT16.
 - A setting for the code page of short names, in place of the system's.
