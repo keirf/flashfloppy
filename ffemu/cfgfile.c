@@ -23,7 +23,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "version.h"
 #include "host.h"
 
 /* examples/FF.CFG of the firmware, built into the program. */
@@ -77,7 +76,7 @@ static unsigned int generate(FILE *f, const uint8_t *cfg,
 
     strftime(date, sizeof(date), "%Y-%m-%d %H:%M", localtime(&now));
     fprintf(f, "## Written by ffemu %s on %s from %s: %s.\r\n\r\n",
-            FFEMU_VERSION, date, source,
+            emu_fw_version(), date, source,
             all ? "every option"
             : "the options that differ from flash");
 
