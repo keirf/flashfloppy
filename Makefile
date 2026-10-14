@@ -42,6 +42,7 @@ logfile-%: FORCE
 
 apple2-bootloader-%: FORCE
 	$(MAKE) target mcu=$* target=apple2-bootloader level=prod
+	$(MAKE) target mcu=$* target=apple2-bl_update level=prod
 
 all-%: FORCE prod-% debug-% logfile-% ;
 
@@ -133,6 +134,8 @@ _dist_apple2_at2_bootloader: FORCE
 	cd $(OUT)/stm32f105/prod/apple2-bootloader; \
 	  cp -a target.dfu $(f)/$(n).dfu; \
 	  cp -a target.hex $(f)/$(n).hex
+	$(PYTHON) $(ROOT)/scripts/mk_update.py new $(f)/$(n).upd \
+	  $(OUT)/stm32f105/prod/apple2-bl_update/target.bin stm32f105
 
 dist: level := prod
 dist: t := $(OUT)/$(PROJ)-$(VER)

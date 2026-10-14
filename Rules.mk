@@ -29,6 +29,12 @@ override target=bootloader
 FLAGS += -DAPPLE2_BOOTLOADER=1
 endif
 
+# And the update that installs it in place of the standard bootloader.
+ifeq ($(target),apple2-bl_update)
+override target=bl_update
+FLAGS += -DAPPLE2_BOOTLOADER=1
+endif
+
 ifeq ($(target),bootloader)
 # Debug bootloader doesn't fit in 32kB
 override level=prod

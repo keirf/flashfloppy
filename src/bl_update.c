@@ -28,14 +28,20 @@
 #define FIRMWARE_END   0x0800c000
 #endif
 
-/* The update payload. */
+/* The update payload: the bootloader, or the Apple2 one, which knows that
+ * QFN32 pin PA10 is reassigned. */
+#ifdef APPLE2_BOOTLOADER
+#define BOOTLOADER_BIN "../apple2-bootloader/target.bin"
+#else
+#define BOOTLOADER_BIN "../bootloader/target.bin"
+#endif
 extern char update_start[], update_end[];
 asm (
 "    .section .rodata\n"
 "    .align 4\n"
 "    .global update_start, update_end\n"
 "update_start:\n"
-"    .incbin \"../bootloader/target.bin\"\n"
+"    .incbin \"" BOOTLOADER_BIN "\"\n"
 "update_end:\n"
 "    .previous\n"
     );
