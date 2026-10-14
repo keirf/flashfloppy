@@ -1802,7 +1802,9 @@ static uint32_t calc_start_pos(struct image *im)
     if (bc < 0)
         bc += im->tracklen_bc;
 
-    im->img.crc = 0xffff;
+    /* A start within a sector's first data chunk regenerates the data from
+     * its first byte, whose CRC follows that of the data mark. */
+    im->img.crc = (im->sync == SYNC_fm) ? FM_DAM_CRC : MFM_DAM_CRC;
     im->img.trk_sec = im->img.rd_sec_pos = im->img.decode_data_pos = 0;
     decode_off = bc / 16;
     if (decode_off < im->img.idx_sz) {
