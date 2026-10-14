@@ -23,8 +23,6 @@
 #include <wchar.h>
 #include <sys/stat.h>
 
-#include "version.h"
-
 #include "host.h"
 
 static pthread_t thread;
@@ -1510,16 +1508,20 @@ static int hotkey(int x, const char *key, const char *what)
  * bottom. */
 static void draw_bars(void)
 {
-    static const char *name = FFEMU_NAME, *ver = " v" FFEMU_VERSION;
+    static const char *name = FFEMU_NAME;
     static const char *what = " - flashfloppy fw on a PC";
     /* "KIBER-MUZEJ, MUROM" in Cyrillic capitals, or in English where
      * everything is ASCII. */
     static const wchar_t cyrillic[] = L"\u041a\u0418\u0411\u0415\u0420-"
         L"\u041c\u0423\u0417\u0415\u0419, \u041c\u0423\u0420\u041e\u041c";
     const wchar_t *museum = plain() ? L"CYBER-MUSEUM, MUROM" : cyrillic;
-    int name_w = strlen(name) + strlen(ver), what_w = strlen(what);
+    char ver[48];
+    int name_w, what_w = strlen(what);
     int museum_w = wcslen(museum);
 
+    /* ffemu carries the version of the firmware it is built with. */
+    snprintf(ver, sizeof(ver), " %s", emu_fw_version());
+    name_w = strlen(name) + strlen(ver);
     pane_right = -1;
 
     /* Whole parts only: the description goes first, then the museum. */
