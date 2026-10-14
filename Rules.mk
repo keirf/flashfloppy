@@ -25,6 +25,9 @@ FLAGS += -mcpu=cortex-m3
 ifeq ($(target),apple2-bootloader)
 override target=bootloader
 FLAGS += -DAPPLE2_BOOTLOADER=1
+else ifeq ($(target),apple2-bl_update)
+override target=bl_update
+FLAGS += -DAPPLE2_BOOTLOADER=1
 endif
 
 ifeq ($(target),bootloader)

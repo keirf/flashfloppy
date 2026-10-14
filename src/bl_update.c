@@ -19,7 +19,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-/* Reflash the main bootloader (first 32kB). */
+/* Bootloader-update firmware: Reflashes the main bootloader. */
 #if MCU == MCU_stm32f105
 #define FIRMWARE_START 0x08000000
 #define FIRMWARE_END   0x08008000
@@ -29,13 +29,19 @@
 #endif
 
 /* The update payload. */
+#ifdef APPLE2_BOOTLOADER
+#define BOOTLOADER_BIN "../apple2-bootloader/target.bin"
+#else
+#define BOOTLOADER_BIN "../bootloader/target.bin"
+#endif
+
 extern char update_start[], update_end[];
 asm (
 "    .section .rodata\n"
 "    .align 4\n"
 "    .global update_start, update_end\n"
 "update_start:\n"
-"    .incbin \"../bootloader/target.bin\"\n"
+"    .incbin \"" BOOTLOADER_BIN "\"\n"
 "update_end:\n"
 "    .previous\n"
     );
