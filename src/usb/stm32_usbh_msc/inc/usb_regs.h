@@ -517,15 +517,12 @@ typedef union _USB_OTG_HNPTXSTS_TypeDef
         16;
         uint32_t nptxqspcavail :
         8;
-        struct
-        {
-            uint32_t terminate :
-            1;
-            uint32_t token :
-            2;
-            uint32_t chnum :
-            4;
-        } nptxqtop;
+        uint32_t nptxqtop_terminate :
+        1;
+        uint32_t nptxqtop_token :
+        2;
+        uint32_t nptxqtop_chnum :
+        4;
         uint32_t Reserved :
         1;
     }
@@ -847,17 +844,14 @@ typedef union _USB_OTG_HPTXSTS_TypeDef
         16;
         uint32_t ptxqspcavail :
         8;
-        struct
-        {
-            uint32_t terminate :
-            1;
-            uint32_t token :
-            2;
-            uint32_t chnum :
-            4;
-            uint32_t odd_even :
-            1;
-        } ptxqtop;
+        uint32_t ptxqtop_terminate :
+        1;
+        uint32_t ptxqtop_token :
+        2;
+        uint32_t ptxqtop_chnum :
+        4;
+        uint32_t ptxqtop_odd_even :
+        1;
     }
         b;
 } USB_OTG_HPTXSTS_TypeDef ;
