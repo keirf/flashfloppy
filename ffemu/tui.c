@@ -12,7 +12,9 @@
 
 #include <ctype.h>
 #include <curses.h>
+#include <poll.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -4015,9 +4017,24 @@ static void handle_key(int key)
         color_key(key);
 }
 
+/* Whether the terminal has gone with no hangup signal for ffemu: a wait for
+ * a key ended at once with none, while the terminal reads as ready. */
+static bool terminal_gone(uint64_t waited_ns)
+{
+    static unsigned int early;
+    struct pollfd p = { .fd = STDIN_FILENO, .events = POLLIN };
+
+    if ((waited_ns < FRAME_MS * 1000000ull / 4) && (poll(&p, 1, 0) > 0))
+        early++;
+    else
+        early = 0;
+    return early >= 3;
+}
+
 static void *tui_thread(void *unused)
 {
     int key, rc, i;
+    uint64_t t;
     wint_t ch;
 
     fitted_display = config.display;
@@ -4103,7 +4120,12 @@ static void *tui_thread(void *unused)
 
         /* Waits for a key for up to one frame time. Characters come as
          * Unicode, since a layout sets what Shift+digit gives. */
+        t = emu_time_ns();
         rc = get_wch(&ch);
+        /* Reads fail at once on a terminal that has gone, and the loop would
+         * spin: end as the hangup signal would have ended ffemu. */
+        if ((rc == ERR) && terminal_gone(emu_time_ns() - t))
+            raise(SIGHUP);
         while (rc != ERR) {
             timeout(0);
             if ((rc == OK) && (ch == 27)) {
