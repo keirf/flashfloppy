@@ -237,6 +237,11 @@ void floppy_set_fintf_mode(void)
     uint32_t old_active;
     uint8_t mode = ff_cfg.interface;
 
+    /* Flash may hold an interface unknown to this firmware, written by
+     * another one: take it as jc, the default. */
+    if (mode >= ARRAY_SIZE(fintfs))
+        mode = FINTF_JC;
+
     if (mode == FINTF_JC) {
         /* Jumper JC selects default floppy interface configuration:
          *   - No Jumper: Shugart
