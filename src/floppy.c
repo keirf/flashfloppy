@@ -237,6 +237,10 @@ void floppy_set_fintf_mode(void)
     uint32_t old_active;
     uint8_t mode = ff_cfg.interface;
 
+    /* Default to JC if the interface type is unknown to this firmware. */
+    if (mode >= ARRAY_SIZE(fintfs))
+        mode = FINTF_JC;
+
     if (mode == FINTF_JC) {
         /* Jumper JC selects default floppy interface configuration:
          *   - No Jumper: Shugart
