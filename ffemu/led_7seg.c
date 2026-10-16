@@ -86,7 +86,8 @@ static void tm1651_byte(uint8_t b)
     }
     if (writing && (addr < ARRAY_SIZE(d.seg))) {
         update_begin();
-        d.seg[addr] = b;
+        /* Seven segment outputs: the display's decimal points stay dark. */
+        d.seg[addr] = b & 0x7f;
         update_end();
         dirty = true;
     }
