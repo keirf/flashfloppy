@@ -115,13 +115,14 @@ static const uint8_t dsk_file_sec[2][16] = {
 
 static bool_t dsk_open(struct image *im)
 {
-    unsigned int prodos = (im->slot->type[0] == 'p');
+    unsigned int prodos = (im->slot->type[0] == 'p'); /* .po vs .do */
     uint32_t hdr[2];
 
     im->a2.nic = im->a2.dsk = TRUE;
     if (!nib_open(im))
         return FALSE;
 
+    /* .DSK: Auto-probe DOS 3.3 vs ProDOS sector order.  */
     if (im->slot->type[1] == 's') {
         /* The key block of a ProDOS volume directory, block 2: no previous
          * block, the next one 3, storage type F before the name's length. */
@@ -129,9 +130,10 @@ static bool_t dsk_open(struct image *im)
         F_read(&im->fp, hdr, sizeof(hdr), NULL);
         prodos = (le32toh(hdr[0]) == 0x00030000)
             && ((le32toh(hdr[1]) & 0xf0) == 0xf0);
+        if (prodos)
+            printk(".DSK: ProDOS\n");
     }
-    if (prodos)
-        printk("ProDOS order\n");
+
     im->a2.file_sec = dsk_file_sec[prodos];
 
     return TRUE;
