@@ -2255,9 +2255,6 @@ static int run_floppy(void *_b)
         t_prev = t_now;
     }
 
-    if (display_type == DT_LED_7SEG)
-        display_state = LED_NORMAL;
-
     return 0;
 }
 
@@ -2823,6 +2820,9 @@ static int floppy_main(void *unused)
             floppy_arena_teardown();
             speaker_notify_insert(cfg.slot_nr);
             fres = F_call_cancellable(run_floppy, &b);
+            /* Also when the call was cancelled, as a pulled USB drive does. */
+            if (display_type == DT_LED_7SEG)
+                display_state = LED_NORMAL;
             floppy_cancel();
             speaker_notify_eject();
             assert_volume_connected();
