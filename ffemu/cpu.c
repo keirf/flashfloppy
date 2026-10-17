@@ -46,7 +46,8 @@ volatile int emu_oled_synth_8x16;
 
 char log_ring[LOG_SIZE];
 volatile unsigned int log_head;
-const char *log_file_name;
+const char *log_file_name, *log_file_tried;
+int log_file_errno = ENOENT;
 static int log_fd = -1;
 
 static char **saved_argv;
@@ -502,11 +503,14 @@ static void open_log(void)
         rename(path, bak);
     }
 
+    log_file_tried = path;
     log_fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC
                   | (fw_reset ? 0 : O_TRUNC), 0644);
     if (log_fd >= 0) {
         own_file(path);
         log_file_name = path;
+    } else {
+        log_file_errno = errno;
     }
     if (fw_reset) {
         load_log_tail(path);

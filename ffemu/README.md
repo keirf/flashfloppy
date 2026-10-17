@@ -245,6 +245,12 @@ starts a comment line. ffemu writes it with the defaults, and a comment on each
 setting, when it does not exist, and writes a setting changed from the keyboard
 back into it, keeping the other lines as they are.
 
+When ffemu has written the file anew and runs in a terminal, it first says
+where it runs, which file it wrote, where the console log goes and which folder
+takes its temporary files, the paths in Windows notation when it runs on
+Windows without MSYS2, Cygwin or Git Bash, and waits for a key before it
+starts. It stops with an error when it cannot write the file or the log.
+
 The settings file also holds the state of the Gotek flash memory, where the
 firmware stores its settings. Those lines are rewritten every time the firmware
 writes to flash memory. Also there is a TUI dialog to edit those values right
