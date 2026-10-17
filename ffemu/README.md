@@ -146,7 +146,8 @@ The app presents a TUI similar in look to Turbo Vision, mostly self-documented.
 The keys that act like Gotek controls or its state changers are shown in the
 Controls pane, each lit for a moment when pressed, other keys are shown in the
 bottom line of the terminal, which ends in a green `>` when the window is too
-narrow for all of it. Ctrl+L repaints the screen, for a terminal that has lost
+narrow for all of it. Ctrl+L sends the whole screen anew, leaving the
+terminal's alternate screen and entering it again, for a terminal that has lost
 part of it, say after the window was maximized; a change of the rendering
 repaints it too. Esc acts after 25 ms, the time ncurses waits for the rest of a
 key sequence that starts with it, or after 200 ms in an ssh session, which
@@ -166,7 +167,15 @@ it. Beside the display, the `FF.CFG` that the firmware reads is
 shown; while the USB drive is ejected, it stays there, in light gray: for a
 drive made from a directory, as the file is on the host now, looked for and
 read again on every Del, so that an edit shows what the next insertion will
-give the firmware; for an image or a disk, as last read from it.
+give the firmware; for an image or a disk, as last read from it. The dash in
+the museum's name at the top right turns every half second, which shows that
+ffemu runs; ffemu ends when two of its turns in a row cannot be written, as
+happens when the window of the terminal is killed and no hangup signal comes.
+With each turn ffemu also reads the terminal's size, since on Windows the
+signal of a resize can get lost; in Windows Terminal, or another terminal
+behind a Windows pseudo console, the screen is sent anew as by Ctrl+L once a
+resize has settled, as the pseudo console passes on only the changes of its
+own copy of the screen and a resize can leave the terminal's copy broken.
 
 A terminal reports key presses but not releases, so a key press holds its
 virtual button down for a fixed time (150 ms by default), and then auto-repeat
@@ -249,7 +258,8 @@ When ffemu has written the file anew and runs in a terminal, it first says
 where it runs, which file it wrote, where the console log goes and which folder
 takes its temporary files, the paths in Windows notation when it runs on
 Windows without MSYS2, Cygwin or Git Bash, and waits for a key before it
-starts. It stops with an error when it cannot write the file or the log.
+starts, a dash turning after the question as at the top right of the TUI. It
+stops with an error when it cannot write the file or the log.
 
 The settings file also holds the state of the Gotek flash memory, where the
 firmware stores its settings. Those lines are rewritten every time the firmware

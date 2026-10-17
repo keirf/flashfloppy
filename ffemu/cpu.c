@@ -679,6 +679,16 @@ static void prepare_restart(void)
 
 static void restart(void)
 {
+#ifdef __CYGWIN__
+    /* Cygwin names the program without its .exe, which a directory of that
+     * name beside it, such as its settings folder, would take instead. */
+    char self[4096];
+    ssize_t n = readlink("/proc/self/exe", self, sizeof(self) - 5);
+    if (n > 0) {
+        strcpy(self + n, ".exe");
+        execv(self, saved_argv);
+    }
+#endif
     execv("/proc/self/exe", saved_argv);
     execvp(saved_argv[0], saved_argv);
     _exit(3);
