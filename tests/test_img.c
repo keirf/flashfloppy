@@ -384,6 +384,45 @@ TEST(hfe_write_cells)
     CHECK_MEM(back, trk, HFE_TRK);
 }
 
+/* An HFE whose header names Apple II GCR, which no Shugart host reads, is
+ * refused; one whose header says none is served, and the bits of its first
+ * track only noted in the log when they look like GCR, runs of four 0 cells
+ * or more. */
+TEST(hfe_encodings)
+{
+    static const uint8_t encodings[5] = { 0x00, 0x02, 0x06, 0x07, 0xff };
+    static uint8_t trk[HFE_TRK], hfe[32*1024];
+    unsigned int i;
+    uint32_t len;
+
+    memset(trk, 0x49, HFE_TRK); /* no four 0 cells in a row */
+    for (i = 0; i < ARRAY_SIZE(encodings); i++) {
+        bool_t ok = (encodings[i] != 0x06) && (encodings[i] != 0x07);
+        FRESULT fr;
+        drive_reset();
+        ft_fw_log_clear();
+        len = make_hfe(hfe, trk);
+        hfe[11] = encodings[i];
+        drive_add("A.HFE", hfe, len);
+        fr = image_mount("A.HFE");
+        if ((fr == FR_OK) != ok)
+            ft_fail(__FILE__, __LINE__, "encoding %02x: mount gave %d",
+                    encodings[i], fr);
+        if (!ok)
+            CHECK(log_has("HFE unfit: GCR"));
+    }
+    /* The last one, no encoding and no GCR's runs, noted nothing. */
+    CHECK(!log_has("HFE: looks"));
+
+    drive_reset();
+    memset(trk, 0x01, HFE_TRK); /* seven 0 cells in a row */
+    len = make_hfe(hfe, trk);
+    hfe[11] = 0xff;
+    drive_add("A.HFE", hfe, len);
+    REQUIRE(image_mount("A.HFE") == FR_OK);
+    CHECK(log_has("HFE: looks GCR"));
+}
+
 TEST(img_pc_720k)
 {
     drive_reset();

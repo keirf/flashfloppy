@@ -73,7 +73,7 @@ enum {
 
 static void hfe_seek_track(struct image *im, uint16_t track);
 
-#if (TARGET == TARGET_apple2) && (LEVEL != LEVEL_prod)
+#if LEVEL != LEVEL_prod
 /* Whether the bits at the start of track 0 look like Apple2 GCR: the
  * converters store a 4us GCR bit as two 2us cells, so GCR's runs of two 0
  * bits show as runs of four 0 cells or more, which MFM and FM, with at most
@@ -158,6 +158,18 @@ static bool_t hfe_open(struct image *im)
     } else if ((dhdr.track_encoding != ENC_AppleII_GCR1)
                && (dhdr.track_encoding != ENC_AppleII_GCR2)) {
         printk("HFE unfit: non-GCR\n");
+        return FALSE;
+    }
+#else
+    /* A Shugart host reads anything but Apple II GCR, likewise. */
+    if (dhdr.track_encoding == ENC_Unknown) {
+#if LEVEL != LEVEL_prod
+        if (hfe_bits_look_gcr(im))
+            printk("HFE: looks GCR\n");
+#endif
+    } else if ((dhdr.track_encoding == ENC_AppleII_GCR1)
+               || (dhdr.track_encoding == ENC_AppleII_GCR2)) {
+        printk("HFE unfit: GCR\n");
         return FALSE;
     }
 #endif
