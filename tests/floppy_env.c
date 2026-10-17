@@ -123,6 +123,7 @@ void IRQ_10(void);
 void IRQ_12(void);
 void IRQ_13(void);
 void IRQ_23(void);
+void IRQ_27(void);
 void IRQ_28(void);
 void IRQ_40(void);
 void IRQ_43(void);
@@ -185,7 +186,11 @@ void irqs_run(void)
         case 12: IRQ_12(); break;
         case 13: IRQ_13(); break;
         case 23: IRQ_23(); break;
-        case 28: IRQ_28(); break;
+#if TARGET == TARGET_apple2
+        case 27: IRQ_27(); break; /* TMR1_CC: WDATA */
+#else
+        case 28: IRQ_28(); break; /* TIM2: STEP */
+#endif
         case 40: IRQ_40(); break;
         case 43: IRQ_43(); break;
         default:
@@ -322,6 +327,13 @@ static time_t index_time;
 void floppy_boot(void)
 {
     board_reset();
+#if TARGET == TARGET_apple2
+    /* The stepper phases at rest: all off, their pins low. */
+    pin_set(PA, 10, FALSE);
+    pin_set(PA, 9, FALSE);
+    pin_set(PB, 0, FALSE);
+    pin_set(PA, 1, FALSE);
+#endif
     floppy_init();
     floppy_set_cyl(0, 0);
     pin_set(PA, 0, FALSE);
