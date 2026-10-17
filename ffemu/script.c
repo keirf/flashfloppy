@@ -89,7 +89,7 @@ static unsigned int utf8(char *p, unsigned int cp)
 static void dump_display(void)
 {
     static uint8_t px[OLED_W * OLED_MAX_H];
-    const uint8_t *src = px, *all;
+    const uint8_t *src = px;
     struct oled_view v;
     struct led_view lv;
     struct lcd_view cv;
@@ -114,20 +114,23 @@ static void dump_display(void)
         return;
     }
     if (DISP_IS_LED(config.display)) {
+        char art[3][16];
         led_get_view(&lv);
         led_text(&lv, text, sizeof(text));
         printf("display: LED %u digits %s \"%s\" segments %02x %02x %02x "
                "updates=%u\n", lv.nr_digits, lv.on ? "on" : "off", text,
                lv.seg[0], lv.seg[1], lv.seg[2], lv.nr_updates);
-        led_pixels(&lv, LED_FONT_ascii, &src, &all, &w, &h);
-    } else {
-        oled_get_view(&v, px);
-        printf("display: 128x%u %s contrast=%u%s updates=%u\n", v.height,
-               v.on ? "on" : "off", v.contrast,
-               v.inverse ? " inverse" : "", v.nr_updates);
-        w = OLED_W;
-        h = v.height;
+        led_art(&lv, art);
+        for (y = 0; y < 3; y++)
+            puts(art[y]);
+        return;
     }
+    oled_get_view(&v, px);
+    printf("display: 128x%u %s contrast=%u%s updates=%u\n", v.height,
+           v.on ? "on" : "off", v.contrast,
+           v.inverse ? " inverse" : "", v.nr_updates);
+    w = OLED_W;
+    h = v.height;
     if (w > sizeof(row) - 1)
         w = sizeof(row) - 1;
     for (y = 0; y < h; y++) {
