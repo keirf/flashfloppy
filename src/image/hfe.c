@@ -33,6 +33,8 @@ enum {
     ENC_Amiga_MFM,
     ENC_ISOIBM_FM,
     ENC_Emu_FM,
+    ENC_AppleII_GCR1 = 6,
+    ENC_AppleII_GCR2 = 7,
     ENC_Unknown = 0xff
 };
 
@@ -115,6 +117,20 @@ static bool_t hfe_open(struct image *im)
 
     /* Get an initial value for ticks per revolution. */
     hfe_seek_track(im, 0);
+
+#if TARGET == TARGET_apple2
+    /* An Apple2 host reads GCR and nothing else. An image whose header names
+     * another encoding is refused rather than served as noise. */
+    switch (dhdr.track_encoding) {
+    case ENC_Unknown:
+    case ENC_AppleII_GCR1:
+    case ENC_AppleII_GCR2:
+        break;
+    default:
+        printk("HFE unfit: non-GCR\n");
+        return FALSE;
+    }
+#endif
 
     return TRUE;
 }

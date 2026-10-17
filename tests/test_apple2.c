@@ -633,6 +633,34 @@ static uint32_t make_hfe(uint8_t *hfe, uint8_t encoding, bool_t gcr)
     return 1024 + ((len + 255) / 256) * 512;
 }
 
+/* An HFE whose header names an encoding other than Apple II GCR is refused;
+ * one whose header says none is served. */
+TEST(apple2_hfe_encodings)
+{
+    static const uint8_t encodings[5] = { 0x00, 0x02, 0x06, 0x07, 0xff };
+    unsigned int i;
+    uint32_t len;
+
+    make_nib62();
+    make_disk(disk, 35);
+    make_track(want, disk, 0, dos_order, 0);
+    for (i = 0; i < ARRAY_SIZE(encodings); i++) {
+        bool_t ok = (encodings[i] == 0x06) || (encodings[i] == 0x07)
+            || (encodings[i] == 0xff);
+        FRESULT fr;
+        drive_reset();
+        ft_fw_log_clear();
+        len = make_hfe(file, encodings[i], TRUE);
+        drive_add("GCR.HFE", file, len);
+        fr = image_mount("GCR.HFE");
+        if ((fr == FR_OK) != ok)
+            ft_fail(__FILE__, __LINE__, "encoding %02x: mount gave %d",
+                    encodings[i], fr);
+        if (!ok)
+            CHECK(log_has("HFE unfit: non-GCR"));
+    }
+}
+
 /*
  * Positions: the floppy code starts a track where the disk has turned to,
  * after every seek and every write. A revolution from there must be the
