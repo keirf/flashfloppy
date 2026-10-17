@@ -377,6 +377,17 @@ bool bare_windows(void);
 const char *user_path(const char *path, char *buf, size_t size);
 
 /*
+ * wincon.c, Windows only
+ */
+
+/* Hides a scroll bar of the console window that covers a part of the screen
+ * and has nothing to scroll. */
+void check_console_bars(void);
+/* Whether the terminal is a pseudo console, whose screen a terminal program,
+ * such as Windows Terminal, draws. */
+bool pseudo_console(void);
+
+/*
  * ffemu.c
  */
 

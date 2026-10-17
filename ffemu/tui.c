@@ -12,6 +12,7 @@
 
 #include <ctype.h>
 #include <curses.h>
+#include <errno.h>
 #include <poll.h>
 #include <pthread.h>
 #include <signal.h>
@@ -19,8 +20,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <wchar.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 
 #include "host.h"
@@ -1521,20 +1524,40 @@ static int hotkey(int x, const char *key, const char *what)
     return x + strlen(what) + 1;
 }
 
+/* A quarter turn of the menu bar's spinner every half second of the host's
+ * time, so that the screen changes even while nothing else on it does. */
+#define SPIN_STEP_NS 500000000u
+static unsigned int spin_step;
+
+/* The host's monotonic clock. */
+static uint64_t clock_ns(void)
+{
+    struct timespec t;
+
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1000000000ull + t.tv_nsec;
+}
+
 /* The menu bar at the top, and the status line with its hotkeys at the
  * bottom. */
 static void draw_bars(void)
 {
     static const char *name = FFEMU_NAME;
     static const char *what = " - flashfloppy fw on a PC";
+    static const char spin[] = "-\\|/";
     /* "KIBER-MUZEJ, MUROM" in Cyrillic capitals, or in English where
      * everything is ASCII. */
     static const wchar_t cyrillic[] = L"\u041a\u0418\u0411\u0415\u0420-"
         L"\u041c\u0423\u0417\u0415\u0419, \u041c\u0423\u0420\u041e\u041c";
-    const wchar_t *museum = plain() ? L"CYBER-MUSEUM, MUROM" : cyrillic;
+    wchar_t museum[32];
     char ver[48];
     int name_w, what_w = strlen(what);
-    int museum_w = wcslen(museum);
+    int museum_w;
+
+    /* The museum's dash is the spinner. */
+    wcscpy(museum, plain() ? L"CYBER-MUSEUM, MUROM" : cyrillic);
+    *wcschr(museum, L'-') = spin[spin_step % 4];
+    museum_w = wcslen(museum);
 
     /* ffemu carries the version of the firmware it is built with. */
     snprintf(ver, sizeof(ver), " %s", emu_fw_version());
@@ -1700,6 +1723,9 @@ static void draw_ff_cfg(int y, int x, int w, int h)
                  ff_cfg_top + rows < nr_lines);
 }
 
+/* How the last update of the screen ended: 0 or the error of a write. */
+static int write_errno;
+
 static void redraw(void)
 {
     static uint8_t px[OLED_W * OLED_MAX_H];
@@ -1755,7 +1781,10 @@ static void redraw(void)
     draw_dialog();
     /* Last, over a dialog or its shadow reaching it in a short window. */
     draw_key_bar();
+    /* Curses ignores a failed write, which leaves its errno set. */
+    errno = 0;
     refresh();
+    write_errno = errno;
 }
 
 /*
@@ -3947,6 +3976,43 @@ static int fdd_key(int key)
     return -1;
 }
 
+/* When to renew the screen, or 0. */
+static uint64_t renew_at;
+#define RENEW_DELAY_NS 400000000u
+
+/* At the next refresh, the whole screen anew in a new alternate screen: a
+ * Windows pseudo console passes on only what changed in its copy of the
+ * screen, while its terminal may have broken rows in a width just changed. */
+static void renew_screen(void)
+{
+    endwin();
+    clearok(stdscr, TRUE);
+}
+
+/* The terminal resized: the next refresh repaints everything, and a pseudo
+ * console's terminal gets the screen anew once the size has settled. */
+static void resized(void)
+{
+    clearok(stdscr, TRUE);
+#ifdef __CYGWIN__
+    if (pseudo_console())
+        renew_at = clock_ns() + RENEW_DELAY_NS;
+#endif
+}
+
+/* Reads the terminal's size, since the runtime of Windows loses the signal of
+ * a resize when another call has read the new size before. */
+static void check_size(void)
+{
+    struct winsize ws;
+
+    if ((ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0) && (ws.ws_row > 0)
+        && (ws.ws_col > 0) && is_term_resized(ws.ws_row, ws.ws_col)) {
+        resizeterm(ws.ws_row, ws.ws_col);
+        resized();
+    }
+}
+
 static void handle_key(int key)
 {
     unsigned int i;
@@ -3955,10 +4021,13 @@ static void handle_key(int key)
     if ((key == '\r') || (key == KEY_ENTER))
         key = '\n';
 
-    /* Ctrl+L, or the window resized: the next refresh repaints everything,
-     * for a terminal that has lost part of the screen. */
-    if ((key == ('L' & 0x1f)) || (key == KEY_RESIZE)) {
-        clearok(stdscr, TRUE);
+    /* Ctrl+L, for a terminal that has lost part of the screen. */
+    if (key == ('L' & 0x1f)) {
+        renew_screen();
+        return;
+    }
+    if (key == KEY_RESIZE) {
+        resized();
         return;
     }
 
@@ -4113,6 +4182,8 @@ static bool terminal_gone(uint64_t waited_ns)
 static void *tui_thread(void *unused)
 {
     int key, rc, i;
+    unsigned int step, failed = 0;
+    bool new_step;
     uint64_t t;
     wint_t ch;
 
@@ -4226,7 +4297,28 @@ static void *tui_thread(void *unused)
 
         ui_poll();
         check_flash_dump();
+        /* Each step of the spinner is written to the terminal: when two in a
+         * row fail, the terminal has gone with no hangup signal, as a
+         * terminal window does when its process is killed. */
+        step = clock_ns() / SPIN_STEP_NS;
+        new_step = (step != spin_step);
+        spin_step = step;
+        if (new_step)
+            check_size();
+        if ((renew_at != 0) && (clock_ns() >= renew_at)) {
+            renew_at = 0;
+            renew_screen();
+        }
         redraw();
+        if (new_step) {
+            failed = ((write_errno == EIO) || (write_errno == EPIPE)
+                || (write_errno == EBADF)) ? failed + 1 : 0;
+            if (failed >= 2)
+                raise(SIGHUP);
+#ifdef __CYGWIN__
+            check_console_bars();
+#endif
+        }
     }
 
     return NULL;

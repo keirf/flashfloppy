@@ -16,6 +16,8 @@
 #include <fcntl.h>
 #include <langinfo.h>
 #include <locale.h>
+#include <poll.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -425,12 +427,17 @@ static void say_where(void)
  * ends the program if the terminal goes away. */
 static void wait_key(void)
 {
+    static const char spin[] = "-\\|/";
     struct termios old, raw;
     bool set = (tcgetattr(STDIN_FILENO, &old) == 0);
-    ssize_t n;
+    struct pollfd p = { .fd = STDIN_FILENO, .events = POLLIN };
+    char turn[2] = { '\b', 0 };
+    unsigned int step = 0;
+    ssize_t n = 0;
+    int rc;
     char c;
 
-    printf("Press any key to start...");
+    printf("Press any key to start... %c", spin[0]);
     fflush(stdout);
     if (set) {
         raw = old;
@@ -441,14 +448,28 @@ static void wait_key(void)
     }
     /* Keys typed before the question do not answer it. */
     tcflush(STDIN_FILENO, TCIFLUSH);
-    do
-        n = read(STDIN_FILENO, &c, 1);
-    while ((n < 0) && (errno == EINTR));
+    /* A spinner turns while ffemu waits; a write of it that fails means the
+     * terminal has gone with no hangup signal. */
+    for (;;) {
+        rc = poll(&p, 1, 500);
+        if (rc > 0) {
+            n = read(STDIN_FILENO, &c, 1);
+            if ((n >= 0) || (errno != EINTR))
+                break;
+        } else if (rc == 0) {
+            turn[1] = spin[++step % 4];
+            if ((write(STDOUT_FILENO, turn, 2) < 0) && (errno != EINTR)
+                && (errno != EAGAIN))
+                raise(SIGHUP);
+        } else if (errno != EINTR) {
+            break;
+        }
+    }
     /* The rest of a key that sends a sequence. */
     tcflush(STDIN_FILENO, TCIFLUSH);
     if (set)
         tcsetattr(STDIN_FILENO, TCSANOW, &old);
-    printf("\n");
+    printf("\b \n");
     if (n != 1)
         exit(0);
 }
