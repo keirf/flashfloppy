@@ -3197,12 +3197,15 @@ static void check_buttons(void)
     banner();
 }
 
+/* "UER" and the version, as frames laid out by the build for 3 digits
+ * (led_ver3) and for 2 (led_ver2). */
+#include "led_ver.h"
+
 static void maybe_show_version(void)
 {
+    const uint8_t (*v)[3];
+    unsigned int i, nr;
     uint8_t b, nb;
-    const char *p, *np;
-    char msg[3];
-    int len;
 
     /* LCD/OLED already displays version info in idle state. */
     if (display_type != DT_LED_7SEG)
@@ -3228,16 +3231,15 @@ static void maybe_show_version(void)
     led_7seg_write_decimal(ram_kb);
     delay_ms(1000);
 
-    led_7seg_write_string("UER");
-    delay_ms(1000);
-
-    /* Iterate through the dotted sections of the version number. */
-    for (p = fw_ver; p != NULL; p = np ? np+1 : NULL) {
-        np = strchr(p, '.');
-        memset(msg, ' ', sizeof(msg));
-        len = min_t(int, np ? np - p : strnlen(p, sizeof(msg)), sizeof(msg));
-        memcpy(&msg[sizeof(msg) - len], p, len);
-        led_7seg_write_string(msg);
+    if (led_7seg_nr_digits() == 3) {
+        v = led_ver3;
+        nr = ARRAY_SIZE(led_ver3);
+    } else {
+        v = led_ver2;
+        nr = ARRAY_SIZE(led_ver2);
+    }
+    for (i = 0; i < nr; i++) {
+        led_7seg_write_raw(v[i]);
         delay_ms(1000);
     }
 
