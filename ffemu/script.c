@@ -82,10 +82,22 @@ static unsigned int utf8(char *p, unsigned int cp)
     return 3;
 }
 
+/* Row @y of the LCD @cv into @row, each code as the Unicode character that
+ * its ROM's glyph stands for, in UTF-8, a white square for one with none. */
+static void lcd_row(const struct lcd_view *cv, unsigned int y, char *row)
+{
+    unsigned int x, n = 0;
+
+    for (x = 0; x < cv->cols; x++) {
+        unsigned int cp = hd44780_unicode(cv->rom, cv->text[y][x]);
+        n += utf8(row + n, !cv->on ? ' ' : cp ? cp : LCD_MISSING);
+    }
+    row[n] = '\0';
+}
+
 /* The display as text: an OLED as its pixels, the ASCII rendering's character
  * for lit; the LED display as its digits, then as pixels in that shape; the
- * LCD as its rows between bars, each code as the Unicode character that its
- * ROM's glyph stands for, in UTF-8, a white square for one with none. */
+ * LCD as its rows between bars. */
 static void dump_display(void)
 {
     static uint8_t px[OLED_W * OLED_MAX_H];
@@ -103,12 +115,7 @@ static void dump_display(void)
                cv.backlight ? "on" : "off", lcd_rom_name[cv.rom],
                cv.nr_updates);
         for (y = 0; y < cv.rows; y++) {
-            unsigned int n = 0;
-            for (x = 0; x < cv.cols; x++) {
-                unsigned int cp = hd44780_unicode(cv.rom, cv.text[y][x]);
-                n += utf8(row + n, !cv.on ? ' ' : cp ? cp : LCD_MISSING);
-            }
-            row[n] = '\0';
+            lcd_row(&cv, y, row);
             printf("|%s|\n", row);
         }
         return;
@@ -149,6 +156,90 @@ static void print_log(void)
         log_printed = head - LOG_SIZE;
     for (; log_printed != head; log_printed++)
         putchar(log_ring[log_printed % LOG_SIZE]);
+}
+
+/* Where the console output that "wait" searches begins: after its last
+ * match. */
+static unsigned int log_waited;
+
+/* Whether the console output since the last match contains @text; the next
+ * search then begins after this match. */
+static bool log_matches(const char *text)
+{
+    static char buf[LOG_SIZE + 1];
+    unsigned int head = log_head, n = 0;
+    const char *p;
+
+    if (head - log_waited > LOG_SIZE)
+        log_waited = head - LOG_SIZE;
+    for (; n != head - log_waited; n++)
+        buf[n] = log_ring[(log_waited + n) % LOG_SIZE];
+    buf[n] = '\0';
+    if ((p = strstr(buf, text)) == NULL)
+        return false;
+    log_waited += (p - buf) + strlen(text);
+    return true;
+}
+
+/* Whether @text is on the display: in the LED display's digits as "dump"
+ * prints them, or in a row of the LCD; never on an OLED. */
+static bool display_matches(const char *text)
+{
+    char row[512];
+    unsigned int y;
+
+    if (DISP_IS_LCD(config.display)) {
+        struct lcd_view cv;
+        hd44780_get_view(&cv);
+        for (y = 0; y < cv.rows; y++) {
+            lcd_row(&cv, y, row);
+            if (strstr(row, text) != NULL)
+                return true;
+        }
+    } else if (DISP_IS_LED(config.display)) {
+        struct led_view lv;
+        led_get_view(&lv);
+        led_text(&lv, row, sizeof(row));
+        return strstr(row, text) != NULL;
+    }
+    return false;
+}
+
+/* Whether the LED display's digits are @hex, the segments of each as a hex
+ * byte, as "dump" prints them. */
+static bool segments_match(const char *hex)
+{
+    struct led_view lv;
+    unsigned int i, seg;
+    int n;
+
+    if (!DISP_IS_LED(config.display))
+        return false;
+    led_get_view(&lv);
+    for (i = 0; i < lv.nr_digits; i++, hex += n)
+        if ((sscanf(hex, "%x%n", &seg, &n) != 1) || (seg != lv.seg[i]))
+            return false;
+    return true;
+}
+
+/* Lets the firmware run until the condition @kind on @text holds, checked
+ * every 10 ms, or @ms pass, and prints which. */
+static void wait_for(unsigned int ms, const char *kind, const char *text)
+{
+    uint64_t start = emu_time_ns();
+    bool ok;
+
+    for (;;) {
+        ok = !strcmp(kind, "log") ? log_matches(text)
+            : !strcmp(kind, "display") ? display_matches(text)
+            : segments_match(text);
+        if (ok || (emu_time_ns() - start >= (uint64_t)ms * 1000000u))
+            break;
+        run_for(10);
+    }
+    printf("wait %s %s: %s after %u ms\n", kind, text,
+           ok ? "ok" : "timed out",
+           (unsigned int)((emu_time_ns() - start) / 1000000u));
 }
 
 /* The signals of the host computer, active ones in capitals, and the drive
@@ -262,6 +353,7 @@ static void *script_thread(void *arg_sleep_ms)
 {
     char line[512], arg[64];
     unsigned int i, ms = (uintptr_t)arg_sleep_ms;
+    int n;
 
     if (ms != 0)
         run_for(ms);
@@ -272,6 +364,11 @@ static void *script_thread(void *arg_sleep_ms)
 
         if (sscanf(line, "sleep %u", &ms) == 1) {
             run_for(ms);
+        } else if ((sscanf(line, "wait %u %63s %n", &ms, arg, &n) == 2)
+                   && (line[n] != '\0')
+                   && (!strcmp(arg, "log") || !strcmp(arg, "display")
+                       || !strcmp(arg, "segments"))) {
+            wait_for(ms, arg, line + n);
         } else if (sscanf(line, "key %63s", arg) == 1) {
             for (i = 0; i < FDD_ACT_nr; i++)
                 if (ui_fdd_has(i) && !strcmp(arg, fdd_action_name[i]))

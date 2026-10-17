@@ -338,6 +338,17 @@ three rows, a lit point as `.`), `log` (the firmware's console output so far),
 `save <file>`, which writes the USB drive as the firmware sees it, its writes
 included, to an image file.
 
+`wait <ms> <log|display|segments> <text>` lets the firmware run until a
+condition holds, checked every 10 ms, or `<ms>` pass, and prints which, as
+`wait log Intf Shugart: ok after 1250 ms` or `... timed out after 5000 ms`:
+`log` waits for `<text>` in the console output since the last match of such a
+wait, so that a second wait for the same text waits for its next line;
+`display` for `<text>` in the display's text, the LED's digits as `dump` prints
+them or a row of the LCD; `segments` for the LED's segments, such as
+`71 40 71` for `F-F`. A wait ends with the power cycle of a firmware reset,
+printing nothing, so a reset to come, such as the one after reading a new
+`FF.CFG`, is slept through.
+
 ## How it works
 
 - `decls.h`, `regs.h`, `hooks.h`: the host counterparts of `inc/decls.h` and
