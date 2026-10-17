@@ -86,7 +86,8 @@ static void tm1651_byte(uint8_t b)
     }
     if (writing && (addr < ARRAY_SIZE(d.seg))) {
         update_begin();
-        d.seg[addr] = b;
+        /* Seven segment outputs: the display's decimal points stay dark. */
+        d.seg[addr] = b & 0x7f;
         update_end();
         dirty = true;
     }
@@ -299,6 +300,26 @@ void led_text(const struct led_view *v, char *buf, size_t size)
             buf[n++] = '.';
     }
     buf[n] = '\0';
+}
+
+void led_art(const struct led_view *v, char art[3][16])
+{
+    /* Where each segment, a to g and the point, is drawn in a digit's
+     * cells, three rows of four columns. */
+    static const struct { uint8_t row, col; char c; } cell[8] = {
+        { 0, 1, '_' }, { 1, 2, '|' }, { 2, 2, '|' }, { 2, 1, '_' },
+        { 2, 0, '|' }, { 1, 0, '|' }, { 1, 1, '_' }, { 2, 3, '.' }
+    };
+    unsigned int i, j, w = 4 * v->nr_digits;
+
+    for (j = 0; j < 3; j++) {
+        memset(art[j], ' ', w);
+        art[j][w] = '\0';
+    }
+    for (i = 0; i < v->nr_digits; i++)
+        for (j = 0; j < 8; j++)
+            if (v->on && (v->seg[i] & (1u << j)))
+                art[cell[j].row][4*i + cell[j].col] = cell[j].c;
 }
 
 /*
