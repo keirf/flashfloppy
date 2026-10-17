@@ -40,6 +40,21 @@ static void check_flux(unsigned int track, bool_t lsb_first)
                 track, nr);
 }
 
+#if TARGET == TARGET_apple2
+
+/* Apple2: 4us cells, the track's bytes as they are. */
+TEST(flux_nib)
+{
+    drive_reset();
+    fill(file, 35*6656);
+    drive_add("A.NIB", file, 35*6656);
+    REQUIRE(image_mount("A.NIB") == FR_OK);
+    check_flux(5 << 2, FALSE);
+    check_flux(34 << 2, FALSE);
+}
+
+#else
+
 /* IBM PC 720K: 2us cells of MFM made of the sectors. */
 TEST(flux_img)
 {
@@ -81,6 +96,8 @@ TEST(flux_hfe)
     REQUIRE(image_mount("MFM.HFE") == FR_OK);
     check_flux(0, TRUE);
 }
+
+#endif
 
 /*
  * Local variables:

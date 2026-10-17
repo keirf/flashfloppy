@@ -185,7 +185,9 @@ void irqs_run(void)
         case 12: IRQ_12(); break;
         case 13: IRQ_13(); break;
         case 23: IRQ_23(); break;
-        case 28: IRQ_28(); break;
+#if TARGET == TARGET_shugart
+        case 28: IRQ_28(); break; /* TIM2: STEP */
+#endif
         case 40: IRQ_40(); break;
         case 43: IRQ_43(); break;
         default:
