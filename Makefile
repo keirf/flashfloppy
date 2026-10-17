@@ -53,6 +53,7 @@ ffemu: FORCE ffemu-shugart ffemu-apple2 ;
 
 tests: FORCE
 	$(MAKE) -C $(ROOT)/tests O=$(O) all
+	$(MAKE) -C $(ROOT)/tests O=$(O) TARGET=apple2 all
 
 all: FORCE all-stm32f105 all-at32f435 apple2-bootloader-stm32f105 ffemu \
     tests ;
