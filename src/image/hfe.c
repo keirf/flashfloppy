@@ -130,6 +130,16 @@ static bool_t hfe_open(struct image *im)
         printk("HFE unfit: non-GCR\n");
         return FALSE;
     }
+#else
+    /* A Shugart host reads anything *but* Apple II GCR. */
+    switch (dhdr.track_encoding) {
+    case ENC_AppleII_GCR1:
+    case ENC_AppleII_GCR2:
+        printk("HFE unfit: GCR\n");
+        return FALSE;
+    default:
+        break;
+    }
 #endif
 
     return TRUE;
