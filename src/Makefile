@@ -62,3 +62,8 @@ ff_cfg_defaults.h: $(ROOT)/examples/FF.CFG
 
 main.o flash_cfg.o: ff_cfg_defaults.h
 main.o flash_cfg.o: CFLAGS += -iquote .
+
+led_ver.h: FORCE
+	$(PYTHON) $(ROOT)/scripts/mk_led_ver.py "$(FW_VER)" $@
+
+main.o: led_ver.h
