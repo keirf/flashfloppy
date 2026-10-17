@@ -503,6 +503,42 @@ TEST(apple2_write_nib)
     CHECK_MEM(got, file, 35*TRK_LEN);
 }
 
+#define A2_CELL 288 /* WDATA timer ticks of a 4 us bit cell */
+
+/* Data fields that an Apple2 host writes through the floppy code, each from
+ * the gap after its address field as DOS writes a sector: WGATE, the timer's
+ * captures of WDATA, and the main loop writing them to the image. The host's
+ * clock is 0.7% slow, each flux reversal up to a tenth of a cell early or
+ * late. */
+TEST(apple2_write_flux)
+{
+    static const uint8_t phys[2] = { 3, 12 };
+    static uint8_t rec[REC_LEN];
+    unsigned int i, j;
+    uint8_t *d;
+
+    make_nib62();
+    drive_reset();
+    make_disk(disk, 35);
+    drive_add("DOS.DSK", disk, 35*DSK_TRK);
+    floppy_boot();
+    floppy_insert_image("DOS.DSK");
+
+    floppy_head(2*17, 0);
+    for (i = 0; i < 2; i++) {
+        d = &disk[17*DSK_TRK + dos_order[phys[i]]*256];
+        for (j = 0; j < 256; j++)
+            d[j] ^= 0xff;
+        make_record(rec, 17, phys[i], d, 0);
+        host_write((phys[i]*REC_LEN + 48) * 8 * A2_CELL, &rec[48],
+                   (REC_LEN - 48) * 8, A2_CELL + 2, A2_CELL / 10);
+    }
+    floppy_cancel();
+    CHECK(!log_has("Bad CRC"));
+    CHECK_EQ(drive_get("DOS.DSK", got, sizeof(got)), 35*DSK_TRK);
+    CHECK_MEM(got, disk, 35*DSK_TRK);
+}
+
 /*
  * HFE: an image of one track, track 0 of @want as the converters store an
  * Apple2 disk, or else bytes 49, under a header naming @encoding.
