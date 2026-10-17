@@ -33,6 +33,8 @@ enum {
     ENC_Amiga_MFM,
     ENC_ISOIBM_FM,
     ENC_Emu_FM,
+    ENC_AppleII_GCR1 = 6,
+    ENC_AppleII_GCR2 = 7,
     ENC_Unknown = 0xff
 };
 
@@ -70,6 +72,34 @@ enum {
 };
 
 static void hfe_seek_track(struct image *im, uint16_t track);
+
+#if LEVEL != LEVEL_prod
+/* Whether the bits at the start of track 0 look like Apple2 GCR: the
+ * converters store a 4us GCR bit as two 2us cells, so GCR's runs of two 0
+ * bits show as runs of four 0 cells or more, which MFM and FM, with at most
+ * three, never have. A dropout on a damaged disk looks the same, so this
+ * only informs the log. */
+static bool_t hfe_bits_look_gcr(struct image *im)
+{
+    uint8_t *buf = im->bufs.read_data.p;
+    unsigned int i, j, zeros = 0;
+
+    /* Side 0 of the first block of track 0. */
+    F_lseek(&im->fp, im->hfe.trk_off * 512);
+    F_read(&im->fp, buf, 256, NULL);
+
+    for (i = 0; i < 256; i++) {
+        uint8_t x = buf[i];
+        for (j = 0; j < 8; j++, x >>= 1) {
+            zeros = (x & 1) ? 0 : zeros + 1;
+            if (zeros >= 4)
+                return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+#endif
 
 static bool_t hfe_open(struct image *im)
 {
@@ -115,6 +145,34 @@ static bool_t hfe_open(struct image *im)
 
     /* Get an initial value for ticks per revolution. */
     hfe_seek_track(im, 0);
+
+#if TARGET == TARGET_apple2
+    /* An Apple2 host reads GCR and nothing else. An image whose header names
+     * another encoding is refused rather than served as noise; one whose
+     * header does not say is served. */
+    if (dhdr.track_encoding == ENC_Unknown) {
+#if LEVEL != LEVEL_prod
+        if (!hfe_bits_look_gcr(im))
+            printk("HFE: looks non-GCR\n");
+#endif
+    } else if ((dhdr.track_encoding != ENC_AppleII_GCR1)
+               && (dhdr.track_encoding != ENC_AppleII_GCR2)) {
+        printk("HFE unfit: non-GCR\n");
+        return FALSE;
+    }
+#else
+    /* A Shugart host reads anything but Apple II GCR, likewise. */
+    if (dhdr.track_encoding == ENC_Unknown) {
+#if LEVEL != LEVEL_prod
+        if (hfe_bits_look_gcr(im))
+            printk("HFE: looks GCR\n");
+#endif
+    } else if ((dhdr.track_encoding == ENC_AppleII_GCR1)
+               || (dhdr.track_encoding == ENC_AppleII_GCR2)) {
+        printk("HFE unfit: GCR\n");
+        return FALSE;
+    }
+#endif
 
     return TRUE;
 }

@@ -96,6 +96,45 @@ const struct image_type image_type[] = {
 
 #endif
 
+#if TARGET == TARGET_apple2
+
+/* An Apple2 disk has at most 40 tracks on one side, which an HFE holds in
+ * well under this; a larger one is a disk of another kind. */
+#define HFE_APPLE2_MAX (1280*1024)
+
+static unsigned int image_nr_hidden;
+
+void image_log_hidden(void)
+{
+    if (image_nr_hidden != 0)
+        printk("%u image(s) hidden by size\n", image_nr_hidden);
+    image_nr_hidden = 0;
+}
+
+/* Whether an image can hold the one side of 35 to 40 tracks an Apple2 disk
+ * has, told by its size alone, which costs no file access during a folder
+ * scan, else counted as hidden. A sector image has 16 sectors of 256 bytes
+ * per track; one of the Agat may end in a 128-byte trailer naming the
+ * disk. */
+static bool_t apple2_size_valid(const struct image_handler *handler,
+                                uint32_t size)
+{
+    bool_t ok = TRUE;
+    if (handler == &hfe_image_handler)
+        ok = size <= HFE_APPLE2_MAX;
+    else if (handler == &a2dsk_image_handler)
+        ok = !((size % 4096) & ~128u)
+            && (size / 4096 >= 35) && (size / 4096 <= 40);
+    if (!ok)
+        image_nr_hidden++;
+    return ok;
+}
+
+#else
+
+#define apple2_size_valid(handler, size) TRUE
+
+#endif
 
 bool_t image_valid(FILINFO *fp)
 {
@@ -117,7 +156,7 @@ bool_t image_valid(FILINFO *fp)
         const struct image_type *type;
         for (type = &image_type[0]; type->handler != NULL; type++)
             if (!strcmp(ext, type->ext))
-                return TRUE;
+                return apple2_size_valid(type->handler, fp->fsize);
     }
 
     return FALSE;

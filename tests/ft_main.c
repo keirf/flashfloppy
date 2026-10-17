@@ -5,7 +5,8 @@
  * reports their failures, and gives the firmware the few things that need
  * the host: cancellable calls and a target for its assertions.
  *
- * Usage: fftest [-v] [name...], where a name runs the tests that contain it.
+ * Usage: fftest [-v] [name...], where a name runs the tests that contain it;
+ * fftest-apple2 likewise.
  *
  * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
  *
@@ -22,6 +23,11 @@
 
 #include "ft.h"
 
+/* The program's name in its output. */
+#ifndef FT_NAME
+#define FT_NAME "fftest"
+#endif
+
 #define MAX_TESTS 256
 
 static struct test {
@@ -37,7 +43,7 @@ static jmp_buf abort_jb;
 void ft_register(const char *name, void (*fn)(void))
 {
     if (nr_tests == MAX_TESTS) {
-        fprintf(stderr, "fftest: too many tests\n");
+        fprintf(stderr, FT_NAME ": too many tests\n");
         exit(2);
     }
     tests[nr_tests].name = name;
@@ -205,7 +211,7 @@ int main(int argc, char **argv)
         }
     }
 
-    printf("fftest: %u tests, %u failed\n", nr_run, nr_failed);
+    printf(FT_NAME ": %u tests, %u failed\n", nr_run, nr_failed);
     return nr_failed ? 1 : 0;
 }
 
