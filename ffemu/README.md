@@ -316,10 +316,11 @@ The commands are `key <action>`, the action being `select`, `left`, `right`,
 or `latch`, or on the floppy interface `sel`, `motor`, `dir`, `step` or `side`
 for Shugart, and `sel`, `phase-in`, `phase-out` or `release` for Apple2,
 `sleep <ms>`, `dump` (the display as text: an LCD as its rows of characters
-between bars), `log` (the firmware's console output so far), `status`, `flash`
-(the `[Flash mem]` section as the flash memory is now), and `save <file>`,
-which writes the USB drive as the firmware sees it, its writes included, to an
-image file.
+between bars, a 7-segment display as its digits drawn with `_` and `|` in
+three rows, a lit point as `.`), `log` (the firmware's console output so far),
+`status`, `flash` (the `[Flash mem]` section as the flash memory is now), and
+`save <file>`, which writes the USB drive as the firmware sees it, its writes
+included, to an image file.
 
 ## How it works
 
