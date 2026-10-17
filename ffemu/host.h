@@ -53,8 +53,10 @@ const char *cpu_restart_state(void);
 #define LOG_SIZE 16384
 extern char log_ring[LOG_SIZE];
 extern volatile unsigned int log_head;
-/* The file that the console output also goes to, or NULL. */
-extern const char *log_file_name;
+/* The file that the console output also goes to, or NULL; then the file
+ * that could not be opened, or NULL with no folder for it, and why. */
+extern const char *log_file_name, *log_file_tried;
+extern int log_file_errno;
 
 /* The firmware's configuration in its flash memory, as hex, into @buf; and
  * from hex, as the settings file keeps it. */
@@ -236,6 +238,8 @@ bool usb_insert(const char *path, bool keep_writes);
 /* The store of the firmware's writes, to carry it over a power cycle. */
 void usb_get_store(int *fd, uint32_t *layout);
 void usb_set_store(int fd, uint32_t layout);
+/* The temporary folder that the store is made in. */
+const char *usb_store_dir(void);
 void usb_remove(void);
 /* On every eject, of a drive that is in or already out: the FF.CFG of a
  * drive made from a directory is looked for again, for showing what the
@@ -346,12 +350,14 @@ struct config {
     unsigned int hold_ms;   /* how long a key press holds a button down */
     char path[512];         /* where the settings file is, or would be */
     bool loaded;            /* the file exists */
+    bool created;           /* the file was missing and has been written */
 };
 
 extern struct config config;
 extern const char * const style_name[STYLE_nr + 1];
 
-/* Reads the settings file, writing it with the defaults if it is missing. */
+/* Reads the settings file, writing it with the defaults if it is missing, or
+ * ending the program if that fails. */
 void rc_load(void);
 /* Writes the present settings into the file, keeping its other lines. */
 void rc_save(void);
@@ -363,6 +369,12 @@ void make_dirs(char *dir);
 const char *user_home(void);
 /* Gives a file that ffemu created under sudo to the user who ran sudo. */
 void own_file(const char *path);
+/* Whether ffemu runs from a folder of its own on Windows, with the runtime
+ * DLL but no shell: with no MSYS2, Cygwin or Git Bash around it. */
+bool bare_windows(void);
+/* @path as the user knows it, into @buf if it is converted: in Windows
+ * notation on bare Windows. */
+const char *user_path(const char *path, char *buf, size_t size);
 
 /*
  * ffemu.c

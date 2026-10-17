@@ -20,8 +20,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 
 #include "host.h"
 
@@ -383,6 +385,90 @@ static void usage(FILE *f)
             config.path, fdd);
 }
 
+/* Where ffemu runs: the system, or on Windows the runtime's installation,
+ * known by files in its root; and the terminal. */
+static void say_where(void)
+{
+    const char *tty = ttyname(STDIN_FILENO), *program = getenv("TERM_PROGRAM");
+    const char *term = getenv("TERM"), *where;
+    char sys[80], in[96];
+    struct utsname u;
+
+    if (bare_windows())
+        where = "on Windows without MSYS2, Cygwin or Git Bash";
+#ifdef __CYGWIN__
+    else if (access("/cmd/git.exe", F_OK) == 0)
+        where = "in Git Bash";
+    else if (access("/usr/bin/pacman.exe", F_OK) == 0)
+        where = "in MSYS2";
+#endif
+    else {
+        snprintf(sys, sizeof(sys), "on %s",
+                 (uname(&u) == 0) ? u.sysname : "Unix");
+        where = sys;
+    }
+
+    if ((tty != NULL) && !strncmp(tty, "/dev/cons", 9))
+        snprintf(in, sizeof(in), "%s", getenv("WT_SESSION")
+                 ? "Windows Terminal" : "a Windows console window");
+    else if ((program != NULL) && (program[0] != '\0'))
+        snprintf(in, sizeof(in), "the %s terminal", program);
+    else if (getenv("VTE_VERSION") != NULL)
+        snprintf(in, sizeof(in), "GNOME Terminal or another VTE terminal");
+    else
+        snprintf(in, sizeof(in), "a terminal of type %s",
+                 term ? term : "unknown");
+    printf("Running %s, in %s.\n", where, in);
+}
+
+/* Waits for a key pressed from now on, taken without Enter and not echoed;
+ * ends the program if the terminal goes away. */
+static void wait_key(void)
+{
+    struct termios old, raw;
+    bool set = (tcgetattr(STDIN_FILENO, &old) == 0);
+    ssize_t n;
+    char c;
+
+    printf("Press any key to start...");
+    fflush(stdout);
+    if (set) {
+        raw = old;
+        raw.c_lflag &= ~(ICANON | ECHO);
+        raw.c_cc[VMIN] = 1;
+        raw.c_cc[VTIME] = 0;
+        tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+    }
+    /* Keys typed before the question do not answer it. */
+    tcflush(STDIN_FILENO, TCIFLUSH);
+    do
+        n = read(STDIN_FILENO, &c, 1);
+    while ((n < 0) && (errno == EINTR));
+    /* The rest of a key that sends a sequence. */
+    tcflush(STDIN_FILENO, TCIFLUSH);
+    if (set)
+        tcsetattr(STDIN_FILENO, TCSANOW, &old);
+    printf("\n");
+    if (n != 1)
+        exit(0);
+}
+
+/* The first run in a terminal: where ffemu runs and keeps its files, to be
+ * read before the user interface takes the screen. */
+static void first_run_note(void)
+{
+    char buf[1024];
+
+    say_where();
+    printf("The ffemu config file created: %s\n",
+           user_path(config.path, buf, sizeof(buf)));
+    printf("The log will appear here: %s\n",
+           user_path(log_file_name, buf, sizeof(buf)));
+    printf("Temporary files go here: %s\n",
+           user_path(usb_store_dir(), buf, sizeof(buf)));
+    wait_key();
+}
+
 int main(int argc, char **argv)
 {
     const char *state, *store = getenv("FFEMU_USB");
@@ -398,6 +484,17 @@ int main(int argc, char **argv)
 
     cpu_init(argv);
     rc_load();
+    if (config.created && (log_file_name == NULL)) {
+        char buf[1024];
+        if (log_file_tried != NULL)
+            fprintf(stderr, "ffemu: cannot create the log file %s: %s\n",
+                    user_path(log_file_tried, buf, sizeof(buf)),
+                    strerror(log_file_errno));
+        else
+            fprintf(stderr, "ffemu: no folder for the log file: neither "
+                    "XDG_STATE_HOME nor HOME is set\n");
+        return 1;
+    }
 
     if ((argc > 2) || ((argc == 2) && (argv[1][0] == '-'))) {
         bool help = (argc == 2) && (!strcmp(argv[1], "-h")
@@ -483,10 +580,13 @@ int main(int argc, char **argv)
     if (usb)
         insert(state != NULL);
 
-    if (isatty(STDIN_FILENO) && isatty(STDOUT_FILENO))
+    if (isatty(STDIN_FILENO) && isatty(STDOUT_FILENO)) {
+        if (config.created)
+            first_run_note();
         tui_start();
-    else
+    } else {
         script_start(sleep_ms);
+    }
 
     cpu_start();
     ff_main();

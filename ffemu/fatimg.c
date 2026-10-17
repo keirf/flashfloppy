@@ -1411,12 +1411,24 @@ static bool store_write(const void *buf, size_t size, off_t offs)
         && (write(store_fd, buf, size) == (ssize_t)size);
 }
 
+const char *usb_store_dir(void)
+{
+    const char *dir = getenv("TMPDIR");
+
+    /* Windows names its temporary folder by TMP and TEMP, which the Cygwin
+     * and MSYS runtime gives in its own form, as it does TMPDIR. */
+    if (dir == NULL)
+        dir = getenv("TMP");
+    if (dir == NULL)
+        dir = getenv("TEMP");
+    return dir ? dir : "/tmp";
+}
+
 static void store_create(void)
 {
-    const char *tmp = getenv("TMPDIR");
     char path[512];
 
-    snprintf(path, sizeof(path), "%s/ffemu-XXXXXX", tmp ? tmp : "/tmp");
+    snprintf(path, sizeof(path), "%s/ffemu-XXXXXX", usb_store_dir());
     store_fd = mkstemp(path);
     if (store_fd < 0)
         cpu_quit(3, "ffemu: cannot create a temporary file");

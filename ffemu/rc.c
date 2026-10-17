@@ -23,6 +23,9 @@
 #include <pwd.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#ifdef __CYGWIN__
+#include <sys/cygwin.h>
+#endif
 
 #include "host.h"
 
@@ -128,11 +131,39 @@ void own_file(const char *path)
     }
 }
 
+bool bare_windows(void)
+{
+#ifdef __CYGWIN__
+    return access("/usr/bin/sh.exe", X_OK) != 0;
+#else
+    return false;
+#endif
+}
+
+const char *user_path(const char *path, char *buf, size_t size)
+{
+#ifdef __CYGWIN__
+    if (bare_windows()
+        && (cygwin_conv_path(CCP_POSIX_TO_WIN_A | CCP_ABSOLUTE, path, buf,
+                             size) == 0))
+        return buf;
+#endif
+    (void)buf;
+    (void)size;
+    return path;
+}
+
 void make_dirs(char *dir)
 {
-    char *p;
+    char *p = dir;
 
-    for (p = dir + 1; *p != '\0'; p++) {
+#ifdef __CYGWIN__
+    /* The drive of a Windows path is no folder to make: the runtime would
+     * make "C:" a folder of that name in the current one. */
+    if (isalpha((unsigned char)dir[0]) && (dir[1] == ':') && (dir[2] == '/'))
+        p += 2;
+#endif
+    for (p++; *p != '\0'; p++) {
         if (*p == '/') {
             *p = '\0';
             if (mkdir(dir, 0755) == 0)
@@ -247,12 +278,14 @@ static bool parse_line(char *line)
 #define RC_VALUE_MAX 2048
 #define RC_LINE_MAX 4096
 
-/* Writes @text to the settings file, by way of a new file put in its place. */
+/* Writes @text to the settings file, by way of a new file put in its place;
+ * on failure errno says why. */
 static bool write_file(const char *text)
 {
     char dir[sizeof(config.path)], tmp[sizeof(config.path) + 8], *slash;
     FILE *f;
     bool ok;
+    int err = 0;
 
     snprintf(dir, sizeof(dir), "%s", config.path);
     slash = strrchr(dir, '/');
@@ -264,19 +297,29 @@ static bool write_file(const char *text)
     snprintf(tmp, sizeof(tmp), "%s.new", config.path);
     f = fopen(tmp, "w");
     if (f == NULL) {
-        host_log("Cannot write %s: %s", tmp, strerror(errno));
+        err = errno;
+        host_log("Cannot write %s: %s", tmp, strerror(err));
+        errno = err;
         return false;
     }
     ok = (fputs(text, f) >= 0);
-    ok = (fclose(f) == 0) && ok;
+    if (!ok)
+        err = errno;
+    if ((fclose(f) != 0) && ok) {
+        err = errno;
+        ok = false;
+    }
     if (ok)
         own_file(tmp);
     if (ok && (rename(tmp, config.path) != 0)) {
-        host_log("Cannot replace %s: %s", config.path, strerror(errno));
+        err = errno;
+        host_log("Cannot replace %s: %s", config.path, strerror(err));
         ok = false;
     }
-    if (!ok)
+    if (!ok) {
         remove(tmp);
+        errno = err;
+    }
     return ok;
 }
 
@@ -552,8 +595,18 @@ void rc_load(void)
     f = fopen(config.path, "r");
     if (f == NULL) {
         /* The first run: write the defaults, to be seen and edited. */
-        if (errno == ENOENT)
+        if (errno == ENOENT) {
             rc_save();
+            if (!config.loaded) {
+                int err = errno;
+                char buf[sizeof(config.path) + 64];
+                fprintf(stderr, "ffemu: cannot create the config file %s: "
+                        "%s\n", user_path(config.path, buf, sizeof(buf)),
+                        strerror(err));
+                exit(1);
+            }
+            config.created = true;
+        }
         return;
     }
     config.loaded = true;
