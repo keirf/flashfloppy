@@ -522,12 +522,20 @@ static void bus_sync(uint64_t now)
     i2c_sync(&i2c_model[1], now);
 }
 
-/* One thread at a time updates the models; a tick that arrives while the
- * firmware's thread is in here, or the other thread, leaves it to that. */
+/* One thread at a time updates the models; a tick that arrives while a thread
+ * is in here leaves it to that, and so does the bus thread when the firmware's
+ * is. The firmware's thread waits for the bus thread instead: a pin write left
+ * unseen until its next write to the same register would be lost. */
 static bool_t hw_lock(void)
 {
-    return hw_ready
-        && __sync_bool_compare_and_swap(&busy, 0, emu_on_hw_thread() ? 2 : 1);
+    int me = emu_on_hw_thread() ? 2 : 1;
+
+    if (!hw_ready)
+        return FALSE;
+    while (!__sync_bool_compare_and_swap(&busy, 0, me))
+        if ((busy == me) || (me == 2))
+            return FALSE;
+    return TRUE;
 }
 
 void emu_hw_sync(void)
