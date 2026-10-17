@@ -83,6 +83,21 @@ TEST(floppy_apple2_steps)
     CHECK_EQ(nr_speaker_pulses, 12);
 }
 
+/* The phases on, debounced, as the floppy code gives them to the display. */
+TEST(floppy_apple2_phases_shown)
+{
+    apple2_boot();
+    set_phases(6);
+    clock_run_ms(3);
+    CHECK_EQ(apple2_phases, 6);
+    /* Deselected: no phases, no steps. */
+    pin_set(PA, 0, TRUE);
+    clock_run_ms(3);
+    CHECK_EQ(apple2_phases, 0);
+    seek(4);
+    CHECK_EQ(track(), 0);
+}
+
 #else
 
 /* A Shugart host steps by a pulse on STEP, inward while DIR is low. */
