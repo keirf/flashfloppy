@@ -2,7 +2,7 @@
  * test_apple2.c
  *
  * The Apple2 images: what .dsk, .do, .po, .nib and .nic stream, what a
- * write puts into them, and which of them mount.
+ * write puts into them, and which of them a folder lists and mounts.
  *
  * The disks are made up here, never taken from real disks. The expected
  * streams come from an encoder in this file, written from the format, and
@@ -537,6 +537,54 @@ TEST(apple2_write_flux)
     CHECK(!log_has("Bad CRC"));
     CHECK_EQ(drive_get("DOS.DSK", got, sizeof(got)), 35*DSK_TRK);
     CHECK_MEM(got, disk, 35*DSK_TRK);
+}
+
+/* Which files a folder lists, by size alone. */
+TEST(apple2_listed_sizes)
+{
+    static const struct {
+        const char *name;
+        uint32_t size;
+        bool_t listed;
+    } files[] = {
+        { "A.DSK", 34*DSK_TRK, FALSE },
+        { "A.DSK", 35*DSK_TRK, TRUE },
+        { "A.DSK", 35*DSK_TRK + 1, FALSE },
+        { "A.DSK", 35*DSK_TRK + 127, FALSE },
+        { "A.DSK", 35*DSK_TRK + TRAILER, TRUE },
+        { "A.DSK", 35*DSK_TRK + 129, FALSE },
+        { "A.DSK", 35*DSK_TRK + 256, FALSE },
+        { "A.DO", 40*DSK_TRK, TRUE },
+        { "A.PO", 40*DSK_TRK + TRAILER, TRUE },
+        { "A.PO", 41*DSK_TRK, FALSE },
+        { "AGAT840.DSK", 860160, FALSE },
+        { "A.HFE", 932864, TRUE },
+        { "A.HFE", 1405952, FALSE },
+        { "A.NIB", 35*TRK_LEN, TRUE },
+        { "A.NIC", 35*16*NIC_REC, TRUE },
+        { "A.TRD", 655360, FALSE },
+    };
+    unsigned int i, nr_hidden = 0;
+    char msg[40];
+    FILINFO fno;
+
+    drive_reset();
+    image_log_hidden();
+    ft_fw_log_clear();
+    for (i = 0; i < ARRAY_SIZE(files); i++) {
+        memset(&fno, 0, sizeof(fno));
+        snprintf(fno.fname, sizeof(fno.fname), "%s", files[i].name);
+        fno.fsize = files[i].size;
+        fno.fattrib = AM_ARC;
+        if (image_valid(&fno) != files[i].listed)
+            ft_fail(__FILE__, __LINE__, "%s of %u bytes is%s listed",
+                    files[i].name, (unsigned int)files[i].size,
+                    files[i].listed ? " not" : "");
+        nr_hidden += !files[i].listed && strcmp(files[i].name, "A.TRD");
+    }
+    image_log_hidden();
+    snprintf(msg, sizeof(msg), "%u image(s) hidden by size", nr_hidden);
+    CHECK(log_has(msg));
 }
 
 /*

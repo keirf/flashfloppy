@@ -247,6 +247,13 @@ extern const struct image_type {
 
 /* Is given file valid to open as an image? */
 bool_t image_valid(FILINFO *fp);
+#if TARGET == TARGET_apple2
+/* Logs and clears the count of the files image_valid() refused by size, at
+ * the end of a folder scan. */
+void image_log_hidden(void);
+#else
+#define image_log_hidden() ((void)0)
+#endif
 
 /* Open specified image file on mass storage device. */
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl);
