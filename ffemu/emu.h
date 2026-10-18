@@ -40,6 +40,9 @@ uint64_t emu_time_ns(void);
 /* Waits @ns, keeping the peripherals and the interrupts running. */
 void emu_idle_ns(uint64_t ns);
 void emu_relax(void);
+/* Notes a call of the firmware into the host half, which a loop that spins on
+ * a variable alone does not make. */
+void emu_fw_progress(void);
 /* Whether the caller is the thread that runs the peripheral models beside
  * the firmware's own. */
 int emu_on_hw_thread(void);
@@ -80,6 +83,11 @@ int emu_usb_write(const void *buf, uint32_t sector, unsigned int count);
 extern volatile unsigned int emu_in_buttons;
 /* Encoder detents not yet delivered: clockwise is positive. */
 extern volatile int emu_in_rotary;
+/* Whether the firmware's timers run on time now, which its reading of the
+ * encoder needs: always, but on a host whose sleeps are coarse only while
+ * ffemu spins for the user's input, which a call notes, a detent waiting
+ * being input. */
+int emu_timers_on_time(void);
 
 /* Floppy interface inputs from the host computer, written by the user
  * interface: a bit is set while its signal is active, as on the schematics,
