@@ -2,9 +2,10 @@
  * fatimg.c
  *
  * The emulated USB drive. Made from a directory of the host, it is a
- * FAT32 volume synthesized from the files: only the file system structures
- * are built in memory, and file contents are read from the host files when
- * the firmware asks for their sectors. Made from an image file or a disk, it
+ * FAT32 volume, or a FAT16 one if the settings say so, synthesized from the
+ * files: only the file system structures are built in memory, and file
+ * contents are read from the host files when the firmware asks for their
+ * sectors. Made from an image file or a disk, it
  * is read from there as it is. Whatever the firmware writes goes to a
  * temporary file, so that it reads back what it wrote, and never to the host
  * files, the image or the disk. It lasts until the drive is removed, and so
@@ -40,11 +41,13 @@
 #endif
 
 #define SEC 512
-#define SEC_PER_CLUS 8
-#define CLUS (SEC * SEC_PER_CLUS)
+#define SEC_PER_CLUS 8 /* 4 KB, as format makes it; FAT16 doubles it to fit */
+#define MAX_SEC_PER_CLUS 64 /* 32 KB, FAT16's largest, for 2 GB */
 #define RSVD_SECS 32
 #define NR_FATS 2
 #define MIN_CLUSTERS 66000 /* fewer than 65525 would make it FAT16 */
+#define MAX_FAT16_CLUSTERS 65524 /* more would make it FAT32 */
+#define FAT16_ROOT_ENTS 512 /* the root folder's entries, as format makes it */
 #define FREE_CLUSTERS 4096 /* room for the firmware to create files */
 #define FAT_EOC 0x0fffffffu
 #define MAX_NODES 50000
@@ -92,7 +95,8 @@ struct overlay {
 struct image {
     uint8_t rsvd[RSVD_SECS * SEC];
     uint32_t *fat;
-    uint32_t fat_secs, nr_clus, data_start, total_secs;
+    unsigned int fat_bits, sec_per_clus, rsvd_secs;
+    uint32_t fat_secs, nr_clus, root_start, data_start, total_secs;
     struct node *root;
     struct extent *ext;
     unsigned int nr_ext, nr_nodes;
@@ -816,31 +820,47 @@ static void place(struct node *n, uint32_t nr_clus, uint32_t *next)
     *next += nr_clus;
 }
 
-/* Directories first, so that the firmware's directory scans stay within a
- * small part of the volume. */
-static void place_dirs(struct node *dir, uint32_t *next)
+/* The entries of directory @dir: the volume label of the root, or `.` and
+ * `..`, and its children's. */
+static unsigned int dir_entries(const struct node *dir)
 {
-    struct node *n;
+    const struct node *n;
     unsigned int nr = (dir->parent == NULL) ? 1 : 2;
 
     for (n = dir->children; n != NULL; n = n->next)
         nr += nr_dirents(n);
-    place(dir, (nr * 32 + CLUS - 1) / CLUS, next);
+    return nr;
+}
+
+/* Directories first, so that the firmware's directory scans stay within a
+ * small part of the volume. The root of FAT16 has an area of its own. */
+static void place_dirs(const struct image *im, struct node *dir,
+                       uint32_t *next)
+{
+    uint32_t clus = im->sec_per_clus * SEC;
+    struct node *n;
+
+    if ((dir->parent == NULL) && (im->fat_bits == 16))
+        place(dir, 0, next);
+    else
+        place(dir, (dir_entries(dir) * 32 + clus - 1) / clus, next);
 
     for (n = dir->children; n != NULL; n = n->next)
         if (n->is_dir)
-            place_dirs(n, next);
+            place_dirs(im, n, next);
 }
 
-static void place_files(struct node *dir, uint32_t *next)
+static void place_files(const struct image *im, struct node *dir,
+                        uint32_t *next)
 {
+    uint32_t clus = im->sec_per_clus * SEC;
     struct node *n;
 
     for (n = dir->children; n != NULL; n = n->next) {
         if (n->is_dir)
-            place_files(n, next);
+            place_files(im, n, next);
         else
-            place(n, ((uint64_t)n->size + CLUS - 1) / CLUS, next);
+            place(n, ((uint64_t)n->size + clus - 1) / clus, next);
     }
 }
 
@@ -866,7 +886,9 @@ static void build_dirs(struct image *im, struct node *dir)
     struct node *n;
     uint8_t *p;
 
-    p = dir->data = xalloc(dir->nr_clus * CLUS);
+    p = dir->data = xalloc((dir->nr_clus != 0)
+                           ? dir->nr_clus * im->sec_per_clus * SEC
+                           : (im->data_start - im->root_start) * SEC);
     add_extent(im, dir);
 
     if (dir->parent == NULL) {
@@ -908,16 +930,30 @@ static void build_boot_sectors(struct image *im, uint32_t nr_used)
     uint8_t *b = im->rsvd, *f = im->rsvd + SEC;
 
     b[0] = 0xeb;
-    b[1] = 0x58;
+    b[1] = (im->fat_bits == 16) ? 0x3c : 0x58;
     b[2] = 0x90;
     memcpy(b + 3, "FFEMU   ", 8);
     put16(b + 11, SEC);
-    b[13] = SEC_PER_CLUS;
-    put16(b + 14, RSVD_SECS);
+    b[13] = im->sec_per_clus;
+    put16(b + 14, im->rsvd_secs);
     b[16] = NR_FATS;
     b[21] = 0xf8; /* media: fixed disk */
     put16(b + 24, 63);
     put16(b + 26, 255);
+    put16(b + 510, 0xaa55);
+    if (im->fat_bits == 16) {
+        put16(b + 17, (im->data_start - im->root_start) * (SEC / 32));
+        if (im->total_secs < 0x10000)
+            put16(b + 19, im->total_secs);
+        else
+            put32(b + 32, im->total_secs);
+        put16(b + 22, im->fat_secs);
+        b[36] = 0x80;
+        b[38] = 0x29;
+        put32(b + 39, (uint32_t)time(NULL));
+        memcpy(b + 43, "FFEMU      FAT16   ", 19);
+        return;
+    }
     put32(b + 32, im->total_secs);
     put32(b + 36, im->fat_secs);
     put32(b + 44, 2); /* root directory cluster */
@@ -928,7 +964,6 @@ static void build_boot_sectors(struct image *im, uint32_t nr_used)
     put32(b + 67, (uint32_t)time(NULL));
     memcpy(b + 71, "FFEMU      ", 11);
     memcpy(b + 82, "FAT32   ", 8);
-    put16(b + 510, 0xaa55);
 
     put32(f + 0, 0x41615252);
     put32(f + 484, 0x61417272);
@@ -1042,10 +1077,132 @@ void usb_ff_cfg_place(const char *dir, char *buf, size_t size)
     }
 }
 
+/* No longer counts @n and what it holds among the entries of the drive. */
+static void uncount(struct image *im, const struct node *n)
+{
+    const struct node *c;
+
+    im->nr_nodes--;
+    if (!n->is_dir) {
+        im->info.nr_files--;
+        return;
+    }
+    im->info.nr_dirs--;
+    for (c = n->children; c != NULL; c = c->next)
+        uncount(im, c);
+}
+
+/* Leaves @n, unlinked from its folder, and what it holds off the drive:
+ * one more left out for @nr, and the first of them as a path into @first,
+ * which has room for 160 characters. */
+static void leave_out(struct image *im, struct node *n, unsigned int *nr,
+                      char *first)
+{
+    if ((*nr)++ == 0)
+        snprintf(first, 160, "%s", n->path + strlen(im->root->path) + 1);
+    uncount(im, n);
+    n->next = NULL;
+    free_nodes(n);
+}
+
+/* The root folder of FAT16 has 512 entries, the volume label one of them:
+ * an entry that finds too few left is left out, as copying it would be,
+ * and the copying goes on with the next. */
+static void fit_root(struct image *im)
+{
+    unsigned int room = FAT16_ROOT_ENTS - 1;
+    struct node **p = &im->root->children, *n;
+
+    while ((n = *p) != NULL) {
+        if (nr_dirents(n) <= room) {
+            room -= nr_dirents(n);
+            p = &n->next;
+        } else {
+            *p = n->next;
+            leave_out(im, n, &im->info.nr_root_full, im->info.root_full);
+        }
+    }
+}
+
+/* The files under @dir, in the order of copying, that @room clusters of
+ * the largest size take; those that find too few left are left out, as
+ * copying them would be. */
+static void fit_dir_files(struct image *im, struct node *dir, uint32_t *room)
+{
+    uint32_t clus = MAX_SEC_PER_CLUS * SEC, need;
+    struct node **p = &dir->children, *n;
+
+    while ((n = *p) != NULL) {
+        if (n->is_dir) {
+            fit_dir_files(im, n, room);
+        } else if ((need = ((uint64_t)n->size + clus - 1) / clus) <= *room) {
+            *room -= need;
+        } else {
+            *p = n->next;
+            leave_out(im, n, &im->info.nr_drive_full, im->info.drive_full);
+            continue;
+        }
+        p = &n->next;
+    }
+}
+
+/* Leaves out the files that do not fit the largest FAT16 drive next to the
+ * folders. */
+static void fit_files(struct image *im)
+{
+    uint32_t next = 2, room;
+
+    im->fat_bits = 16;
+    im->sec_per_clus = MAX_SEC_PER_CLUS;
+    place_dirs(im, im->root, &next);
+    room = (next - 2 < MAX_FAT16_CLUSTERS) ? MAX_FAT16_CLUSTERS - (next - 2)
+        : 0;
+    fit_dir_files(im, im->root, &room);
+}
+
+/* Places the directories and files in clusters of @sec_per_clus sectors and
+ * sizes the volume, with a FAT of @fat_bits, around them, or for FAT16 as
+ * large as it can be if @largest; the clusters used into @nr_used. False if
+ * FAT16 cannot have that many clusters. */
+static bool lay_out(struct image *im, unsigned int fat_bits,
+                    unsigned int sec_per_clus, bool largest,
+                    uint32_t *nr_used)
+{
+    uint32_t next = 2, root_ents;
+
+    im->fat_bits = fat_bits;
+    im->sec_per_clus = sec_per_clus;
+    place_dirs(im, im->root, &next);
+    place_files(im, im->root, &next);
+    *nr_used = next - 2;
+
+    im->nr_clus = next - 2 + FREE_CLUSTERS;
+    if (fat_bits == 16) {
+        if (largest && (*nr_used <= MAX_FAT16_CLUSTERS))
+            im->nr_clus = MAX_FAT16_CLUSTERS;
+        if (im->nr_clus > MAX_FAT16_CLUSTERS)
+            return false;
+        root_ents = FAT16_ROOT_ENTS;
+        im->rsvd_secs = 1;
+        im->fat_secs = ((im->nr_clus + 2) * 2 + SEC - 1) / SEC;
+    } else {
+        root_ents = 0;
+        if (im->nr_clus < MIN_CLUSTERS)
+            im->nr_clus = MIN_CLUSTERS;
+        im->rsvd_secs = RSVD_SECS;
+        im->fat_secs = ((im->nr_clus + 2) * 4 + SEC - 1) / SEC;
+    }
+    im->root_start = im->rsvd_secs + NR_FATS * im->fat_secs;
+    im->data_start = im->root_start + root_ents * 32 / SEC;
+    im->total_secs = im->data_start + im->nr_clus * sec_per_clus;
+    return true;
+}
+
 static struct image *build_image(const char *dir, const struct stat *st)
 {
     struct image *im = xalloc(sizeof(*im));
-    uint32_t next = 2;
+    unsigned int spc = SEC_PER_CLUS;
+    uint32_t nr_used;
 
     im->dev_fd = -1;
     im->root = xalloc(sizeof(*im->root));
@@ -1054,15 +1211,22 @@ static struct image *build_image(const char *dir, const struct stat *st)
     im->root->mtime = st->st_mtime;
     scan_dir(im, im->root, 0);
 
-    place_dirs(im->root, &next);
-    place_files(im->root, &next);
-
-    im->nr_clus = next - 2 + FREE_CLUSTERS;
-    if (im->nr_clus < MIN_CLUSTERS)
-        im->nr_clus = MIN_CLUSTERS;
-    im->fat_secs = ((im->nr_clus + 2) * 4 + SEC - 1) / SEC;
-    im->data_start = RSVD_SECS + NR_FATS * im->fat_secs;
-    im->total_secs = im->data_start + im->nr_clus * SEC_PER_CLUS;
+    if (config.usb_fat16) {
+        /* Clusters doubled until the files fit, as format would make them
+         * for a drive of that size; then the largest drive, full. */
+        fit_root(im);
+        while (!lay_out(im, 16, spc, false, &nr_used)) {
+            if (spc == MAX_SEC_PER_CLUS) {
+                fit_files(im);
+                lay_out(im, 16, spc, true, &nr_used);
+                break;
+            }
+            spc *= 2;
+        }
+    } else {
+        lay_out(im, 32, spc, false, &nr_used);
+    }
+    im->info.fat_bits = im->fat_bits;
 
     im->fat = xalloc((im->nr_clus + 2) * sizeof(uint32_t));
     im->fat[0] = 0x0ffffff8;
@@ -1071,9 +1235,12 @@ static struct image *build_image(const char *dir, const struct stat *st)
     build_dirs(im, im->root);
     build_files(im, im->root);
 
-    build_boot_sectors(im, next - 2);
-    im->layout = hash_layout(hash(2166136261u, &im->nr_clus,
-                                  sizeof(im->nr_clus)), im->root);
+    build_boot_sectors(im, nr_used);
+    im->layout = hash(2166136261u, &im->nr_clus, sizeof(im->nr_clus));
+    im->layout = hash(im->layout, &im->fat_bits, sizeof(im->fat_bits));
+    im->layout = hash(im->layout, &im->sec_per_clus,
+                      sizeof(im->sec_per_clus));
+    im->layout = hash_layout(im->layout, im->root);
 
     find_ff_cfg(dir, im->info.ff_cfg, sizeof(im->info.ff_cfg));
     im->info.kind = USB_dir;
@@ -1489,16 +1656,24 @@ static void read_sector(struct image *im, uint32_t sec, uint8_t *buf)
 
 static void built_sector(struct image *im, uint32_t sec, uint8_t *buf)
 {
-    if (sec < RSVD_SECS) {
+    if (sec < im->rsvd_secs) {
         memcpy(buf, im->rsvd + sec * SEC, SEC);
+    } else if (sec < im->root_start) {
+        unsigned int per = SEC * 8 / im->fat_bits;
+        uint32_t i, first = ((sec - im->rsvd_secs) % im->fat_secs) * per;
+        for (i = 0; i < per; i++) {
+            uint32_t x = (first + i < im->nr_clus + 2) ? im->fat[first + i]
+                : 0;
+            if (im->fat_bits == 32)
+                put32(buf + 4*i, x);
+            else /* FAT_EOC and the media byte's entry as 16 bits */
+                put16(buf + 2*i, x);
+        }
     } else if (sec < im->data_start) {
-        uint32_t i, first = ((sec - RSVD_SECS) % im->fat_secs) * (SEC/4);
-        for (i = 0; i < SEC/4; i++)
-            put32(buf + 4*i, (first + i < im->nr_clus + 2)
-                  ? im->fat[first + i] : 0);
+        memcpy(buf, im->root->data + (sec - im->root_start) * SEC, SEC);
     } else {
         uint32_t offs = sec - im->data_start;
-        uint32_t clus = 2 + offs / SEC_PER_CLUS;
+        uint32_t clus = 2 + offs / im->sec_per_clus;
         unsigned int lo = 0, hi = im->nr_ext;
         struct extent *e = NULL;
         while (lo < hi) {
@@ -1515,8 +1690,8 @@ static void built_sector(struct image *im, uint32_t sec, uint8_t *buf)
         if (e == NULL) {
             memset(buf, 0, SEC);
         } else {
-            uint64_t pos = (uint64_t)(clus - e->clus) * CLUS
-                + (offs % SEC_PER_CLUS) * SEC;
+            uint64_t pos = (uint64_t)(clus - e->clus) * im->sec_per_clus * SEC
+                + (offs % im->sec_per_clus) * SEC;
             if (e->node->is_dir)
                 memcpy(buf, e->node->data + pos, SEC);
             else

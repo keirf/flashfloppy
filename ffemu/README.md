@@ -40,8 +40,12 @@ Git Bash.
 
     ffemu [<directory> | <image> | <disk>]
 
-The USB drive holds the files and folders of `<directory>` as a FAT32 volume.
-File contents are read from the host when the firmware asks for them.
+The USB drive holds the files and folders of `<directory>` as a FAT32 volume,
+or as a FAT16 one, chosen in the Externals dialog, key `8`, for what the device
+is connected to, or by `usb-fat = fat16` in the settings (see below): its
+clusters of 4 KB doubled as far as 32 KB to fit, up to 2 GB, and a root folder
+of 512 entries. File contents are read from the host when the firmware asks for
+them; a change of the file system in the dialog inserts the drive again.
 Alternatively, the drive is read from an image file of a whole drive (as `dd`
 makes it, with or without a partition table, FAT12, FAT16 or FAT32), or from a
 disk itself, such as a real USB drive: `/dev/sdb` on Linux, or `/dev/sdb` for
@@ -95,9 +99,12 @@ otherwise.
   (trailing spaces, and on Windows trailing dots, which Linux drops instead),
   names that differ from another one in the folder only in letter case (only
   possible on Linux; the first in byte order stays), special files, files of 4
-  GB or larger, and anything beyond 50'000 entries or 12 levels of folders.
+  GB or larger, and anything beyond 50'000 entries or 12 levels of folders; and
+  on FAT16, as copying would leave them out, an entry that finds too few of the
+  root folder's 512 entries left, and a file that finds too little of the 2 GB
+  left, the copying going on with the next.
 - Not followed: the order of the entries in a folder, which on a real drive is
-  the order of copying; ffemu sorts them by name.
+  the order of copying; ffemu sorts them by name, and copies in that order.
 
 The emulated device is an SFRKC30.AT2 board (AT32F415, 32 KB RAM) with an OLED
 display, an SSD1306 or an SH1106 controller on a panel of 128x32 or 128x64, a
@@ -345,6 +352,8 @@ The commands are `key <action>`, the action being `select`, `left`, `right`,
 `cw`, `ccw`, `remove`, `insert`, `reset` (Home), `relaunch` (Ctrl+Home), `quit`
 or `latch`, or on the floppy interface `sel`, `motor`, `dir`, `step` or `side`
 for Shugart, and `sel`, `phase-in`, `phase-out` or `release` for Apple2,
+`usb-fat <fat32|fat16>`, which sets the file system of a drive made from a
+directory and inserts such a drive again as the Externals dialog does,
 `sleep <ms>`, `dump` (the display as text: an LCD as its rows of characters
 between bars, a 7-segment display as its digits drawn with `_` and `|` in
 three rows, a lit point as `.`), `log` (the firmware's console output so far),
@@ -401,8 +410,8 @@ with `FFEMU_CLOCK=host` set on the host's.
   chosen, `lcd_font_cyr.h` or `lcd_font_a00.h`.
 - `led_7seg.c`: the 7-segment LED display, a TM1651 or a pair of 74HC164 shift
   registers on two GPIO lines, and its digits as pixels.
-- `fatimg.c`: the USB drive: the FAT32 volume built from a directory, or an
-  image or a disk read as it is, with the firmware's writes kept aside.
+- `fatimg.c`: the USB drive: the FAT32 or FAT16 volume built from a directory,
+  or an image or a disk read as it is, with the firmware's writes kept aside.
 - `tui.c`, `script.c`, `rc.c`, `ffemu.c`: the terminal user interface, the
   script driver, the preferences and the main program.
 
@@ -422,6 +431,4 @@ with the host C library. Only `emu.h` is shared between the two.
 - The firmware's writes reaching the host files, the image or the disk:
   `IMAGE_A.CFG`, `FLASH.DMP` and the like are kept aside until the drive is
   removed.
-- FAT16 on a USB drive made from a directory, which is always FAT32; an image
-  or a disk may be FAT16.
 - A setting for the code page of short names, in place of the system's.

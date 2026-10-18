@@ -25,6 +25,11 @@ unsigned int drive_add_fragmented(const char *name, const void *data,
 void drive_fill(const char *name);
 /* Reads a file back into @buf: returns its length. */
 uint32_t drive_get(const char *name, void *buf, uint32_t max);
+/* Mounts, until the next drive_reset(), the drive whose sectors @read
+ * gives, in place of the one in RAM, read-only: its file system, or NULL
+ * if FatFS finds none. */
+FATFS *drive_mount_from(int (*read)(void *buf, unsigned long sec,
+                                    unsigned int count));
 
 extern struct image *im;
 

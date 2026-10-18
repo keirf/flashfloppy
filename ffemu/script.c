@@ -323,11 +323,12 @@ static void print_status(void)
     printf("firmware: %s, %s, on %s\n", emu_fw_version(), emu_fw_target(),
            emu_board_name());
     if (usb.inserted && (usb.kind == USB_dir))
-        printf("usb: inserted, %u files, %u dirs, %u left out, "
-               "%u case duplicates left out, %lu reads, %lu writes, "
-               "ff.cfg: %s\n", usb.nr_files, usb.nr_dirs, usb.nr_skipped,
-               usb.nr_case_dups, usb.nr_reads, usb.nr_writes,
-               usb.ff_cfg[0] ? usb.ff_cfg : "none");
+        printf("usb: inserted, FAT%u, %u files, %u dirs, %u left out, "
+               "%u case duplicates left out, %u left out for lack of room, "
+               "%lu reads, %lu writes, ff.cfg: %s\n", usb.fat_bits,
+               usb.nr_files, usb.nr_dirs, usb.nr_skipped, usb.nr_case_dups,
+               usb.nr_root_full + usb.nr_drive_full, usb.nr_reads,
+               usb.nr_writes, usb.ff_cfg[0] ? usb.ff_cfg : "none");
     else if (usb.inserted)
         printf("usb: inserted, %s of %llu sectors, %lu reads, %lu writes, "
                "ff.cfg: %s\n", (usb.kind == USB_image) ? "image" : "disk",
@@ -401,6 +402,12 @@ static void *script_thread(void *arg_sleep_ms)
             if ((i == KEY_ACT_reset) || (i == KEY_ACT_relaunch)
                 || (i == KEY_ACT_quit))
                 park();
+        } else if (sscanf(line, "usb-fat %63s", arg) == 1) {
+            if (strcmp(arg, "fat32") && strcmp(arg, "fat16")) {
+                fprintf(stderr, "ffemu: no such file system: %s\n", arg);
+                continue;
+            }
+            ui_usb_set_fat16(!strcmp(arg, "fat16"));
         } else if (!strcmp(line, "dump")) {
             dump_display();
         } else if (!strcmp(line, "log")) {
