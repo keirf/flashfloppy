@@ -2718,6 +2718,9 @@ static void folder_menu(void)
     display_write_slot(TRUE);
 }
 
+/* Whether a folder was left that holds nothing but "..". */
+static bool_t left_empty;
+
 static int floppy_main(void *unused)
 {
     FRESULT fres;
@@ -2775,6 +2778,7 @@ static int floppy_main(void *unused)
             if (!strcmp(fs->fp.fname, "..")) {
                 if (cfg.depth == 0)
                     F_die(FR_BAD_IMAGECFG);
+                left_empty = (cfg.max_slot_nr == 0);
                 fatfs.cdir = cfg.cur_cdir = cfg.stack[--cfg.depth].cdir;
                 cfg.slot_nr = cfg.stack[cfg.depth].slot;
             } else {
@@ -2884,6 +2888,12 @@ static int floppy_main(void *unused)
             wait_ms = (cfg.slot.attributes & AM_DIR) ?
                 ff_cfg.autoselect_folder_secs : ff_cfg.autoselect_file_secs;
             wait_ms *= 1000;
+            /* Entering the folder just left again unasked, which holds
+             * nothing to mount, would go in and out of it forever: wait for
+             * a button instead. */
+            if (left_empty)
+                wait_ms = 0;
+            left_empty = FALSE;
             if (wait_ms && (display_type == DT_LCD_OLED)) {
                 /* Allow time for full name to scroll through. */
                 unsigned int scroll_ms = ff_cfg.nav_scroll_pause;
