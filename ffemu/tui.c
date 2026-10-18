@@ -139,11 +139,15 @@ enum {
 /* The key that opens the dialog to edit the configuration in flash. */
 #define FLASH_KEY '9'
 
+/* The key that opens the dialog to choose what the device is connected to:
+ * the file system of a USB drive made from a directory. */
+#define EXTERNALS_KEY '8'
+
 /* The dialog on screen, if any, its highlighted button (0 is the first),
  * and the display that the display dialog has selected. */
 static enum {
     DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul,
-    DLG_message, DLG_fdfile, DLG_unpack, DLG_write
+    DLG_externals, DLG_message, DLG_fdfile, DLG_unpack, DLG_write
 } dialog;
 /* The message box over a dialog: what it says, and the dialog it returns
  * to when closed. */
@@ -163,6 +167,15 @@ static const char * const df_label[DF_nr] = {
     [DF_display] = "~D~isplay",
     [DF_rom] = "LCD character ~R~OM",
     [DF_synth] = "OLED 8x16 ~f~ont",
+};
+/* The Externals dialog's file system, 1 for FAT16, and the places of its
+ * focus. */
+static int dialog_usb_fat;
+enum { EF_fat, EF_ok, EF_cancel, EF_nr };
+/* The Externals dialog's labels, by the control each names, `~` around the
+ * letter that moves the focus to it. */
+static const char * const ef_label[EF_nr] = {
+    [EF_fat] = "File ~s~ystem of a USB drive made from a directory",
 };
 static void draw_dialog(void);
 static void draw_fdfile_dialog(void);
@@ -980,7 +993,8 @@ static void draw_status(int y, int x, int w)
             c = piece(y, c, x + w, green, "%u", usb.nr_dirs);
             c = piece(y, c, x + w, gray, " dir%s",
                       (usb.nr_dirs == 1) ? "" : "s");
-            if (usb.nr_skipped || usb.nr_case_dups) {
+            if (usb.nr_skipped || usb.nr_case_dups || usb.nr_root_full
+                || usb.nr_drive_full) {
                 c = piece(y, c, x + w, gray, ", ");
                 c = piece(y, c, x + w, green, "some left out");
             }
@@ -1607,6 +1621,8 @@ static void draw_key_bar(void)
     put(LINES - 1, x + 2, COLS, COLOR_PAIR(CP_hotkey), "Shift");
     put(LINES - 1, x + 7, COLS, COLOR_PAIR(CP_bar), "+]");
     x = hotkey(x + 8, COLOR_KEYS, "Color");
+    snprintf(keys, sizeof(keys), "%c", EXTERNALS_KEY);
+    x = hotkey(x, keys, "Externals");
     snprintf(keys, sizeof(keys), "%c", FLASH_KEY);
     x = hotkey(x, keys, "Flash mem");
     snprintf(keys, sizeof(keys), "%c", DISPLAY_KEY);
@@ -2050,6 +2066,38 @@ static void draw_display_dialog(void)
             "As firmware built with oled_font_8x16_synth draws it");
 }
 
+/* What the device is connected to, each as radio buttons: the file system of
+ * a USB drive made from a directory. */
+static void draw_externals_dialog(void)
+{
+    static const char * const fat_label[2] = {
+        "FAT32", "FAT16: up to 2 GB, a root folder of 512 entries"
+    };
+    int w = 68, h = 6, y, x, i, row;
+
+    /* The frame, its empty first row and the buttons, then each cluster's
+     * label, options and empty row, and its note below them all. */
+    h += 1 + 2 + 1 + 1;
+    dialog_box(w, h, "Externals", &y, &x);
+    row = y + 2;
+    put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
+               COLOR_PAIR(CP_dlg_hot), ef_label[EF_fat]);
+    for (i = 0; i < 2; i++)
+        radio_row(row++, x + 3, w - 6, i == dialog_usb_fat,
+                  (dialog_focus == EF_fat) && (i == dialog_usb_fat),
+                  fat_label[i]);
+    row++;
+    put(row, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
+        "Changing the file system inserts such a drive again.");
+    /* OK is the default while the focus is on no button. Both are at the
+     * bottom right, as in Turbo Pascal's dialogs, Cancel's shadow at the
+     * clusters' right edge, two columns between OK's shadow and Cancel. */
+    button(y + h - 3, x + w - 23,
+           button_face(dialog_focus == EF_ok, dialog_focus < EF_ok), "  OK  ");
+    button(y + h - 3, x + w - 14,
+           button_face(dialog_focus == EF_cancel, false), "  Cancel  ");
+}
+
 /* The configuration in flash when the display changed, which may not suit
  * the new one: the rows dialog offers to fix it. */
 static uint8_t rows_cfg[256];
@@ -2222,6 +2270,9 @@ static void draw_dialog(void)
     case DLG_emul:
         draw_emul_dialog();
         break;
+    case DLG_externals:
+        draw_externals_dialog();
+        break;
     case DLG_fdfile:
         draw_fdfile_dialog();
         break;
@@ -2245,8 +2296,8 @@ static void draw_dialog(void)
 /* What a key did in a dialog. */
 enum {
     DK_none, DK_taken, DK_quit, DK_display, DK_rows_yes, DK_rows_no,
-    DK_emul_yes, DK_emul_no, DK_fdfile_yes, DK_fdfile_no, DK_unpack,
-    DK_write
+    DK_emul_yes, DK_emul_no, DK_externals, DK_fdfile_yes, DK_fdfile_no,
+    DK_unpack, DK_write
 };
 
 /* The Display type dialog's keys: Tab and Shift+Tab move the focus over
@@ -2302,6 +2353,49 @@ static int display_dialog_key(int key)
     return DK_taken;
 }
 
+/* The Externals dialog's keys, as the Display type dialog's, and the letter
+ * a label marks, which moves the focus to its control. */
+static int externals_dialog_key(int key)
+{
+    int step = 0, d = (key == KEY_DOWN) ? 1 : -1, i;
+
+    switch (key) {
+    case '\t':
+        step = 1;
+        break;
+    case KEY_BTAB:
+        step = -1;
+        break;
+    case KEY_LEFT: case KEY_RIGHT:
+        if (dialog_focus == EF_ok)
+            dialog_focus = EF_cancel;
+        else if (dialog_focus == EF_cancel)
+            dialog_focus = EF_ok;
+        break;
+    case KEY_UP: case KEY_DOWN:
+        if ((dialog_focus == EF_fat) && (dialog_usb_fat + d >= 0)
+            && (dialog_usb_fat + d < 2))
+            dialog_usb_fat += d;
+        break;
+    case 27:
+        dialog = DLG_none;
+        return DK_taken;
+    case '\n':
+        dialog = DLG_none;
+        return (dialog_focus == EF_cancel) ? DK_taken : DK_externals;
+    default:
+        for (i = 0; i < EF_nr; i++)
+            if ((key > 0) && (key < 0x80)
+                && (hotkey_of(ef_label[i]) == tolower(key)))
+                dialog_focus = i;
+        break;
+    }
+    if (step != 0)
+        dialog_focus = (dialog_focus + EF_nr + step) % EF_nr;
+    dialog_button = (dialog_focus == EF_cancel);
+    return DK_taken;
+}
+
 /* Gives @key to the dialog, if one is open. */
 static int dialog_key(int key)
 {
@@ -2309,6 +2403,8 @@ static int dialog_key(int key)
         return DK_none;
     if (dialog == DLG_display)
         return display_dialog_key(key);
+    if (dialog == DLG_externals)
+        return externals_dialog_key(key);
 
     switch (key) {
     case KEY_LEFT: case KEY_RIGHT: case '\t': case KEY_BTAB:
@@ -4081,6 +4177,9 @@ static void handle_key(int key)
         leave(KEY_ACT_reset);
     case DK_emul_no:
         leave(KEY_ACT_reset);
+    case DK_externals:
+        ui_usb_set_fat16(dialog_usb_fat == 1);
+        return;
     case DK_fdfile_yes: {
         const char *values[EMU_OPTIONS_MAX];
         char msg[160];
@@ -4135,6 +4234,14 @@ static void handle_key(int key)
         dialog_lcd_rom = config.lcd_rom;
         dialog_oled_synth = config.oled_synth;
         dialog_focus = DF_display;
+        return;
+    }
+
+    if (key == EXTERNALS_KEY) {
+        dialog = DLG_externals;
+        dialog_button = 0;
+        dialog_usb_fat = config.usb_fat16;
+        dialog_focus = EF_fat;
         return;
     }
 

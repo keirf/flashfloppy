@@ -101,6 +101,8 @@ static uint8_t drive[DRIVE_SECS * SECSZ] aligned(4);
 static unsigned int next_clus, nr_files;
 static FATFS fatfs;
 static bool_t mounted;
+/* The sectors of another drive, mounted in place of the one in RAM. */
+static int (*other_read)(void *buf, unsigned long sec, unsigned int count);
 
 static void put16(uint8_t *p, unsigned int v)
 {
@@ -128,6 +130,7 @@ void drive_reset(void)
         f_mount(NULL, "", 0);
     mounted = FALSE;
     volume_cache_destroy();
+    other_read = NULL;
 
     memset(drive, 0, DATA_START * SECSZ);
     memcpy(b, "\xeb\x3c\x90" "FFTEST  ", 11);
@@ -240,6 +243,20 @@ uint32_t drive_get(const char *name, void *buf, uint32_t max)
     return nr;
 }
 
+FATFS *drive_mount_from(int (*read)(void *buf, unsigned long sec,
+                                    unsigned int count))
+{
+    if (mounted)
+        f_mount(NULL, "", 0);
+    mounted = FALSE;
+    volume_cache_destroy();
+    other_read = read;
+    if (f_mount(&fatfs, "", 1) != FR_OK)
+        return NULL;
+    mounted = TRUE;
+    return &fatfs;
+}
+
 static DSTATUS drive_initialize(BYTE pdrv)
 {
     return 0;
@@ -252,6 +269,8 @@ static DSTATUS drive_status(BYTE pdrv)
 
 static DRESULT drive_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count)
 {
+    if (other_read != NULL)
+        return (pdrv || other_read(buff, sector, count)) ? RES_ERROR : RES_OK;
     if (pdrv || (sector + count > DRIVE_SECS))
         return RES_PARERR;
     memcpy(buff, &drive[sector * SECSZ], count * SECSZ);
@@ -261,6 +280,8 @@ static DRESULT drive_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count)
 static DRESULT drive_write(
     BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count)
 {
+    if (other_read != NULL)
+        return RES_WRPRT;
     if (pdrv || (sector + count > DRIVE_SECS))
         return RES_PARERR;
     memcpy(&drive[sector * SECSZ], buff, count * SECSZ);

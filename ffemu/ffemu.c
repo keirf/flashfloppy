@@ -108,8 +108,8 @@ static void insert(bool keep_writes)
         return;
     }
     if (info.kind == USB_dir)
-        host_log("USB drive inserted: %u files in %u folders, from %s",
-                 info.nr_files, info.nr_dirs + 1, usb_path);
+        host_log("USB drive inserted: %u files in %u folders, FAT%u, from %s",
+                 info.nr_files, info.nr_dirs + 1, info.fat_bits, usb_path);
     else
         host_log("USB drive inserted: %s %s, from %s",
                  size_text(info.image_bytes, size, sizeof(size)),
@@ -122,6 +122,16 @@ static void insert(bool keep_writes)
         host_log("USB drive: %u entr%s left out as differing from others "
                  "only in letter case, such as %s", info.nr_case_dups,
                  (info.nr_case_dups == 1) ? "y" : "ies", info.case_dup);
+    if (info.nr_root_full != 0)
+        host_log("USB drive: %u entr%s left out, as copying would leave "
+                 "them: the FAT16 root folder holds 512 entries; first %s",
+                 info.nr_root_full, (info.nr_root_full == 1) ? "y" : "ies",
+                 info.root_full);
+    if (info.nr_drive_full != 0)
+        host_log("USB drive: %u file%s left out, as copying would leave "
+                 "them: a FAT16 drive holds 2 GB; first %s",
+                 info.nr_drive_full, (info.nr_drive_full == 1) ? "" : "s",
+                 info.drive_full);
     if (info.nr_kept != 0)
         host_log("USB drive: kept %u sectors that the firmware wrote before "
                  "the power cycle", info.nr_kept);
@@ -226,6 +236,19 @@ static uint64_t step_until;
 /* Apple2: the position of the phases in their cycle of eight states, from
  * phase 0 alone, through phases 0 and 1, to phase 1 alone, and on. */
 static unsigned int phase_pos;
+
+void ui_usb_set_fat16(bool fat16)
+{
+    struct usb_info info;
+
+    if (fat16 == config.usb_fat16)
+        return;
+    config.usb_fat16 = fat16;
+    rc_save();
+    usb_get_info(&info);
+    if (info.inserted && (info.kind == USB_dir))
+        ui_action(KEY_ACT_insert);
+}
 
 bool ui_fdd_has(int act)
 {

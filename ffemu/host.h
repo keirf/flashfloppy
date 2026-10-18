@@ -225,6 +225,10 @@ struct usb_info {
     uint8_t kind; /* USB_* */
     unsigned int nr_files, nr_dirs, nr_skipped;
     unsigned int nr_case_dups; /* left out: as names they equal others */
+    unsigned int fat_bits;     /* of a drive made from a directory */
+    /* Left out of FAT16, as copying them would leave them: entries of the
+     * full root folder, and files of the full drive. */
+    unsigned int nr_root_full, nr_drive_full;
     unsigned long nr_reads, nr_writes; /* transfers since insertion */
     unsigned int nr_kept;  /* sectors written before the power cycle, kept */
     bool writes_lost;      /* such sectors were dropped: the files changed */
@@ -232,6 +236,7 @@ struct usb_info {
     char ff_cfg[16];  /* the FF.CFG that the firmware reads, as on the drive */
     unsigned int ff_cfg_gen; /* changes whenever FF.CFG is to be read again */
     char case_dup[160]; /* the first of those left out, as a path */
+    char root_full[160], drive_full[160]; /* likewise */
     char error[160];  /* why the last usb_insert() failed, or "" */
 };
 
@@ -351,6 +356,7 @@ struct config {
     int display;            /* DISP_*: the display fitted */
     int lcd_rom;            /* LCD_ROM_*: the LCD's character ROM */
     bool oled_synth;        /* the OLED's 8x16 font made from the 6x13 one */
+    bool usb_fat16;         /* a USB drive made from a directory is FAT16 */
     int display_color;      /* a curses color, plus 8 if bright */
     unsigned int hold_ms;   /* how long a key press holds a button down */
     char path[512];         /* where the settings file is, or would be */
@@ -433,6 +439,9 @@ enum {
     FDD_ACT_nr
 };
 extern const char * const fdd_action_name[FDD_ACT_nr];
+/* Makes a USB drive made from a directory FAT16 if @fat16, else FAT32, in
+ * the settings, and inserts such a drive again if one is in. */
+void ui_usb_set_fat16(bool fat16);
 /* Whether the firmware's target has action @act. */
 bool ui_fdd_has(int act);
 /* Performs FDD_ACT_* @act. User interface thread only. */

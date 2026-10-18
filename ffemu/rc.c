@@ -44,7 +44,7 @@ static const char * const color_name[8] = {
 #define BRIGHT "bright-"
 
 enum { SET_style, SET_display_color, SET_hold_ms, SET_display, SET_lcd_rom,
-       SET_oled_8x16, SET_nr };
+       SET_oled_8x16, SET_usb_fat, SET_nr };
 
 static const struct setting {
     const char *name, *comment;
@@ -76,7 +76,14 @@ static const struct setting {
         "oled-8x16",
         "The OLED's 8x16 font: font (the firmware's own) or synth (made from "
         "the 6x13 one, bold, as the firmware built with "
-        "oled_font_8x16_synth=y draws it). Key 0." }
+        "oled_font_8x16_synth=y draws it). Key 0." },
+    [SET_usb_fat] = {
+        "usb-fat",
+        "File system of a USB drive made from a directory: fat32, or fat16 "
+        "(as a drive of up to 2 GB may have it, its root folder of 512 "
+        "entries; what does not fit is left out, as copying would leave "
+        "it). Key 8, which inserts such a drive again; else it takes "
+        "effect at the next insertion." }
 };
 
 /* The value of setting @set as the file has it, into @buf. */
@@ -101,6 +108,9 @@ static const char *value_of(int set, char *buf, size_t size)
         break;
     case SET_oled_8x16:
         snprintf(buf, size, "%s", config.oled_synth ? "synth" : "font");
+        break;
+    case SET_usb_fat:
+        snprintf(buf, size, "%s", config.usb_fat16 ? "fat16" : "fat32");
         break;
     }
     return buf;
@@ -268,6 +278,11 @@ static bool parse_line(char *line)
         if (strcmp(value, "font") && strcmp(value, "synth"))
             return false;
         config.oled_synth = !strcmp(value, "synth");
+        return true;
+    case SET_usb_fat:
+        if (strcmp(value, "fat32") && strcmp(value, "fat16"))
+            return false;
+        config.usb_fat16 = !strcmp(value, "fat16");
         return true;
     }
 
@@ -584,6 +599,7 @@ void rc_load(void)
     config.oled_synth = false;
     config.display_color = 8 | 6; /* bright cyan */
     config.hold_ms = 150;
+    config.usb_fat16 = false;
 
     if ((xdg != NULL) && (xdg[0] != '\0'))
         snprintf(config.path, sizeof(config.path),
