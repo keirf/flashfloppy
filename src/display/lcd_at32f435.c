@@ -167,7 +167,7 @@ static unsigned int osd_prep_buffer(void)
         /* The OLED's phase spinner goes as a blank: FF OSD has no glyph
          * for it. */
         for (i = 0; i < lcd_columns; i++, q++)
-            if (*q & 0x80)
+            if (((uint8_t)*q & ~0xf) == OLED_SPINNER)
                 *q = ' ';
 #else
         q += lcd_columns;
@@ -536,7 +536,8 @@ static void oled_convert_text_row_8x16(char *pc)
     const unsigned int w = 8;
 
     for (i = 0; i < lcd_columns; i++) {
-        if ((TARGET == TARGET_apple2) && ((uint8_t)*pc >= 0x80)) {
+        if ((TARGET == TARGET_apple2)
+            && (((uint8_t)*pc & ~0xf) == OLED_SPINNER)) {
             oled_spinner(q, w, *pc & 0xf, oled_spinner_14, 14);
             pc += 2;
             q += 2*w;

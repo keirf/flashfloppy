@@ -309,7 +309,7 @@ static void lcd_write_track_info(bool_t force)
             snprintf(msg, sizeof(msg),
                      (lcd_columns > 16) ? " %c %s %c:%02u"
                      : is_oled_display ? "%c %s%c%02u" : "%c%s %c%02u",
-                     is_oled_display ? 0x80 | ti.phases : ' ', ph,
+                     is_oled_display ? OLED_SPINNER | ti.phases : ' ', ph,
                      (wp == ' ') ? 'T' : wp, ti.cyl);
         } else {
             snprintf(msg, sizeof(msg), "%c T:%02u.%u", wp, ti.cyl, ti.side);

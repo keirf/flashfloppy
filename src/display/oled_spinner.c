@@ -3,7 +3,7 @@
  *
  * The stepper phase spinner of the Apple2 mode on the OLED, included by
  * lcd_common.c, whose text row converters and the drivers' draw it for a
- * character 0x80 plus the phases on.
+ * character OLED_SPINNER plus the phases on.
  *
  * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
  *

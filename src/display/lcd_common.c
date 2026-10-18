@@ -190,7 +190,8 @@ static void oled_convert_text_row_6x13(char *pc)
     q++;
 
     for (i = 0; i < lcd_columns; i++) {
-        if ((TARGET == TARGET_apple2) && ((uint8_t)*pc >= 0x80)) {
+        if ((TARGET == TARGET_apple2)
+            && (((uint8_t)*pc & ~0xf) == OLED_SPINNER)) {
             oled_spinner(q, w, *pc & 0xf, oled_spinner_11, 11);
             pc += 2;
             q += 2*w;
