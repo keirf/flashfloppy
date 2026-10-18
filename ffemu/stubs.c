@@ -1007,6 +1007,7 @@ static DRESULT usb_disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count)
         return RES_PARERR;
     if (dstatus & STA_NOINIT)
         return RES_NOTRDY;
+    emu_fw_progress();
     return usb_disk_io(emu_usb_read(buff, sector, count));
 }
 
@@ -1017,6 +1018,7 @@ static DRESULT usb_disk_write(
         return RES_PARERR;
     if (dstatus & STA_NOINIT)
         return RES_NOTRDY;
+    emu_fw_progress();
     return usb_disk_io(emu_usb_write(buff, sector, count));
 }
 

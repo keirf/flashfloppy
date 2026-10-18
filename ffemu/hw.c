@@ -111,6 +111,7 @@ static void reg_update(volatile uint32_t *reg, uint32_t clear, uint32_t set)
 uint32_t emu_stk_now(void)
 {
     uint64_t ticks;
+    emu_fw_progress();
     emu_hw_sync();
     emu_irq_poll();
     /* SysTick counts down. */
@@ -283,18 +284,21 @@ static void gpio_sync(uint64_t now)
     pb_odr = ((pb_odr & ~(bsrr >> 16)) | (bsrr & 0xffff)) & ~emu_gpio[1].brr;
     emu_gpio[1].brr = 0;
 
-    if ((rot_seq == NULL) && (emu_in_rotary != 0)) {
-        bool_t cw = emu_in_rotary > 0;
-        __sync_fetch_and_add(&emu_in_rotary, cw ? -1 : 1);
-        rot_seq = cw ? rot_cw : rot_ccw;
-        rot_pos = 0;
-        rot_next_ns = now;
-    }
-    if ((rot_seq != NULL) && (now >= rot_next_ns)) {
-        rot_state = rot_seq[rot_pos++];
-        rot_next_ns = now + ROT_STEP_NS;
-        if (rot_pos == sizeof(rot_cw))
-            rot_seq = NULL;
+    /* The encoder turns only while the firmware can read it right. */
+    if (emu_timers_on_time()) {
+        if ((rot_seq == NULL) && (emu_in_rotary != 0)) {
+            bool_t cw = emu_in_rotary > 0;
+            __sync_fetch_and_add(&emu_in_rotary, cw ? -1 : 1);
+            rot_seq = cw ? rot_cw : rot_ccw;
+            rot_pos = 0;
+            rot_next_ns = now;
+        }
+        if ((rot_seq != NULL) && (now >= rot_next_ns)) {
+            rot_state = rot_seq[rot_pos++];
+            rot_next_ns = now + ROT_STEP_NS;
+            if (rot_pos == sizeof(rot_cw))
+                rot_seq = NULL;
+        }
     }
 
     if (b & EMU_B_LEFT)

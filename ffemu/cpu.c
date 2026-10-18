@@ -277,8 +277,35 @@ uint64_t emu_time_ns(void)
 
 /* Set where the host sleeps in steps of milliseconds, as a virtual machine on
  * a Windows host may (15.6 ms): sleeping there makes the firmware's overdue
- * timers run in bursts, which lose the encoder's steps, so ffemu spins. */
+ * timers run in bursts, which lose the encoder's steps, so ffemu spins while
+ * the user is at work, see user_active(). */
 static bool coarse_sleep;
+
+/* How long ffemu spins on such a host after the user's last input. */
+#define ACTIVE_NS 3000000000u
+
+/* Whether the user has given input lately: pressed a button or a key of the
+ * floppy interface, turned the encoder, which steps on while detents are
+ * left, or inserted or removed the USB drive. */
+static bool user_active(void)
+{
+    static unsigned int buttons, fdd, step;
+    static int usb;
+    static uint64_t until;
+    unsigned int b = emu_in_buttons, f = emu_in_fdd, s = emu_in_step;
+    int u = emu_usb_inserted();
+    uint64_t now = emu_time_ns();
+
+    if ((b != buttons) || (f != fdd) || (s != step) || (u != usb)
+        || (emu_in_rotary != 0)) {
+        buttons = b;
+        fdd = f;
+        step = s;
+        usb = u;
+        until = now + ACTIVE_NS;
+    }
+    return now < until;
+}
 
 static void sleep_us(unsigned int us)
 {
@@ -291,17 +318,26 @@ static void go_coarse(uint64_t step_ns)
 {
     coarse_sleep = true;
     host_log("This host sleeps in steps of %u ms: keeping time by "
-             "spinning, which keeps a CPU core busy",
+             "spinning after each input, which keeps a CPU core busy then",
              (unsigned int)((step_ns + 500000) / 1000000));
 }
 
-/* Gives up the CPU for a moment, as the host allows. A host whose sleeps are
+/* Notes a sleep that came @late ns after its end. A host whose sleeps are
  * coarse may pass the measurement at the start by chance, as a virtual
  * machine does now and then, so sleeps that overshoot many times in a row
  * mean coarse too. */
-static void pause_briefly(void)
+static void note_sleep(uint64_t late)
 {
     static unsigned int overshoots;
+
+    overshoots = (late > 2000000) ? overshoots + 1 : 0;
+    if (overshoots == 8)
+        go_coarse(late);
+}
+
+/* Gives up the CPU for a moment, as the host allows. */
+static void pause_briefly(void)
+{
     uint64_t t;
 
     if (coarse_sleep) {
@@ -310,30 +346,82 @@ static void pause_briefly(void)
     }
     t = emu_time_ns();
     sleep_us(100);
-    t = emu_time_ns() - t;
-    overshoots = (t > 2000000) ? overshoots + 1 : 0;
-    if (overshoots == 8)
-        go_coarse(t);
+    note_sleep(emu_time_ns() - t);
+}
+
+/* Sleeps until @end, in the host's time since the start, or until a tick cuts
+ * the sleep short: how late it woke, 0 if early. */
+static uint64_t sleep_until(uint64_t end)
+{
+    uint64_t ns = (uint64_t)t0.tv_nsec + end, now;
+    struct timespec t = { t0.tv_sec + ns / 1000000000u, ns % 1000000000u };
+
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &t, NULL);
+    now = emu_time_ns();
+    return (now > end) ? now - end : 0;
+}
+
+/* The firmware's calls into the host half from its thread, outside its
+ * interrupt handlers: a loop that spins on a variable alone makes none. */
+static volatile unsigned long progress;
+
+void emu_fw_progress(void)
+{
+    if (irq_depth == 0)
+        progress++;
+}
+
+/* A wait shorter than this spins, since a sleep would overshoot it many times
+ * over; a longer one sleeps until its end. */
+#define SLEEP_MIN_NS 300000u
+/* A wait that sleeps, called within this of where the previous one was to
+ * end, as in a loop of waits, counts from there: the loop keeps its pace,
+ * though each sleep overshoots by up to a tick of the host's timer. */
+#define CHAIN_NS 2000000u
+static uint64_t idle_end;
+
+/* Set while the firmware's thread sleeps on a host whose sleeps are coarse. */
+static volatile bool coarse_idle;
+
+int emu_timers_on_time(void)
+{
+    return !coarse_sleep || (!coarse_idle && user_active());
 }
 
 void emu_idle_ns(uint64_t ns)
 {
-    uint64_t now = emu_time_ns(), end = now + ns;
+    uint64_t now = emu_time_ns(), end = now + ns, late;
+    bool sleeps = (!coarse_sleep || !user_active())
+        && (ns >= SLEEP_MIN_NS);
+
+    if (sleeps) {
+        if (now - idle_end < CHAIN_NS)
+            end = idle_end + ns;
+        idle_end = end;
+    }
+    coarse_idle = coarse_sleep && sleeps;
 
     for (;;) {
+        emu_fw_progress();
         emu_hw_sync();
         irq_run();
         now = emu_time_ns();
         if (now >= end)
             break;
-        /* Spin for the last bit, where even a short sleep would overshoot. */
-        if (coarse_sleep || ((end - now) > 300000))
+        if (sleeps) {
+            late = sleep_until(end);
+            if (!coarse_sleep)
+                note_sleep(late);
+        } else if (coarse_sleep) {
             pause_briefly();
+        }
     }
+    coarse_idle = false;
 }
 
 void emu_relax(void)
 {
+    emu_fw_progress();
     emu_hw_sync();
     irq_run();
     pause_briefly();
@@ -418,6 +506,47 @@ static void on_fatal(int sig)
     raise(sig);
 }
 
+/* A firmware that waits for a button by spinning on a variable that only its
+ * interrupts change makes no progress: after SPIN_NS of that, the tick sleeps
+ * for it, a while at a time, waking at once when an input changes. */
+#define SPIN_NS 20000000u
+#define THROTTLE_NS 50000000u
+#define THROTTLE_STEP_US 2000
+static volatile bool throttling;
+
+static void throttle(void)
+{
+    static unsigned long seen;
+    static uint64_t still_since;
+    unsigned int buttons = emu_in_buttons, fdd = emu_in_fdd;
+    int rotary = emu_in_rotary, usb = emu_usb_inserted();
+    uint64_t now = emu_time_ns(), end = now + THROTTLE_NS;
+
+    /* In a handler, the firmware waits on a peripheral, which the models
+     * release soon enough. */
+    if ((progress != seen) || (irq_depth != 0)) {
+        seen = progress;
+        still_since = now;
+        return;
+    }
+    if (now - still_since < SPIN_NS)
+        return;
+
+    throttling = true;
+    do {
+        sleep_us(THROTTLE_STEP_US);
+        if ((request != REQ_none) || (emu_in_buttons != buttons)
+            || (emu_in_rotary != rotary) || (emu_in_fdd != fdd)
+            || (emu_usb_inserted() != usb)) {
+            /* A full SPIN_NS at the tick's own pace, for the firmware's
+             * debouncing and the encoder's steps. */
+            still_since = emu_time_ns();
+            break;
+        }
+    } while (emu_time_ns() < end);
+    throttling = false;
+}
+
 static void on_tick(int sig)
 {
     int saved_errno = errno;
@@ -428,6 +557,12 @@ static void on_tick(int sig)
             restart();
         _exit(0);
     }
+    /* A tick within the throttle's sleep has nothing to run. */
+    if (throttling) {
+        errno = saved_errno;
+        return;
+    }
+    throttle();
     emu_hw_sync();
     irq_run();
     errno = saved_errno;

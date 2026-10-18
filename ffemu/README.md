@@ -231,10 +231,12 @@ DMA channels of the read and write data are mere registers.
 
 ## Timing and the console
 
-The firmware needs its timers on time to within a millisecond. Where the host
-sleeps only in coarser steps, as a virtual machine on a Windows host may (4 to
-16 ms), ffemu keeps time by spinning, which keeps one CPU core busy, and says
-so in the console window.
+The firmware needs its timers on time to within a millisecond while it reads
+buttons and the encoder. Where the host sleeps only in coarser steps, as a
+virtual machine on a Windows host may (4 to 16 ms), ffemu keeps time by
+spinning, which keeps one CPU core busy, for 3 seconds after each input and
+while the encoder's steps go on, and says so in the console window; the rest of
+the time it sleeps, the firmware's timers then running late by up to a step.
 
 The firmware's console output (normally available in debug builds on the
 Gotek's UART pins) is shown in the Console pane at the bottom, among ffemu's
