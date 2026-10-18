@@ -2723,6 +2723,7 @@ static int floppy_main(void *unused)
     FRESULT fres;
     uint8_t b;
     uint32_t i;
+    bool_t exited_empty_folder = FALSE;
 
     /* If any buttons are pressed when USB drive is mounted then we start 
      * in ejected state. */
@@ -2775,6 +2776,7 @@ static int floppy_main(void *unused)
             if (!strcmp(fs->fp.fname, "..")) {
                 if (cfg.depth == 0)
                     F_die(FR_BAD_IMAGECFG);
+                exited_empty_folder = (cfg.max_slot_nr == 0);
                 fatfs.cdir = cfg.cur_cdir = cfg.stack[--cfg.depth].cdir;
                 cfg.slot_nr = cfg.stack[cfg.depth].slot;
             } else {
@@ -2884,6 +2886,13 @@ static int floppy_main(void *unused)
             wait_ms = (cfg.slot.attributes & AM_DIR) ?
                 ff_cfg.autoselect_folder_secs : ff_cfg.autoselect_file_secs;
             wait_ms *= 1000;
+            if (exited_empty_folder) {
+                /* Entering the folder just left again unasked, which holds
+                 * nothing to mount, would go in and out of it forever: wait
+                 * for a button instead. */
+                wait_ms = 0;
+                exited_empty_folder = FALSE;
+            }
             if (wait_ms && (display_type == DT_LCD_OLED)) {
                 /* Allow time for full name to scroll through. */
                 unsigned int scroll_ms = ff_cfg.nav_scroll_pause;
