@@ -1622,7 +1622,8 @@ static const char *ff_cfg_text(const char *path, unsigned int gen)
 
 /* The FF.CFG that the firmware reads, beside the display: named by its path
  * on the drive, with its path on the host in the corner. While the drive is
- * out, dimmed: as it is on the host now, or as last read from an image. */
+ * out, in light gray: as it is on the host now, or as last read from an
+ * image. */
 static void draw_ff_cfg(int y, int x, int w, int h)
 {
     struct usb_info usb;
@@ -1669,8 +1670,8 @@ static void draw_ff_cfg(int y, int x, int w, int h)
     for (row = 0, p = text; row < ff_cfg_top; row++)
         p += strcspn(p, "\n") + 1;
     for (row = 0; (row < rows) && (*p != '\0'); row++) {
-        put_line(y + 1 + row, x + 1, w - 2, !usb.inserted, CP_value, p,
-                 strcspn(p, "\n"));
+        put_line(y + 1 + row, x + 1, w - 2, !usb.inserted,
+                 usb.inserted ? CP_value : CP_text, p, strcspn(p, "\n"));
         p += strcspn(p, "\n");
         if (*p == '\n')
             p++;
