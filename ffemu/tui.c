@@ -104,7 +104,7 @@ enum {
     CP_lcd_dark,  /* black on dark gray, or blue on black: the LCD unlit */
     CP_lcd_stub,  /* bright magenta on the LCD: a character it lacks */
     CP_lcd_dot,   /* the LCD's unlit dots, faint, on its panel */
-    CP_lcd_inkdot, /* the LCD's ink on its unlit dots */
+    CP_lcd_inkdot, /* the LCD's unlit dots on its ink */
     CP_nr
 };
 
@@ -677,11 +677,14 @@ static void draw_led(int y0, int x0, int fw, int style, bool too_small,
 }
 
 /* The lit LCD in half blocks with 16 colors, @px over @dots: the dots that
- * are not lit show faintly, as on a real panel. */
+ * are not lit show faintly, as on a real panel. A terminal may show a color
+ * as ink and as paper in different shades, so the unlit dots are always ink
+ * and the panel always paper; a lit dot is paper beside an unlit one. */
 static void draw_lcd_half(int y0, int x0, const uint8_t *px,
                           const uint8_t *dots, unsigned int w, unsigned int h)
 {
-    enum { PANEL, DOT, INK };
+    /* In order of their claim to be the ink of a cell. */
+    enum { PANEL, INK, DOT };
     unsigned int x, y;
 
     for (y = 0; y < h; y += 2) {
@@ -692,9 +695,9 @@ static void draw_lcd_half(int y0, int x0, const uint8_t *px,
                 : px[j] ? INK : dots[j] ? DOT : PANEL;
             int fg = (top > bottom) ? top : bottom;
             int bg = (top > bottom) ? bottom : top;
-            attr_t attr = (fg == DOT) ? COLOR_PAIR(CP_lcd_dot)
-                : (bg == DOT) ? COLOR_PAIR(CP_lcd_inkdot)
-                : COLOR_PAIR(CP_lcd);
+            attr_t attr = (fg != DOT) ? COLOR_PAIR(CP_lcd)
+                : (bg == INK) ? COLOR_PAIR(CP_lcd_inkdot)
+                : COLOR_PAIR(CP_lcd_dot);
             wchar_t wc = (top == bottom) ? ((top == PANEL) ? L' ' : 0x2588)
                 : (top == fg) ? 0x2580 : 0x2584;
             put_char(y0 + y / 2, x0 + x, attr, wc);
@@ -2365,7 +2368,7 @@ static void set_lcd_pairs(void)
     /* The unlit dots: the panel's color with the other brightness. */
     if (COLORS >= 16) {
         init_pair(CP_lcd_dot, panel ^ 8, panel);
-        init_pair(CP_lcd_inkdot, ink, panel ^ 8);
+        init_pair(CP_lcd_inkdot, panel ^ 8, ink);
     }
 }
 
