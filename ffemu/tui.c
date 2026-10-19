@@ -2540,7 +2540,7 @@ static struct fview {
       { "no", "yes", "auto" }, false, true },
     { FV_input, 0, "~d~isplay-order", "display-order",
       "Rows top down: 0=name, 1=status, 2=info, 3=folder, 7=blank, "
-      "d=double-height; e.g. \"3,0d,1\"", { NULL }, false, false },
+      "d=double-height", { NULL }, false, false },
     { FV_input, 0, "display-~o~ff-secs", "display-off-secs",
       "Seconds without activity before the display goes dark, 0-255: 0 is "
       "always off, 255 never",
@@ -3731,15 +3731,47 @@ static const struct {
       "blanks or garbles" },
 };
 
+/* The rows that display-order = default gives, as the firmware chooses them
+ * for the display that the dialog's display-type names, or for auto for the
+ * one fitted; NULL for a 7-segment display, which shows no rows. */
+static const char *fd_default_display_order(void)
+{
+    const struct fview *r = fd_find(FV_radio, "display-type");
+    const char *t = r ? fd_radio_value(r) : "auto";
+    bool oled, tall;
+
+    if (!strcmp(t, "auto")) {
+        if (DISP_IS_LED(fitted_display))
+            return NULL;
+        oled = DISP_IS_OLED(fitted_display);
+        tall = oled ? (DISP_HEIGHT(fitted_display) == 64)
+            : (DISP_LCD_ROWS(fitted_display) == 4);
+    } else {
+        oled = !strncmp(t, "oled-", 5);
+        tall = !strcmp(t, "oled-128x64") || !strcmp(t, "lcd-20x04");
+    }
+    return !tall ? "0,1" : oled ? "3,0d,1" : "3,0,1,2";
+}
+
 /* The help of the control in focus: of the item under the cursor, for a
- * cluster whose item has one, else the control's own. */
+ * cluster whose item has one, else the control's own; for display-order
+ * with its default added. */
 static const char *fd_help(void)
 {
     const struct fview *v = &fviews[fd_focus];
+    static char order[128];
+    const char *dflt;
     char item[32];
     unsigned int i;
     int k;
 
+    if ((v->type == FV_input) && v->opt && !strcmp(v->opt, "display-order")) {
+        dflt = fd_default_display_order();
+        if (dflt == NULL)
+            return v->help;
+        snprintf(order, sizeof(order), "%s; default: %s", v->help, dflt);
+        return order;
+    }
     if ((v->type != FV_radio) && (v->type != FV_check))
         return v->help;
     k = (v->type == FV_radio) ? v->cur : fd_item_of_row(v, v->cur);

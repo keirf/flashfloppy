@@ -438,8 +438,9 @@ static bool_t parse_display_order(char *s, uint32_t *v)
         *v |= ((s[0] - '0') | ((s[1] == 'd') ? DORD_double : 0)) << sh;
         sh += DORD_shift;
     }
+    /* Blank rows for the rest, within the 16 bits that the option has. */
     if (sh < 16)
-        *v |= 0x7777 << sh;
+        *v |= (0x7777u << sh) & 0xffff;
     return TRUE;
 }
 
