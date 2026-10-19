@@ -314,11 +314,6 @@ bool_t get_img_cfg(struct slot *slot)
     return FALSE;
 }
 
-int get_next_opt(struct opts *opts)
-{
-    return OPT_eof;
-}
-
 /*
  * The rest of the firmware that the image code reaches: no display, no
  * direct access and no slot list. The board is in floppy_env.c.

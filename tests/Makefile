@@ -19,6 +19,7 @@ O ?= $(ROOT)
 OUT := $(abspath $(O))/out/fftest
 
 CC ?= cc
+OBJCOPY ?= objcopy
 PYTHON ?= $(firstword $(shell command -v python3 python py 2>/dev/null))
 
 ifneq ($(VERBOSE),1)
@@ -31,9 +32,9 @@ FW_SRCS := fs.c volume.c cache.c crc.c string.c util.c
 FW_SRCS += fatfs/ff.c fatfs/ffunicode.c
 FW_SRCS += image/image.c image/adf.c image/dsk.c image/hfe.c image/img.c
 FW_SRCS += image/da.c image/dummy.c image/mfm.c
-FW_SRCS += floppy.c
+FW_SRCS += floppy.c config.c
 TEST_SRCS := harness.c floppy_env.c
-TEST_SRCS += test_floppy.c test_flux.c test_img.c test_util.c
+TEST_SRCS += test_floppy.c test_flux.c test_img.c test_main.c test_util.c
 
 # The host half: the runner.
 HOST_SRCS := ft_main.c
@@ -74,7 +75,17 @@ $(OUT)/ff_cfg_defaults.h: $(ROOT)/examples/FF.CFG $(ROOT)/scripts/mk_config.py
 	@mkdir -p $(dir $@)
 	$(Q)$(PYTHON) $(ROOT)/scripts/mk_config.py $< $@
 
-$(OUT)/test/harness.o: $(OUT)/ff_cfg_defaults.h
+$(OUT)/test/harness.o $(OUT)/test/test_main.o: $(OUT)/ff_cfg_defaults.h
+
+# test_main.c includes main.c, whose main() must not be the program's, and
+# whose copies of what the harness gives the image code must not clash.
+MAIN_SYMS := main fatfs_from_slot get_img_cfg get_slot_nr set_slot_nr
+MAIN_SYMS += set_slot_name lba_within_fat_volume board_id IRQ_rotary
+$(OUT)/test/test_main.o: $(TESTS)/test_main.c
+	@echo CC tests/test_main.c
+	@mkdir -p $(dir $@)
+	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
+	$(Q)$(OBJCOPY) $(foreach s,$(MAIN_SYMS),--redefine-sym $(s)=fw_$(s)) $@
 
 $(OUT)/fw/%.o: $(ROOT)/src/%.c
 	@echo CC $*.c
