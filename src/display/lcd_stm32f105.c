@@ -168,7 +168,8 @@ static unsigned int osd_prep_buffer(void)
         order = ff_cfg.osd_display_order;
 
     heights = rows = 0;
-    for (i = 3; i >= 0; i--) {
+    /* FF OSD takes three rows at most: its row count is two bits. */
+    for (i = 2; i >= 0; i--) {
         /* Iterate over rows, bottom to top. */
         row = order >> (i<<2);
         /* Skip all trailing empty rows. */

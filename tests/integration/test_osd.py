@@ -45,6 +45,14 @@ class Osd(fr.Case, unittest.TestCase):
             "hd44780-16x2", flash=["osd-display-order = 1,0"])
         self.assertEqual(rows, ["000/000  T:00.0", "A"], r.report())
 
+    def test_four_rows(self):
+        """Of an osd-display-order of four rows, the first three, which is all
+        that FF OSD takes."""
+        header, rows, r = self.osd(
+            "hd44780-16x2", flash=["osd-display-order = 3,0,1,2"])
+        self.assertTrue(header.startswith("osd: 16x3 on "), r.report())
+        self.assertEqual(rows, ["/", "A", "000/000  T:00.0"], r.report())
+
     def test_unfitted(self):
         header, rows, r = self.osd("hd44780-16x2", settings=["osd = no"])
         self.assertEqual(header, "osd: none", r.report())
