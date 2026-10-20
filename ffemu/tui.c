@@ -1375,12 +1375,16 @@ static void draw_keys(int y, int x, int w)
     fdd_panel(y + 5, x + 1, w - 1);
     y += 8;
 
-    /* The latch key lights up while its mode lasts. */
+    /* The latch key lights up while its mode lasts. The `+` between the
+     * keys of a combination is not a key itself. */
     for (i = 0; i < ARRAY_SIZE(device_keys); i++) {
-        int act = device_keys[i].act, n = strlen(key_label[act]) + 1;
+        int act = device_keys[i].act, n = strlen(key_label[act]) + 1, j;
+        const char *k = key_label[act];
         bool lit = ((act == KEY_ACT_latch) && ui_latched())
             || (emu_time_ns() < key_lit_until[act]);
-        put(y, x, w, key_attr(lit), "%s", key_label[act]);
+        for (j = 0; k[j] != '\0'; j++)
+            put(y, x + j, w - j, (k[j] == '+') ? 0 : key_attr(lit), "%c",
+                k[j]);
         put(y++, x + n, w - n, 0, "%s", device_keys[i].what);
     }
 }
