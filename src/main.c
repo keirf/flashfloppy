@@ -286,17 +286,29 @@ static void lcd_write_track_info(bool_t force)
 
     floppy_get_track(&ti);
 
-    if (lcd_columns <= 16)
-        ti.cyl = min_t(uint8_t, ti.cyl, 99);
     ASSERT(ti.side <= 1);
 
     if (force || (ti.cyl != lcd_ti.cyl)
         || ((ti.side != lcd_ti.side) && ti.sel)
         || (ti.writing != lcd_ti.writing)) {
+        unsigned int cyl = ti.cyl, hundreds = 0;
+        if ((lcd_columns <= 16) && (cyl > 99)) {
+            /* Three digits in two cells: the last two, the display
+             * marking the hundreds. */
+            hundreds = cyl / 100;
+            cyl %= 100;
+        }
         snprintf(msg, sizeof(msg), "%c T:%02u.%u",
                  (cfg.slot.attributes & AM_RDO) ? '*' : ti.writing ? 'W' : ' ',
-                 ti.cyl, ti.side);
+                 cyl, ti.side);
+        if (hundreds && (ti.cyl == 255)) {
+            /* Direct Access mode's track. */
+            msg[4] = msg[5] = 'F';
+            hundreds = 0;
+        }
         lcd_write(wp_column, 1, -1, msg);
+        if (hundreds)
+            lcd_hundreds(wp_column + 4, 1, hundreds);
         if (ff_cfg.display_on_activity != DISPON_no)
             lcd_on();
         lcd_ti = ti;

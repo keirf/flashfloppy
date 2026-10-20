@@ -62,6 +62,9 @@ static uint8_t oled_height;
 /* The font that lcd_columns is sized for. FF.CFG may change
  * ff_cfg.oled_font before it resets the system. */
 static uint8_t oled_font;
+/* The two cells of text that lcd_hundreds() marks, and the number of
+ * hundreds it gives them; a write over the cells takes the mark away. */
+static uint8_t hundreds_row, hundreds_col, hundreds_nr;
 
 #define OLED_ADDR 0x3c
 enum { OLED_unknown, OLED_ssd1306, OLED_sh1106 };
@@ -138,6 +141,7 @@ static uint8_t i2c_probe_range(uint8_t s, uint8_t e)
 void lcd_clear(void)
 {
     memset(text, ' ', sizeof(text));
+    hundreds_nr = 0;
 }
 
 void lcd_write(int col, int row, int min, const char *str)
@@ -160,7 +164,19 @@ void lcd_write(int col, int row, int min, const char *str)
     while ((min-- > 0) && (col++ < lcd_columns))
         *p++ = ' ';
 
+    /* A write that reaches the cells of lcd_hundreds() takes their mark
+     * away. */
+    if ((row == hundreds_row) && (col > hundreds_col))
+        hundreds_nr = 0;
+
     IRQ_restore(oldpri);
+}
+
+void lcd_hundreds(int col, int row, unsigned int nr)
+{
+    hundreds_col = col;
+    hundreds_row = row;
+    hundreds_nr = nr;
 }
 
 void lcd_backlight(bool_t on)
@@ -263,6 +279,19 @@ static void oled_double_height(uint8_t *dst, uint8_t *src, uint8_t mask)
     }
 }
 
+/* Draws lines under the two cells of lcd_hundreds() in the text row just
+ * converted into buffer[]: one for the first hundred at pixel row 13, one
+ * for the second at row 15. */
+static void oled_underline(void)
+{
+    unsigned int w = (oled_font == FONT_8x16) ? 8 : 6;
+    unsigned int x = hundreds_col * w + (w == 6), e = x + 2 * w;
+    uint8_t lines = (hundreds_nr > 1) ? 0xa0 : 0x20;
+
+    while (x < e)
+        buffer[128 + x++] |= lines;
+}
+
 static int oled_to_lcd_row(int in_row)
 {
     uint16_t order;
@@ -285,6 +314,8 @@ static int oled_to_lcd_row(int in_row)
     row = order & DORD_row;
     if (row < lcd_rows) {
         oled_convert_text_row(text[row]);
+        if ((row == hundreds_row) && hundreds_nr)
+            oled_underline();
     } else {
         memset(buffer, 0, 256);
     }

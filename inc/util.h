@@ -140,6 +140,10 @@ int led_7seg_nr_digits(void);
 bool_t lcd_init(void);
 void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
+/* Marks the two cells at @col of text row @row as the last two digits of a
+ * number of @nr hundreds: lines under them on an OLED, ++ in their place
+ * elsewhere. A write over the cells takes the mark away. */
+void lcd_hundreds(int col, int row, unsigned int nr);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
 extern uint8_t lcd_columns, lcd_rows;

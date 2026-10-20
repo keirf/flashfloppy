@@ -194,6 +194,9 @@ static unsigned int osd_prep_buffer(void)
             memcpy(q, text[i], lcd_columns);
         else
             memset(q, ' ', lcd_columns);
+        /* FF OSD has no lines to draw: ++ for marked hundreds. */
+        if ((i == hundreds_row) && hundreds_nr)
+            q[hundreds_col] = q[hundreds_col+1] = '+';
         q += lcd_columns;
     }
 
@@ -212,7 +215,7 @@ static unsigned int lcd_prep_buffer(void)
 {
     const static uint8_t row_offs[] = { 0x00, 0x40, 0x14, 0x54 };
     uint16_t order;
-    char *p;
+    char c, *p;
     uint8_t *q = buffer;
     unsigned int i, row;
 
@@ -240,8 +243,14 @@ static unsigned int lcd_prep_buffer(void)
     p = (_bl && row < ARRAY_SIZE(text)) ? text[row] : NULL;
 
     emit8(&q, CMD_SETDDRADDR | row_offs[i2c_row], 0);
-    for (i = 0; i < lcd_columns; i++)
-        emit8(&q, p ? *p++ : ' ', _RS);
+    for (i = 0; i < lcd_columns; i++) {
+        c = p ? *p++ : ' ';
+        /* An LCD has no lines to draw: ++ for marked hundreds. */
+        if (p && (row == hundreds_row) && hundreds_nr
+            && (i - hundreds_col < 2))
+            c = '+';
+        emit8(&q, c, _RS);
+    }
 
     i2c_row++;
 
