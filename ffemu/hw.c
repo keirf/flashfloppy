@@ -114,6 +114,7 @@ uint32_t emu_stk_now(void)
     emu_fw_progress();
     emu_hw_sync();
     emu_irq_poll();
+    emu_stk_read();
     /* SysTick counts down. */
     ticks = emu_time_ns() * STK_MHZ / 1000;
     return (uint32_t)(0 - ticks) & STK_MASK;
@@ -363,6 +364,14 @@ static void tim_sync(uint64_t now)
     }
 }
 
+/* The earlier of two deadlines, 0 being none. */
+static uint64_t earlier(uint64_t a, uint64_t b)
+{
+    if ((a == 0) || ((b != 0) && (b < a)))
+        return b;
+    return a;
+}
+
 /*
  * I2C master, STM32F1 style, and the DMA channel that feeds it.
  *
@@ -524,6 +533,17 @@ static void bus_sync(uint64_t now)
     dma_sync();
     i2c_sync(&i2c_model[0], now);
     i2c_sync(&i2c_model[1], now);
+}
+
+uint64_t emu_hw_due_ns(void)
+{
+    uint64_t due = tim_armed ? tim_deadline_ns : 0;
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_SIZE(i2c_model); i++)
+        if (i2c_model[i].dma_active)
+            due = earlier(due, i2c_model[i].dma_done_ns);
+    return due;
 }
 
 /* One thread at a time updates the models; a tick that arrives while a thread
