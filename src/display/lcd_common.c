@@ -34,7 +34,7 @@
 /* FF OSD command set */
 #define OSD_BACKLIGHT    0x00 /* [0] = backlight on */
 #define OSD_DATA         0x02 /* next columns*rows bytes are text data */
-#define OSD_ROWS         0x10 /* [3:0] = #rows */
+#define OSD_ROWS         0x10 /* [1:0] = #rows */
 #define OSD_HEIGHTS      0x20 /* [3:0] = 1 iff row is 2x height */
 #define OSD_BUTTONS      0x30 /* [3:0] = button mask */
 #define OSD_COLUMNS      0x40 /* [6:0] = #columns */
