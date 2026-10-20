@@ -239,10 +239,13 @@ struct image_handler {
     bool_t (*write_track)(struct image *im);
 };
 
-/* List of supported image types. */
+/* List of supported image types: each an extension and its handler, and
+ * the function that opens an image of the type where the handler, that of
+ * raw sector images, serves many types. */
 extern const struct image_type {
     char ext[8];
     const struct image_handler *handler;
+    bool_t (*open)(struct image *im);
 } image_type[];
 
 /* Is given file valid to open as an image? */

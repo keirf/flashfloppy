@@ -12,58 +12,61 @@
 #if TARGET == TARGET_shugart
 
 extern const struct image_handler adf_image_handler;
-extern const struct image_handler atr_image_handler;
 extern const struct image_handler hfe_image_handler;
-extern const struct image_handler img_image_handler;
-extern const struct image_handler sf7_image_handler;
-extern const struct image_handler st_image_handler;
-extern const struct image_handler d81_image_handler;
 extern const struct image_handler dsk_image_handler;
 extern const struct image_handler da_image_handler;
-extern const struct image_handler adfs_image_handler;
-extern const struct image_handler mbd_image_handler;
-extern const struct image_handler mgt_image_handler;
-extern const struct image_handler pc98fdi_image_handler;
-extern const struct image_handler pc98hdm_image_handler;
-extern const struct image_handler trd_image_handler;
-extern const struct image_handler opd_image_handler;
-extern const struct image_handler ssd_image_handler;
-extern const struct image_handler dsd_image_handler;
-extern const struct image_handler sdu_image_handler;
-extern const struct image_handler jvc_image_handler;
-extern const struct image_handler vdk_image_handler;
-extern const struct image_handler ti99_image_handler;
 extern const struct image_handler xdf_image_handler;
 extern const struct image_handler dummy_image_handler;
+/* Raw sector images: one handler, and an open function per type. */
+extern const struct image_handler raw_image_handler;
+extern const struct image_handler raw_extend_image_handler;
+bool_t img_open(struct image *im);
+bool_t d81_open(struct image *im);
+bool_t sf7_open(struct image *im);
+bool_t st_open(struct image *im);
+bool_t adfs_open(struct image *im);
+bool_t atr_open(struct image *im);
+bool_t mbd_open(struct image *im);
+bool_t mgt_open(struct image *im);
+bool_t pc98fdi_open(struct image *im);
+bool_t pc98hdm_open(struct image *im);
+bool_t trd_open(struct image *im);
+bool_t opd_open(struct image *im);
+bool_t ssd_open(struct image *im);
+bool_t dsd_open(struct image *im);
+bool_t sdu_open(struct image *im);
+bool_t jvc_open(struct image *im);
+bool_t vdk_open(struct image *im);
+bool_t ti99_open(struct image *im);
 
 const struct image_type image_type[] = {
     { "adf", &adf_image_handler },
-    { "atr", &atr_image_handler },
-    { "d1m", &d81_image_handler }, /* CMD FD-2000 DD, 81 track */
-    { "d2m", &d81_image_handler }, /* CMD FD-2000 HD, 81 track */
-    { "d4m", &d81_image_handler }, /* CMD FD-4000 ED, 81 track */
-    { "d81", &d81_image_handler },
+    { "atr", &raw_image_handler, atr_open },
+    { "d1m", &raw_image_handler, d81_open }, /* CMD FD-2000 DD, 81 track */
+    { "d2m", &raw_image_handler, d81_open }, /* CMD FD-2000 HD, 81 track */
+    { "d4m", &raw_image_handler, d81_open }, /* CMD FD-4000 ED, 81 track */
+    { "d81", &raw_image_handler, d81_open },
     { "dsk", &dsk_image_handler },
-    { "hdm", &pc98hdm_image_handler },
+    { "hdm", &raw_image_handler, pc98hdm_open },
     { "hfe", &hfe_image_handler },
-    { "img", &img_image_handler },
-    { "ima", &img_image_handler },
-    { "out", &img_image_handler },
-    { "sf7", &sf7_image_handler },
-    { "st",  &st_image_handler },
-    { "adl", &adfs_image_handler },
-    { "adm", &adfs_image_handler },
-    { "mbd", &mbd_image_handler },
-    { "mgt", &mgt_image_handler },
-    { "fdi", &pc98fdi_image_handler },
-    { "trd", &trd_image_handler },
-    { "opd", &opd_image_handler },
-    { "ssd", &ssd_image_handler },
-    { "dsd", &dsd_image_handler },
-    { "sdu", &sdu_image_handler },
-    { "jvc", &jvc_image_handler },
-    { "vdk", &vdk_image_handler },
-    { "v9t9", &ti99_image_handler },
+    { "img", &raw_image_handler, img_open },
+    { "ima", &raw_image_handler, img_open },
+    { "out", &raw_image_handler, img_open },
+    { "sf7", &raw_image_handler, sf7_open },
+    { "st",  &raw_image_handler, st_open },
+    { "adl", &raw_image_handler, adfs_open },
+    { "adm", &raw_image_handler, adfs_open },
+    { "mbd", &raw_image_handler, mbd_open },
+    { "mgt", &raw_image_handler, mgt_open },
+    { "fdi", &raw_image_handler, pc98fdi_open },
+    { "trd", &raw_extend_image_handler, trd_open },
+    { "opd", &raw_image_handler, opd_open },
+    { "ssd", &raw_extend_image_handler, ssd_open },
+    { "dsd", &raw_extend_image_handler, dsd_open },
+    { "sdu", &raw_image_handler, sdu_open },
+    { "jvc", &raw_image_handler, jvc_open },
+    { "vdk", &raw_image_handler, vdk_open },
+    { "v9t9", &raw_image_handler, ti99_open },
     { "xdf", &xdf_image_handler },
     { "", NULL }
 };
@@ -125,7 +128,8 @@ bool_t image_valid(FILINFO *fp)
 
 static bool_t try_handler(struct image *im, struct slot *slot,
                           DWORD *cltbl,
-                          const struct image_handler *handler)
+                          const struct image_handler *handler,
+                          bool_t (*open)(struct image *im))
 {
     struct image_bufs bufs = im->bufs;
     BYTE mode;
@@ -149,10 +153,21 @@ static bool_t try_handler(struct image *im, struct slot *slot,
     fatfs_from_slot(&im->fp, slot, mode);
     im->fp.cltbl = cltbl;
 
-    return handler->open(im);
+    return (open ?: handler->open)(im);
 }
 
 #if TARGET == TARGET_shugart
+
+/* The type of extension @ext, or the end of image_type[]. */
+static const struct image_type *type_of(const char *ext)
+{
+    const struct image_type *type;
+
+    for (type = &image_type[0]; type->handler != NULL; type++)
+        if (!strcmp(ext, type->ext))
+            break;
+    return type;
+}
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
@@ -165,51 +180,47 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
     };
 
     char ext[sizeof(slot->type)+1];
-    const struct image_handler *hint;
-    const struct image_type *type;
+    const struct image_type *hint;
     int i;
 
     /* Extract filename extension (if available). */
     memcpy(ext, slot->type, sizeof(slot->type));
     ext[sizeof(slot->type)] = '\0';
 
-    /* Use the extension as a hint to the correct image handler. */
-    for (type = &image_type[0]; type->handler != NULL; type++)
-        if (!strcmp(ext, type->ext))
-            break;
-    hint = type->handler;
+    /* Use the extension as a hint to the correct image type. */
+    hint = type_of(ext);
 
     /* Apply host-specific overrides to the hint. */
     switch (ff_cfg.host) {
     case HOST_acorn:
-        if (hint == &adf_image_handler)
-            hint = &adfs_image_handler;
+        if (hint->handler == &adf_image_handler)
+            hint = type_of("adl");
         break;
     case HOST_tandy_coco:
-        if (hint == &dsk_image_handler)
-            hint = &jvc_image_handler;
+        if (hint->handler == &dsk_image_handler)
+            hint = type_of("jvc");
         break;
     }
 
-    while (hint != NULL) {
-        if (try_handler(im, slot, cltbl, hint))
+    while (hint->handler != NULL) {
+        if (try_handler(im, slot, cltbl, hint->handler, hint->open))
             return;
         /* Hint failed. Try a secondary hint. */
-        if (hint == &img_image_handler) {
+        if (hint->open == img_open) {
             /* IMG,IMA,DSK,OUT -> XDF */
-            hint = &xdf_image_handler;
+            hint = type_of("xdf");
         } else if (!strcmp(ext, "dsk")) {
             /* DSK -> IMG */
-            hint = &img_image_handler;
+            hint = type_of("img");
             ext[0] = '\0';
         } else {
-            hint = NULL;
+            break;
         }
     }
 
     /* Filename extension hinting failed: walk the handler list. */
     for (i = 0; i < ARRAY_SIZE(image_handlers); i++) {
-        if (try_handler(im, slot, cltbl, image_handlers[i]))
+        if (try_handler(im, slot, cltbl, image_handlers[i], NULL))
             return;
     }
 
@@ -231,7 +242,7 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
     /* Apple2 image types are distinguished by extension alone. */
     for (type = &image_type[0]; type->handler != NULL; type++)
         if (!strcmp(ext, type->ext)
-            && try_handler(im, slot, cltbl, type->handler))
+            && try_handler(im, slot, cltbl, type->handler, type->open))
             return;
 
     /* No handler found: bad image. */
@@ -242,7 +253,7 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
-    if (try_handler(im, slot, cltbl, &qd_image_handler))
+    if (try_handler(im, slot, cltbl, &qd_image_handler, NULL))
         return;
 
     /* No handler found: bad image. */

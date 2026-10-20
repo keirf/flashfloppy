@@ -56,7 +56,7 @@ static void finalise_track_map(struct image *im);
 static bool_t ibm_3174_open(struct image *im);
 static bool_t msx_open(struct image *im);
 static bool_t pc_dos_open(struct image *im);
-static bool_t ti99_open(struct image *im);
+bool_t ti99_open(struct image *im);
 static bool_t uknc_open(struct image *im);
 
 struct bpb;
@@ -539,7 +539,7 @@ static bool_t tag_open(struct image *im, char *tag)
     return match ? raw_open(im) : FALSE;
 }
 
-static bool_t img_open(struct image *im)
+bool_t img_open(struct image *im)
 {
     const struct raw_type *type;
     char *dot;
@@ -603,12 +603,12 @@ fallback:
     return raw_type_open(im, img_type);
 }
 
-static bool_t adfs_open(struct image *im)
+bool_t adfs_open(struct image *im)
 {
     return raw_type_open(im, adfs_type);
 }
 
-static bool_t atr_open(struct image *im)
+bool_t atr_open(struct image *im)
 {
 
 /* Original Atari drives (eg 1050) spin slightly slow (288rpm, -4%). 
@@ -756,18 +756,18 @@ static bool_t ibm_3174_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t d81_open(struct image *im)
+bool_t d81_open(struct image *im)
 {
     im->hswap = TRUE;
     return raw_type_open(im, d81_type);
 }
 
-static bool_t sf7_open(struct image *im)
+bool_t sf7_open(struct image *im)
 {
     return raw_type_open(im, sf7_type);
 }
 
-static bool_t st_open(struct image *im)
+bool_t st_open(struct image *im)
 {
     const struct raw_type *in;
     struct raw_type *out, *st_type;
@@ -796,17 +796,17 @@ static bool_t st_open(struct image *im)
     return raw_type_open(im, st_type);
 }
 
-static bool_t mbd_open(struct image *im)
+bool_t mbd_open(struct image *im)
 {
     return raw_type_open(im, mbd_type);
 }
 
-static bool_t mgt_open(struct image *im)
+bool_t mgt_open(struct image *im)
 {
     return raw_type_open(im, img_type);
 }
 
-static bool_t pc98fdi_open(struct image *im)
+bool_t pc98fdi_open(struct image *im)
 {
     struct {
         uint32_t zero;
@@ -837,7 +837,7 @@ static bool_t pc98fdi_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t pc98hdm_open(struct image *im)
+bool_t pc98hdm_open(struct image *im)
 {
     return raw_type_open(im, pc98_type);
 }
@@ -949,7 +949,7 @@ fail:
     return FALSE;
 }
 
-static bool_t trd_open(struct image *im)
+bool_t trd_open(struct image *im)
 {
     const struct simple_layout layout = {
         .nr_sectors = 16,
@@ -1015,7 +1015,7 @@ static bool_t trd_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t opd_open(struct image *im)
+bool_t opd_open(struct image *im)
 {
     const struct simple_layout layout = {
         .nr_sectors = 18,
@@ -1067,19 +1067,19 @@ static bool_t dfs_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t ssd_open(struct image *im)
+bool_t ssd_open(struct image *im)
 {
     im->nr_sides = 1;
     return dfs_open(im);
 }
 
-static bool_t dsd_open(struct image *im)
+bool_t dsd_open(struct image *im)
 {
     im->nr_sides = 2;
     return dfs_open(im);
 }
 
-static bool_t sdu_open(struct image *im)
+bool_t sdu_open(struct image *im)
 {
     struct {
         uint8_t app[21], ver[5];
@@ -1115,7 +1115,7 @@ static bool_t sdu_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t ti99_open(struct image *im)
+bool_t ti99_open(struct image *im)
 {
     struct vib {
         uint8_t name[10];
@@ -1259,7 +1259,7 @@ static bool_t uknc_open(struct image *im)
     return ok;
 }
 
-static bool_t jvc_open(struct image *im)
+bool_t jvc_open(struct image *im)
 {
     struct jvc {
         uint8_t spt, sides, ssize_code, sec_id, attr;
@@ -1302,7 +1302,7 @@ static bool_t jvc_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t vdk_open(struct image *im)
+bool_t vdk_open(struct image *im)
 {
     struct vdk {
         char id[2];
@@ -1541,147 +1541,17 @@ static void xdf_setup_track(
     raw_setup_track(im, track, start_pos);
 }
 
-const struct image_handler img_image_handler = {
-    .open = img_open,
+/* Raw sector images: one handler, each type opened by its own function,
+ * which image_type[] gives. */
+const struct image_handler raw_image_handler = {
     .setup_track = raw_setup_track,
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
 };
 
-const struct image_handler d81_image_handler = {
-    .open = d81_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler sf7_image_handler = {
-    .open = sf7_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler st_image_handler = {
-    .open = st_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler adfs_image_handler = {
-    .open = adfs_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler atr_image_handler = {
-    .open = atr_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler mbd_image_handler = {
-    .open = mbd_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler mgt_image_handler = {
-    .open = mgt_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler pc98fdi_image_handler = {
-    .open = pc98fdi_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler pc98hdm_image_handler = {
-    .open = pc98hdm_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler trd_image_handler = {
-    .open = trd_open,
+const struct image_handler raw_extend_image_handler = {
     .extend = raw_extend,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler opd_image_handler = {
-    .open = opd_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler ssd_image_handler = {
-    .open = ssd_open,
-    .extend = raw_extend,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler dsd_image_handler = {
-    .open = dsd_open,
-    .extend = raw_extend,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler sdu_image_handler = {
-    .open = sdu_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler jvc_image_handler = {
-    .open = jvc_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler vdk_image_handler = {
-    .open = vdk_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler ti99_image_handler = {
-    .open = ti99_open,
     .setup_track = raw_setup_track,
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
