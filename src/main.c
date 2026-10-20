@@ -984,11 +984,11 @@ static void read_ff_cfg(void)
         FFCFG_nr
     };
 
-    const static struct opt ff_cfg_opts[FFCFG_nr+1] = {
-#define x(n,o,v) [FFCFG_##o] = { #n },
+    const static char ff_cfg_opts[] =
+#define x(n,o,v) #n "\0"
 #include "ff_cfg_defaults.h"
 #undef x
-    };
+        ;
 
     FRESULT fr;
     int option;
@@ -996,6 +996,7 @@ static void read_ff_cfg(void)
     struct opts opts = {
         .file = &fs->file,
         .opts = ff_cfg_opts,
+        .nr = FFCFG_nr,
         .arg = fs->buf,
         .argmax = sizeof(fs->buf)-1
     };
@@ -1014,38 +1015,28 @@ static void read_ff_cfg(void)
 
             /* DRIVE EMULATION */
 
-        case FFCFG_interface:
-            ff_cfg.interface =
-                !strcmp(opts.arg, "shugart") ? FINTF_SHUGART
-                : !strcmp(opts.arg, "ibmpc") ? FINTF_IBMPC
-                : !strcmp(opts.arg, "ibmpc-hdout") ? FINTF_IBMPC_HDOUT
-                : !strcmp(opts.arg, "jppc") ? FINTF_JPPC
-                : !strcmp(opts.arg, "jppc-hdout") ? FINTF_JPPC_HDOUT
-                : !strcmp(opts.arg, "akai-s950") ? FINTF_JPPC_HDOUT
-                : !strcmp(opts.arg, "amiga") ? FINTF_AMIGA
-                : FINTF_JC;
+        case FFCFG_interface: {
+            const static uint8_t v[] = {
+                FINTF_SHUGART, FINTF_IBMPC, FINTF_IBMPC_HDOUT, FINTF_JPPC,
+                FINTF_JPPC_HDOUT, FINTF_JPPC_HDOUT, FINTF_AMIGA, FINTF_JC };
+            ff_cfg.interface = v[word_index(
+                opts.arg, "shugart\0ibmpc\0ibmpc-hdout\0jppc\0jppc-hdout\0"
+                "akai-s950\0amiga\0")];
             break;
+        }
 
-        case FFCFG_host:
-            ff_cfg.host =
-                !strcmp(opts.arg, "acorn") ? HOST_acorn
-                : !strcmp(opts.arg, "akai") ? HOST_akai
-                : !strcmp(opts.arg, "casio") ? HOST_casio
-                : !strcmp(opts.arg, "dec") ? HOST_dec
-                : !strcmp(opts.arg, "ensoniq") ? HOST_ensoniq
-                : !strcmp(opts.arg, "fluke") ? HOST_fluke
-                : !strcmp(opts.arg, "gem") ? HOST_gem
-                : !strcmp(opts.arg, "ibm-3174") ? HOST_ibm_3174
-                : !strcmp(opts.arg, "memotech") ? HOST_memotech
-                : !strcmp(opts.arg, "msx") ? HOST_msx
-                : !strcmp(opts.arg, "nascom") ? HOST_nascom
-                : !strcmp(opts.arg, "pc98") ? HOST_pc98
-                : !strcmp(opts.arg, "pc-dos") ? HOST_pc_dos
-                : !strcmp(opts.arg, "tandy-coco") ? HOST_tandy_coco
-                : !strcmp(opts.arg, "ti99") ? HOST_ti99
-                : !strcmp(opts.arg, "uknc") ? HOST_uknc
-                : HOST_unspecified;
+        case FFCFG_host: {
+            const static uint8_t v[] = {
+                HOST_acorn, HOST_akai, HOST_casio, HOST_dec, HOST_ensoniq,
+                HOST_fluke, HOST_gem, HOST_ibm_3174, HOST_memotech, HOST_msx,
+                HOST_nascom, HOST_pc98, HOST_pc_dos, HOST_tandy_coco,
+                HOST_ti99, HOST_uknc, HOST_unspecified };
+            ff_cfg.host = v[word_index(
+                opts.arg, "acorn\0akai\0casio\0dec\0ensoniq\0fluke\0gem\0"
+                "ibm-3174\0memotech\0msx\0nascom\0pc98\0pc-dos\0"
+                "tandy-coco\0ti99\0uknc\0")];
             break;
+        }
 
         case FFCFG_pin02:
             ff_cfg.pin02 = parse_pin_str(opts.arg);
@@ -1073,12 +1064,12 @@ static void read_ff_cfg(void)
                 : TRKCHG_instant;
             break;
 
-        case FFCFG_write_drain:
-            ff_cfg.write_drain =
-                !strcmp(opts.arg, "realtime") ? WDRAIN_realtime
-                : !strcmp(opts.arg, "eot") ? WDRAIN_eot
-                : WDRAIN_instant;
+        case FFCFG_write_drain: {
+            const static uint8_t v[] = {
+                WDRAIN_realtime, WDRAIN_eot, WDRAIN_instant };
+            ff_cfg.write_drain = v[word_index(opts.arg, "realtime\0eot\0")];
             break;
+        }
 
         case FFCFG_index_suppression:
             ff_cfg.index_suppression = yes;
@@ -1108,11 +1099,12 @@ static void read_ff_cfg(void)
             ff_cfg.ejected_on_startup = yes;
             break;
 
-        case FFCFG_image_on_startup:
-            ff_cfg.image_on_startup =
-                !strcmp(opts.arg, "static") ? IMGS_static
-                : !strcmp(opts.arg, "last") ? IMGS_last : IMGS_init;
+        case FFCFG_image_on_startup: {
+            const static uint8_t v[] = { IMGS_static, IMGS_last, IMGS_init };
+            ff_cfg.image_on_startup = v[word_index(opts.arg,
+                                                   "static\0last\0")];
             break;
+        }
 
         case FFCFG_display_probe_ms:
             ff_cfg.display_probe_ms = strtol(opts.arg, NULL, 10);
@@ -1128,26 +1120,25 @@ static void read_ff_cfg(void)
             ff_cfg.autoselect_folder_secs = strtol(opts.arg, NULL, 10);
             break;
 
-        case FFCFG_folder_sort:
-            ff_cfg.folder_sort =
-                !strcmp(opts.arg, "never") ? SORT_never
-                : !strcmp(opts.arg, "small") ? SORT_small
-                : SORT_always;
+        case FFCFG_folder_sort: {
+            const static uint8_t v[] = { SORT_never, SORT_small, SORT_always };
+            ff_cfg.folder_sort = v[word_index(opts.arg, "never\0small\0")];
             break;
+        }
 
-        case FFCFG_sort_priority:
-            ff_cfg.sort_priority =
-                !strcmp(opts.arg, "none") ? SORTPRI_none
-                : !strcmp(opts.arg, "files") ? SORTPRI_files
-                : SORTPRI_folders;
+        case FFCFG_sort_priority: {
+            const static uint8_t v[] = {
+                SORTPRI_none, SORTPRI_files, SORTPRI_folders };
+            ff_cfg.sort_priority = v[word_index(opts.arg, "none\0files\0")];
             break;
+        }
 
-        case FFCFG_nav_mode:
-            ff_cfg.nav_mode =
-                !strcmp(opts.arg, "native") ? NAVMODE_native
-                : !strcmp(opts.arg, "indexed") ? NAVMODE_indexed
-                : NAVMODE_default;
+        case FFCFG_nav_mode: {
+            const static uint8_t v[] = {
+                NAVMODE_native, NAVMODE_indexed, NAVMODE_default };
+            ff_cfg.nav_mode = v[word_index(opts.arg, "native\0indexed\0")];
             break;
+        }
 
         case FFCFG_nav_loop:
             ff_cfg.nav_loop = yes;
@@ -1164,13 +1155,12 @@ static void read_ff_cfg(void)
                 if (!strcmp(p, "reverse")) {
                     ff_cfg.twobutton_action |= TWOBUTTON_reverse;
                 } else {
+                    const static uint8_t v[] = {
+                        TWOBUTTON_rotary, TWOBUTTON_rotary_fast,
+                        TWOBUTTON_eject, TWOBUTTON_htu, TWOBUTTON_zero };
                     ff_cfg.twobutton_action &= TWOBUTTON_reverse;
-                    ff_cfg.twobutton_action |=
-                        !strcmp(p, "rotary") ? TWOBUTTON_rotary
-                        : !strcmp(p, "rotary-fast") ? TWOBUTTON_rotary_fast
-                        : !strcmp(p, "eject") ? TWOBUTTON_eject
-                        : !strcmp(p, "htu") ? TWOBUTTON_htu
-                        : TWOBUTTON_zero;
+                    ff_cfg.twobutton_action |= v[word_index(
+                        p, "rotary\0rotary-fast\0eject\0htu\0")];
                 }
             }
             break;
@@ -1189,14 +1179,12 @@ static void read_ff_cfg(void)
                 } else if (!strcmp(p, "v2")) {
                     ff_cfg.rotary |= ROT_v2;
                 } else {
+                    const static uint8_t v[] = {
+                        ROT_quarter, ROT_half, ROT_trackball, ROT_buttons,
+                        ROT_none, ROT_full };
                     ff_cfg.rotary &= ~ROT_typemask;
-                    ff_cfg.rotary |=
-                        !strcmp(p, "quarter") ? ROT_quarter
-                        : !strcmp(p, "half") ? ROT_half
-                        : !strcmp(p, "trackball") ? ROT_trackball
-                        : !strcmp(p, "buttons") ? ROT_buttons
-                        : !strcmp(p, "none") ? ROT_none
-                        : ROT_full;
+                    ff_cfg.rotary |= v[word_index(
+                        p, "quarter\0half\0trackball\0buttons\0none\0")];
                 }
             }
             break;
@@ -1283,12 +1271,12 @@ static void read_ff_cfg(void)
             cfg.ffcfg_has_display_off_secs = TRUE;
             break;
 
-        case FFCFG_display_on_activity:
-            ff_cfg.display_on_activity =
-                !strcmp(opts.arg, "no") ? DISPON_no
-                : !strcmp(opts.arg, "sel") ? DISPON_sel
-                : DISPON_yes;
+        case FFCFG_display_on_activity: {
+            const static uint8_t v[] = { DISPON_no, DISPON_sel, DISPON_yes };
+            ff_cfg.display_on_activity = v[word_index(opts.arg,
+                                                      "no\0sel\0")];
             break;
+        }
 
         case FFCFG_show_filename_ext:
             ff_cfg.show_filename_ext =

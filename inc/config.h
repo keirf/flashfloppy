@@ -9,18 +9,17 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-struct opt {
-    const char *name;
-};
-
 struct opts {
     FIL *file;
-    const struct opt *opts;
+    /* The names, each ended by a NUL, the list by an empty one. */
+    const char *opts;
+    unsigned int nr;
     char *arg;
     int argmax;
 };
 
 int get_next_opt(struct opts *opts);
+unsigned int word_index(const char *s, const char *list);
 #define OPT_eof -1
 #define OPT_section -2
 
