@@ -139,6 +139,7 @@ uint32_t emu_stk_now(void)
 #define PA_PHA1     9  /* Apple2, as in the release */
 #define PA_PHA0    10  /* Apple2, as in the release */
 #define PB_DIR      0  /* Shugart; Apple2 phase 2 */
+#define PB_WGATE    1  /* WGATE in QFN32; Apple2 write request */
 #define PB_SIDE     4
 #define PB_MOTOR   12  /* on a board with KC30 header type 2, else PB15 */
 #define PB_MOTOR2  15
@@ -209,6 +210,8 @@ static void fdd_pins(uint32_t *pa, uint32_t *pb)
 
     if (in & EMU_FDD_SEL)
         *pa &= ~m(PA_SEL0);
+    if (in & EMU_FDD_WRITE)
+        *pb &= ~m(PB_WGATE);
 #if TARGET == TARGET_apple2
     /* The stepper phases, unlike the drive enable, are active high. */
     *pa &= ~(m(PA_PHA0) | m(PA_PHA1) | m(PA_STEP));

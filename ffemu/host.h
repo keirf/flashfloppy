@@ -465,6 +465,7 @@ void ui_latch_restore(unsigned int latch);
  * them only. */
 enum {
     FDD_ACT_sel,       /* toggles drive select, or Apple2 drive enable */
+    FDD_ACT_write,     /* toggles write gate, or Apple2 write request */
     FDD_ACT_motor,     /* Shugart: toggles motor on */
     FDD_ACT_dir,       /* Shugart: toggles the step direction */
     FDD_ACT_step,      /* Shugart: sends a STEP pulse */
