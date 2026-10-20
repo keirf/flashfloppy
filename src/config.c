@@ -23,10 +23,22 @@ static int isvalid(char c)
     return ((c/8) < sizeof(map)) ? (int8_t)(map[c/8] << (c&7)) < 0 : FALSE;
 }
 
+/* The index of @s among @list's words, each ended by a NUL, the list by an
+ * empty one; the number of words if none matches. */
+unsigned int word_index(const char *s, const char *list)
+{
+    unsigned int i;
+
+    for (i = 0; *list != '\0'; i++, list += strlen(list) + 1)
+        if (!strcmp(s, list))
+            break;
+    return i;
+}
+
 int get_next_opt(struct opts *opts)
 {
     char *p, c;
-    const struct opt *opt;
+    unsigned int i;
     bool_t section;
 
     F_read(opts->file, &c, 1, NULL);
@@ -50,10 +62,8 @@ next_line:
     if (section)
         return OPT_section;
     /* Look for a match in the accepted options list. */
-    for (opt = opts->opts; opt->name; opt++)
-        if (!strcmp(opt->name, opts->arg))
-            break;
-    if (!opt->name) {
+    i = word_index(opts->arg, opts->opts);
+    if (i >= opts->nr) {
         /* No match? Then skip to next line and try again. */
         while ((c != '\r') && (c != '\n') && (c != '\0'))
             F_read(opts->file, &c, 1, NULL);
@@ -83,7 +93,7 @@ next_line:
     }
     *p = '\0';
 
-    return opt - opts->opts;
+    return i;
 }
 
 

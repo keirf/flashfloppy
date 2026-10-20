@@ -305,28 +305,29 @@ static bool_t tag_open(struct image *im, char *tag)
         IMGCFG_nr
     };
 
-    const static struct opt img_cfg_opts[IMGCFG_nr+1] = {
-        [IMGCFG_tracks] = { "tracks" },
-        [IMGCFG_cyls] = { "cyls" },
-        [IMGCFG_heads] = { "heads" },
-        [IMGCFG_step] = { "step" },
-        [IMGCFG_secs] = { "secs" },
-        [IMGCFG_bps] = { "bps" },
-        [IMGCFG_img_bps] = { "img_bps" },
-        [IMGCFG_id] = { "id" },
-        [IMGCFG_h] = { "h" },
-        [IMGCFG_mode] = { "mode" },
-        [IMGCFG_interleave] = { "interleave" },
-        [IMGCFG_cskew] = { "cskew" },
-        [IMGCFG_hskew] = { "hskew" },
-        [IMGCFG_rpm]  = { "rpm" },
-        [IMGCFG_gap2] = { "gap2" },
-        [IMGCFG_gap3] = { "gap3" },
-        [IMGCFG_gap4a] = { "gap4a" },
-        [IMGCFG_iam]  = { "iam" },
-        [IMGCFG_rate] = { "rate" },
-        [IMGCFG_file_layout] = { "file-layout" },
-    };
+    /* In the order of the options above. */
+    const static char img_cfg_opts[] =
+        "tracks\0"
+        "cyls\0"
+        "heads\0"
+        "step\0"
+        "secs\0"
+        "bps\0"
+        "img_bps\0"
+        "id\0"
+        "h\0"
+        "mode\0"
+        "interleave\0"
+        "cskew\0"
+        "hskew\0"
+        "rpm\0"
+        "gap2\0"
+        "gap3\0"
+        "gap4a\0"
+        "iam\0"
+        "rate\0"
+        "file-layout\0"
+        ;
 
     int match, active, option, nr_t = 0;
     struct {
@@ -339,6 +340,7 @@ static bool_t tag_open(struct image *im, char *tag)
     struct opts opts = {
         .file = &heap->file,
         .opts = img_cfg_opts,
+        .nr = IMGCFG_nr,
         .arg = heap->buf,
         .argmax = sizeof(heap->buf)-1
     };
