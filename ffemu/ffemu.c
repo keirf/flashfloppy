@@ -329,32 +329,42 @@ void ui_fdd_restore(unsigned int in, unsigned int pos)
     phase_pos = pos % 8;
 }
 
-/* The I2C bus, whose one slave is the display fitted, an OLED or an LCD:
- * the device that answered the last START takes the transaction. */
-static bool i2c_lcd;
+/* The I2C bus, whose slaves are the display fitted, an OLED or an LCD,
+ * and FF OSD if on: the device that answered the last START takes the
+ * transaction. */
+static enum { I2C_oled, I2C_lcd, I2C_osd } i2c_dev;
 
 int emu_i2c_dev_start(unsigned int addr, int rd)
 {
-    i2c_lcd = hd44780_i2c_start(addr, rd);
-    return i2c_lcd || oled_i2c_start(addr, rd);
+    if (hd44780_i2c_start(addr, rd))
+        i2c_dev = I2C_lcd;
+    else if (osd_i2c_start(addr, rd))
+        i2c_dev = I2C_osd;
+    else
+        i2c_dev = I2C_oled;
+    return (i2c_dev != I2C_oled) || oled_i2c_start(addr, rd);
 }
 
 void emu_i2c_dev_write(uint8_t b)
 {
-    if (i2c_lcd)
+    if (i2c_dev == I2C_lcd)
         hd44780_i2c_write(b);
+    else if (i2c_dev == I2C_osd)
+        osd_i2c_write(b);
     else
         oled_i2c_write(b);
 }
 
 uint8_t emu_i2c_dev_read(void)
 {
-    return i2c_lcd ? hd44780_i2c_read() : oled_i2c_read();
+    return (i2c_dev == I2C_lcd) ? hd44780_i2c_read()
+        : (i2c_dev == I2C_osd) ? osd_i2c_read() : oled_i2c_read();
 }
 
 void emu_i2c_dev_stop(void)
 {
     hd44780_i2c_stop();
+    osd_i2c_stop();
     oled_i2c_stop();
 }
 
@@ -624,6 +634,9 @@ int main(int argc, char **argv)
         hd44780_init(config.display);
     else
         oled_init(config.display);
+    /* FF OSD shares the bus with an OLED or an LCD, the header of a
+     * 7-segment display being another. */
+    osd_init(config.osd && !DISP_IS_LED(config.display));
     hd44780_set_rom(config.lcd_rom);
     emu_oled_synth_8x16 = config.oled_synth;
     if (usb)

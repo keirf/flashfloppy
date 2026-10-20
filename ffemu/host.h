@@ -177,6 +177,40 @@ void hd44780_pixels(const struct lcd_view *v, const uint8_t **px,
                     const uint8_t **dots, unsigned int *w, unsigned int *h);
 
 /*
+ * osd.c
+ */
+
+#define OSD_MAX_COLS 40
+#define OSD_MAX_ROWS 4
+/* FF OSD's frame: eight pixels a character across, at most 56 lines, as it
+ * takes three rows at most, each of up to 16 lines and two blank ones, after
+ * two blank lines. */
+#define OSD_W (OSD_MAX_COLS * 8)
+#define OSD_MAX_H 56
+
+struct osd_view {
+    bool present;            /* FF OSD is on the bus */
+    bool on;                 /* the firmware's backlight */
+    unsigned int cols, rows; /* of the frames that the firmware sends */
+    unsigned int heights;    /* bit n: row n is of double height */
+    unsigned int nr_updates; /* counts the frames written */
+    uint8_t text[OSD_MAX_ROWS][OSD_MAX_COLS];
+};
+
+/* Puts FF OSD on the bus if @fit. */
+void osd_init(bool fit);
+void osd_get_view(struct osd_view *view);
+int osd_i2c_start(unsigned int addr, int rd);
+void osd_i2c_write(uint8_t b);
+uint8_t osd_i2c_read(void);
+void osd_i2c_stop(void);
+/* The lines of the frame that FF OSD shows for @v. */
+unsigned int osd_height(const struct osd_view *v);
+/* FF OSD's frame of @v as pixels into @px, @w by @h bytes, 1 for lit. */
+void osd_pixels(const struct osd_view *v, uint8_t *px, unsigned int w,
+                unsigned int h);
+
+/*
  * led_7seg.c
  */
 
@@ -356,6 +390,8 @@ struct config {
     int display;            /* DISP_*: the display fitted */
     int lcd_rom;            /* LCD_ROM_*: the LCD's character ROM */
     bool oled_synth;        /* the OLED's 8x16 font made from the 6x13 one */
+    bool osd;               /* FF OSD on the bus beside an OLED or LCD */
+    bool osd_braille;       /* the OSD pane draws FF OSD's pixels */
     bool usb_fat16;         /* a USB drive made from a directory is FAT16 */
     int display_color;      /* a curses color, plus 8 if bright */
     unsigned int hold_ms;   /* how long a key press holds a button down */

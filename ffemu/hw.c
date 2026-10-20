@@ -373,7 +373,8 @@ static uint64_t earlier(uint64_t a, uint64_t b)
 }
 
 /*
- * I2C master, STM32F1 style, and the DMA channel that feeds it.
+ * I2C master, STM32F1 style, and the DMA channels that feed it and that it
+ * fills.
  *
  * The firmware's writes to the data register cannot be trapped, so the model
  * keeps a marker bit set in DR, above the data byte. A write by the firmware
@@ -385,16 +386,18 @@ static uint64_t earlier(uint64_t a, uint64_t b)
 
 static struct i2c_model {
     volatile struct i2c *r;
-    volatile struct dma_chn *tx;
-    uint8_t tx_ch, irq_ev, irq_er, irq_dma_tx;
+    volatile struct dma_chn *tx, *rx;
+    uint8_t tx_ch, rx_ch, irq_ev, irq_er, irq_dma_tx, irq_dma_rx;
     enum { I2C_idle, I2C_addr, I2C_tx, I2C_rx } state;
     bool_t dma_active;
     uint64_t dma_done_ns;
 } i2c_model[2] = {
     { .r = &emu_i2c[0], .tx = &emu_dma[0].ch[6-1], .tx_ch = 6,
-      .irq_ev = 31, .irq_er = 32, .irq_dma_tx = 16 },
+      .rx = &emu_dma[0].ch[7-1], .rx_ch = 7,
+      .irq_ev = 31, .irq_er = 32, .irq_dma_tx = 16, .irq_dma_rx = 17 },
     { .r = &emu_i2c[1], .tx = &emu_dma[0].ch[4-1], .tx_ch = 4,
-      .irq_ev = 33, .irq_er = 34, .irq_dma_tx = 14 }
+      .rx = &emu_dma[0].ch[5-1], .rx_ch = 5,
+      .irq_ev = 33, .irq_er = 34, .irq_dma_tx = 14, .irq_dma_rx = 15 }
 };
 
 /* DMA address registers hold only 32 bits of a firmware pointer. The rest is
@@ -508,6 +511,29 @@ static void i2c_sync(struct i2c_model *m, uint64_t now)
         break;
 
     case I2C_rx:
+        if (m->dma_active) {
+            if (now >= m->dma_done_ns) {
+                /* The first byte came with the address; the last is
+                 * NACKed, so that no other byte is in flight then. */
+                uint8_t *p = ptr32(m->rx->cmar);
+                unsigned int i, nr = m->rx->cndtr;
+                for (i = 0; i < nr; i++)
+                    p[i] = i ? emu_i2c_dev_read() : (uint8_t)r->dr;
+                r->dr = DR_IDLE;
+                m->rx->cndtr = 0;
+                m->dma_active = FALSE;
+                m->state = I2C_idle;
+                __sync_fetch_and_or(&emu_dma[0].isr, DMA_ISR_TCIF(m->rx_ch)
+                                    | DMA_ISR_GIF(m->rx_ch));
+                if (m->rx->ccr & DMA_CCR_TCIE)
+                    emu_irqx_set_pending(m->irq_dma_rx);
+            }
+        } else if ((r->cr2 & I2C_CR2_DMAEN) && (m->rx->ccr & DMA_CCR_EN)
+                   && (m->rx->cndtr != 0)) {
+            reg_update(&r->sr1, I2C_SR1_ADDR | I2C_SR1_RXNE, 0);
+            m->dma_active = TRUE;
+            m->dma_done_ns = now + (uint64_t)m->rx->cndtr * I2C_BYTE_NS;
+        }
         break;
 
     }
