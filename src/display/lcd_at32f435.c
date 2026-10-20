@@ -10,38 +10,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-/* PCF8574 pin assignment: D7-D6-D5-D4-BL-EN-RW-RS */
-#define _D7 (1u<<7)
-#define _D6 (1u<<6)
-#define _D5 (1u<<5)
-#define _D4 (1u<<4)
-#define _BL (1u<<3)
-#define _EN (1u<<2)
-#define _RW (1u<<1)
-#define _RS (1u<<0)
-
-/* HD44780 commands */
-#define CMD_ENTRYMODE    0x04
-#define CMD_DISPLAYCTL   0x08
-#define CMD_DISPLAYSHIFT 0x10
-#define CMD_FUNCTIONSET  0x20
-#define CMD_SETCGRADDR   0x40
-#define CMD_SETDDRADDR   0x80
-#define FS_2LINE         0x08
-
-/* FF OSD command set */
-#define OSD_BACKLIGHT    0x00 /* [0] = backlight on */
-#define OSD_DATA         0x02 /* next columns*rows bytes are text data */
-#define OSD_ROWS         0x10 /* [3:0] = #rows */
-#define OSD_HEIGHTS      0x20 /* [3:0] = 1 iff row is 2x height */
-#define OSD_BUTTONS      0x30 /* [3:0] = button mask */
-#define OSD_COLUMNS      0x40 /* [6:0] = #columns */
-struct packed i2c_osd_info {
-    uint8_t protocol_ver;
-    uint8_t fw_major, fw_minor;
-    uint8_t buttons;
-};
-
 /* STM32 I2C peripheral. */
 #define i2c i2c2
 
@@ -64,30 +32,7 @@ void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
 #define DMA_RX_CH 5
 #define i2c_rx_dma dma1->ch[DMA_RX_CH-1]
 
-bool_t has_osd;
-uint8_t osd_buttons_tx;
-uint8_t osd_buttons_rx;
-#define OSD_no    0
-#define OSD_read  1
-#define OSD_write 2
-static uint8_t in_osd, osd_ver;
-#define OSD_I2C_ADDR 0x10
-
-static uint8_t _bl;
-static uint8_t i2c_addr;
-static uint8_t i2c_dead;
-static uint8_t i2c_row;
-static bool_t is_oled_display;
-static uint8_t oled_height;
-/* The font that lcd_columns is sized for. FF.CFG may change
- * ff_cfg.oled_font before it resets the system. */
-static uint8_t oled_font;
-
-#define OLED_ADDR 0x3c
-enum { OLED_unknown, OLED_ssd1306, OLED_sh1106 };
-static uint8_t oled_model;
-static void oled_init(void);
-static unsigned int oled_prep_buffer(void);
+#include "lcd_common.c"
 
 #define I2C_RD TRUE
 #define I2C_WR FALSE
@@ -95,31 +40,6 @@ static void i2c_start(uint8_t a, unsigned int nr, bool_t rd);
 
 static void i2c_tx_tc(void);
 static void i2c_rx_tc(void);
-
-/* Count of display-refresh completions. For synchronisation/flush. */
-static volatile uint8_t refresh_count;
-
-/* I2C data buffer. Data is DMAed to the I2C peripheral. */
-static uint8_t buffer[256] aligned(4);
-
-/* Text buffer, rendered into I2C data and placed into buffer[]. */
-static char text[4][40];
-
-/* Columns and rows of text. */
-uint8_t lcd_columns, lcd_rows;
-
-/* Current display mode: Affects row ordering and sizing. */
-uint8_t display_mode = DM_banner;
-#define menu_mode (display_mode == DM_menu)
-
-/* Occasionally the I2C/DMA engine seems to get stuck. Detect this with 
- * a timeout timer and unwedge it by calling the I2C error handler. */
-#define DMA_TIMEOUT time_ms(200)
-static struct timer timeout_timer;
-static void timeout_fn(void *unused)
-{
-    IRQx_set_pending(I2C_ERROR_IRQ);
-}
 
 /* I2C Error ISR: Reset the peripheral and reinit everything. */
 static void IRQ_i2c_error(void)
@@ -198,22 +118,6 @@ static void dma_start(unsigned int sz)
 
     /* Set the timeout timer in case the DMA hangs for any reason. */
     timer_set(&timeout_timer, time_now() + DMA_TIMEOUT);
-}
-
-/* Emit a 4-bit command to the HD44780 via the DMA buffer. */
-static void emit4(uint8_t **p, uint8_t val)
-{
-    *(*p)++ = val;
-    *(*p)++ = val | _EN;
-    *(*p)++ = val;
-}
-
-/* Emit an 8-bit command to the HD44780 via the DMA buffer. */
-static void emit8(uint8_t **p, uint8_t val, uint8_t signals)
-{
-    signals |= _bl;
-    emit4(p, (val & 0xf0) | signals);
-    emit4(p, (val << 4) | signals);
 }
 
 /* Snapshot text buffer into the command buffer. */
@@ -415,14 +319,6 @@ static bool_t i2c_sync_read_txn(uint8_t addr, uint8_t *rsp, unsigned int nr)
     return i2c_stop();
 }
 
-/* Write a 4-bit nibble over D7-D4 (4-bit bus). */
-static void write4(uint8_t val)
-{
-    i2c_sync_write(val);
-    i2c_sync_write(val | _EN);
-    i2c_sync_write(val);
-}
-
 /* Check whether an I2C device is responding at given address. */
 static bool_t i2c_probe(uint8_t a)
 {
@@ -430,57 +326,6 @@ static bool_t i2c_probe(uint8_t a)
     if (!i2c_sync_write(0))
         return FALSE;
     return i2c_stop();
-}
-
-/* Check given inclusive range of addresses for a responding I2C device. */
-static uint8_t i2c_probe_range(uint8_t s, uint8_t e)
-{
-    uint8_t a;
-    for (a = s; (a <= e) && !i2c_dead; a++)
-        if (i2c_probe(a))
-            return a;
-    return 0;
-}
-
-void lcd_clear(void)
-{
-    memset(text, ' ', sizeof(text));
-}
-
-void lcd_write(int col, int row, int min, const char *str)
-{
-    char c, *p;
-    uint32_t oldpri;
-
-    if (min < 0)
-        min = lcd_columns;
-
-    p = &text[row][col];
-
-    /* Prevent the text[] getting rendered while we're updating it. */
-    oldpri = IRQ_save(I2C_IRQ_PRI);
-
-    while ((c = *str++) && (col++ < lcd_columns)) {
-        *p++ = c;
-        min--;
-    }
-    while ((min-- > 0) && (col++ < lcd_columns))
-        *p++ = ' ';
-
-    IRQ_restore(oldpri);
-}
-
-void lcd_backlight(bool_t on)
-{
-    /* Will be picked up the next time text[] is rendered. */
-    _bl = on ? _BL : 0;
-}
-
-void lcd_sync(void)
-{
-    uint8_t c = refresh_count;
-    while ((uint8_t)(refresh_count - c) < 2)
-        cpu_relax();
 }
 
 bool_t lcd_init(void)
@@ -671,31 +516,6 @@ fail:
     return FALSE;
 }
 
-extern const uint8_t oled_font_6x13[];
-static void oled_convert_text_row_6x13(char *pc)
-{
-    unsigned int i, c;
-    const uint8_t *p;
-    uint8_t *q = buffer;
-    const unsigned int w = 6;
-
-    q[0] = q[128] = 0;
-    q++;
-
-    for (i = 0; i < lcd_columns; i++) {
-        if ((c = *pc++ - 0x20) > 0x5e)
-            c = '.' - 0x20;
-        p = &oled_font_6x13[c * w * 2];
-        memcpy(q, p, w);
-        memcpy(q+128, p+w, w);
-        q += w;
-    }
-
-    /* Fill remainder of buffer[] with zeroes. */
-    memset(q, 0, 127-lcd_columns*w);
-    memset(q+128, 0, 127-lcd_columns*w);
-}
-
 #ifdef font_extra
 extern const uint8_t oled_font_8x16[];
 static void oled_convert_text_row_8x16(char *pc)
@@ -715,68 +535,6 @@ static void oled_convert_text_row_8x16(char *pc)
     }
 }
 #endif
-
-static void oled_convert_text_row(char *pc)
-{
-#ifdef font_extra
-    if (oled_font == FONT_8x16)
-        oled_convert_text_row_8x16(pc);
-    else
-#endif
-        oled_convert_text_row_6x13(pc);
-}
-
-static unsigned int oled_queue_cmds(
-    uint8_t *buf, const uint8_t *cmds, unsigned int nr)
-{
-    uint8_t *p = buf;
-
-    while (nr--) {
-        *p++ = 0x80; /* Co=1, Command */
-        *p++ = *cmds++;
-    }
-
-    return p - buf;
-}
-
-static void oled_double_height(uint8_t *dst, uint8_t *src, uint8_t mask)
-{
-    const uint8_t tbl[] = {
-        0x00, 0x03, 0x0c, 0x0f, 0x30, 0x33, 0x3c, 0x3f,
-        0xc0, 0xc3, 0xcc, 0xcf, 0xf0, 0xf3, 0xfc, 0xff
-    };
-    uint8_t x, *p, *q;
-    unsigned int i;
-    if ((mask == 3) && (src == dst)) {
-        p = src + 128;
-        q = dst + 256;
-        for (i = 0; i < 128; i++) {
-            x = *--p;
-            *--q = tbl[x>>4];
-        }
-        p = src + 128;
-        for (i = 0; i < 128; i++) {
-            x = *--p;
-            *--q = tbl[x&15];
-        }
-    } else {
-        p = src;
-        q = dst;
-        if (mask & 1) {
-            for (i = 0; i < 128; i++) {
-                x = *p++;
-                *q++ = tbl[x&15];
-            }
-        }
-        if (mask & 2) {
-            p = src;
-            for (i = 0; i < 128; i++) {
-                x = *p++;
-                *q++ = tbl[x>>4];
-            }
-        }
-    }
-}
 
 static unsigned int oled_start_i2c(uint8_t *buf)
 {
@@ -822,35 +580,6 @@ static unsigned int oled_start_i2c(uint8_t *buf)
     *p++ = 0x40;
 
     return p - buf;
-}
-
-static int oled_to_lcd_row(int in_row)
-{
-    uint16_t order;
-    int i = 0, row;
-    bool_t large = FALSE;
-
-    order = (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
-    if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
-        order = ff_cfg.display_order;
-
-    for (;;) {
-        large = !!(order & DORD_double);
-        i += large ? 2 : 1;
-        if (i > in_row)
-            break;
-        order >>= DORD_shift;
-    }
-
-    /* Remap the row */
-    row = order & DORD_row;
-    if (row < lcd_rows) {
-        oled_convert_text_row(text[row]);
-    } else {
-        memset(buffer, 0, 256);
-    }
-
-    return large ? i - in_row : 0;
 }
 
 /* Snapshot text buffer into the bitmap buffer. */
