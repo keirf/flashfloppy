@@ -44,7 +44,7 @@ static const char * const color_name[8] = {
 #define BRIGHT "bright-"
 
 enum { SET_style, SET_display_color, SET_hold_ms, SET_display, SET_lcd_rom,
-       SET_oled_8x16, SET_usb_fat, SET_nr };
+       SET_oled_8x16, SET_osd, SET_osd_style, SET_usb_fat, SET_nr };
 
 static const struct setting {
     const char *name, *comment;
@@ -77,6 +77,14 @@ static const struct setting {
         "The OLED's 8x16 font: font (the firmware's own) or synth (made from "
         "the 6x13 one, bold, as the firmware built with "
         "oled_font_8x16_synth=y draws it). Key 0." },
+    [SET_osd] = {
+        "osd",
+        "FF OSD on the I2C bus beside an OLED or an LCD: yes or no. "
+        "Key 8." },
+    [SET_osd_style] = {
+        "osd-style",
+        "How the OSD pane shows FF OSD: text, or braille where the window is "
+        "wide enough. Key `." },
     [SET_usb_fat] = {
         "usb-fat",
         "File system of a USB drive made from a directory: fat32, or fat16 "
@@ -108,6 +116,12 @@ static const char *value_of(int set, char *buf, size_t size)
         break;
     case SET_oled_8x16:
         snprintf(buf, size, "%s", config.oled_synth ? "synth" : "font");
+        break;
+    case SET_osd:
+        snprintf(buf, size, "%s", config.osd ? "yes" : "no");
+        break;
+    case SET_osd_style:
+        snprintf(buf, size, "%s", config.osd_braille ? "braille" : "text");
         break;
     case SET_usb_fat:
         snprintf(buf, size, "%s", config.usb_fat16 ? "fat16" : "fat32");
@@ -278,6 +292,16 @@ static bool parse_line(char *line)
         if (strcmp(value, "font") && strcmp(value, "synth"))
             return false;
         config.oled_synth = !strcmp(value, "synth");
+        return true;
+    case SET_osd:
+        if (strcmp(value, "yes") && strcmp(value, "no"))
+            return false;
+        config.osd = !strcmp(value, "yes");
+        return true;
+    case SET_osd_style:
+        if (strcmp(value, "text") && strcmp(value, "braille"))
+            return false;
+        config.osd_braille = !strcmp(value, "braille");
         return true;
     case SET_usb_fat:
         if (strcmp(value, "fat32") && strcmp(value, "fat16"))
@@ -597,6 +621,8 @@ void rc_load(void)
     config.display = DISP_ssd1306_32;
     config.lcd_rom = LCD_ROM_cyr;
     config.oled_synth = false;
+    config.osd = true;
+    config.osd_braille = false;
     config.display_color = 8 | 6; /* bright cyan */
     config.hold_ms = 150;
     config.usb_fat16 = false;

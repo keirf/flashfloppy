@@ -108,6 +108,7 @@ enum {
     CP_lcd_stub,  /* bright magenta on the LCD: a character it lacks */
     CP_lcd_dot,   /* the LCD's unlit dots, faint, on its panel */
     CP_lcd_inkdot, /* the LCD's unlit dots on its ink */
+    CP_osd,       /* green on black, bright: FF OSD's text */
     CP_nr
 };
 
@@ -127,6 +128,14 @@ enum {
 #define STATUS_MIN_W 42
 #define PANE_ROWS 13
 
+/* FF OSD shows three rows at most, its field of the count being two bits
+ * wide; the OSD pane as text shows them in a frame. */
+#define OSD_ROWS_SHOWN 3
+#define OSD_TEXT_H (OSD_ROWS_SHOWN + 2)
+
+/* The key that switches the OSD pane between text and braille. */
+#define OSD_KEY '`'
+
 /* The letters that select the rendering styles, in their order. */
 #define STYLE_KEYS "qwe"
 
@@ -140,7 +149,7 @@ enum {
 #define FLASH_KEY '9'
 
 /* The key that opens the dialog to choose what the device is connected to:
- * the file system of a USB drive made from a directory. */
+ * the file system of a USB drive made from a directory, and FF OSD. */
 #define EXTERNALS_KEY '8'
 
 /* The dialog on screen, if any, its highlighted button (0 is the first),
@@ -168,14 +177,16 @@ static const char * const df_label[DF_nr] = {
     [DF_rom] = "LCD character ~R~OM",
     [DF_synth] = "OLED 8x16 ~f~ont",
 };
-/* The Externals dialog's file system, 1 for FAT16, and the places of its
- * focus. */
+/* The Externals dialog's file system, 1 for FAT16, and whether FF OSD is
+ * fitted, and the places of its focus. */
 static int dialog_usb_fat;
-enum { EF_fat, EF_ok, EF_cancel, EF_nr };
+static bool dialog_osd;
+enum { EF_fat, EF_osd, EF_ok, EF_cancel, EF_nr };
 /* The Externals dialog's labels, by the control each names, `~` around the
  * letter that moves the focus to it. */
 static const char * const ef_label[EF_nr] = {
     [EF_fat] = "File ~s~ystem of a USB drive made from a directory",
+    [EF_osd] = "FF ~O~SD: the display's text over the host's video",
 };
 static void draw_dialog(void);
 static void draw_fdfile_dialog(void);
@@ -776,6 +787,88 @@ static void draw_lcd(int y0, int x0, int fw, int style, bool too_small,
 }
 
 /*
+ * The OSD pane.
+ */
+
+/* The columns of FF OSD's frames of @v, the firmware sending no fewer than
+ * 16, which stand for them before it sends any. */
+static unsigned int osd_columns(const struct osd_view *v)
+{
+    return (v->cols < 16) ? 16 : v->cols;
+}
+
+/* Whether the OSD pane shows FF OSD's pixels of @v: when braille is chosen,
+ * the rest is not drawn in ASCII, and the window is wide enough for them,
+ * four cells a character. */
+static bool osd_braille(const struct osd_view *v)
+{
+    return config.osd_braille && !plain()
+        && (osd_columns(v) * 4 + 2 <= (unsigned)COLS);
+}
+
+/* The character that text shows for FF OSD's code @c: FF OSD has glyphs
+ * for 0x20 to 0x7F, the last a checkerboard, which ASCII has no character
+ * for, and draws any other code as a space. */
+static wchar_t osd_char(uint8_t c)
+{
+    if (c == 0x7f)
+        return plain() ? L'?' : 0x2592;
+    return ((c < 0x20) || (c > 0x7f)) ? L' ' : c;
+}
+
+/* The rows of braille that FF OSD's frame of @v takes: at least those of
+ * its three rows of text, so that the pane changes size only for double
+ * ones. */
+static int osd_braille_rows(const struct osd_view *v)
+{
+    unsigned int h = osd_height(v);
+
+    if (h < OSD_ROWS_SHOWN * 10 + 2)
+        h = OSD_ROWS_SHOWN * 10 + 2;
+    return (h + 3) / 4;
+}
+
+/* Draws FF OSD at (@y,@x), its frame @h rows tall and as wide as its
+ * columns need: its text in light green on black, or in @braille its
+ * pixels; with the key that switches them in the frame's bottom left
+ * corner, or that the window is too small for the braille chosen. */
+static void draw_osd(int y, int x, int h, bool braille,
+                     const struct osd_view *v)
+{
+    static uint8_t px[OSD_W * OSD_MAX_H];
+    attr_t attr = BRIGHT(CP_osd);
+    wchar_t line[OSD_MAX_COLS];
+    bool narrow = config.osd_braille && !braille && !plain();
+    char title[48], hint[32];
+    unsigned int r, c, n = osd_columns(v);
+    int w = (braille ? 4 * n : n) + 2;
+
+    /* Within the 12 cells that the title of 16 columns has. */
+    if (v->on)
+        snprintf(title, sizeof(title), "FF OSD %ux%u", v->cols, v->rows);
+    else
+        snprintf(title, sizeof(title), "FF OSD off");
+    frame(y, x, w, h, title, attr, COLOR_PAIR(CP_dframe));
+    if (braille && v->on) {
+        osd_pixels(v, px, 8 * n, 4 * (h - 2));
+        draw_pixels(y + 1, x + 1, STYLE_braille, px, NULL, 8 * n,
+                    4 * (h - 2), attr);
+    } else if (v->on) {
+        for (r = 0; (r < OSD_ROWS_SHOWN) && ((int)r < h - 2); r++) {
+            for (c = 0; c < n; c++)
+                line[c] = ((r < v->rows) && (c < v->cols))
+                    ? osd_char(v->text[r][c]) : L' ';
+            put_wide(y + 1 + r, x + 1, attr, line, n);
+        }
+    }
+    snprintf(hint, sizeof(hint), " %c: %s ", OSD_KEY,
+             !narrow ? (braille ? "Braille" : "Text")
+             : (w >= 25) ? "Window too small" : "Too small");
+    put(y + h - 1, x + 2, strlen(hint),
+        narrow ? BRIGHT(CP_note) : COLOR_PAIR(CP_dframe), "%s", hint);
+}
+
+/*
  * The status window.
  */
 
@@ -1087,6 +1180,8 @@ static int ctrl_key(const char *cap, const char *seq, int code)
 
 /* The first line that the Flash mem window shows: PgUp and PgDn move it. */
 static int flash_top;
+/* The rows of options that Flash mem shows. */
+static int flash_rows = PANE_ROWS;
 
 /* The keys that page a window at (@x) of @w, at the right end of its bottom
  * frame @y: PgUp/PgDn, after modifier @mod and a '+' unless it is NULL.
@@ -1136,11 +1231,11 @@ static void draw_flash(int y, int x, int w)
     if (w < 12)
         return;
     if (len == 0) {
-        frame(y, x, w, PANE_ROWS + 2, "Flash mem - empty", COLOR_PAIR(CP_off),
+        frame(y, x, w, flash_rows + 2, "Flash mem - empty", COLOR_PAIR(CP_off),
               COLOR_PAIR(CP_off));
         return;
     }
-    frame(y, x, w, PANE_ROWS + 2, "Flash mem", COLOR_PAIR(CP_text),
+    frame(y, x, w, flash_rows + 2, "Flash mem", COLOR_PAIR(CP_text),
           COLOR_PAIR(CP_text));
     if (len != emu_flash_cfg_size()) {
         put(y + 1, x + 1, w - 2, BRIGHT(CP_raw),
@@ -1148,15 +1243,15 @@ static void draw_flash(int y, int x, int w)
         return;
     }
 
-    if (flash_top > nr_lines - PANE_ROWS)
-        flash_top = nr_lines - PANE_ROWS;
+    if (flash_top > nr_lines - flash_rows)
+        flash_top = nr_lines - flash_rows;
     if (flash_top < 0)
         flash_top = 0;
 
     /* The scroll bar first: the '>' of a line cut short goes over it. */
-    if (nr_lines > PANE_ROWS)
-        scroll_bar(y, x, w, PANE_ROWS + 2, false, flash_top, nr_lines);
-    for (row = 0; (row < PANE_ROWS) && (flash_top + row < nr_lines); row++) {
+    if (nr_lines > flash_rows)
+        scroll_bar(y, x, w, flash_rows + 2, false, flash_top, nr_lines);
+    for (row = 0; (row < flash_rows) && (flash_top + row < nr_lines); row++) {
         name = emu_flash_option(flash_top + row, cfg, value, sizeof(value),
                                 &flags);
         attr = (flags & (EMU_OPT_raw | EMU_OPT_hex_only))
@@ -1166,14 +1261,14 @@ static void draw_flash(int y, int x, int w)
         put(y + 1 + row, x + 1, w - 2, attr, "%s = %s", name,
             (flags & EMU_OPT_hex_only) ? "(only in the hex)" : value);
     }
-    if (nr_lines <= PANE_ROWS)
+    if (nr_lines <= flash_rows)
         return;
 
-    scroll_marks(y, x, PANE_ROWS + 2, false, flash_top > 0,
-                 flash_top + PANE_ROWS < nr_lines);
+    scroll_marks(y, x, flash_rows + 2, false, flash_top > 0,
+                 flash_top + flash_rows < nr_lines);
 
     /* The keys that page, in the bottom right corner. */
-    page_keys(y + PANE_ROWS + 1, x, w, false, flash_up_lit, flash_down_lit,
+    page_keys(y + flash_rows + 1, x, w, false, flash_up_lit, flash_down_lit,
               NULL);
 }
 
@@ -1594,6 +1689,7 @@ static void draw_bars(void)
 static void draw_key_bar(void)
 {
     char keys[16];
+    struct osd_view ov;
     int x = 0, i;
 
     pane_right = -1;
@@ -1614,7 +1710,12 @@ static void draw_key_bar(void)
         keys[2*i + 1] = '/';
     }
     keys[2*STYLE_nr - 1] = '\0';
-    x = hotkey(x, keys, "Rendering");
+    x = hotkey(x, keys, "Render");
+    osd_get_view(&ov);
+    if (ov.present) {
+        snprintf(keys, sizeof(keys), "%c", OSD_KEY);
+        x = hotkey(x, keys, "OSD");
+    }
     x = hotkey(x, "Ctrl+L", "Refresh");
     /* Shift is a key too; the brackets say that it is optional. */
     put(LINES - 1, x + 1, COLS, COLOR_PAIR(CP_bar), "[");
@@ -1624,7 +1725,7 @@ static void draw_key_bar(void)
     snprintf(keys, sizeof(keys), "%c", EXTERNALS_KEY);
     x = hotkey(x, keys, "Externals");
     snprintf(keys, sizeof(keys), "%c", FLASH_KEY);
-    x = hotkey(x, keys, "Flash mem");
+    x = hotkey(x, keys, "Flash");
     snprintf(keys, sizeof(keys), "%c", DISPLAY_KEY);
     x = hotkey(x, keys, "Display");
     /* Cut short by a narrow window: a mark in the last column. */
@@ -1748,8 +1849,9 @@ static void redraw(void)
     struct oled_view v;
     struct led_view lv;
     struct lcd_view cv;
+    struct osd_view ov;
     bool led = DISP_IS_LED(fitted_display), lcd = DISP_IS_LCD(fitted_display);
-    bool too_small, mismatch;
+    bool too_small, mismatch, osd_text, osd_px;
     int style, cw, ch, fw, dh, y, kw, sw, bottom = LINES - 1;
     char title[96];
 
@@ -1781,17 +1883,33 @@ static void redraw(void)
     draw_bars();
 
     /* Controls as wide as they need, then Status and Flash mem sharing the
-     * rest, below the display; the log below them at full width, showing
-     * its newest lines. */
+     * rest, below the display; FF OSD's text below Controls, Flash mem as
+     * tall as both, or its pixels below the three; the log below them at
+     * full width, showing its newest lines. */
     y = 1 + dh;
-    kw = (keys_width() < COLS) ? keys_width() : COLS;
+    osd_get_view(&ov);
+    osd_px = ov.present && osd_braille(&ov);
+    osd_text = ov.present && !osd_px;
+    kw = keys_width();
+    if (osd_text && (kw < (int)osd_columns(&ov) + 2))
+        kw = osd_columns(&ov) + 2;
+    if (kw > COLS)
+        kw = COLS;
     sw = (COLS - kw) / 2;
     if (sw < STATUS_MIN_W)
         sw = (COLS - kw < STATUS_MIN_W) ? COLS - kw : STATUS_MIN_W;
+    flash_rows = PANE_ROWS + (osd_text ? OSD_TEXT_H : 0);
     draw_keys(y, 0, kw);
     draw_status(y, kw, sw);
     draw_flash(y, kw + sw, COLS - kw - sw);
     y += PANE_ROWS + 2;
+    if (osd_text) {
+        draw_osd(y, 0, OSD_TEXT_H, false, &ov);
+        y += OSD_TEXT_H;
+    } else if (osd_px) {
+        draw_osd(y, 0, osd_braille_rows(&ov) + 2, true, &ov);
+        y += osd_braille_rows(&ov) + 2;
+    }
     draw_log(y, 0, COLS, bottom - y);
 
     draw_dialog();
@@ -2067,7 +2185,7 @@ static void draw_display_dialog(void)
 }
 
 /* What the device is connected to, each as radio buttons: the file system of
- * a USB drive made from a directory. */
+ * a USB drive made from a directory; and FF OSD, as a check box. */
 static void draw_externals_dialog(void)
 {
     static const char * const fat_label[2] = {
@@ -2078,6 +2196,7 @@ static void draw_externals_dialog(void)
     /* The frame, its empty first row and the buttons, then each cluster's
      * label, options and empty row, and its note below them all. */
     h += 1 + 2 + 1 + 1;
+    h += 1 + 1 + 1 + 1;
     dialog_box(w, h, "Externals", &y, &x);
     row = y + 2;
     put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
@@ -2087,8 +2206,15 @@ static void draw_externals_dialog(void)
                   (dialog_focus == EF_fat) && (i == dialog_usb_fat),
                   fat_label[i]);
     row++;
-    put(row, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
+    put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
+               COLOR_PAIR(CP_dlg_hot), ef_label[EF_osd]);
+    check_row(row++, x + 3, w - 6, dialog_osd, dialog_focus == EF_osd,
+              "Fitted, on the I2C bus beside an OLED or an LCD");
+    row++;
+    put(row++, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
         "Changing the file system inserts such a drive again.");
+    put(row++, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
+        "Fitting or removing FF OSD restarts the device.");
     /* OK is the default while the focus is on no button. Both are at the
      * bottom right, as in Turbo Pascal's dialogs, Cancel's shadow at the
      * clusters' right edge, two columns between OK's shadow and Cancel. */
@@ -2372,6 +2498,10 @@ static int externals_dialog_key(int key)
         else if (dialog_focus == EF_cancel)
             dialog_focus = EF_ok;
         break;
+    case ' ':
+        if (dialog_focus == EF_osd)
+            dialog_osd = !dialog_osd;
+        break;
     case KEY_UP: case KEY_DOWN:
         if ((dialog_focus == EF_fat) && (dialog_usb_fat + d >= 0)
             && (dialog_usb_fat + d < 2))
@@ -2589,6 +2719,7 @@ static int key_of_char(wint_t ch)
         { 0x439, 'q' }, { 0x419, 'Q' }, { 0x446, 'w' }, { 0x426, 'W' },
         { 0x443, 'e' }, { 0x423, 'E' },
         { 0x445, '[' }, { 0x425, '[' }, { 0x44a, ']' }, { 0x42a, ']' },
+        { 0x451, '`' }, { 0x401, '`' },
         { 0x2116, '#' } /* the numero sign, Shift+3 */
     };
     unsigned int i;
@@ -4179,6 +4310,13 @@ static void handle_key(int key)
         leave(KEY_ACT_reset);
     case DK_externals:
         ui_usb_set_fat16(dialog_usb_fat == 1);
+        /* The firmware finds FF OSD as it starts: a change restarts the
+         * device. */
+        if (dialog_osd != config.osd) {
+            config.osd = dialog_osd;
+            rc_save();
+            leave(KEY_ACT_reset);
+        }
         return;
     case DK_fdfile_yes: {
         const char *values[EMU_OPTIONS_MAX];
@@ -4217,7 +4355,7 @@ static void handle_key(int key)
 
     if ((key == KEY_PPAGE) || (key == KEY_NPAGE)) {
         /* A page less a line, which stays in view. */
-        flash_top += (key == KEY_NPAGE) ? PANE_ROWS - 1 : 1 - PANE_ROWS;
+        flash_top += (key == KEY_NPAGE) ? flash_rows - 1 : 1 - flash_rows;
         *((key == KEY_NPAGE) ? &flash_down_lit : &flash_up_lit) = lit_end();
         return;
     }
@@ -4241,6 +4379,7 @@ static void handle_key(int key)
         dialog = DLG_externals;
         dialog_button = 0;
         dialog_usb_fat = config.usb_fat16;
+        dialog_osd = config.osd;
         dialog_focus = EF_fat;
         return;
     }
@@ -4264,6 +4403,17 @@ static void handle_key(int key)
             leave(i);
         } else {
             ui_action(i);
+        }
+        return;
+    }
+
+    if (key == OSD_KEY) {
+        struct osd_view ov;
+        osd_get_view(&ov);
+        if (ov.present) {
+            config.osd_braille = !config.osd_braille;
+            rc_save();
+            clearok(stdscr, TRUE);
         }
         return;
     }
@@ -4363,6 +4513,7 @@ static void *tui_thread(void *unused)
         init_pair(CP_button_def, COLOR_CYAN, COLOR_GREEN);
         init_pair(CP_signal, COLOR_BLACK, COLOR_YELLOW);
         init_pair(CP_key, COLOR_RED, COLOR_BLUE);
+        init_pair(CP_osd, COLOR_GREEN, COLOR_BLACK);
         set_lcd_pairs();
         for (i = 1; i < CP_nr; i++)
             bright_twin(i);

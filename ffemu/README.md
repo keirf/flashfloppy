@@ -149,6 +149,25 @@ font out and making each glyph from the 6x13 one, bold with a second copy a
 column to the right; it takes effect at once and is kept as
 `oled-8x16 = font | synth`.
 
+FF OSD, the on-screen display that shares the I2C bus at 0x10 and shows the
+display's text over the host computer's video, is fitted beside an OLED or an
+LCD unless unticked in the Externals dialog (key `8`), kept as
+`osd = yes | no`; a 7-segment display has no I2C bus. The firmware finds it at
+boot, so a change in the dialog power-cycles the device, and then sends it its
+text rows with each refresh, as many columns as the display has, in the order
+of `osd-display-order`; ffemu takes them as FF OSD's own firmware does, which
+shows three rows at most, and answers the firmware's reads as FF OSD 1.9 with
+no button pressed. The OSD pane below Controls shows the text in light green on
+black, its three rows and as many columns as the firmware sends, with Flash mem
+as tall as both: FF OSD draws a code outside 0x20 to 0x7F as a blank, and 0x7F
+as a checkerboard, which the pane shows as a medium shade, or as `?` in the
+ASCII rendering. `` ` ``, the same key on a Russian layout, switches the pane
+to braille: FF OSD's pixels, in its own 8x8 font, double-height rows included,
+below Controls, Status and Flash mem, four cells a column: 86 for an OLED's 21
+columns, 162 for 40. In a window too narrow for them the pane stays text, and
+its frame says that the window is too small; in the ASCII rendering it stays
+text, as plain ASCII. The choice is kept as `osd-style = text | braille`.
+
 The app presents a TUI similar in look to Turbo Vision, mostly self-documented.
 The keys that act like Gotek controls or its state changers are shown in the
 Controls pane, each lit for a moment when pressed, other keys are shown in the
@@ -357,9 +376,9 @@ directory and inserts such a drive again as the Externals dialog does,
 `sleep <ms>`, `dump` (the display as text: an LCD as its rows of characters
 between bars, a 7-segment display as its digits drawn with `_` and `|` in
 three rows, a lit point as `.`), `log` (the firmware's console output so far),
-`status`, `flash` (the `[Flash mem]` section as the flash memory is now), and
-`save <file>`, which writes the USB drive as the firmware sees it, its writes
-included, to an image file.
+`status`, `flash` (the `[Flash mem]` section as the flash memory is now), `osd`
+(FF OSD's text, its rows between bars), and `save <file>`, which writes the USB
+drive as the firmware sees it, its writes included, to an image file.
 
 `wait <ms> <log|display|segments> <text>` lets the firmware run until a
 condition holds, checked every 10 ms, or `<ms>` pass, and prints which, as
@@ -410,6 +429,8 @@ with `FFEMU_CLOCK=host` set on the host's.
   chosen, `lcd_font_cyr.h` or `lcd_font_a00.h`.
 - `led_7seg.c`: the 7-segment LED display, a TM1651 or a pair of 74HC164 shift
   registers on two GPIO lines, and its digits as pixels.
+- `osd.c`: FF OSD as an I2C slave, and its text as pixels in its font,
+  `osd_font.h`, a copy of FF OSD's own.
 - `fatimg.c`: the USB drive: the FAT32 or FAT16 volume built from a directory,
   or an image or a disk read as it is, with the firmware's writes kept aside.
 - `tui.c`, `script.c`, `rc.c`, `ffemu.c`: the terminal user interface, the
@@ -427,7 +448,6 @@ with the host C library. Only `emu.h` is shared between the two.
 - AT32F435 boards, which have a display driver of their own.
 - The LCD's user-defined characters, its cursor, and a PCF8574A backpack, at
   0x3f, which the firmware would find just as well.
-- FF OSD.
 - The firmware's writes reaching the host files, the image or the disk:
   `IMAGE_A.CFG`, `FLASH.DMP` and the like are kept aside until the drive is
   removed.
