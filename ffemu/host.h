@@ -48,6 +48,11 @@ void cpu_request_relaunch(void);
  * the rendering style, whether the USB drive is inserted, how much of a
  * script's sleep is left, the floppy signals and the latched buttons. */
 const char *cpu_restart_state(void);
+/* Whether the emulated clock is the virtual one of scripts, FFEMU_CLOCK, which
+ * moves on only as the firmware runs, and as far as cpu_run_until() lets it:
+ * which returns once the firmware has got to emulated time @t and waits. */
+bool cpu_clock_virtual(void);
+void cpu_run_until(uint64_t t);
 
 /* Firmware console output: a ring that only ever grows at log_head. */
 #define LOG_SIZE 16384

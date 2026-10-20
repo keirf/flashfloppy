@@ -238,6 +238,18 @@ spinning, which keeps one CPU core busy, for 3 seconds after each input and
 while the encoder's steps go on, and says so in the console window; the rest of
 the time it sleeps, the firmware's timers then running late by up to a step.
 
+With `FFEMU_CLOCK=virtual`, a script's emulated clock moves on only as
+the firmware reads it and waits, and only as far as the script lets it run, so
+that it does not depend on the host's speed: a script gives the same output on
+every run, as fast as the host can run it. Where the firmware spins on a
+register or a variable, which neither reads the clock nor calls ffemu, ffemu
+notices by the basic blocks of the firmware's code: after 1000 of them it runs
+the emulated peripherals, which ends a wait on a register, and after 100'000,
+which only a spin or the sort of a large folder reaches, it moves the clock on
+to the peripherals' next deadline. An idle firmware runs some 100 times as
+fast as real time in MSYS2 and 400 times on Linux, a loop that waits for a
+button some 60 and 100 times. The TUI always runs on the host's clock.
+
 The firmware's console output (normally available in debug builds on the
 Gotek's UART pins) is shown in the Console pane at the bottom, among ffemu's
 own lines, which start with `ffemu:`, and also written to

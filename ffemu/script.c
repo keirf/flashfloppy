@@ -44,14 +44,26 @@ unsigned int script_sleep_left(void)
     return (end > now) ? (end - now) / 1000000u : 0;
 }
 
+/* On the virtual clock, a script lets the firmware run a slice at a time,
+ * serving the emulated inputs in between, as ui_poll() does every 2 ms of the
+ * host's time otherwise. */
+#define VIRT_SLICE_NS 10000000u
+
 /* Lets the firmware run for @ms, keeping the emulated inputs serviced. */
 static void run_for(unsigned int ms)
 {
+    uint64_t next;
+
     sleep_end = emu_time_ns() + (uint64_t)ms * 1000000u;
 
     do {
         ui_poll();
-        usleep(2000);
+        if (cpu_clock_virtual()) {
+            next = emu_time_ns() + VIRT_SLICE_NS;
+            cpu_run_until((next < sleep_end) ? next : sleep_end);
+        } else {
+            usleep(2000);
+        }
     } while (emu_time_ns() < sleep_end);
     ui_poll();
 

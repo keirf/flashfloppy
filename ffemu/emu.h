@@ -43,6 +43,9 @@ void emu_relax(void);
 /* Notes a call of the firmware into the host half, which a loop that spins on
  * a variable alone does not make. */
 void emu_fw_progress(void);
+/* Notes a read of SysTick by the firmware, which a virtual clock moves on:
+ * after the models have run at the time it had. */
+void emu_stk_read(void);
 /* Whether the caller is the thread that runs the peripheral models beside
  * the firmware's own. */
 int emu_on_hw_thread(void);
@@ -125,6 +128,10 @@ void emu_hw_sync(void);
 void emu_hw_sync_bus(void);
 /* Whether the calling thread is in the middle of a sync. */
 int emu_hw_busy(void);
+/* When the next deadline of the models comes, as of the last sync, or 0 if
+ * none: the one-shot timer behind the firmware's timers, or the end of a DMA
+ * transfer on the I2C bus. */
+uint64_t emu_hw_due_ns(void);
 void emu_irq_vector(unsigned int nr);
 
 /* Facts about the emulated device, for the status pane (hw.c, stubs.c). */
