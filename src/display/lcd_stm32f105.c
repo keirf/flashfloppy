@@ -526,6 +526,14 @@ void lcd_sync(void)
         cpu_relax();
 }
 
+/* Enables interrupt @irq at the I2C priority, none pending. */
+static void i2c_irq_enable(unsigned int irq)
+{
+    IRQx_set_prio(irq, I2C_IRQ_PRI);
+    IRQx_clear_pending(irq);
+    IRQx_enable(irq);
+}
+
 bool_t lcd_init(void)
 {
     uint8_t a, *p;
@@ -658,31 +666,23 @@ bool_t lcd_init(void)
     }
 
     /* Enable the Event IRQ. */
-    IRQx_set_prio(I2C_EVENT_IRQ, I2C_IRQ_PRI);
-    IRQx_clear_pending(I2C_EVENT_IRQ);
-    IRQx_enable(I2C_EVENT_IRQ);
+    i2c_irq_enable(I2C_EVENT_IRQ);
 
     /* Enable the Error IRQ. */
-    IRQx_set_prio(I2C_ERROR_IRQ, I2C_IRQ_PRI);
-    IRQx_clear_pending(I2C_ERROR_IRQ);
-    IRQx_enable(I2C_ERROR_IRQ);
+    i2c_irq_enable(I2C_ERROR_IRQ);
     i2c->cr2 |= I2C_CR2_ITERREN;
 
     /* Initialise DMA1 channel 4 and its completion interrupt. */
     i2c_tx_dma.cmar = (uint32_t)(unsigned long)buffer;
     i2c_tx_dma.cpar = (uint32_t)(unsigned long)&i2c->dr;
     dma1->ifcr = DMA_TX_CGIF;
-    IRQx_set_prio(DMA_TX_IRQ, I2C_IRQ_PRI);
-    IRQx_clear_pending(DMA_TX_IRQ);
-    IRQx_enable(DMA_TX_IRQ);
+    i2c_irq_enable(DMA_TX_IRQ);
 
     /* Initialise DMA1 channel 5 and its completion interrupt. */
     i2c_rx_dma.cmar = (uint32_t)(unsigned long)buffer;
     i2c_rx_dma.cpar = (uint32_t)(unsigned long)&i2c->dr;
     dma1->ifcr = DMA_RX_CGIF;
-    IRQx_set_prio(DMA_RX_IRQ, I2C_IRQ_PRI);
-    IRQx_clear_pending(DMA_RX_IRQ);
-    IRQx_enable(DMA_RX_IRQ);
+    i2c_irq_enable(DMA_RX_IRQ);
 
     /* Timeout handler for if I2C transmission borks. */
     timer_init(&timeout_timer, timeout_fn, NULL);
