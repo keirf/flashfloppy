@@ -241,9 +241,12 @@ struct image_handler {
 
 /* List of supported image types. */
 extern const struct image_type {
-    char ext[8];
+    char ext[4]; /* NUL-ended if shorter */
     const struct image_handler *handler;
 } image_type[];
+
+/* Whether @ext, NUL-ended, is the extension of image type @type. */
+bool_t image_type_is(const struct image_type *type, const char *ext);
 
 /* Is given file valid to open as an image? */
 bool_t image_valid(FILINFO *fp);
