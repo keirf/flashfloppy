@@ -100,6 +100,12 @@ const struct image_type image_type[] = {
 #endif
 
 
+bool_t image_type_is(const struct image_type *type, const char *ext)
+{
+    return !strncmp(ext, type->ext, sizeof(type->ext))
+        && (strlen(ext) <= sizeof(type->ext));
+}
+
 bool_t image_valid(FILINFO *fp)
 {
     char ext[8];
@@ -119,7 +125,7 @@ bool_t image_valid(FILINFO *fp)
     } else {
         const struct image_type *type;
         for (type = &image_type[0]; type->handler != NULL; type++)
-            if (!strcmp(ext, type->ext))
+            if (image_type_is(type, ext))
                 return TRUE;
     }
 
@@ -164,7 +170,7 @@ static const struct image_type *type_of(const char *ext)
     const struct image_type *type;
 
     for (type = &image_type[0]; type->handler != NULL; type++)
-        if (!strcmp(ext, type->ext))
+        if (image_type_is(type, ext))
             break;
     return type;
 }
@@ -241,7 +247,7 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 
     /* Apple2 image types are distinguished by extension alone. */
     for (type = &image_type[0]; type->handler != NULL; type++)
-        if (!strcmp(ext, type->ext)
+        if (image_type_is(type, ext)
             && try_handler(im, slot, cltbl, type->handler, type->open))
             return;
 

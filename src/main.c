@@ -246,13 +246,15 @@ static void display_write_slot(bool_t nav_mode)
     if (slot_type("v9t9")) {
         snprintf(typename, sizeof(typename), "T99");
     } else if (!(cfg.slot.attributes & AM_DIR)) {
+        char ext[8];
+        filename_extension(cfg.slot.name, ext, sizeof(ext));
         for (type = &image_type[0]; type->handler != NULL; type++)
-            if (slot_type(type->ext))
+            if (image_type_is(type, ext)
+                || image_type_is(type, cfg.slot.type))
                 break;
         if (type->handler != NULL) {
-            snprintf(typename, sizeof(typename), "%s", type->ext);
-            for (i = 0; i < sizeof(typename); i++)
-                typename[i] = toupper(typename[i]);
+            for (i = 0; i < sizeof(typename) - 1; i++)
+                typename[i] = toupper(type->ext[i]);
         }
     }
 

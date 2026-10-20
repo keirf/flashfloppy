@@ -243,10 +243,13 @@ struct image_handler {
  * the function that opens an image of the type where the handler, that of
  * raw sector images, serves many types. */
 extern const struct image_type {
-    char ext[8];
+    char ext[4]; /* NUL-ended if shorter */
     const struct image_handler *handler;
     bool_t (*open)(struct image *im);
 } image_type[];
+
+/* Whether @ext, NUL-ended, is the extension of image type @type. */
+bool_t image_type_is(const struct image_type *type, const char *ext);
 
 /* Is given file valid to open as an image? */
 bool_t image_valid(FILINFO *fp);
