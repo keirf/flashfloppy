@@ -4,7 +4,16 @@ VER := $(shell git rev-parse --short HEAD)
 
 export FW_VER := $(VER)
 
-PYTHON := python3
+# Python by name, the first of python3, python and py found, as a path may
+# hold a space.
+ifndef PYTHON
+PYTHON := $(firstword $(foreach p,python3 python py,$(if \
+    $(shell command -v $(p) 2>/dev/null),$(p))))
+endif
+ifeq ($(PYTHON),)
+$(error No python3, python or py found: give PYTHON=<command>)
+endif
+export PYTHON
 
 export ROOT := $(CURDIR)
 

@@ -23,7 +23,17 @@ OUT := $(abspath $(O))/out/$(NAME)
 
 CC ?= cc
 OBJCOPY ?= objcopy
-PYTHON ?= $(firstword $(shell command -v python3 python py 2>/dev/null))
+
+# Python by name, the first of python3, python and py found, as a path may
+# hold a space.
+ifndef PYTHON
+PYTHON := $(firstword $(foreach p,python3 python py,$(if \
+    $(shell command -v $(p) 2>/dev/null),$(p))))
+endif
+ifeq ($(PYTHON),)
+$(error No python3, python or py found: give PYTHON=<command>)
+endif
+
 VER ?= $(shell git -C $(ROOT) rev-parse --short HEAD)
 
 ifneq ($(VERBOSE),1)
