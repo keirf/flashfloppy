@@ -154,11 +154,21 @@ static int dialog_display;
 static int dialog_lcd_rom, dialog_focus;
 static bool dialog_oled_synth;
 enum { DF_display, DF_rom, DF_synth, DF_ok, DF_cancel, DF_nr };
+/* The Display type dialog's labels, by the control each names, `~` around
+ * the letter that moves the focus to it. */
+static const char * const df_label[DF_nr] = {
+    [DF_display] = "~D~isplay",
+    [DF_rom] = "LCD character ~R~OM",
+    [DF_synth] = "OLED 8x16 ~f~ont",
+};
 static void draw_dialog(void);
 static void draw_fdfile_dialog(void);
 static void draw_unpack_dialog(void);
 static void draw_write_dialog(void);
 static void draw_flash_dialog(void);
+static int hotkey_of(const char *s);
+static void put_marked(int y, int x, int w, attr_t attr, attr_t hot,
+                       const char *s);
 
 #define FRAME_MS 20
 #define SPEAKER_SHOWN_NS 120000000u
@@ -1965,29 +1975,32 @@ static void check_row(int y, int x, int w, bool on, bool current,
 
 /* The displays to choose from, as radio buttons, the character ROM of an
  * LCD and the 8x16 font of an OLED, which only change how it is drawn and
- * can be set whatever display is chosen; what choosing does; and on the
- * last row, as in the Flash mem dialog, the help of a ROM or the font in
- * focus. */
+ * can be set whatever display is chosen, each under its label; what
+ * choosing does; and on the last row, as in the Flash mem dialog, the help
+ * of a ROM or the font in focus. */
 static void draw_display_dialog(void)
 {
-    int w = 56, h = DISP_nr + LCD_ROM_nr + 14, y, x, i;
+    int w = 56, h = DISP_nr + LCD_ROM_nr + 15, y, x, i;
 
     dialog_box(w, h, "Display type", &y, &x);
+    put_marked(y + 2, x + 3, w - 6, COLOR_PAIR(CP_dialog),
+               COLOR_PAIR(CP_dlg_hot), df_label[DF_display]);
     for (i = 0; i < DISP_nr; i++)
-        radio_row(y + 2 + i, x + 3, w - 6, i == dialog_display,
+        radio_row(y + 3 + i, x + 3, w - 6, i == dialog_display,
                   (dialog_focus == DF_display) && (i == dialog_display),
                   display_label[i]);
-    put(y + DISP_nr + 3, x + 3, w - 6, COLOR_PAIR(CP_dialog), "%s",
-        "LCD character ROM");
+    put_marked(y + DISP_nr + 4, x + 3, w - 6, COLOR_PAIR(CP_dialog),
+               COLOR_PAIR(CP_dlg_hot), df_label[DF_rom]);
     for (i = 0; i < LCD_ROM_nr; i++)
-        radio_row(y + DISP_nr + 4 + i, x + 3, w - 6, i == dialog_lcd_rom,
+        radio_row(y + DISP_nr + 5 + i, x + 3, w - 6, i == dialog_lcd_rom,
                   (dialog_focus == DF_rom) && (i == dialog_lcd_rom),
                   lcd_rom_label[i]);
-    put(y + DISP_nr + LCD_ROM_nr + 5, x + 3, w - 6, COLOR_PAIR(CP_dialog),
-        "%s", "OLED 8x16 font");
-    check_row(y + DISP_nr + LCD_ROM_nr + 6, x + 3, w - 6, dialog_oled_synth,
+    put_marked(y + DISP_nr + LCD_ROM_nr + 6, x + 3, w - 6,
+               COLOR_PAIR(CP_dialog), COLOR_PAIR(CP_dlg_hot),
+               df_label[DF_synth]);
+    check_row(y + DISP_nr + LCD_ROM_nr + 7, x + 3, w - 6, dialog_oled_synth,
               dialog_focus == DF_synth, "Made from 6x13, bold");
-    put(y + DISP_nr + LCD_ROM_nr + 8, x + 3, w - 4, COLOR_PAIR(CP_dialog),
+    put(y + DISP_nr + LCD_ROM_nr + 9, x + 3, w - 4, COLOR_PAIR(CP_dialog),
         "%s", "Changing the display restarts the device.");
     /* OK is the default while the focus is on no button. Both are at the
      * bottom right, as in Turbo Pascal's dialogs, Cancel's shadow at the
@@ -2204,12 +2217,13 @@ enum {
 };
 
 /* The Display type dialog's keys: Tab and Shift+Tab move the focus over
- * every control; Up and Down choose in the cluster in focus, Space toggles
- * the check box, Left and Right go between the buttons; Enter takes the
- * choice, unless Cancel is in focus. */
+ * every control, and so does the letter a label marks to its control; Up
+ * and Down choose in the cluster in focus, Space toggles the check box,
+ * Left and Right go between the buttons; Enter takes the choice, unless
+ * Cancel is in focus. */
 static int display_dialog_key(int key)
 {
-    int step = 0, d = (key == KEY_DOWN) ? 1 : -1;
+    int step = 0, d = (key == KEY_DOWN) ? 1 : -1, i;
 
     switch (key) {
     case '\t':
@@ -2242,6 +2256,12 @@ static int display_dialog_key(int key)
     case '\n':
         dialog = DLG_none;
         return (dialog_focus == DF_cancel) ? DK_taken : DK_display;
+    default:
+        for (i = 0; i < DF_nr; i++)
+            if ((key > 0) && (key < 0x80)
+                && (hotkey_of(df_label[i]) == tolower(key)))
+                dialog_focus = i;
+        break;
     }
     if (step != 0)
         dialog_focus = (dialog_focus + DF_nr + step) % DF_nr;
