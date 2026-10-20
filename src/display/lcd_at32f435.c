@@ -220,7 +220,6 @@ static void emit8(uint8_t **p, uint8_t val, uint8_t signals)
 static unsigned int osd_prep_buffer(void)
 {
     uint16_t order = menu_mode ? 0x7903 : 0x7183;
-    char *p;
     uint8_t *q = buffer;
     unsigned int row, rows, heights;
     int i;
@@ -255,8 +254,12 @@ static unsigned int osd_prep_buffer(void)
     *q++ = OSD_BUTTONS | osd_buttons_tx;
     *q++ = OSD_DATA;
     for (row = 0; row < rows; row++) {
-        p = text[(order >> (row * DORD_shift)) & DORD_row];
-        memcpy(q, p, lcd_columns);
+        i = (order >> (row * DORD_shift)) & DORD_row;
+        /* A blank row, 7, has no text[] of its own. */
+        if (i < ARRAY_SIZE(text))
+            memcpy(q, text[i], lcd_columns);
+        else
+            memset(q, ' ', lcd_columns);
         q += lcd_columns;
     }
 
