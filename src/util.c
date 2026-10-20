@@ -64,7 +64,8 @@ void *memcpy(void *dest, const void *src, size_t n)
 
 #if defined(__arm__)
 
-__attribute__((naked))
+/* noipa: callers must not assume that this asm leaves memory alone. */
+__attribute__((naked, noipa))
 void memcpy_fast(void *dest, const void *src, size_t n) {
     asm (
         "    push  {r4-r10}\n"
@@ -77,7 +78,8 @@ void memcpy_fast(void *dest, const void *src, size_t n) {
         );
 }
 
-__attribute__((naked))
+/* noipa: callers must not assume that this asm leaves memory alone. */
+__attribute__((naked, noipa))
 void memset_fast(void *s, int c, size_t n) {
     asm (
         "    push  {r4-r10}\n"

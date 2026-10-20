@@ -9,7 +9,9 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-__attribute__((naked))
+/* noipa: callers must not assume that this asm, which calls fn(), leaves
+ * memory alone. */
+__attribute__((naked, noipa))
 int call_cancellable_fn(struct cancellation *c, int (*fn)(void *), void *arg) {
     asm (
         "    stmdb.w sp!, {r0, r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"
@@ -23,7 +25,7 @@ int call_cancellable_fn(struct cancellation *c, int (*fn)(void *), void *arg) {
         );
 }
 
-__attribute__((naked))
+__attribute__((naked, noipa))
 void do_cancel(void) {
     asm (
         "    add     sp, #4\n"

@@ -241,7 +241,9 @@ static void board_floppy_init(void)
 
 static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
     __attribute__((used)) __attribute__((section(".ramfuncs")));
-static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
+/* Not static: assembly branches to it by name, which link-time
+ * optimization would change for a static function. */
+void _IRQ_SELA_changed(uint32_t _gpio_out_active)
     __attribute__((used)) __attribute__((section(".ramfuncs")))
     __attribute__((optimize("Ofast")));
 
@@ -259,7 +261,7 @@ static void Amiga_HD_ID(uint32_t _gpio_out_active, uint32_t _gpiob_setreset)
 /* Main entry point for SELA-changed IRQ. This fixes up GPIO pins if we 
  * mis-speculated, also handles the timer-driver RDATA pin, and sets up the 
  * speculative entry point for the next interrupt. */
-static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
+void _IRQ_SELA_changed(uint32_t _gpio_out_active)
 {
     /* Latch SELA. */
     exti->pr = m(pin_sel0);
@@ -295,7 +297,7 @@ static void _IRQ_SELA_changed(uint32_t _gpio_out_active)
  * Note that the entirety of the SELA handler is in SRAM (.data) -- not only
  * is this faster to execute, but allows us to co-locate gpio_out_active for
  * even faster access in the time-critical speculative entry point. */
-__attribute__((naked)) __attribute__((section(".ramfuncs"))) aligned(4)
+__attribute__((naked, noipa)) __attribute__((section(".ramfuncs"))) aligned(4)
 void IRQ_SELA_changed(void) {
     asm (
         ".global gpio_out_active, gpiob_setreset\n"
