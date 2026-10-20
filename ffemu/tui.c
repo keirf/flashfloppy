@@ -167,15 +167,16 @@ static int dialog_display;
 /* The Display type dialog's character ROM and 8x16 font, and its focus: the
  * displays, the ROMs, which only an LCD uses, the font's check box, which
  * only an OLED uses, OK and Cancel. */
-static int dialog_lcd_rom, dialog_focus;
+static int dialog_lcd_rom, dialog_mcu, dialog_focus;
 static bool dialog_oled_synth;
-enum { DF_display, DF_rom, DF_synth, DF_ok, DF_cancel, DF_nr };
+enum { DF_display, DF_rom, DF_synth, DF_mcu, DF_ok, DF_cancel, DF_nr };
 /* The Display type dialog's labels, by the control each names, `~` around
  * the letter that moves the focus to it. */
 static const char * const df_label[DF_nr] = {
     [DF_display] = "~D~isplay",
     [DF_rom] = "LCD character ~R~OM",
     [DF_synth] = "OLED 8x16 ~f~ont",
+    [DF_mcu] = "Display driver of ~M~CU",
 };
 /* The Externals dialog's file system, 1 for FAT16, and whether FF OSD is
  * fitted, and the places of its focus. */
@@ -2146,12 +2147,14 @@ static void check_row(int y, int x, int w, bool on, bool current,
 
 /* The displays to choose from, as radio buttons, the character ROM of an
  * LCD and the 8x16 font of an OLED, which only change how it is drawn and
- * can be set whatever display is chosen, each under its label; what
- * choosing does; and on the last row, as in the Flash mem dialog, the help
- * of a ROM or the font in focus. */
+ * can be set whatever display is chosen, and the MCU whose display driver
+ * the firmware runs, each under its label; what choosing does; and on the
+ * last row, as in the Flash mem dialog, the help of a ROM, the font or an
+ * MCU in focus. */
 static void draw_display_dialog(void)
 {
-    int w = 56, h = DISP_nr + LCD_ROM_nr + 15, y, x, i;
+    int w = 56, h = DISP_nr + LCD_ROM_nr + MCU_nr + 17, y, x, i;
+    int mcu_y = DISP_nr + LCD_ROM_nr + 9;
 
     dialog_box(w, h, "Display type", &y, &x);
     put_marked(y + 2, x + 3, w - 6, COLOR_PAIR(CP_dialog),
@@ -2171,8 +2174,14 @@ static void draw_display_dialog(void)
                df_label[DF_synth]);
     check_row(y + DISP_nr + LCD_ROM_nr + 7, x + 3, w - 6, dialog_oled_synth,
               dialog_focus == DF_synth, "Made from 6x13, bold");
-    put(y + DISP_nr + LCD_ROM_nr + 9, x + 3, w - 4, COLOR_PAIR(CP_dialog),
-        "%s", "Changing the display restarts the device.");
+    put_marked(y + mcu_y, x + 3, w - 6, COLOR_PAIR(CP_dialog),
+               COLOR_PAIR(CP_dlg_hot), df_label[DF_mcu]);
+    for (i = 0; i < MCU_nr; i++)
+        radio_row(y + mcu_y + 1 + i, x + 3, w - 6, i == dialog_mcu,
+                  (dialog_focus == DF_mcu) && (i == dialog_mcu),
+                  mcu_label[i]);
+    put(y + mcu_y + MCU_nr + 2, x + 3, w - 4, COLOR_PAIR(CP_dialog),
+        "%s", "Changing the display or MCU restarts the device.");
     /* OK is the default while the focus is on no button. Both are at the
      * bottom right, as in Turbo Pascal's dialogs, Cancel's shadow at the
      * clusters' right edge, two columns between OK's shadow and Cancel. */
@@ -2186,6 +2195,9 @@ static void draw_display_dialog(void)
     else if (dialog_focus == DF_synth)
         put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
             "As firmware built with oled_font_8x16_synth draws it");
+    else if (dialog_focus == DF_mcu)
+        put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
+            mcu_help[dialog_mcu]);
 }
 
 /* What the device is connected to, each as radio buttons: the file system of
@@ -2463,6 +2475,9 @@ static int display_dialog_key(int key)
         else if ((dialog_focus == DF_rom) && (dialog_lcd_rom + d >= 0)
                  && (dialog_lcd_rom + d < LCD_ROM_nr))
             dialog_lcd_rom += d;
+        else if ((dialog_focus == DF_mcu) && (dialog_mcu + d >= 0)
+                 && (dialog_mcu + d < MCU_nr))
+            dialog_mcu += d;
         break;
     case 27:
         dialog = DLG_none;
@@ -2751,14 +2766,16 @@ static void drop_sequence(wint_t c)
     }
 }
 
-/* Fits display @display, if another than the one fitted, and power-cycles
- * the device; first asking to change display-type in flash if that does not
+/* Fits display @display and makes the firmware run the display driver of MCU
+ * @mcu, EMU_MCU_*, if either is another than it is, and power-cycles the
+ * device; first asking to change display-type in flash if that does not
  * suit the display, even the one fitted already. */
-static void set_display(int display)
+static void set_display(int display, int mcu)
 {
-    rows_restart = (display != config.display);
+    rows_restart = (display != config.display) || (mcu != config.mcu);
     if (rows_restart) {
         config.display = display;
+        config.mcu = mcu;
         rc_save();
     }
     emu_flash_get(rows_cfg);
@@ -4291,7 +4308,7 @@ static void handle_key(int key)
             emu_oled_synth_8x16 = config.oled_synth;
             rc_save();
         }
-        set_display(dialog_display);
+        set_display(dialog_display, dialog_mcu);
         return;
     case DK_rows_yes: {
         char then[64], msg[160];
@@ -4378,6 +4395,7 @@ static void handle_key(int key)
         dialog_display = config.display;
         dialog_lcd_rom = config.lcd_rom;
         dialog_oled_synth = config.oled_synth;
+        dialog_mcu = config.mcu;
         dialog_focus = DF_display;
         return;
     }

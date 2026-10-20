@@ -149,6 +149,16 @@ font out and making each glyph from the 6x13 one, bold with a second copy a
 column to the right; it takes effect at once and is kept as
 `oled-8x16 = font | synth`.
 
+The firmware of an AT32F435 board has a display driver of its own, for that
+MCU's I2C, a newer kind than the AT32F415's, whose code is the STM32F105's. The
+dialog's choice of the display driver's MCU, kept as
+`mcu = 415 | 435`, makes the firmware run that driver in place of the
+board's own, with a model of that I2C, on the same displays; the rest of the
+device stays the AT32F415 board, and Status names the board with "AT32F435
+display". A change restarts the device. Reading from that I2C leaves no trace
+that the model could see, so every byte of a read is its last: the driver's one
+read of more than a byte, its probe of an SH1106, takes the last.
+
 FF OSD, the on-screen display that shares the I2C bus at 0x10 and shows the
 display's text over the host computer's video, is fitted beside an OLED or an
 LCD unless unticked in the Externals dialog (key `8`), kept as
@@ -449,7 +459,7 @@ with the host C library. Only `emu.h` is shared between the two.
 - Data flow on the floppy interface, either way: the write signal comes with no
   data; the drive's outputs to the computer (INDEX, TRK0, WRPROT, RDY, DSKCHG)
   are set by the firmware but not shown.
-- AT32F435 boards, which have a display driver of their own.
+- AT32F435 boards but for their display driver.
 - The LCD's user-defined characters, its cursor, and a PCF8574A backpack, at
   0x3f, which the firmware would find just as well.
 - The firmware's writes reaching the host files, the image or the disk:
