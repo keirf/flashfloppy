@@ -35,13 +35,23 @@
 #define snprintf ff_snprintf
 
 #include "build_enums.h"
+#if MCU == MCU_at32f435
+/* The AT32F435's code beside the STM32F105's: the name they share. */
+#define gpio_configure_pin at435_gpio_configure_pin
+#endif
 #include "types.h"
 #include "mcu/common_regs.h"
 #include "mcu/common.h"
+#if MCU == MCU_at32f435
+#include "mcu/at32f435_regs.h"
+#include "regs435.h"
+#include "mcu/at32f435.h"
+#else
 #include "mcu/stm32f105_regs.h"
 #include "regs.h"
 #include "mcu/at32f415_regs.h"
 #include "mcu/stm32f105.h"
+#endif
 #include "hooks.h"
 
 #include "time.h"

@@ -44,7 +44,7 @@ static const char * const color_name[8] = {
 #define BRIGHT "bright-"
 
 enum { SET_style, SET_display_color, SET_hold_ms, SET_display, SET_lcd_rom,
-       SET_oled_8x16, SET_osd, SET_osd_style, SET_usb_fat, SET_nr };
+       SET_oled_8x16, SET_mcu, SET_osd, SET_osd_style, SET_usb_fat, SET_nr };
 
 static const struct setting {
     const char *name, *comment;
@@ -77,6 +77,11 @@ static const struct setting {
         "The OLED's 8x16 font: font (the firmware's own) or synth (made from "
         "the 6x13 one, bold, as the firmware built with "
         "oled_font_8x16_synth=y draws it). Key 0." },
+    [SET_mcu] = {
+        "mcu",
+        "The MCU whose display driver the firmware runs: 415 (the board's "
+        "own AT32F415, which shares the STM32F105's code) or 435 (an "
+        "AT32F435 board's, through that MCU's kind of I2C). Key 0." },
     [SET_osd] = {
         "osd",
         "FF OSD on the I2C bus beside an OLED or an LCD: yes or no. "
@@ -116,6 +121,9 @@ static const char *value_of(int set, char *buf, size_t size)
         break;
     case SET_oled_8x16:
         snprintf(buf, size, "%s", config.oled_synth ? "synth" : "font");
+        break;
+    case SET_mcu:
+        snprintf(buf, size, "%s", mcu_name[config.mcu]);
         break;
     case SET_osd:
         snprintf(buf, size, "%s", config.osd ? "yes" : "no");
@@ -293,6 +301,14 @@ static bool parse_line(char *line)
             return false;
         config.oled_synth = !strcmp(value, "synth");
         return true;
+    case SET_mcu:
+        for (i = 0; i < MCU_nr; i++) {
+            if (!strcmp(value, mcu_name[i])) {
+                config.mcu = i;
+                return true;
+            }
+        }
+        return false;
     case SET_osd:
         if (strcmp(value, "yes") && strcmp(value, "no"))
             return false;
@@ -621,6 +637,7 @@ void rc_load(void)
     config.display = DISP_ssd1306_32;
     config.lcd_rom = LCD_ROM_cyr;
     config.oled_synth = false;
+    config.mcu = EMU_MCU_at32f415;
     config.osd = true;
     config.osd_braille = false;
     config.display_color = 8 | 6; /* bright cyan */

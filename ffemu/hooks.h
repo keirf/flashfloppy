@@ -91,3 +91,9 @@ static inline uint32_t _rbit32(uint32_t x)
 uint32_t emu_stk_now(void);
 #undef stk_now
 #define stk_now() emu_stk_now()
+
+/* For a model of a peripheral: its bits of a register that the firmware
+ * writes too, changed atomically; and the pointer whose low 32 bits a DMA
+ * address register holds. */
+void emu_reg_update(volatile uint32_t *reg, uint32_t clear, uint32_t set);
+void *emu_ptr32(uint32_t lo);

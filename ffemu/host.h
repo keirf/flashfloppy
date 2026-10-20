@@ -385,11 +385,19 @@ enum {
     KEY_ACT_nr
 };
 
+/* The MCUs whose display driver the firmware may run, EMU_MCU_*, by their
+ * names in the settings file and on the screen, with a line of help. */
+#define MCU_nr 2
+extern const char * const mcu_name[MCU_nr];
+extern const char * const mcu_label[MCU_nr];
+extern const char * const mcu_help[MCU_nr];
+
 struct config {
     int style;              /* STYLE_* */
     int display;            /* DISP_*: the display fitted */
     int lcd_rom;            /* LCD_ROM_*: the LCD's character ROM */
     bool oled_synth;        /* the OLED's 8x16 font made from the 6x13 one */
+    int mcu;                /* EMU_MCU_*: whose display driver runs */
     bool osd;               /* FF OSD on the bus beside an OLED or LCD */
     bool osd_braille;       /* the OSD pane draws FF OSD's pixels */
     bool usb_fat16;         /* a USB drive made from a directory is FAT16 */

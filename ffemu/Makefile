@@ -48,7 +48,7 @@ FW_SRCS += display/display.c display/lcd_stm32f105.c display/led_7seg.c
 FW_SRCS += gotek/board.c gotek/speaker.c floppy.c
 FW_SRCS += image/image.c image/adf.c image/dsk.c image/hfe.c image/img.c
 FW_SRCS += image/da.c image/dummy.c image/mfm.c image/apple2.c
-EMU_FW_SRCS := hw.c stubs.c
+EMU_FW_SRCS := hw.c stubs.c at32f435.c
 # Display fonts, generated from fonts/ as in src/display/Makefile.
 FONTS := 6x13 8x16
 
@@ -138,7 +138,11 @@ $(OUT)/fw/gotek/board.o $(OUT)/fw/floppy.o: \
 endif
 
 # As in src/display/Makefile: the main firmware has both fonts.
-$(OUT)/fw/display/lcd_stm32f105.o: FW_CFLAGS += -Dfont_extra=1
+$(OUT)/fw/display/lcd_stm32f105.o $(OUT)/emu/at32f435.o: \
+    FW_CFLAGS += -Dfont_extra=1
+
+# at32f435.c has the AT32F435's display driver, which it builds for that MCU.
+$(OUT)/emu/at32f435.o: FW_CFLAGS += -UMCU -DMCU=MCU_at32f435
 
 .PHONY: $(ROOT)/src/build_info.c
 $(OUT)/fw/build_info.o: FW_CFLAGS += -DFW_VER="\"$(VER)\""
@@ -156,6 +160,14 @@ $(OUT)/fw/main.o: $(ROOT)/src/main.c
 	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
 	$(Q)$(OBJCOPY) --redefine-sym main=ff_main \
 	    --globalize-symbol is_dump_flash_cfg_needed $@
+
+# at32f435.c calls the display driver's functions, or the AT32F435's.
+$(OUT)/fw/display/lcd_stm32f105.o: $(ROOT)/src/display/lcd_stm32f105.c
+	@echo CC display/lcd_stm32f105.c
+	@mkdir -p $(dir $@)
+	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
+	$(Q)$(OBJCOPY) $(foreach f,init clear write backlight sync, \
+	    --redefine-sym lcd_$(f)=f105_lcd_$(f)) $@
 
 # stubs.c wraps these with what ffemu adds to them.
 $(OUT)/fw/floppy.o: $(ROOT)/src/floppy.c

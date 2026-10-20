@@ -12,8 +12,9 @@
  * interface, with their EXTI interrupts as AFIO routes them, and TIM2's
  * capture of STEP; the two GPIO lines of the 7-segment LED display; the
  * one-shot timer behind timer.c; the I2C master with its
- * DMA channel, which carries the display traffic. The floppy data timers and
- * their DMA channels are mere registers: no data flows.
+ * DMA channel, which carries the display traffic, or the AT32F435's, which
+ * at32f435.c models for that MCU's display driver. The floppy data timers
+ * and their DMA channels are mere registers: no data flows.
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
@@ -57,6 +58,11 @@ void IRQ_27(void);
 void IRQ_28(void);
 void IRQ_40(void);
 void IRQ_43(void);
+/* The AT32F435's display driver's, and the model of its I2C2. */
+void at435_IRQ_33(void);
+void at435_IRQ_34(void);
+void at435_bus_sync(uint64_t now);
+uint64_t at435_bus_due_ns(void);
 
 void emu_irq_vector(unsigned int nr)
 {
@@ -74,8 +80,12 @@ void emu_irq_vector(unsigned int nr)
     case 30: IRQ_30(); break; /* TIM4 */
     case 31: IRQ_31(); break; /* I2C1 event */
     case 32: IRQ_32(); break; /* I2C1 error */
-    case 33: IRQ_33(); break; /* I2C2 event */
-    case 34: IRQ_34(); break; /* I2C2 error */
+    case 33: /* I2C2 event */
+        (emu_mcu == EMU_MCU_at32f435) ? at435_IRQ_33() : IRQ_33();
+        break;
+    case 34: /* I2C2 error */
+        (emu_mcu == EMU_MCU_at32f435) ? at435_IRQ_34() : IRQ_34();
+        break;
     case 40: IRQ_40(); break; /* EXTI15_10 */
 #if TARGET == TARGET_apple2
     case 27: IRQ_27(); break; /* TIM1 capture: WDATA */
@@ -106,6 +116,11 @@ static void reg_update(volatile uint32_t *reg, uint32_t clear, uint32_t set)
     uint32_t old = *reg;
     while (!__sync_bool_compare_and_swap(reg, old, (old & ~clear) | set))
         old = *reg;
+}
+
+void emu_reg_update(volatile uint32_t *reg, uint32_t clear, uint32_t set)
+{
+    reg_update(reg, clear, set);
 }
 
 uint32_t emu_stk_now(void)
@@ -419,6 +434,11 @@ static void *ptr32(uint32_t lo)
     return (void *)p;
 }
 
+void *emu_ptr32(uint32_t lo)
+{
+    return ptr32(lo);
+}
+
 static void i2c_sync(struct i2c_model *m, uint64_t now)
 {
     volatile struct i2c *r = m->r;
@@ -560,6 +580,10 @@ static void dma_sync(void)
 static void bus_sync(uint64_t now)
 {
     dma_sync();
+    if (emu_mcu == EMU_MCU_at32f435) {
+        at435_bus_sync(now);
+        return;
+    }
     i2c_sync(&i2c_model[0], now);
     i2c_sync(&i2c_model[1], now);
 }
@@ -569,6 +593,8 @@ uint64_t emu_hw_due_ns(void)
     uint64_t due = tim_armed ? tim_deadline_ns : 0;
     unsigned int i;
 
+    if (emu_mcu == EMU_MCU_at32f435)
+        return earlier(due, at435_bus_due_ns());
     for (i = 0; i < ARRAY_SIZE(i2c_model); i++)
         if (i2c_model[i].dma_active)
             due = earlier(due, i2c_model[i].dma_done_ns);
@@ -634,7 +660,8 @@ void emu_hw_init(void)
 
 const char *emu_board_name(void)
 {
-    return "SFRKC30.AT2 (AT32F415, QFN32)";
+    return (emu_mcu == EMU_MCU_at32f435) ? "SFRKC30.AT2, AT32F435 display"
+        : "SFRKC30.AT2 (AT32F415, QFN32)";
 }
 
 /*

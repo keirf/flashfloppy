@@ -238,6 +238,19 @@ static uint64_t step_until;
  * phase 0 alone, through phases 0 and 1, to phase 1 alone, and on. */
 static unsigned int phase_pos;
 
+const char * const mcu_name[MCU_nr] = {
+    [EMU_MCU_at32f415] = "415",
+    [EMU_MCU_at32f435] = "435"
+};
+const char * const mcu_label[MCU_nr] = {
+    [EMU_MCU_at32f415] = "AT32F415, as STM32F105",
+    [EMU_MCU_at32f435] = "AT32F435"
+};
+const char * const mcu_help[MCU_nr] = {
+    [EMU_MCU_at32f415] = "The board's own MCU, whose code is the STM32F105's",
+    [EMU_MCU_at32f435] = "That of AT32F435 boards: its I2C is of a newer kind"
+};
+
 void ui_usb_set_fat16(bool fat16)
 {
     struct usb_info info;
@@ -643,6 +656,7 @@ int main(int argc, char **argv)
     osd_init(config.osd && !DISP_IS_LED(config.display));
     hd44780_set_rom(config.lcd_rom);
     emu_oled_synth_8x16 = config.oled_synth;
+    emu_mcu = config.mcu;
     if (usb)
         insert(state != NULL);
 
