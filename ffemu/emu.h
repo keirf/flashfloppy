@@ -100,6 +100,7 @@ int emu_timers_on_time(void);
 #define EMU_FDD_DIR   4  /* active: steps go inward, to higher tracks */
 #define EMU_FDD_SIDE  8
 #define EMU_FDD_PH0   16 /* Apple2 stepper phases 0 to 3: 16, 32, 64, 128 */
+#define EMU_FDD_WRITE 256 /* Shugart write gate, or Apple2 write request */
 extern volatile unsigned int emu_in_fdd;
 /* Counts the STEP pulses sent. */
 extern volatile unsigned int emu_in_step;

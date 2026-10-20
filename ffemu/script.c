@@ -264,13 +264,15 @@ static void print_fdd(void)
     int sel;
 
     if (FFEMU_APPLE2)
-        printf("fdd: %s, phases %s, kept %s\n",
+        printf("fdd: %s %s, phases %s, kept %s\n",
                (in & EMU_FDD_SEL) ? "D_E" : "d_e",
+               (in & EMU_FDD_WRITE) ? "WRQ" : "wrq",
                ui_fdd_phase_text(in, ph),
                ui_fdd_phase_text(ui_fdd_phases(), kept));
     else
-        printf("fdd: %s %s %s %s\n", (in & EMU_FDD_SEL) ? "D_S" : "d_s",
+        printf("fdd: %s %s %s %s %s\n", (in & EMU_FDD_SEL) ? "D_S" : "d_s",
                (in & EMU_FDD_MOTOR) ? "M_O" : "m_o",
+               (in & EMU_FDD_WRITE) ? "WRG" : "wrg",
                (in & EMU_FDD_DIR) ? "DIR" : "dir",
                (in & EMU_FDD_SIDE) ? "SID" : "sid");
     emu_fdd_status(&cyl, &side, &sel, &image);

@@ -1433,36 +1433,40 @@ static void fdd_panel(int y, int x, int w)
         FFEMU_APPLE2 ? "Apple2" : "Step/Dir");
 
     if (FFEMU_APPLE2) {
-        static const char * const name[5] = {
-            "D_E", "PH0", "PH1", "PH2", "PH3" };
-        /* Closer than the Shugart ones, for the kept state of the phases,
-         * which a press of + or - goes on from. */
-        for (i = 0; i < 5; i++) {
-            bool on = in & (i ? EMU_FDD_PH0 << (i - 1) : EMU_FDD_SEL);
-            c = 9 + 5 * i;
-            put(y, x + c, w - c, SIGNAL(on), "%s", name[i]);
+        static const char * const name[6] = {
+            "D_E", "WRQ", "PH0", "PH1", "PH2", "PH3" };
+        static const unsigned int bit[6] = {
+            EMU_FDD_SEL, EMU_FDD_WRITE, EMU_FDD_PH0, EMU_FDD_PH0 << 1,
+            EMU_FDD_PH0 << 2, EMU_FDD_PH0 << 3 };
+        /* From a column left of the Shugart ones, for the kept state of the
+         * phases, which a press of `+` or `-` goes on from. */
+        for (i = 0; i < 6; i++) {
+            c = 8 + 5 * i;
+            put(y, x + c, w - c, SIGNAL(in & bit[i]), "%s", name[i]);
         }
-        put(y, x + 35, w - 35, BRIGHT(CP_good), "%s",
+        put(y, x + 37, w - 37, BRIGHT(CP_good), "%s",
             ui_fdd_phase_text(ui_fdd_phases(), ph));
-        put(y + 1, x + 10, w - 10, KEY(FDD_ACT_sel), "[");
-        put(y + 1, x + 15, w - 15, KEY(FDD_ACT_phase_out), "-");
-        put(y + 1, x + 16, w - 16, 0, "/");
-        put(y + 1, x + 17, w - 17, KEY(FDD_ACT_phase_in), "+");
-        put(y + 1, x + 19, w - 19, 0, "Step");
-        put(y + 1, x + 27, w - 27, KEY(FDD_ACT_release), "\\");
-        put(y + 1, x + 29, w - 29, 0, "Release");
+        put(y + 1, x + 9, w - 9, KEY(FDD_ACT_sel), "[");
+        put(y + 1, x + 14, w - 14, KEY(FDD_ACT_write), ";");
+        put(y + 1, x + 19, w - 19, KEY(FDD_ACT_phase_out), "-");
+        put(y + 1, x + 20, w - 20, 0, "/");
+        put(y + 1, x + 21, w - 21, KEY(FDD_ACT_phase_in), "+");
+        put(y + 1, x + 23, w - 23, 0, "Step");
+        put(y + 1, x + 31, w - 31, KEY(FDD_ACT_release), "\\");
+        put(y + 1, x + 33, w - 33, 0, "Release");
     } else {
-        static const char * const name[5] = {
-            "D_S", "M_O", "DIR", "STP", "SID" };
-        static const char * const keys[5] = { "[", "]", "-", "+", "\\" };
-        static const int acts[5] = {
-            FDD_ACT_sel, FDD_ACT_motor, FDD_ACT_dir, FDD_ACT_step,
-            FDD_ACT_side };
-        bool on[5] = {
-            in & EMU_FDD_SEL, in & EMU_FDD_MOTOR, in & EMU_FDD_DIR,
-            ui_fdd_stepping(), in & EMU_FDD_SIDE };
-        for (i = 0; i < 5; i++) {
-            c = 9 + 6 * i;
+        static const char * const name[6] = {
+            "D_S", "M_O", "WRG", "DIR", "STP", "SID" };
+        static const char * const keys[6] = {
+            "[", "]", ";", "-", "+", "\\" };
+        static const int acts[6] = {
+            FDD_ACT_sel, FDD_ACT_motor, FDD_ACT_write, FDD_ACT_dir,
+            FDD_ACT_step, FDD_ACT_side };
+        bool on[6] = {
+            in & EMU_FDD_SEL, in & EMU_FDD_MOTOR, in & EMU_FDD_WRITE,
+            in & EMU_FDD_DIR, ui_fdd_stepping(), in & EMU_FDD_SIDE };
+        for (i = 0; i < 6; i++) {
+            c = 9 + 5 * i;
             put(y, x + c, w - c, SIGNAL(on[i]), "%s", name[i]);
             put(y + 1, x + c + 1, w - c - 1, KEY(acts[i]), "%s", keys[i]);
         }
@@ -1484,7 +1488,7 @@ static void draw_keys(int y, int x, int w)
     /* A drawing, not text: one space from the frame. */
     usb_port(y, x + 1, w - 1);
     picture(y, x + 11, w - 11);
-    fdd_panel(y + 5, x + 1, w - 1);
+    fdd_panel(y + 5, x, w);
     y += 8;
 
     /* The latch key lights up while its mode lasts. The `+` between the
@@ -2719,6 +2723,7 @@ static int key_of_char(wint_t ch)
         { 0x439, 'q' }, { 0x419, 'Q' }, { 0x446, 'w' }, { 0x426, 'W' },
         { 0x443, 'e' }, { 0x423, 'E' },
         { 0x445, '[' }, { 0x425, '[' }, { 0x44a, ']' }, { 0x42a, ']' },
+        { 0x436, ';' }, { 0x416, ';' },
         { 0x451, '`' }, { 0x401, '`' },
         { 0x2116, '#' } /* the numero sign, Shift+3 */
     };
@@ -4191,6 +4196,8 @@ static int fdd_key(int key)
     switch (key) {
     case '[':
         return FDD_ACT_sel;
+    case ';':
+        return FDD_ACT_write;
     case ']':
         return FDD_ACT_motor;
     case '-':

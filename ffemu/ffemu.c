@@ -222,6 +222,7 @@ void ui_poll(void)
 
 const char * const fdd_action_name[FDD_ACT_nr] = {
     [FDD_ACT_sel] = "sel",
+    [FDD_ACT_write] = "write",
     [FDD_ACT_motor] = "motor",
     [FDD_ACT_dir] = "dir",
     [FDD_ACT_step] = "step",
@@ -252,7 +253,7 @@ void ui_usb_set_fat16(bool fat16)
 
 bool ui_fdd_has(int act)
 {
-    if (act == FDD_ACT_sel)
+    if ((act == FDD_ACT_sel) || (act == FDD_ACT_write))
         return true;
     return FFEMU_APPLE2 ? (act >= FDD_ACT_phase_in) : (act < FDD_ACT_phase_in);
 }
@@ -277,6 +278,9 @@ void ui_fdd_action(int act)
     switch (act) {
     case FDD_ACT_sel:
         emu_in_fdd = in ^ EMU_FDD_SEL;
+        break;
+    case FDD_ACT_write:
+        emu_in_fdd = in ^ EMU_FDD_WRITE;
         break;
     case FDD_ACT_motor:
         emu_in_fdd = in ^ EMU_FDD_MOTOR;

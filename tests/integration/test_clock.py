@@ -27,8 +27,8 @@ class VirtualClock(fr.Case, unittest.TestCase):
         self.check_same([
             "wait 10000 log Name:", "dump", "key cw", "wait 3000 log 'B'",
             "sleep 500", "dump", "key sel", "key motor", "key step",
-            "key step", "sleep 300", "dump", "key right", "sleep 1000", "dump",
-            "status"],
+            "key step", "sleep 300", "dump", "key write", "sleep 200", "dump",
+            "key write", "key right", "sleep 1000", "dump", "status"],
             IMAGES, 2)
 
     def test_error_screen(self):

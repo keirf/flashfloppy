@@ -228,24 +228,28 @@ of the cable, `Step/Dir` or `Apple2`, and the signals that it sends to the
 drive, each lit in dark yellow while it is active as on the schematics,
 whatever its voltage, with the key that changes it below:
 
-- Shugart: `[` toggles D_S (drive select), `]` M_O (motor on), `-` DIR (step
-  direction: active, as at the start, steps inward to higher tracks), `+` sends
-  a STP (step) pulse, which stays lit for a moment, and `\` toggles SID (side
-  select).
-- Apple2: `[` toggles D_E (drive enable), and `+` and `-` move the stepper
-  phases PH0 to PH3 to their next or previous state in the cycle a computer
-  goes through: phase 0 alone, phases 0 and 1, phase 1 alone, and so on. The
-  firmware steps the head when one phase alone is on next to the present one,
-  so two presses make one step. `\` releases all phases, as a computer does
-  between seeks; the state they were in is kept, shown in bright green to the
-  right of the phases, and the next press goes on from it.
+- Shugart: `[` toggles D_S (drive select), `]` M_O (motor on), `;` WRG (write
+  gate), `-` DIR (step direction: active, as at the start, steps inward to
+  higher tracks), `+` sends a STP (step) pulse, which stays lit for a moment,
+  and `\` toggles SID (side select).
+- Apple2: `[` toggles D_E (drive enable), `;` WRQ (write request), and `+` and
+  `-` move the stepper phases PH0 to PH3 to their next or previous state in the
+  cycle a computer goes through: phase 0 alone, phases 0 and 1, phase 1 alone,
+  and so on. The firmware steps the head when one phase alone is on next to the
+  present one, so two presses make one step. `\` releases all phases, as a
+  computer does between seeks; the state they were in is kept, shown in bright
+  green to the right of the phases, and the next press goes on from it.
+
+The write signal comes with no data, which ffemu does not emulate: the firmware
+shows a write in progress on its display as the device does, and the write
+brings nothing to the image.
 
 `=` also works as `+`, and `/` as `\`, which is the key that types it on a
-Russian layout, as do the keys of `[` and `]`. The drive selected or enabled is
-the default. The signals survive a power cycle of the device (Home), as the
-computer's would; Ctrl+Home puts them back to the defaults. The Status pane
-shows the cylinder and the side as the firmware sees them, and, as Floppy, the
-image mounted; the firmware's display shows them as on the device, and the
+Russian layout, as do the keys of `[`, `]` and `;`. The drive selected or
+enabled is the default. The signals survive a power cycle of the device (Home),
+as the computer's would; Ctrl+Home puts them back to the defaults. The Status
+pane shows the cylinder and the side as the firmware sees them, and, as Floppy,
+the image mounted; the firmware's display shows them as on the device, and the
 beeper sounds each step, unless `step-volume` is 0.
 
 The firmware's own floppy code, `src/floppy.c` with what it includes, runs in
@@ -369,10 +373,10 @@ to standard output, which is how it can be tested without a terminal:
 
 The commands are `key <action>`, the action being `select`, `left`, `right`,
 `cw`, `ccw`, `remove`, `insert`, `reset` (Home), `relaunch` (Ctrl+Home), `quit`
-or `latch`, or on the floppy interface `sel`, `motor`, `dir`, `step` or `side`
-for Shugart, and `sel`, `phase-in`, `phase-out` or `release` for Apple2,
-`usb-fat <fat32|fat16>`, which sets the file system of a drive made from a
-directory and inserts such a drive again as the Externals dialog does,
+or `latch`, or on the floppy interface `sel`, `write`, `motor`, `dir`, `step`
+or `side` for Shugart, and `sel`, `write`, `phase-in`, `phase-out` or `release`
+for Apple2, `usb-fat <fat32|fat16>`, which sets the file system of a drive made
+from a directory and inserts such a drive again as the Externals dialog does,
 `sleep <ms>`, `dump` (the display as text: an LCD as its rows of characters
 between bars, a 7-segment display as its digits drawn with `_` and `|` in
 three rows, a lit point as `.`), `log` (the firmware's console output so far),
@@ -442,9 +446,9 @@ with the host C library. Only `emu.h` is shared between the two.
 
 ## Not emulated [yet]
 
-- Data flow on the floppy interface, and WGATE; the drive's outputs to the
-  computer (INDEX, TRK0, WRPROT, RDY, DSKCHG) are set by the firmware but not
-  shown.
+- Data flow on the floppy interface, either way: the write signal comes with no
+  data; the drive's outputs to the computer (INDEX, TRK0, WRPROT, RDY, DSKCHG)
+  are set by the firmware but not shown.
 - AT32F435 boards, which have a display driver of their own.
 - The LCD's user-defined characters, its cursor, and a PCF8574A backpack, at
   0x3f, which the firmware would find just as well.
