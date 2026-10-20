@@ -4,7 +4,8 @@ VER := $(shell git rev-parse --short HEAD)
 
 export FW_VER := $(VER)
 
-PYTHON := python3
+export PYTHON ?= $(firstword $(foreach p,python3 python py,$(if \
+    $(shell command -v $(p) 2>/dev/null),$(p))))
 
 export ROOT := $(CURDIR)
 

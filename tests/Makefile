@@ -19,7 +19,8 @@ O ?= $(ROOT)
 OUT := $(abspath $(O))/out/fftest
 
 CC ?= cc
-PYTHON ?= $(firstword $(shell command -v python3 python py 2>/dev/null))
+PYTHON ?= $(firstword $(foreach p,python3 python py,$(if \
+    $(shell command -v $(p) 2>/dev/null),$(p))))
 
 ifneq ($(VERBOSE),1)
 Q := @

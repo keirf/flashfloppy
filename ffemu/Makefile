@@ -23,7 +23,9 @@ OUT := $(abspath $(O))/out/$(NAME)
 
 CC ?= cc
 OBJCOPY ?= objcopy
-PYTHON ?= $(firstword $(shell command -v python3 python py 2>/dev/null))
+PYTHON ?= $(firstword $(foreach p,python3 python py,$(if \
+    $(shell command -v $(p) 2>/dev/null),$(p))))
+
 VER ?= $(shell git -C $(ROOT) rev-parse --short HEAD)
 
 ifneq ($(VERBOSE),1)
