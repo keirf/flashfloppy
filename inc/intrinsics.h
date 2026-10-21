@@ -31,7 +31,7 @@ struct exception_frame {
 
 #define barrier() asm volatile ("" ::: "memory")
 #define cpu_sync() asm volatile("dsb; isb" ::: "memory")
-#define cpu_relax() asm volatile ("nop" ::: "memory")
+#define cpu_relax() asm volatile ("" ::: "memory")
 
 #define sv_call(imm) asm volatile ( "svc %0" : : "i" (imm) : "memory" )
 
