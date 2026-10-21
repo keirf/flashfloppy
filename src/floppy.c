@@ -549,9 +549,13 @@ void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 {
     if (unit == 0) {
         struct drive *drv = &drive;
+        /* No step may complete between the cylinder and its TRK0. */
+        IRQ_global_disable();
         drv->cyl = cyl;
         if (cyl == 0)
-            drive_change_output(drv, outp_trk0, TRUE);
+            drive_change_output(drv, outp_trk0, TRUE); /* enables IRQs */
+        else
+            IRQ_global_enable();
     }
 }
 
