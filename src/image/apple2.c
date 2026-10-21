@@ -66,7 +66,9 @@
 
 static void nib_seek_track(struct image *im, uint16_t track);
 
-static bool_t nib_open(struct image *im)
+static const struct image_handler nib_image_handler;
+
+const struct image_handler *nib_open(struct image *im)
 {
     unsigned int trk_len = im->a2.dsk ? DSK_TRK_LEN
         : im->a2.nic ? NIC_TRK_LEN : TRK_LEN;
@@ -76,7 +78,7 @@ static bool_t nib_open(struct image *im)
      * disk. */
     if (((f_size(&im->fp) % trk_len) & ~(im->a2.dsk ? 128u : 0u))
         || (nr_trks < 35) || (nr_trks > MAX_TRKS))
-        return FALSE;
+        return NULL;
 
     im->a2.trk_len = trk_len;
     im->nr_cyls = nr_trks;
@@ -97,13 +99,15 @@ static bool_t nib_open(struct image *im)
 
     nib_seek_track(im, 0);
 
-    return TRUE;
+    return &nib_image_handler;
 }
 
-static bool_t nic_open(struct image *im)
+static const struct image_handler nic_image_handler;
+
+const struct image_handler *nic_open(struct image *im)
 {
     im->a2.nic = TRUE;
-    return nib_open(im);
+    return nib_open(im) ? &nic_image_handler : NULL;
 }
 
 /* The sector of the file that each physical sector of a track holds, in DOS
@@ -113,14 +117,16 @@ static const uint8_t dsk_file_sec[2][16] = {
     { 0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15 }
 };
 
-static bool_t dsk_open(struct image *im)
+static const struct image_handler a2dsk_image_handler;
+
+const struct image_handler *a2dsk_open(struct image *im)
 {
     unsigned int prodos = (im->slot->type[0] == 'p'); /* .po vs .do */
     uint32_t hdr[2];
 
     im->a2.nic = im->a2.dsk = TRUE;
     if (!nib_open(im))
-        return FALSE;
+        return NULL;
 
     /* .DSK: Auto-probe DOS 3.3 vs ProDOS sector order.  */
     if (im->slot->type[1] == 's') {
@@ -136,7 +142,7 @@ static bool_t dsk_open(struct image *im)
 
     im->a2.file_sec = dsk_file_sec[prodos];
 
-    return TRUE;
+    return &a2dsk_image_handler;
 }
 
 static void nib_seek_track(struct image *im, uint16_t track)
@@ -503,24 +509,21 @@ static bool_t nib_write_track(struct image *im)
     return TRUE;
 }
 
-const struct image_handler nib_image_handler = {
-    .open = nib_open,
+static const struct image_handler nib_image_handler = {
     .setup_track = nib_setup_track,
     .read_track = nib_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = nib_write_track,
 };
 
-const struct image_handler nic_image_handler = {
-    .open = nic_open,
+static const struct image_handler nic_image_handler = {
     .setup_track = nib_setup_track,
     .read_track = nib_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = nib_write_track,
 };
 
-const struct image_handler a2dsk_image_handler = {
-    .open = dsk_open,
+static const struct image_handler a2dsk_image_handler = {
     .setup_track = nib_setup_track,
     .read_track = nib_read_track,
     .rdata_flux = bc_rdata_flux,

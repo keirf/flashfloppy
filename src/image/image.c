@@ -11,86 +11,88 @@
 
 #if TARGET == TARGET_shugart
 
-extern const struct image_handler adf_image_handler;
-extern const struct image_handler atr_image_handler;
-extern const struct image_handler hfe_image_handler;
-extern const struct image_handler img_image_handler;
-extern const struct image_handler sf7_image_handler;
-extern const struct image_handler st_image_handler;
-extern const struct image_handler d81_image_handler;
-extern const struct image_handler dsk_image_handler;
+image_open_fn adf_open;
+image_open_fn atr_open;
+image_open_fn hfe_open;
+image_open_fn img_open;
+image_open_fn sf7_open;
+image_open_fn st_open;
+image_open_fn d81_open;
+image_open_fn dsk_open;
+image_open_fn adfs_open;
+image_open_fn mbd_open;
+image_open_fn mgt_open;
+image_open_fn pc98fdi_open;
+image_open_fn pc98hdm_open;
+image_open_fn trd_open;
+image_open_fn opd_open;
+image_open_fn ssd_open;
+image_open_fn dsd_open;
+image_open_fn sdu_open;
+image_open_fn jvc_open;
+image_open_fn vdk_open;
+image_open_fn ti99_open;
+image_open_fn xdf_open;
+image_open_fn dummy_open;
+/* The handlers that image_setup_track() switches to. */
 extern const struct image_handler da_image_handler;
-extern const struct image_handler adfs_image_handler;
-extern const struct image_handler mbd_image_handler;
-extern const struct image_handler mgt_image_handler;
-extern const struct image_handler pc98fdi_image_handler;
-extern const struct image_handler pc98hdm_image_handler;
-extern const struct image_handler trd_image_handler;
-extern const struct image_handler opd_image_handler;
-extern const struct image_handler ssd_image_handler;
-extern const struct image_handler dsd_image_handler;
-extern const struct image_handler sdu_image_handler;
-extern const struct image_handler jvc_image_handler;
-extern const struct image_handler vdk_image_handler;
-extern const struct image_handler ti99_image_handler;
-extern const struct image_handler xdf_image_handler;
 extern const struct image_handler dummy_image_handler;
 
 const struct image_type image_type[] = {
-    { "adf", &adf_image_handler },
-    { "atr", &atr_image_handler },
-    { "d1m", &d81_image_handler }, /* CMD FD-2000 DD, 81 track */
-    { "d2m", &d81_image_handler }, /* CMD FD-2000 HD, 81 track */
-    { "d4m", &d81_image_handler }, /* CMD FD-4000 ED, 81 track */
-    { "d81", &d81_image_handler },
-    { "dsk", &dsk_image_handler },
-    { "hdm", &pc98hdm_image_handler },
-    { "hfe", &hfe_image_handler },
-    { "img", &img_image_handler },
-    { "ima", &img_image_handler },
-    { "out", &img_image_handler },
-    { "sf7", &sf7_image_handler },
-    { "st",  &st_image_handler },
-    { "adl", &adfs_image_handler },
-    { "adm", &adfs_image_handler },
-    { "mbd", &mbd_image_handler },
-    { "mgt", &mgt_image_handler },
-    { "fdi", &pc98fdi_image_handler },
-    { "trd", &trd_image_handler },
-    { "opd", &opd_image_handler },
-    { "ssd", &ssd_image_handler },
-    { "dsd", &dsd_image_handler },
-    { "sdu", &sdu_image_handler },
-    { "jvc", &jvc_image_handler },
-    { "vdk", &vdk_image_handler },
-    { "v9t9", &ti99_image_handler },
-    { "xdf", &xdf_image_handler },
+    { "adf", adf_open },
+    { "atr", atr_open },
+    { "d1m", d81_open }, /* CMD FD-2000 DD, 81 track */
+    { "d2m", d81_open }, /* CMD FD-2000 HD, 81 track */
+    { "d4m", d81_open }, /* CMD FD-4000 ED, 81 track */
+    { "d81", d81_open },
+    { "dsk", dsk_open },
+    { "hdm", pc98hdm_open },
+    { "hfe", hfe_open },
+    { "img", img_open },
+    { "ima", img_open },
+    { "out", img_open },
+    { "sf7", sf7_open },
+    { "st",  st_open },
+    { "adl", adfs_open },
+    { "adm", adfs_open },
+    { "mbd", mbd_open },
+    { "mgt", mgt_open },
+    { "fdi", pc98fdi_open },
+    { "trd", trd_open },
+    { "opd", opd_open },
+    { "ssd", ssd_open },
+    { "dsd", dsd_open },
+    { "sdu", sdu_open },
+    { "jvc", jvc_open },
+    { "vdk", vdk_open },
+    { "v9t9", ti99_open },
+    { "xdf", xdf_open },
     { "", NULL }
 };
 
 #elif TARGET == TARGET_apple2
 
-extern const struct image_handler hfe_image_handler;
-extern const struct image_handler nib_image_handler;
-extern const struct image_handler nic_image_handler;
-extern const struct image_handler a2dsk_image_handler;
+image_open_fn hfe_open;
+image_open_fn nib_open;
+image_open_fn nic_open;
+image_open_fn a2dsk_open;
 
 const struct image_type image_type[] = {
-    { "hfe", &hfe_image_handler },
-    { "nib", &nib_image_handler },
-    { "nic", &nic_image_handler },
-    { "dsk", &a2dsk_image_handler },
-    { "do", &a2dsk_image_handler },
-    { "po", &a2dsk_image_handler },
+    { "hfe", hfe_open },
+    { "nib", nib_open },
+    { "nic", nic_open },
+    { "dsk", a2dsk_open },
+    { "do", a2dsk_open },
+    { "po", a2dsk_open },
     { "", NULL }
 };
 
 #elif TARGET == TARGET_quickdisk
 
-extern const struct image_handler qd_image_handler;
+image_open_fn qd_open;
 
 const struct image_type image_type[] = {
-    { "qd", &qd_image_handler },
+    { "qd", qd_open },
     { "", NULL }
 };
 
@@ -107,15 +109,14 @@ void image_log_hidden(void)
     image_nr_hidden = 0;
 }
 
-static bool_t image_is_hidden(const struct image_handler *handler,
-                              uint32_t size)
+static bool_t image_is_hidden(image_open_fn *open, uint32_t size)
 {
     bool_t ok = TRUE;
-    if (handler == &hfe_image_handler) {
+    if (open == hfe_open) {
         /* An Apple2 disk has at most 40 tracks on one side, which an HFE holds
          * in well under this; a larger one is a disk of another kind. */
         ok = size <= 1280*1024;
-    } else if (handler == &a2dsk_image_handler) {
+    } else if (open == a2dsk_open) {
         /* Can this image hold the one side of 35 to 40 tracks an Apple2 disk
          * has? A sector image has 16 sectors of 256 bytes per track; one of
          * the Agat may end in a 128-byte trailer naming the disk. */
@@ -129,7 +130,7 @@ static bool_t image_is_hidden(const struct image_handler *handler,
 
 #else
 
-#define image_is_hidden(handler, size) FALSE
+#define image_is_hidden(open, size) FALSE
 
 #endif
 
@@ -157,9 +158,9 @@ bool_t image_valid(FILINFO *fp)
         return (ff_cfg.host == HOST_acorn) || !(fp->fsize % (2*11*512));
     } else {
         const struct image_type *type;
-        for (type = &image_type[0]; type->handler != NULL; type++)
+        for (type = &image_type[0]; type->open != NULL; type++)
             if (image_type_is(type, ext))
-                return !image_is_hidden(type->handler, fp->fsize);
+                return !image_is_hidden(type->open, fp->fsize);
     }
 
     return FALSE;
@@ -167,10 +168,10 @@ bool_t image_valid(FILINFO *fp)
 
 static bool_t try_handler(struct image *im, struct slot *slot,
                           DWORD *cltbl,
-                          const struct image_handler *handler)
+                          image_open_fn *open)
 {
     struct image_bufs bufs = im->bufs;
-    BYTE mode;
+    const struct image_handler *handler;
 
     /* Reinitialise image structure, except for static buffers. */
     memset(im, 0, sizeof(*im));
@@ -183,31 +184,30 @@ static bool_t try_handler(struct image *im, struct slot *slot,
     im->write_bc_ticks = sampleclk_us(2);
     im->stk_per_rev = stk_ms(200);
 
-    im->disk_handler = im->track_handler = handler;
-
-    mode = FA_READ | FA_OPEN_EXISTING;
-    if (handler->write_track != NULL)
-        mode |= FA_WRITE;
-    fatfs_from_slot(&im->fp, slot, mode);
+    /* The handler is known only once open() takes the image, and every
+     * handler writes. */
+    fatfs_from_slot(&im->fp, slot, FA_READ | FA_WRITE | FA_OPEN_EXISTING);
     im->fp.cltbl = cltbl;
 
-    return handler->open(im);
+    handler = open(im);
+    im->disk_handler = im->track_handler = handler;
+    return handler != NULL;
 }
 
 #if TARGET == TARGET_shugart
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
-    static const struct image_handler * const image_handlers[] = {
+    static image_open_fn * const image_handlers[] = {
         /* Special handler for dummy slots (empty HxC slot 0). */
-        &dummy_image_handler,
+        dummy_open,
         /* Only put formats here that have a strong identifying header. */
-        &dsk_image_handler,
-        &hfe_image_handler
+        dsk_open,
+        hfe_open
     };
 
     char ext[sizeof(slot->type)+1];
-    const struct image_handler *hint;
+    image_open_fn *hint;
     const struct image_type *type;
     int i;
 
@@ -216,20 +216,20 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
     ext[sizeof(slot->type)] = '\0';
 
     /* Use the extension as a hint to the correct image handler. */
-    for (type = &image_type[0]; type->handler != NULL; type++)
+    for (type = &image_type[0]; type->open != NULL; type++)
         if (image_type_is(type, ext))
             break;
-    hint = type->handler;
+    hint = type->open;
 
     /* Apply host-specific overrides to the hint. */
     switch (ff_cfg.host) {
     case HOST_acorn:
-        if (hint == &adf_image_handler)
-            hint = &adfs_image_handler;
+        if (hint == adf_open)
+            hint = adfs_open;
         break;
     case HOST_tandy_coco:
-        if (hint == &dsk_image_handler)
-            hint = &jvc_image_handler;
+        if (hint == dsk_open)
+            hint = jvc_open;
         break;
     }
 
@@ -237,12 +237,12 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
         if (try_handler(im, slot, cltbl, hint))
             return;
         /* Hint failed. Try a secondary hint. */
-        if (hint == &img_image_handler) {
+        if (hint == img_open) {
             /* IMG,IMA,DSK,OUT -> XDF */
-            hint = &xdf_image_handler;
+            hint = xdf_open;
         } else if (!strcmp(ext, "dsk")) {
             /* DSK -> IMG */
-            hint = &img_image_handler;
+            hint = img_open;
             ext[0] = '\0';
         } else {
             hint = NULL;
@@ -271,9 +271,9 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
     ext[sizeof(slot->type)] = '\0';
 
     /* Apple2 image types are distinguished by extension alone. */
-    for (type = &image_type[0]; type->handler != NULL; type++)
+    for (type = &image_type[0]; type->open != NULL; type++)
         if (image_type_is(type, ext)
-            && try_handler(im, slot, cltbl, type->handler))
+            && try_handler(im, slot, cltbl, type->open))
             return;
 
     /* No handler found: bad image. */
@@ -284,7 +284,7 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 
 void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 {
-    if (try_handler(im, slot, cltbl, &qd_image_handler))
+    if (try_handler(im, slot, cltbl, qd_open))
         return;
 
     /* No handler found: bad image. */

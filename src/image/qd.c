@@ -22,13 +22,15 @@ struct track_header {
 
 static void qd_seek_track(struct image *im, uint16_t track);
 
-static bool_t qd_open(struct image *im)
+static const struct image_handler qd_image_handler;
+
+const struct image_handler *qd_open(struct image *im)
 {
     struct disk_header dh;
 
     F_read(&im->fp, &dh, sizeof(dh), NULL);
     if (strncmp(&dh.sig[3], "QD", 2))
-        return FALSE;
+        return NULL;
 
     im->qd.tb = 1;
     im->nr_cyls = 1;
@@ -46,7 +48,7 @@ static bool_t qd_open(struct image *im)
     /* There is only one track: Seek to it. */
     qd_seek_track(im, 0);
 
-    return TRUE;
+    return &qd_image_handler;
 }
 
 static void qd_seek_track(struct image *im, uint16_t track)
@@ -310,8 +312,7 @@ static bool_t qd_write_track(struct image *im)
     return flush;
 }
 
-const struct image_handler qd_image_handler = {
-    .open = qd_open,
+static const struct image_handler qd_image_handler = {
     .setup_track = qd_setup_track,
     .read_track = qd_read_track,
     .rdata_flux = qd_rdata_flux,

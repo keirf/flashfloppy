@@ -16,7 +16,11 @@ static void raw_setup_track(
     struct image *im, uint16_t track, uint32_t *start_pos);
 static bool_t raw_read_track(struct image *im);
 static bool_t raw_write_track(struct image *im);
-static bool_t raw_open(struct image *im);
+static const struct image_handler *raw_open(struct image *im);
+/* The handlers that the open functions return. */
+static const struct image_handler raw_image_handler;
+static const struct image_handler raw_extend_image_handler;
+static const struct image_handler xdf_image_handler;
 static void mfm_prep_track(struct image *im);
 static bool_t mfm_read_track(struct image *im);
 static void fm_prep_track(struct image *im);
@@ -53,11 +57,11 @@ static struct raw_trk *add_track_layout(
 static uint8_t *init_track_map(struct image *im);
 static void finalise_track_map(struct image *im);
 
-static bool_t ibm_3174_open(struct image *im);
-static bool_t msx_open(struct image *im);
-static bool_t pc_dos_open(struct image *im);
-static bool_t ti99_open(struct image *im);
-static bool_t uknc_open(struct image *im);
+static const struct image_handler *ibm_3174_open(struct image *im);
+static const struct image_handler *msx_open(struct image *im);
+static const struct image_handler *pc_dos_open(struct image *im);
+const struct image_handler *ti99_open(struct image *im);
+static const struct image_handler *uknc_open(struct image *im);
 
 struct bpb;
 static bool_t xdf_check(const struct bpb *bpb);
@@ -194,7 +198,8 @@ static void reset_all_params(struct image *im)
     im->nr_cyls = im->nr_sides = 0;
 }
 
-static bool_t raw_type_open(struct image *im, const struct raw_type *type)
+static const struct image_handler *raw_type_open(
+    struct image *im, const struct raw_type *type)
 {
     struct simple_layout layout = dfl_simple_layout;
     unsigned int nr_cyls, cyl_sz, nr_sides;
@@ -220,7 +225,7 @@ static bool_t raw_type_open(struct image *im, const struct raw_type *type)
                 goto found;
     }
 
-    return FALSE;
+    return NULL;
 
 found:
     im->nr_cyls = nr_cyls;
@@ -279,7 +284,7 @@ static void tag_add_layout(
     }
 }
 
-static bool_t tag_open(struct image *im, char *tag)
+static const struct image_handler *tag_open(struct image *im, char *tag)
 {
     enum {
         IMGCFG_tracks,
@@ -348,7 +353,7 @@ static bool_t tag_open(struct image *im, char *tag)
     ASSERT(sizeof(*heap) <= im->bufs.write_bc.len);
 
     if (!get_img_cfg(&heap->slot))
-        return FALSE;
+        return NULL;
 
     fatfs_from_slot(&heap->file, &heap->slot, FA_READ);
 
@@ -536,17 +541,17 @@ static bool_t tag_open(struct image *im, char *tag)
 
     F_close(&heap->file);
 
-    return match ? raw_open(im) : FALSE;
+    return match ? raw_open(im) : NULL;
 }
 
-static bool_t img_open(struct image *im)
+const struct image_handler *img_open(struct image *im)
 {
     const struct raw_type *type;
     char *dot;
 
     dot = strrchr(im->slot->name, '.');
     if (tag_open(im, dot ? dot+1 : NULL))
-        return TRUE;
+        return &raw_image_handler;
 
     switch (ff_cfg.host) {
     case HOST_akai:
@@ -572,7 +577,7 @@ static bool_t img_open(struct image *im)
         break;
     case HOST_msx:
         if (msx_open(im))
-            return TRUE;
+            return &raw_image_handler;
         goto fallback;
     case HOST_nascom:
         type = nascom_type;
@@ -582,7 +587,7 @@ static bool_t img_open(struct image *im)
         break;
     case HOST_pc_dos:
         if (pc_dos_open(im))
-            return TRUE;
+            return &raw_image_handler;
         goto fallback;
     case HOST_ti99:
         return ti99_open(im);
@@ -595,7 +600,7 @@ static bool_t img_open(struct image *im)
 
     /* Try specified host-specific geometries. */
     if (raw_type_open(im, type))
-        return TRUE;
+        return &raw_image_handler;
 
 fallback:
     /* Fall back to default list. */
@@ -603,12 +608,12 @@ fallback:
     return raw_type_open(im, img_type);
 }
 
-static bool_t adfs_open(struct image *im)
+const struct image_handler *adfs_open(struct image *im)
 {
     return raw_type_open(im, adfs_type);
 }
 
-static bool_t atr_open(struct image *im)
+const struct image_handler *atr_open(struct image *im)
 {
 
 /* Original Atari drives (eg 1050) spin slightly slow (288rpm, -4%). 
@@ -637,7 +642,7 @@ static bool_t atr_open(struct image *im)
 
     F_read(&im->fp, &header, sizeof(header), NULL);
     if (le16toh(header.sig) != 0x0296)
-        return FALSE;
+        return NULL;
     sz = (unsigned int)le16toh(header.size_lo) << 4;
     no = le16toh(header.size_sec) / 256; /* 128 or 256 -> 0 or 1 */
 
@@ -696,7 +701,7 @@ static bool_t atr_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t ibm_3174_open(struct image *im)
+static const struct image_handler *ibm_3174_open(struct image *im)
 {
     struct raw_sec *sec;
     struct raw_trk *trk;
@@ -718,7 +723,7 @@ static bool_t ibm_3174_open(struct image *im)
         break;
     default:
         /* No other disk formats are valid on the IBM 3174. */
-        return FALSE;
+        return NULL;
     }
 
     im->nr_cyls = 80;
@@ -756,18 +761,18 @@ static bool_t ibm_3174_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t d81_open(struct image *im)
+const struct image_handler *d81_open(struct image *im)
 {
     im->hswap = TRUE;
     return raw_type_open(im, d81_type);
 }
 
-static bool_t sf7_open(struct image *im)
+const struct image_handler *sf7_open(struct image *im)
 {
     return raw_type_open(im, sf7_type);
 }
 
-static bool_t st_open(struct image *im)
+const struct image_handler *st_open(struct image *im)
 {
     const struct raw_type *in;
     struct raw_type *out, *st_type;
@@ -796,17 +801,17 @@ static bool_t st_open(struct image *im)
     return raw_type_open(im, st_type);
 }
 
-static bool_t mbd_open(struct image *im)
+const struct image_handler *mbd_open(struct image *im)
 {
     return raw_type_open(im, mbd_type);
 }
 
-static bool_t mgt_open(struct image *im)
+const struct image_handler *mgt_open(struct image *im)
 {
     return raw_type_open(im, img_type);
 }
 
-static bool_t pc98fdi_open(struct image *im)
+const struct image_handler *pc98fdi_open(struct image *im)
 {
     struct {
         uint32_t zero;
@@ -837,7 +842,7 @@ static bool_t pc98fdi_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t pc98hdm_open(struct image *im)
+const struct image_handler *pc98hdm_open(struct image *im)
 {
     return raw_type_open(im, pc98_type);
 }
@@ -867,7 +872,7 @@ static void bpb_read(struct image *im, struct bpb *bpb)
     }
 }
 
-static bool_t msx_open(struct image *im)
+static const struct image_handler *msx_open(struct image *im)
 {
     struct bpb bpb;
     struct simple_layout layout = dfl_simple_layout;
@@ -888,7 +893,7 @@ static bool_t msx_open(struct image *im)
             im->nr_cyls = (im->nr_sides == 1) ? 80 : 40;
             simple_layout(im, &layout);
             if (raw_open(im))
-                return TRUE;
+                return &raw_image_handler;
         }
         break;
     }
@@ -896,13 +901,13 @@ static bool_t msx_open(struct image *im)
     /* Use the MSX-specific list. */
     reset_all_params(im);
     if (raw_type_open(im, msx_type))
-        return TRUE;
+        return &raw_image_handler;
 
     /* Caller falls back to the generic list. */
-    return FALSE;
+    return NULL;
 }
 
-static bool_t pc_dos_open(struct image *im)
+static const struct image_handler *pc_dos_open(struct image *im)
 {
     struct bpb bpb;
     struct simple_layout layout = dfl_simple_layout;
@@ -946,10 +951,10 @@ static bool_t pc_dos_open(struct image *im)
     return raw_open(im);
 
 fail:
-    return FALSE;
+    return NULL;
 }
 
-static bool_t trd_open(struct image *im)
+const struct image_handler *trd_open(struct image *im)
 {
     const struct simple_layout layout = {
         .nr_sectors = 16,
@@ -977,7 +982,7 @@ static bool_t trd_open(struct image *im)
     F_lseek(&im->fp, 0x8e0);
     F_read(&im->fp, &geometry, sizeof(geometry), NULL);
     if (geometry.id != 0x10)
-        return FALSE;
+        return NULL;
 
     /* Use type identifier as a geometry hint. Default to double sided. */
     switch (geometry.type) {
@@ -1003,7 +1008,7 @@ static bool_t trd_open(struct image *im)
     tot_trks = tot_secs >> 4;
     im->nr_cyls = (tot_trks + im->nr_sides - 1) / im->nr_sides;
     if (im->nr_cyls == 0)
-        return FALSE;
+        return NULL;
 
     simple_layout(im, &layout);
 
@@ -1012,10 +1017,11 @@ static bool_t trd_open(struct image *im)
     if (tot_trks & (im->nr_sides-1))
         im->img.trk_map[tot_trks] = SIMPLE_EMPTY_TRK;
 
-    return raw_open(im);
+    raw_open(im);
+    return &raw_extend_image_handler;
 }
 
-static bool_t opd_open(struct image *im)
+const struct image_handler *opd_open(struct image *im)
 {
     const struct simple_layout layout = {
         .nr_sectors = 18,
@@ -1040,14 +1046,14 @@ static bool_t opd_open(struct image *im)
         im->nr_sides = 2;
         break;
     default:
-        return FALSE;
+        return NULL;
     }
 
     simple_layout(im, &layout);
     return raw_open(im);
 }
 
-static bool_t dfs_open(struct image *im)
+static const struct image_handler *dfs_open(struct image *im)
 {
     const struct simple_layout layout = {
         .nr_sectors = 10,
@@ -1067,19 +1073,19 @@ static bool_t dfs_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t ssd_open(struct image *im)
+const struct image_handler *ssd_open(struct image *im)
 {
     im->nr_sides = 1;
-    return dfs_open(im);
+    return dfs_open(im) ? &raw_extend_image_handler : NULL;
 }
 
-static bool_t dsd_open(struct image *im)
+const struct image_handler *dsd_open(struct image *im)
 {
     im->nr_sides = 2;
-    return dfs_open(im);
+    return dfs_open(im) ? &raw_extend_image_handler : NULL;
 }
 
-static bool_t sdu_open(struct image *im)
+const struct image_handler *sdu_open(struct image *im)
 {
     struct {
         uint8_t app[21], ver[5];
@@ -1102,7 +1108,7 @@ static bool_t sdu_open(struct image *im)
         || ((layout.nr_sectors != 9)
             && (layout.nr_sectors != 18)
             && (layout.nr_sectors != 36)))
-        return FALSE;
+        return NULL;
 
     /* Fill in the rest of the geometry. */
     layout.no = 2; /* 512-byte sectors */
@@ -1115,7 +1121,7 @@ static bool_t sdu_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t ti99_open(struct image *im)
+const struct image_handler *ti99_open(struct image *im)
 {
     struct vib {
         uint8_t name[10];
@@ -1133,7 +1139,7 @@ static bool_t ti99_open(struct image *im)
 
     /* Must be a multiple of 256 sectors. */
     if ((fsize % 256) != 0)
-        return FALSE;
+        return NULL;
     fsize /= 256;
 
     /* Check for 3-sector footer containing a bad sector map. We ignore it. */
@@ -1142,7 +1148,7 @@ static bool_t ti99_open(struct image *im)
 
     /* Main image must be non-zero size. */
     if (fsize == 0)
-        return FALSE;
+        return NULL;
 
     /* Check for Volume Information Block in sector 0. */
     F_read(&im->fp, &vib, sizeof(vib), NULL);
@@ -1226,7 +1232,7 @@ static bool_t ti99_open(struct image *im)
 
     }
 
-    return FALSE;
+    return NULL;
 
 fm:
     layout.is_fm = TRUE;
@@ -1235,11 +1241,11 @@ mfm:
     return raw_open(im);
 }
 
-static bool_t uknc_open(struct image *im)
+static const struct image_handler *uknc_open(struct image *im)
 {
     struct raw_trk *trk;
     unsigned int i;
-    bool_t ok;
+    const struct image_handler *ok;
 
     /* All tracks have special extra sync marks. */
     im->img.post_crc_syncs = 1;
@@ -1259,7 +1265,7 @@ static bool_t uknc_open(struct image *im)
     return ok;
 }
 
-static bool_t jvc_open(struct image *im)
+const struct image_handler *jvc_open(struct image *im)
 {
     struct jvc {
         uint8_t spt, sides, ssize_code, sec_id, attr;
@@ -1275,7 +1281,7 @@ static bool_t jvc_open(struct image *im)
     F_read(&im->fp, &jvc,
            min_t(unsigned, im->img.base_off, sizeof(jvc)), NULL);
     if (jvc.attr || ((jvc.sides != 1) && (jvc.sides != 2)) || (jvc.spt == 0))
-        return FALSE;
+        return NULL;
 
     im->nr_sides = jvc.sides;
     layout.interleave = 3; /* RSDOS likes a 3:1 interleave (ref. xroar) */
@@ -1302,7 +1308,7 @@ static bool_t jvc_open(struct image *im)
     return raw_open(im);
 }
 
-static bool_t vdk_open(struct image *im)
+const struct image_handler *vdk_open(struct image *im)
 {
     struct vdk {
         char id[2];
@@ -1326,7 +1332,7 @@ static bool_t vdk_open(struct image *im)
     /* Check the image header. */
     F_read(&im->fp, &vdk, sizeof(vdk), NULL);
     if (strncmp(vdk.id, "dk", 2) || le16toh(vdk.hlen < 12))
-        return FALSE;
+        return NULL;
 
     /* Read (cyls, heads) geometry from the image header. */
     im->nr_cyls = vdk.cyls;
@@ -1334,7 +1340,7 @@ static bool_t vdk_open(struct image *im)
 
     /* Check the geometry. */
     if ((im->nr_sides != 1) && (im->nr_sides != 2))
-        return FALSE;
+        return NULL;
 
     im->img.base_off = le16toh(vdk.hlen);
 
@@ -1370,7 +1376,7 @@ static bool_t xdf_check(const struct bpb *bpb)
         && (bpb->tot_sec == (2*80*bpb->sec_per_track));
 }
 
-static bool_t xdf_open(struct image *im)
+const struct image_handler *xdf_open(struct image *im)
 {
     const static struct xdf_format formats[] = {
         { /* 3.5 HD */
@@ -1411,13 +1417,13 @@ static bool_t xdf_open(struct image *im)
 
     bpb_read(im, &bpb);
     if (!xdf_check(&bpb))
-        return FALSE;
+        return NULL;
 
     fmt = formats;
     for (i = 0; i < ARRAY_SIZE(formats); i++)
         if (bpb.sec_per_track == fmt->logical_sec_per_track)
             goto found;
-    return FALSE;
+    return NULL;
 
 found:
     rootdir_secs = bpb.rootdir_ents/16;
@@ -1426,7 +1432,7 @@ found:
         ((bpb.rootdir_ents & 15) != 0)
         /* Fat and Rootdir must fit in cylinder 0. */
         || (8 + 1 + fat_secs + rootdir_secs) > (2 * fmt->sec_per_track0))
-        return FALSE;
+        return NULL;
 
     im->nr_sides = 2;
     im->nr_cyls = 80;
@@ -1514,7 +1520,8 @@ found:
         for (j = 0; j < fmt->sec_per_trackN; j++)
             *off++ = (uint32_t)fmt->cylN_sec[i][j].offs << 8;
 
-    return raw_open(im);
+    raw_open(im);
+    return &xdf_image_handler;
 }
 
 /* Sets up track delay and file sector-offsets table before calling 
@@ -1541,88 +1548,14 @@ static void xdf_setup_track(
     raw_setup_track(im, track, start_pos);
 }
 
-const struct image_handler img_image_handler = {
-    .open = img_open,
+static const struct image_handler raw_image_handler = {
     .setup_track = raw_setup_track,
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
     .write_track = raw_write_track,
 };
 
-const struct image_handler d81_image_handler = {
-    .open = d81_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler sf7_image_handler = {
-    .open = sf7_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler st_image_handler = {
-    .open = st_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler adfs_image_handler = {
-    .open = adfs_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler atr_image_handler = {
-    .open = atr_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler mbd_image_handler = {
-    .open = mbd_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler mgt_image_handler = {
-    .open = mgt_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler pc98fdi_image_handler = {
-    .open = pc98fdi_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler pc98hdm_image_handler = {
-    .open = pc98hdm_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler trd_image_handler = {
-    .open = trd_open,
+static const struct image_handler raw_extend_image_handler = {
     .extend = raw_extend,
     .setup_track = raw_setup_track,
     .read_track = raw_read_track,
@@ -1630,66 +1563,7 @@ const struct image_handler trd_image_handler = {
     .write_track = raw_write_track,
 };
 
-const struct image_handler opd_image_handler = {
-    .open = opd_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler ssd_image_handler = {
-    .open = ssd_open,
-    .extend = raw_extend,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler dsd_image_handler = {
-    .open = dsd_open,
-    .extend = raw_extend,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler sdu_image_handler = {
-    .open = sdu_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler jvc_image_handler = {
-    .open = jvc_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler vdk_image_handler = {
-    .open = vdk_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler ti99_image_handler = {
-    .open = ti99_open,
-    .setup_track = raw_setup_track,
-    .read_track = raw_read_track,
-    .rdata_flux = bc_rdata_flux,
-    .write_track = raw_write_track,
-};
-
-const struct image_handler xdf_image_handler = {
-    .open = xdf_open,
+static const struct image_handler xdf_image_handler = {
     .setup_track = xdf_setup_track,
     .read_track = raw_read_track,
     .rdata_flux = bc_rdata_flux,
@@ -1903,7 +1777,7 @@ static void raw_setup_track(
     }
 }
 
-static bool_t raw_open(struct image *im)
+static const struct image_handler *raw_open(struct image *im)
 {
     if (im->step == 0)
         im->step = 1;
@@ -1914,7 +1788,7 @@ static bool_t raw_open(struct image *im)
     /* Initialise write_bc_ticks (used by floppy_insert to set outp_hden). */
     raw_seek_track(im, 0, 0, 0);
 
-    return TRUE;
+    return &raw_image_handler;
 }
 
 void process_data(struct image *im, void *p, unsigned int len)
