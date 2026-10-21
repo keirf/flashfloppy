@@ -6,6 +6,9 @@ export FW_VER := $(VER)
 
 export PYTHON ?= $(firstword $(foreach p,python3 python py,$(if \
     $(shell command -v $(p) 2>/dev/null),$(p))))
+ifndef PYTHON
+$(error No python3, python or py found: give PYTHON=<command>)
+endif
 
 export ROOT := $(CURDIR)
 

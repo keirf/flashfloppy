@@ -23,8 +23,12 @@ OUT := $(abspath $(O))/out/$(NAME)
 
 CC ?= cc
 OBJCOPY ?= objcopy
+
 PYTHON ?= $(firstword $(foreach p,python3 python py,$(if \
     $(shell command -v $(p) 2>/dev/null),$(p))))
+ifndef PYTHON
+$(error No python3, python or py found: give PYTHON=<command>)
+endif
 
 VER ?= $(shell git -C $(ROOT) rev-parse --short HEAD)
 
