@@ -2463,7 +2463,7 @@ static int key_of_char(wint_t ch)
     } map[] = {
         { 0x439, 'q' }, { 0x419, 'Q' }, { 0x446, 'w' }, { 0x426, 'W' },
         { 0x443, 'e' }, { 0x423, 'E' },
-        { 0x445, '[' }, { 0x44a, ']' },
+        { 0x445, '[' }, { 0x425, '[' }, { 0x44a, ']' }, { 0x42a, ']' },
         { 0x2116, '#' } /* the numero sign, Shift+3 */
     };
     unsigned int i;
