@@ -549,9 +549,10 @@ void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 {
     if (unit == 0) {
         struct drive *drv = &drive;
+        /* Set cylinder and TRK0 atomically. */
+        IRQ_global_disable();
         drv->cyl = cyl;
-        if (cyl == 0)
-            drive_change_output(drv, outp_trk0, TRUE);
+        drive_change_output(drv, outp_trk0, cyl==0); /* enables IRQs */
     }
 }
 
