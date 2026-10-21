@@ -33,7 +33,7 @@ struct exception_frame {
 #define cpu_sync() asm volatile("dsb; isb" ::: "memory")
 #define cpu_relax() asm volatile ("nop" ::: "memory")
 
-#define sv_call(imm) asm volatile ( "svc %0" : : "i" (imm) )
+#define sv_call(imm) asm volatile ( "svc %0" : : "i" (imm) : "memory" )
 
 #define read_special(reg) ({                        \
     uint32_t __x;                                   \
@@ -41,9 +41,9 @@ struct exception_frame {
     __x;                                            \
 })
 
-#define write_special(reg,val) ({                   \
-    uint32_t __x = (uint32_t)(val);                 \
-    asm volatile ("msr "#reg",%0" :: "r" (__x) :);  \
+#define write_special(reg,val) ({                           \
+    uint32_t __x = (uint32_t)(val);                         \
+    asm volatile ("msr "#reg",%0" :: "r" (__x) : "memory"); \
 })
 
 /* CONTROL[1] == 0 => running on Master Stack (Exception Handler mode). */
