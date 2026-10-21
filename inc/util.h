@@ -146,8 +146,8 @@ extern uint8_t lcd_columns, lcd_rows;
 
 /* FF OSD (On Screen Display) */
 extern bool_t has_osd;
-extern uint8_t osd_buttons_tx; /* Gotek -> FF_OSD */
-extern uint8_t osd_buttons_rx; /* FF_OSD -> Gotek */
+extern volatile uint8_t osd_buttons_tx; /* Gotek -> FF_OSD */
+extern volatile uint8_t osd_buttons_rx; /* FF_OSD -> Gotek */
 
 /* USB stack processing */
 void usbh_msc_init(void);

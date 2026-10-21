@@ -45,8 +45,8 @@ struct packed i2c_osd_info {
 };
 
 bool_t has_osd;
-uint8_t osd_buttons_tx;
-uint8_t osd_buttons_rx;
+volatile uint8_t osd_buttons_tx;
+volatile uint8_t osd_buttons_rx;
 #define OSD_no    0
 #define OSD_read  1
 #define OSD_write 2
