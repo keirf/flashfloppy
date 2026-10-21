@@ -533,6 +533,9 @@ static void IRQ_WGATE(void)
     }
 }
 
+/* A rotary edge seen at WGATE's priority, for IRQ_MOTOR_CHGRST_rotary(). */
+static bool_t rotary_changed;
+
 static void IRQ_WGATE_rotary(void)
 {
     uint32_t rot_mask = board_rotary_exti_mask, pr = exti->pr;
@@ -543,8 +546,13 @@ static void IRQ_WGATE_rotary(void)
     if (pr & m(pin_wgate))
         IRQ_WGATE();
 
-    if (pr & rot_mask)
-        IRQ_rotary();
+    /* The button timer decodes the rotary encoder too. Defer decode tothe
+     * MOTOR/CHGRST IRQ, which runs at timer priority, to avoid races. */
+    if (pr & rot_mask) {
+        rotary_changed = TRUE;
+        barrier(); /* set the flag /then/ pend the irq */
+        IRQx_set_pending(MOTOR_CHGRST_IRQ);
+    }
 }
 
 static void IRQ_MOTOR(struct drive *drv)
@@ -600,10 +608,11 @@ static void IRQ_wdata_capture(void)
 static void IRQ_MOTOR_CHGRST_rotary(void)
 {
     struct drive *drv = &drive;
-    bool_t changed = drv->motor.changed;
+    bool_t changed = drv->motor.changed, rot_changed;
     uint32_t rot_mask = board_rotary_exti_mask, pr = exti->pr;
 
     drv->motor.changed = FALSE;
+    rot_changed = xchg(&rotary_changed, FALSE);
 
     /* Latch and clear PR[15:10] */
     exti->pr = pr & 0xfc00;
@@ -616,7 +625,7 @@ static void IRQ_MOTOR_CHGRST_rotary(void)
         || changed)
         IRQ_CHGRST(drv);
 
-    if (pr & rot_mask)
+    if ((pr & rot_mask) || rot_changed)
         IRQ_rotary();
 }
 
