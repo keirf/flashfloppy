@@ -21,6 +21,8 @@ void drive_add(const char *name, const void *data, uint32_t len);
  * number of its fragments. */
 unsigned int drive_add_fragmented(const char *name, const void *data,
                                   uint32_t len);
+/* Adds a file of every cluster left, so that no file can grow. */
+void drive_fill(const char *name);
 /* Reads a file back into @buf: returns its length. */
 uint32_t drive_get(const char *name, void *buf, uint32_t max);
 
