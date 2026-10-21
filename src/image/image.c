@@ -217,7 +217,7 @@ void image_open(struct image *im, struct slot *slot, DWORD *cltbl)
 
     /* Use the extension as a hint to the correct image handler. */
     for (type = &image_type[0]; type->handler != NULL; type++)
-        if (!strcmp(ext, type->ext))
+        if (image_type_is(type, ext))
             break;
     hint = type->handler;
 
