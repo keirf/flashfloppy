@@ -191,6 +191,23 @@ static void print_status(void)
         hd44780_get_view(&cv);
         printf("display: HD44780 %ux%u, ROM %s\n", cv.cols, cv.rows,
                lcd_rom_name[cv.rom]);
+    } else if (DISP_IS_LED(config.display)) {
+        struct led_view lv;
+        char text[16];
+        unsigned int i;
+        led_get_view(&lv);
+        led_text(&lv, text, sizeof(text));
+        printf("display: %s %u digits",
+               (config.display == DISP_tm1651) ? "TM1651" : "74HC164",
+               lv.nr_digits);
+        /* The shift registers have neither a switch nor a brightness. */
+        if (config.display == DISP_tm1651)
+            printf(", %s, brightness %u", lv.on ? "on" : "off",
+                   lv.brightness);
+        printf(", showing \"%s\", segments", text);
+        for (i = 0; i < lv.nr_digits; i++)
+            printf(" %02x", lv.seg[i]);
+        putchar('\n');
     } else {
         oled_get_view(&v, px);
         printf("display: %s 128x%u, driven 128x%u\n", v.chip, v.height,
