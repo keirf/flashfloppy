@@ -31,10 +31,12 @@ static uint32_t amigados_checksum(void *dat, unsigned int bytes)
     return csum;
 }
 
-static bool_t adf_open(struct image *im)
+static const struct image_handler adf_image_handler;
+
+const struct image_handler *adf_open(struct image *im)
 {
     if ((f_size(&im->fp) % (2*11*512)) || (f_size(&im->fp) == 0))
-        return FALSE;
+        return NULL;
 
     im->nr_sides = 2;
     im->adf.nr_secs = 11;
@@ -60,7 +62,7 @@ static bool_t adf_open(struct image *im)
     volume_cache_init(im->bufs.write_data.p + MAX_WR_BATCH * 512,
                       im->bufs.write_data.p + im->bufs.write_data.len);
 
-    return TRUE;
+    return &adf_image_handler;
 }
 
 static void adf_setup_track(
@@ -339,8 +341,7 @@ static bool_t adf_write_track(struct image *im)
     return flush;
 }
 
-const struct image_handler adf_image_handler = {
-    .open = adf_open,
+static const struct image_handler adf_image_handler = {
     .setup_track = adf_setup_track,
     .read_track = adf_read_track,
     .rdata_flux = bc_rdata_flux,

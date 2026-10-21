@@ -73,7 +73,9 @@ enum {
 
 static void hfe_seek_track(struct image *im, uint16_t track);
 
-static bool_t hfe_open(struct image *im)
+static const struct image_handler hfe_image_handler;
+
+const struct image_handler *hfe_open(struct image *im)
 {
     struct disk_header dhdr;
     uint16_t bitrate;
@@ -81,14 +83,14 @@ static bool_t hfe_open(struct image *im)
     F_read(&im->fp, &dhdr, sizeof(dhdr), NULL);
     if (!strncmp(dhdr.sig, "HXCHFEV3", sizeof(dhdr.sig))) {
         if (dhdr.formatrevision > 0)
-            return FALSE;
+            return NULL;
         im->hfe.is_v3 = TRUE;
     } else if (!strncmp(dhdr.sig, "HXCPICFE", sizeof(dhdr.sig))) {
         if (dhdr.formatrevision > 1)
-            return FALSE;
+            return NULL;
         im->hfe.is_v3 = FALSE;
     } else {
-        return FALSE;
+        return NULL;
     }
 
     /* Sanity-check the header fields. */
@@ -96,7 +98,7 @@ static bool_t hfe_open(struct image *im)
     if ((dhdr.nr_tracks == 0)
         || (dhdr.nr_sides < 1) || (dhdr.nr_sides > 2)
         || (bitrate == 0)) {
-        return FALSE;
+        return NULL;
     }
 
     im->hfe.double_step = (ff_cfg.hfe_step ? (ff_cfg.hfe_step == 2)
@@ -128,7 +130,7 @@ static bool_t hfe_open(struct image *im)
         break;
     default:
         printk("HFE unfit: non-GCR\n");
-        return FALSE;
+        return NULL;
     }
 #else
     /* A Shugart host reads anything *but* Apple II GCR. */
@@ -136,13 +138,13 @@ static bool_t hfe_open(struct image *im)
     case ENC_AppleII_GCR1:
     case ENC_AppleII_GCR2:
         printk("HFE unfit: GCR\n");
-        return FALSE;
+        return NULL;
     default:
         break;
     }
 #endif
 
-    return TRUE;
+    return &hfe_image_handler;
 }
 
 static void hfe_seek_track(struct image *im, uint16_t track)
@@ -530,8 +532,7 @@ static bool_t hfe_write_track(struct image *im)
     return flush;
 }
 
-const struct image_handler hfe_image_handler = {
-    .open = hfe_open,
+static const struct image_handler hfe_image_handler = {
     .setup_track = hfe_setup_track,
     .read_track = hfe_read_track,
     .rdata_flux = hfe_rdata_flux,

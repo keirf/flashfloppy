@@ -69,7 +69,9 @@ static struct tib *tib_p(struct image *im)
     return (struct tib *)((char *)rd->p + 256);
 }
 
-static bool_t dsk_open(struct image *im)
+static const struct image_handler dsk_image_handler;
+
+const struct image_handler *dsk_open(struct image *im)
 {
     struct dib *dib = dib_p(im);
 
@@ -87,13 +89,13 @@ static bool_t dsk_open(struct image *im)
         /* extended DSK */
         im->dsk.extended = 1;
     } else {
-        return FALSE;
+        return NULL;
     }
 
     /* Sanity check the disk parameters. */
     if ((dib->nr_sides == 0) || (dib->nr_sides > 2)
         || (dib->nr_tracks * dib->nr_sides > 200)) {
-        return FALSE;
+        return NULL;
     }
 
     im->nr_cyls = dib->nr_tracks;
@@ -108,7 +110,7 @@ static bool_t dsk_open(struct image *im)
     volume_cache_init(im->bufs.write_data.p + 512 + CHUNK_SIZE,
                       im->bufs.write_data.p + im->bufs.write_data.len);
 
-    return TRUE;
+    return &dsk_image_handler;
 }
 
 static void dsk_seek_track(
@@ -616,8 +618,7 @@ static bool_t dsk_write_track(struct image *im)
     return flush;
 }
 
-const struct image_handler dsk_image_handler = {
-    .open = dsk_open,
+static const struct image_handler dsk_image_handler = {
     .setup_track = dsk_setup_track,
     .read_track = dsk_read_track,
     .rdata_flux = bc_rdata_flux,

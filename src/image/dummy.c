@@ -9,11 +9,14 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-static bool_t dummy_open(struct image *im)
+extern const struct image_handler dummy_image_handler;
+
+const struct image_handler *dummy_open(struct image *im)
 {
     /* Check for dummy slot info (zero-sized, invalid start cluster). */
     im->nr_sides = 1;
-    return (im->fp.obj.sclust == ~0u) && (f_size(&im->fp) == 0);
+    return ((im->fp.obj.sclust == ~0u) && (f_size(&im->fp) == 0))
+        ? &dummy_image_handler : NULL;
 }
 
 static void dummy_setup_track(
@@ -52,7 +55,6 @@ static bool_t dummy_write_track(struct image *im)
 }
 
 const struct image_handler dummy_image_handler = {
-    .open = dummy_open,
     .setup_track = dummy_setup_track,
     .read_track = dummy_read_track,
     .rdata_flux = dummy_rdata_flux,

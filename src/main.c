@@ -248,11 +248,11 @@ static void display_write_slot(bool_t nav_mode)
     } else if (!(cfg.slot.attributes & AM_DIR)) {
         char ext[8];
         filename_extension(cfg.slot.name, ext, sizeof(ext));
-        for (type = &image_type[0]; type->handler != NULL; type++)
+        for (type = &image_type[0]; type->open != NULL; type++)
             if (image_type_is(type, ext)
                 || image_type_is(type, cfg.slot.type))
                 break;
-        if (type->handler != NULL) {
+        if (type->open != NULL) {
             for (i = 0; i < sizeof(typename) - 1; i++)
                 typename[i] = toupper(type->ext[i]);
         }

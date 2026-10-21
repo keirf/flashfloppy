@@ -230,7 +230,6 @@ static inline struct write *get_write(struct image *im, uint16_t idx)
 }
 
 struct image_handler {
-    bool_t (*open)(struct image *im);
     FSIZE_t (*extend)(struct image *im);
     void (*setup_track)(
         struct image *im, uint16_t track, uint32_t *start_pos);
@@ -239,10 +238,13 @@ struct image_handler {
     bool_t (*write_track)(struct image *im);
 };
 
+/* Opens an image and returns the handler that serves it, or NULL. */
+typedef const struct image_handler *image_open_fn(struct image *im);
+
 /* List of supported image types. */
 extern const struct image_type {
     char ext[4]; /* NUL-ended if shorter */
-    const struct image_handler *handler;
+    image_open_fn *open;
 } image_type[];
 
 /* Whether @ext, NUL-ended, is the extension of image type @type. */
