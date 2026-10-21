@@ -65,8 +65,8 @@ void IRQ_33(void) __attribute__((alias("IRQ_i2c_event")));
 #define i2c_rx_dma dma1->ch[DMA_RX_CH-1]
 
 bool_t has_osd;
-uint8_t osd_buttons_tx;
-uint8_t osd_buttons_rx;
+volatile uint8_t osd_buttons_tx;
+volatile uint8_t osd_buttons_rx;
 #define OSD_no    0
 #define OSD_read  1
 #define OSD_write 2
