@@ -350,8 +350,8 @@ static void led_7seg_update_track(bool_t force)
             display_write_slot(FALSE);
         showing_track = FALSE;
         active_countdown = 0;
-        if (display_state == LED_TRACK)
-            display_state = LED_TRACK_QUIESCENT;
+        /* Atomic: Avoids racing a button press that changes the state. */
+        cmpxchg(&display_state, LED_TRACK, LED_TRACK_QUIESCENT);
         return;
     }
 
