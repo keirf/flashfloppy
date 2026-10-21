@@ -188,8 +188,9 @@ static unsigned int add_file(const char *name, const void *data,
         for (j = 0; j < 2; j++)
             clus[j] = scatter ? first + 2*(nr-1-(i+j)) : first + i + j;
         put_fat(clus[0], (i + 1 < nr) ? clus[1] : 0xffff);
-        memcpy(&drive[(DATA_START + (clus[0]-2)*CLUS_SECS) * SECSZ],
-               p + i*CLUS_SZ, min_t(uint32_t, CLUS_SZ, len - i*CLUS_SZ));
+        if (p != NULL)
+            memcpy(&drive[(DATA_START + (clus[0]-2)*CLUS_SECS) * SECSZ],
+                   p + i*CLUS_SZ, min_t(uint32_t, CLUS_SZ, len - i*CLUS_SZ));
     }
     next_clus += span;
     nr_files++;
@@ -205,6 +206,11 @@ unsigned int drive_add_fragmented(const char *name, const void *data,
                                   uint32_t len)
 {
     return add_file(name, data, len, TRUE);
+}
+
+void drive_fill(const char *name)
+{
+    add_file(name, NULL, (NR_CLUS + 2 - next_clus) * CLUS_SZ, FALSE);
 }
 
 static void drive_mount(void)
