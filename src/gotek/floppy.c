@@ -326,7 +326,7 @@ static void update_SELA_irq(bool_t amiga_hd_id)
 
     /* Create a new tail-call instruction for the entry stub. */
     opcode = handler - (entry + OFF*2 + 4);
-    opcode = 0xe000 | (opcode >> 1);
+    opcode = 0xe000 | ((opcode >> 1) & 0x7ff);
 
     /* If the tail-call instruction has changed, modify the entry stub. */
     if (unlikely(((uint16_t *)entry)[OFF] != opcode)) {
