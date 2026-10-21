@@ -135,6 +135,7 @@ void delay_ticks(unsigned int ticks)
     unsigned int diff, cur, prev = stk->val;
 
     for (;;) {
+        cpu_relax();
         cur = stk->val;
         diff = (prev - cur) & STK_MASK;
         if (ticks <= diff)
