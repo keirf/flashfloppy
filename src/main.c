@@ -3238,11 +3238,16 @@ static void maybe_show_version(void)
     /* Iterate through the dotted sections of the version number. */
     for (p = fw_ver; p != NULL; p = np ? np+1 : NULL) {
         np = strchr(p, '.');
-        memset(msg, ' ', sizeof(msg));
-        len = min_t(int, np ? np - p : strnlen(p, sizeof(msg)), sizeof(msg));
-        memcpy(&msg[sizeof(msg) - len], p, len);
-        led_7seg_write_string(msg);
-        delay_ms(1000);
+        len = np ? np - p : strlen(p);
+        while (len) {
+            int l = min_t(int, len, led_7seg_nr_digits());
+            memset(msg, ' ', sizeof(msg));
+            memcpy(msg, p, l);
+            led_7seg_write_string(msg);
+            delay_ms(1000);
+            len -= l;
+            p += l;
+        }
     }
 
     banner();
