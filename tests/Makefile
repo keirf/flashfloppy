@@ -30,8 +30,14 @@ O ?= $(ROOT)
 OUT := $(abspath $(O))/out/$(NAME)
 
 CC ?= cc
-PYTHON ?= $(firstword $(foreach p,python3 python py,$(if \
-    $(shell command -v $(p) 2>/dev/null),$(p))))
+
+ifndef PYTHON
+PYTHON := $(firstword $(foreach p,python3 python py,$(if \
+	    $(shell command -v $(p) 2>/dev/null),$(p))))
+endif
+ifeq ($(strip $(PYTHON)),)
+$(error No python3, python or py found: give PYTHON=<command>)
+endif
 
 ifneq ($(VERBOSE),1)
 Q := @
