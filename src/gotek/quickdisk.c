@@ -150,8 +150,8 @@ static void IRQ_WGATE_rotary(void)
     if (pr & m(pin_wgate))
         IRQ_WGATE();
 
-    /* The button timer decodes the rotary encoder too. Defer decode tothe
-     * MOTOR/CHGRST IRQ, which runs at timer priority, to avoid races. */
+    /* The button timer decodes the rotary encoder too. Defer decode to the
+     * rotary IRQ, which runs at timer priority, to avoid races. */
     if (pr & rot_mask)
         IRQx_set_pending(rotary_irq);
 }
