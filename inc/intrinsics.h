@@ -161,6 +161,54 @@ static always_inline unsigned long __cmpxchg(
                                    (unsigned long)(n),  \
                                    sizeof(*(ptr))))
 
+extern void __bad_xchg(volatile void *ptr, int size);
+
+static always_inline unsigned long __xchg(
+    volatile void *ptr, unsigned long new, int size)
+{
+    unsigned long oldval, res;
+
+    switch (size) {
+    case 1:
+        do {
+            asm volatile("    ldrexb %1,[%2]      \n"
+                         "    strexb %0,%3,[%2]   \n"
+                         : "=&r" (res), "=&r" (oldval)
+                         : "r" (ptr), "r" (new)
+                         : "memory", "cc");
+        } while (res);
+        break;
+    case 2:
+        do {
+            asm volatile("    ldrexh %1,[%2]      \n"
+                         "    strexh %0,%3,[%2]   \n"
+                         : "=&r" (res), "=&r" (oldval)
+                         : "r" (ptr), "r" (new)
+                         : "memory", "cc");
+        } while (res);
+        break;
+    case 4:
+        do {
+            asm volatile("    ldrex  %1,[%2]      \n"
+                         "    strex %0,%3,[%2]    \n"
+                         : "=&r" (res), "=&r" (oldval)
+                         : "r" (ptr), "r" (new)
+                         : "memory", "cc");
+        } while (res);
+        break;
+    default:
+        __bad_xchg(ptr, size);
+        oldval = 0;
+    }
+
+    return oldval;
+}
+
+#define xchg(ptr,n)                                     \
+    ((__typeof__(*(ptr)))__xchg((ptr),                  \
+                                   (unsigned long)(n),  \
+                                   sizeof(*(ptr))))
+
 /*
  * Local variables:
  * mode: C

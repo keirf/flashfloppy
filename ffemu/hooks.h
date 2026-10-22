@@ -66,6 +66,7 @@ static inline uint32_t _rbit32(uint32_t x)
 }
 
 #define cmpxchg(ptr,o,n) __sync_val_compare_and_swap(ptr, o, n)
+#define xchg(ptr,n) __atomic_exchange_n(ptr, n, __ATOMIC_RELAXED)
 
 /* Interrupt controller: route to the emulated one. */
 #undef IRQx_enable
