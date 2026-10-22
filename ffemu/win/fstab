@@ -1,0 +1,5 @@
+# The MSYS2 runtime's mount table for a folder made by mk_dist.sh: the folder
+# is the root, the Windows drives are /c/, /d/ and so on, and /tmp is the
+# user's temporary folder, as in an MSYS2 installation.
+none / cygdrive binary,posix=0,noacl,user 0 0
+none /tmp usertemp binary,posix=0,noacl 0 0
