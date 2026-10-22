@@ -36,6 +36,26 @@ configuration generators of the firmware build) and the wide-character
 runtime DLL is linked statically, so the program built there also runs in any
 Git Bash.
 
+For a Windows with no MSYS2, Cygwin or Git Bash, `ffemu/win/mk_dist.sh <out>
+<folder>`, run in the MSYS2 shell after the build, makes `<folder>` from the
+programs in `<out>`, the build's `out/`: the programs in `bin/`; the runtime
+DLL, its console helper, without which a program in mintty shows a console
+window, and MSYS2's mintty, the terminal of Git Bash and MSYS2, in
+`runtime/usr/bin/`, so that `runtime/` is the runtime's root, with its mount
+table in `runtime/etc/fstab`, which makes `/tmp` the Windows temporary folder,
+the terminal types in `runtime/usr/share/terminfo/`, without which the
+runtime's ncurses cannot start, and the licenses; and a `.cmd` launcher for
+each program, named after it, onto which a folder or an image can be dropped;
+each names its program and calls `bin/launch.cmd`, which runs it in that mintty
+on the folder's runtime, the program finding the runtime's DLL on `PATH`,
+`bin/` having none. The program keeps its settings and log in
+`bin/<program>/`, and mintty its own in `bin/mintty/config`, so that nothing
+goes into the user's profile folder. That file starts with `xterm-256color`,
+120x50 and the VGA palette, mintty's theme `vga`, its themes
+being in `runtime/usr/share/mintty/themes/`, and has mintty take Braille, which
+its font lacks, from Segoe UI Symbol at the font's size, where Windows'
+fallback takes the same font shrunk to three quarters.
+
 ## Running
 
     ffemu [<directory> | <image> | <disk>]
