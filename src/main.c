@@ -2720,7 +2720,7 @@ static void folder_menu(void)
 
 static int floppy_main(void *unused)
 {
-    FRESULT fres;
+    FRESULT fres = FR_OK;
     uint8_t b = 0;
     uint32_t i;
     bool_t exited_empty_folder = FALSE;
