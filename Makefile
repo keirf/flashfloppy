@@ -179,21 +179,3 @@ dist: FORCE all
 	cp -a scripts/edsk* $(t)/scripts/
 	cp -a scripts/mk_hfe.py $(t)/scripts/
 	cd $(OUT) && zip -r $(PROJ)-$(VER).zip $(PROJ)-$(VER)
-
-BAUD=115200
-DEV=/dev/ttyUSB0
-SUDO=sudo
-STM32FLASH=stm32flash
-T=$(OUT)/$(target)/target.hex
-
-ocd: FORCE all
-	$(PYTHON) scripts/openocd/flash.py $(T)
-
-flash: FORCE all
-	$(SUDO) $(STM32FLASH) -b $(BAUD) -w $(T) $(DEV)
-
-start: FORCE
-	$(SUDO) $(STM32FLASH) -b $(BAUD) -g 0 $(DEV)
-
-serial: FORCE
-	$(SUDO) miniterm.py $(DEV) 3000000
