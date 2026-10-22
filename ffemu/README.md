@@ -363,6 +363,18 @@ them or a row of the LCD; `segments` for the LED's segments, such as
 printing nothing, so a reset to come, such as the one after reading a new
 `FF.CFG`, is slept through.
 
+The integration tests in `tests/integration/` drive the ffemu programs by these
+commands, from Python 3 and its standard library alone. `make` runs them after
+building the programs, as it runs the unit tests, once the programs or the
+tests have changed since the tests last passed, a failing test stopping the
+build; `make integration-tests` does that alone, and
+`make -C tests/integration` runs every test. To run some of them, run
+`python3 -m unittest -v` in `tests/integration/` with the names of modules,
+classes or tests, such as `test_version` or
+`test_flash.Flash.test_unknown_interface`, and `FFEMU_OUT=<dir>/out` for
+programs built with `O=<dir>`. They run the programs on the virtual clock, or
+with `FFEMU_CLOCK=host` set on the host's.
+
 ## How it works
 
 - `decls.h`, `regs.h`, `hooks.h`: the host counterparts of `inc/decls.h` and
