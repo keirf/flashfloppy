@@ -9,7 +9,7 @@
 
 # Run OpenCD:
 ~/install/bin/openocd -s ~/install/share/openocd/scripts/ \
--f interface/cmsis-dap.cfg -f target/at32f4xx.cfg
+-f interface/cmsis-dap.cfg -c "transport select swd" -f target/at32f4xx.cfg
 
 # If running against a target with SWD pins reassigned, need to force
 # reset before connection:
@@ -17,7 +17,7 @@
 #  so you will need to restart openocd with the above simpler command line
 #  after a mass erase]
 ~/install/bin/openocd -s ~/install/share/openocd/scripts/ \
--f interface/cmsis-dap.cfg -f target/at32f4xx.cfg \
+-f interface/cmsis-dap.cfg -c "transport select swd" -f target/at32f4xx.cfg \
 -c "reset_config srst_only connect_assert_srst" \
 -c "init" -c "reset halt"
 
