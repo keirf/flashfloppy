@@ -72,6 +72,8 @@ FW_CFLAGS += -iquote $(ROOT)/inc -iquote $(EMU) -iquote $(OUT)
 FW_CFLAGS += -include $(EMU)/decls.h
 FW_CFLAGS += -DMCU=MCU_stm32f105 -DTARGET=TARGET_$(TARGET) -DLEVEL=LEVEL_debug
 FW_CFLAGS += -MMD -MP
+# Extra debug flags just for ffemu
+FW_CFLAGS += -ftrivial-auto-var-init=pattern
 
 HOST_CFLAGS := -std=gnu11 -O2 -g -Wall -Werror -D_GNU_SOURCE
 HOST_CFLAGS += -DNCURSES_WIDECHAR=1 -DFFEMU_NAME='"$(NAME)"'
