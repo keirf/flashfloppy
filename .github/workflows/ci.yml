@@ -50,3 +50,42 @@ jobs:
       with:
         name: FlashFloppy.CI.${{ steps.vars.outputs.sha_short }}
         path: _cidist
+
+  build-windows:
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+
+    - name: Keep LF line endings in checkout
+      shell: pwsh
+      run: git config --global core.autocrlf false
+
+    - uses: actions/checkout@v6
+
+    - name: Dependency packages (MSYS2)
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MSYS
+        install: git gcc make ncurses-devel python mintty
+
+    - name: Set environment variables
+      id: vars
+      run: |
+        echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+    - name: Tests
+      run: make -j4 tests
+
+    - name: Build Windows pack
+      run: |
+        export VER=${{ steps.vars.outputs.sha_short }}
+        mkdir -p _cidist
+        ffemu/win/mk_dist.sh out _cidist/ffemu-win-$VER
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v6
+      with:
+        name: FlashFloppy.CI.${{ steps.vars.outputs.sha_short }}.ffemu-win
+        path: _cidist
