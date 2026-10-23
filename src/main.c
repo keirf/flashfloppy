@@ -285,9 +285,6 @@ static void lcd_write_track_info(bool_t force)
         return;
 
     floppy_get_track(&ti);
-
-    if (lcd_columns <= 16)
-        ti.cyl = min_t(uint8_t, ti.cyl, 99);
     ASSERT(ti.side <= 1);
 
     if (force || (ti.cyl != lcd_ti.cyl)
