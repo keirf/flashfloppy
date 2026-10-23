@@ -19,16 +19,10 @@ TESTS := $(ROOT)/tests
 EMU := $(ROOT)/ffemu
 
 TARGET ?= shugart
-ifeq ($(TARGET),shugart)
-NAME := fftest
-else ifeq ($(TARGET),apple2)
-NAME := fftest-apple2
-else
-$(error TARGET must be shugart or apple2)
-endif
+NAME := fftest-$(TARGET)
 
 O ?= $(ROOT)
-OUT := $(abspath $(O))/out/$(NAME)
+OUT := $(abspath $(O))/out/tests/unit/$(TARGET)
 
 CC ?= cc
 

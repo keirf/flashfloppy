@@ -29,7 +29,9 @@ UNITTEST := PYTHONDONTWRITEBYTECODE=1 FFEMU_OUT=$(OUT) $(PYTHON) -m unittest \
 run:
 	$(UNITTEST) -v
 
-all: $(OUT)/integration-tests/passed
+PASS_FILE := $(OUT)/tests/integration/passed
+
+all: $(PASS_FILE)
 
 # Every build links the programs anew, with build_info.c compiled again for
 # its time: their other objects tell whether they changed. The tests read the
@@ -37,7 +39,7 @@ all: $(OUT)/integration-tests/passed
 PROGRAM_OBJS := $(shell find $(OUT)/ffemu $(OUT)/ffemu-apple2 -name '*.o' \
     ! -name build_info.o 2>/dev/null)
 
-$(OUT)/integration-tests/passed: $(PROGRAM_OBJS) $(wildcard $(TESTS)/*.py) \
+$(PASS_FILE): $(PROGRAM_OBJS) $(wildcard $(TESTS)/*.py) \
     $(ROOT)/src/display/led_7seg.c
 	$(UNITTEST)
 	@mkdir -p $(dir $@)
