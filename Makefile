@@ -56,17 +56,18 @@ all-%: FORCE prod-% debug-% logfile-% ;
 ffemu-%: FORCE
 	$(MAKE) -C $(ROOT)/ffemu O=$(O) TARGET=$*
 
-ffemu: FORCE ffemu-shugart ffemu-apple2 ;
+ffemu: FORCE ffemu-shugart ffemu-apple2
 
-tests: FORCE
+unit-tests: FORCE
 	$(MAKE) -C $(ROOT)/tests O=$(O) all
 	$(MAKE) -C $(ROOT)/tests O=$(O) TARGET=apple2 all
 
 integration-tests: FORCE ffemu
 	$(MAKE) -C $(ROOT)/tests/integration O=$(O) all
 
-all: FORCE all-stm32f105 all-at32f435 apple2-bootloader-stm32f105 ffemu \
-    tests integration-tests ;
+tests: FORCE unit-tests integration-tests
+
+all: FORCE all-stm32f105 all-at32f435 apple2-bootloader-stm32f105 ffemu tests
 
 clean: FORCE
 	rm -rf $(OUT)
