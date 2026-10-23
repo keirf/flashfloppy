@@ -4695,7 +4695,7 @@ static const struct {
       "right: 0T17" },
     { "display-order",
       "0=name 1=status 2=info 3=folder 4=name&status 7=blank, "
-      "d=double-height" },
+      "d=tall w=tall&wide" },
     { "display-off-secs",
       "Seconds without activity before the display goes dark, 0-255: 0 is "
       "always off, 255 never" },

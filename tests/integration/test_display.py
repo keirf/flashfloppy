@@ -1,10 +1,12 @@
 """The LCD's and the OLED's rows as the firmware lays them out: the status
 row's track, in the long form or in short with show-tracks-short, as the apple2
-firmware always gives it, with the phases; and display-order's row 4, the
-image's name and its track in short. An OLED's rows are read as FF OSD gets
-them, beside it on the I2C bus: the display's text, as many columns as it
-has."""
+firmware always gives it, with the phases; display-order's row 4, the image's
+name and its track in short; and rows of double width. An OLED's rows are read
+as FF OSD gets them, beside it on the I2C bus: the display's text, as many
+columns as it has; or from its pixels, by the firmware's glyphs."""
 
+import os
+import re
 import unittest
 
 import ffemu_run as fr
@@ -30,6 +32,41 @@ def half_tracks(nr):
 # waits there too, autoselect-folder-secs = 0.
 SELECTOR = ["sleep 3000", "key right"]
 SELECTOR_FLASH = ["autoselect-folder-secs = 0", "autoselect-file-secs = 0"]
+SELECTOR_FILES = {"GAMES/A.IMG": bytes(737280), "B.IMG": bytes(737280)}
+
+FONT_W = {"6x13": 6, "8x16": 8}
+
+
+def oled_glyphs(font):
+    """The firmware's glyphs of @font for ASCII, with which the fonts that the
+    build generated from fonts/ begin, by their columns' bytes, the top
+    page's and then the bottom page's, bit 0 a column's top pixel."""
+    path = os.path.join(
+        fr.OUT, "ffemu", "shugart", "gen", "oled_font_%s.c" % font)
+    with open(path) as f:
+        data = bytes(
+            int(x, 16) for x in re.findall(r"0x([0-9a-f]{2})", f.read()))
+    n = 2 * FONT_W[font]
+    return {data[i*n:(i+1)*n]: chr(0x20 + i) for i in range(0x7f - 0x20)}
+
+
+def oled_text(pixels, top, font, wide):
+    """The text of the OLED's row of double height from pixel row @top of
+    @pixels, rows of "." and "#", of double width too if @wide: each cell as
+    the glyph that it shows, "@" for none, such as the phase spinner's."""
+    glyphs, w = oled_glyphs(font), FONT_W[font]
+    margin, sx = (1 if w == 6 else 0), (2 if wide else 1)
+    text = ""
+    for i in range((128 - margin) // w // sx):
+        cols = []
+        for page in (0, 8):
+            for j in range(w):
+                x = sx * (margin + i*w + j)
+                cols.append(sum(
+                    (pixels[top + 2 * (page+b)][x] == "#") << b
+                    for b in range(8)))
+        text += glyphs.get(bytes(cols), "@")
+    return text
 
 
 class Case(fr.Case):
@@ -299,6 +336,189 @@ class NameStatus(Case, unittest.TestCase):
             flash=self.ORDER + ["display-type = lcd-40x02"], files=DSK)
         self.assertEqual(
             rows[0], "000/000 TEST" + 21 * " " + ".1..T01", r.report())
+
+
+class DoubleWidth(Case, unittest.TestCase):
+    """A row given as `w` in display-order, double height and double width on
+    an OLED: the left half of the row, magnified. The status row has a layout
+    of its own there, the track alone at the row's right, the mode of the long
+    form at its left, and in Apple2 mode the phase spinner of one cell, which
+    gives way to a track of three digits where the row has no room. Row 4
+    keeps its layout, with the spinner of one cell and without the phases in
+    Apple2 mode."""
+
+    def pixels(self, name, commands, order, font, flash=(), files=PC,
+               mounted=True):
+        """The pixels of a 128x64 OLED, with display-order @order, once the
+        image is in, if @mounted, and @commands have run."""
+        wait = ["wait 10000 log Name:"] if mounted else []
+        r = fr.run(
+            name, wait + list(commands) + ["sleep 500", "dump"],
+            settings=["display = ssd1306-128x64"],
+            flash=["display-type = oled-128x64", "display-order = " + order,
+                   "oled-font = " + font] + list(flash),
+            files=files)
+        self.assertWaits(r, len(wait))
+        return [line for line in r.lines if line and set(line) <= set(".#")]
+
+    def check(self, name, commands, order, expected, flash=(), files=PC,
+              mounted=True):
+        """The text of the double-width row that @order puts first, in each
+        font, as @expected gives it."""
+        for font, text in expected.items():
+            with self.subTest(font=font):
+                pixels = self.pixels(
+                    name, commands, order, font, flash, files, mounted)
+                self.assertEqual(oled_text(pixels, 0, font, True), text)
+
+    def test_name(self):
+        self.check(
+            "ffemu", [], "0w,1", {"6x13": "ABCDEFGHIJ", "8x16": "ABCDEFGH"},
+            files={"ABCDEFGHIJKL.IMG": bytes(737280)})
+
+    def test_status(self):
+        self.check(
+            "ffemu", steps(3), "1w,0",
+            {"6x13": "    T:03.0", "8x16": "  T:03.0"})
+
+    def test_status_three_digits(self):
+        self.check(
+            "ffemu", steps(100), "1w,0",
+            {"6x13": "   T:100.0", "8x16": " T:100.0"})
+
+    def test_status_short(self):
+        self.check(
+            "ffemu", steps(100), "1w,0",
+            {"6x13": "     0T100", "8x16": "   0T100"},
+            flash=["show-tracks-short = yes"])
+
+    def test_status_unmounted(self):
+        """The image's type, and the depth at the row's right."""
+        self.check(
+            "ffemu", SELECTOR, "1w,0",
+            {"6x13": "IMG    D:0", "8x16": "IMG  D:0"},
+            flash=SELECTOR_FLASH, files=SELECTOR_FILES,
+            mounted=False)
+
+    def test_info_unmounted(self):
+        """The drive's free and total space at the row's right."""
+        self.check(
+            "ffemu", SELECTOR, "2w,0",
+            {"6x13": "  0.3/0.3G", "8x16": "0.3/0.3G"},
+            flash=SELECTOR_FLASH, files=SELECTOR_FILES,
+            mounted=False)
+
+    def test_name_status_unmounted(self):
+        """Row 4 is the name's alone while no image is in."""
+        self.check(
+            "ffemu", SELECTOR, "4w,0",
+            {"6x13": "ABCDEFGH  ", "8x16": "ABCDEFGH"},
+            flash=SELECTOR_FLASH,
+            files={"GAMES/A.IMG": bytes(737280),
+                   "ABCDEFGH.IMG": bytes(737280)},
+            mounted=False)
+
+    def test_info_mounted(self):
+        """The image's encoding, then its sides, density and cylinders at the
+        row's right."""
+        self.check(
+            "ffemu", [], "2w,0", {"6x13": "MFM   DD80", "8x16": "MFM DD80"})
+
+    def test_name_status(self):
+        self.check(
+            "ffemu", steps(3), "4w,1",
+            {"6x13": "A     0T03", "8x16": "A   0T03"})
+
+    def test_name_status_long(self):
+        """A name that the row cannot hold, at the start of its scrolling:
+        no blank before the track."""
+        self.check(
+            "ffemu", steps(3), "4w,1",
+            {"6x13": "ABCDEF0T03", "8x16": "ABCD0T03"},
+            files={"ABCDEFGHIJKL.IMG": bytes(737280)})
+
+    def test_apple2_status(self):
+        """Phases 0 and 1 on: a half track in, at the first state."""
+        self.check(
+            "ffemu-apple2", ["key phase-in"], "1w,0",
+            {"6x13": "  @01..T00", "8x16": "@01..T00"}, files=DSK)
+
+    def test_apple2_status_three_digits(self):
+        self.check(
+            "ffemu-apple2", half_tracks(100), "1w,0",
+            {"6x13": " @0...T100", "8x16": "0...T100"}, files=DSK)
+
+    def test_apple2_name_status(self):
+        self.check(
+            "ffemu-apple2", half_tracks(100), "4w,1",
+            {"6x13": "ABC  @T100", "8x16": "ABC@T100"},
+            files={"ABC.DSK": DSK["TEST.DSK"]})
+
+    def test_name_status_osd(self):
+        """FF OSD gets row 4 laid out for the row's whole width."""
+        rows, r = self.rows(
+            "ffemu", steps(3), "ssd1306-128x64",
+            flash=["display-type = oled-128x64", "display-order = 4w,1",
+                   "osd-display-order = 4,1"])
+        self.assertEqual(rows[0], "000/000 A        0T03", r.report())
+
+    def test_name_scrolls_apart(self):
+        """The name scrolls in the double-width row, whose columns cannot
+        hold it, and not in the row of normal width that FF OSD gets: one
+        step in, after the first pause."""
+        r = fr.run(
+            "ffemu", ["wait 10000 log Name:", "sleep 2100", "dump", "osd"],
+            settings=["display = ssd1306-128x64"],
+            flash=["display-type = oled-128x64", "display-order = 0w,1",
+                   "osd-display-order = 0,1"],
+            files={"ABCDEFGHIJKLMNOP.IMG": bytes(737280)})
+        self.assertWaits(r, 1)
+        pixels = [line for line in r.lines if line and set(line) <= set(".#")]
+        self.assertEqual(
+            oled_text(pixels, 0, "6x13", True), "BCDEFGHIJK", r.report())
+        osd = [line[1:-1] for line in r.stdout.split("\nosd: ")[1].splitlines()
+               if line.startswith("|") and line.endswith("|")]
+        self.assertEqual(osd[0], "ABCDEFGHIJKLMNOP     ", r.report())
+
+    def test_apple2_spinner(self):
+        """The spinner of one cell is that of two cells in a row of normal
+        height, centered."""
+        normal = self.pixels(
+            "ffemu-apple2", ["key phase-in"], "0,1", "6x13", files=DSK)
+        wide = self.pixels(
+            "ffemu-apple2", ["key phase-in"], "1w,0", "6x13", files=DSK)
+        spinner = [row[73:85] for row in normal[16:32]]
+        self.assertIn("#", "".join(spinner))
+        blank = ["." * 12] * 8
+        self.assertEqual(
+            [row[26:38] for row in wide[0:32]], blank + spinner + blank)
+
+    def test_osd(self):
+        """FF OSD gets the status row of normal width."""
+        rows, r = self.rows(
+            "ffemu", steps(3), "ssd1306-128x64",
+            flash=["display-type = oled-128x64", "display-order = 1w,0"])
+        self.assertEqual(rows[2], "000/000   T:03.0     ", r.report())
+
+    def test_lcd(self):
+        """An LCD takes `w` as `d`: as a row of normal height."""
+        rows, r = self.rows(
+            "ffemu", steps(3), "hd44780-16x2",
+            flash=["display-order = 1w,0"])
+        self.assertEqual(rows, ["000/000  T:03.0 ", "A" + 15 * " "])
+
+    def test_ff_cfg(self):
+        """From FF.CFG, which the firmware puts in flash and resets: a reset
+        ends a wait, so it is slept through."""
+        files = dict(PC, **{"FF.CFG": "display-order = 1w,0\n"})
+        r = fr.run(
+            "ffemu", ["sleep 6000", "wait 10000 log Name:", "sleep 500",
+                      "dump", "flash"],
+            settings=["display = ssd1306-128x32"], files=files)
+        self.assertWaits(r, 1)
+        self.assertEqual(r.flash().get("display-order"), "1w,0", r.report())
+        pixels = [line for line in r.lines if line and set(line) <= set(".#")]
+        self.assertEqual(oled_text(pixels, 0, "6x13", True), "    T:00.0")
 
 
 if __name__ == "__main__":

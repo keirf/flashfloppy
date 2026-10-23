@@ -79,6 +79,10 @@ static uint8_t buffer[256] aligned(4);
  * and 4, the image's name and track, as display-order names them. */
 static char text[5][40];
 
+/* The rows' layouts of half width, for a row that display-order draws double
+ * width on an OLED, whose columns are 21 at most. */
+static char text_wide[ARRAY_SIZE(text)][21];
+
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
 
@@ -139,26 +143,33 @@ static uint8_t i2c_probe_range(uint8_t s, uint8_t e)
 void lcd_clear(void)
 {
     memset(text, ' ', sizeof(text));
+    memset(text_wide, ' ', sizeof(text_wide));
 }
 
 void lcd_write(int col, int row, int min, const char *str)
 {
     char c, *p;
     uint32_t oldpri;
+    int columns = lcd_columns;
+
+    if (row & LCD_WIDE) {
+        columns /= 2;
+        p = &text_wide[row & ~LCD_WIDE][col];
+    } else {
+        p = &text[row][col];
+    }
 
     if (min < 0)
-        min = lcd_columns;
-
-    p = &text[row][col];
+        min = columns;
 
     /* Prevent the text[] getting rendered while we're updating it. */
     oldpri = IRQ_save(I2C_IRQ_PRI);
 
-    while ((c = *str++) && (col++ < lcd_columns)) {
+    while ((c = *str++) && (col++ < columns)) {
         *p++ = c;
         min--;
     }
-    while ((min-- > 0) && (col++ < lcd_columns))
+    while ((min-- > 0) && (col++ < columns))
         *p++ = ' ';
 
     IRQ_restore(oldpri);
@@ -182,15 +193,15 @@ void lcd_sync(void)
 
 /* Draws the phase spinners of text row @pc over its rendering in buffer[],
  * which holds @half of a double-height row, or 0 for a row of normal
- * height. */
-static void oled_draw_spinners(const char *pc, unsigned int half)
+ * height, stretched to double width if @wide. */
+static void oled_draw_spinners(const char *pc, unsigned int half,
+                               bool_t wide)
 {
-    unsigned int i, w = (oled_font == FONT_8x16) ? 8 : 6;
-    uint8_t *q = &buffer[(w == 6) ? 1 : 0];
+    unsigned int i, w = (oled_font == FONT_8x16) ? 8 : 6, x = (w == 6);
 
-    for (i = 0; i < lcd_columns; i++, q += w)
+    for (i = 0; i < (wide ? lcd_columns/2 : lcd_columns); i++, x += w)
         if (((uint8_t)pc[i] & ~0xf) == OLED_SPINNER)
-            oled_spinner(q, w, pc[i] & 0xf, half);
+            oled_spinner(&buffer[wide ? 2*x : x], w, pc[i] & 0xf, half);
 }
 #endif
 
@@ -281,13 +292,34 @@ static void oled_double_height(uint8_t *dst, uint8_t *src, uint8_t mask)
     }
 }
 
+/* Stretches the left half of the text row in buffer[] to its full width. */
+static void oled_double_width(void)
+{
+    int x;
+
+    /* Each page from its right, so that no column is written before it is
+     * read. */
+    for (x = 255; x >= 0; x--)
+        buffer[x] = buffer[(x & 128) | ((x & 127) >> 1)];
+}
+
+unsigned int lcd_row_columns(unsigned int row)
+{
+    /* As oled_to_lcd_row() takes display_order, on the normal screen. */
+    if (is_oled_display && (display_mode == DM_normal)
+        && (ff_cfg.display_order_wide & (1 << row)))
+        return lcd_columns / 2;
+    return lcd_columns;
+}
+
 /* Renders the 16 pixel rows @in_row of the display into buffer[], its top and
  * bottom pages: a text row, or half of a double-height one. */
 static void oled_to_lcd_row(int in_row)
 {
     uint16_t order;
     int i = 0, row, half;
-    bool_t large = FALSE;
+    bool_t large = FALSE, wide;
+    char *pc;
 
     order = (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
     if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
@@ -303,8 +335,12 @@ static void oled_to_lcd_row(int in_row)
 
     /* Remap the row */
     row = order & DORD_row;
-    if (row < ARRAY_SIZE(text)) {
-        oled_convert_text_row(text[row]);
+    wide = large && (lcd_row_columns(row) < lcd_columns);
+    pc = (row >= ARRAY_SIZE(text)) ? NULL : wide ? text_wide[row] : text[row];
+    if (pc != NULL) {
+        oled_convert_text_row(pc);
+        if (wide)
+            oled_double_width();
     } else {
         memset(buffer, 0, 256);
     }
@@ -314,8 +350,8 @@ static void oled_to_lcd_row(int in_row)
         oled_double_height(buffer, &buffer[(half == 1) ? 128 : 0], 0x3);
 
 #if TARGET == TARGET_apple2
-    if (row < ARRAY_SIZE(text))
-        oled_draw_spinners(text[row], half);
+    if (pc != NULL)
+        oled_draw_spinners(pc, half, wide);
 #endif
 }
 

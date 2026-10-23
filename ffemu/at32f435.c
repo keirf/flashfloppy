@@ -18,6 +18,7 @@
 #define lcd_write at435_lcd_write
 #define lcd_backlight at435_lcd_backlight
 #define lcd_sync at435_lcd_sync
+#define lcd_row_columns at435_lcd_row_columns
 #define lcd_columns at435_lcd_columns
 #define lcd_rows at435_lcd_rows
 #define display_mode at435_display_mode
@@ -43,6 +44,7 @@ void lcd_clear(void);
 #undef lcd_write
 #undef lcd_backlight
 #undef lcd_sync
+#undef lcd_row_columns
 #undef lcd_columns
 #undef lcd_rows
 #undef display_mode
@@ -261,6 +263,7 @@ void f105_lcd_clear(void);
 void f105_lcd_write(int col, int row, int min, const char *str);
 void f105_lcd_backlight(bool_t on);
 void f105_lcd_sync(void);
+unsigned int f105_lcd_row_columns(unsigned int row);
 
 #define at435 (emu_mcu == EMU_MCU_at32f435)
 
@@ -306,6 +309,14 @@ void lcd_sync(void)
         at435_lcd_sync();
     else
         f105_lcd_sync();
+}
+
+unsigned int lcd_row_columns(unsigned int row)
+{
+    if (!at435)
+        return f105_lcd_row_columns(row);
+    follow();
+    return at435_lcd_row_columns(row);
 }
 
 /*
