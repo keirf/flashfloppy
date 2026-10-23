@@ -1,11 +1,11 @@
 /*
  * rc.c
  *
- * Settings, kept in ffemurc in ${XDG_CONFIG_HOME:-~/.config}/ffemu/ (or
- * /ffemu-apple2/): lines of "name = value", a '#' starting a comment line.
- * The file is written with the defaults and a comment on each setting when
- * it does not exist, and a setting changed from the keyboard is written back
- * into it, other lines kept as they are. Its last section, [Flash mem],
+ * Settings, kept in ffemurc in ${XDG_CONFIG_HOME:-~/.config}/ffemu-shugart/
+ * (or /ffemu-apple2/): lines of "name = value", a '#' starting a comment
+ * line. The file is written with the defaults and a comment on each setting
+ * when it does not exist, and a setting changed from the keyboard is written
+ * back into it, other lines kept as they are. Its last section, [Flash mem],
  * mirrors the emulated flash memory, and is written anew whenever the flash
  * changes.
  *

@@ -82,10 +82,10 @@ main() {
       "${dir}/runtime/usr/share/licenses/ncurses" \
       "${dir}/runtime/usr/share/licenses/mintty" || fail "Cannot make ${dir}"
 
-  for p in ffemu ffemu-apple2; do
-    exe="${out}/${p}/${p}.exe"
+  for p in shugart apple2; do
+    exe="${out}/ffemu/${p}/ffemu-${p}.exe"
     cp "${exe}" "${dir}/bin/" || fail "Cannot copy ${exe}"
-    launcher "${p}" "${dir}"
+    launcher "ffemu-${p}" "${dir}"
   done
   cp /usr/bin/mintty.exe "${dir}/runtime/usr/bin/" \
       && cp /usr/share/mintty/themes/* \

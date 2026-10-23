@@ -5,8 +5,8 @@
  * reports their failures, and gives the firmware the few things that need
  * the host: cancellable calls and a target for its assertions.
  *
- * Usage: fftest [-v] [name...], where a name runs the tests that contain it;
- * fftest-apple2 likewise.
+ * Usage: fftest-shugart [-v] [name...], where a name runs the tests that
+ * contain it; fftest-apple2 likewise.
  *
  * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
  *

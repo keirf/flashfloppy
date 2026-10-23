@@ -5,8 +5,8 @@ floppy drive emulators in a terminal, with no Gotek hardware. This
 folder runs on Windows with nothing else installed, in the bundled
 mintty terminal (from MSYS2) with the recommended colors and fonts.
 
-- ffemu.cmd - runs the firmware for Shugart-like (TR-DOS, IBM PC)
-  floppy drives (bin\ffemu.exe)
+- ffemu-shugart.cmd - runs the firmware for Shugart-like (TR-DOS, IBM
+  PC) floppy drives (bin\ffemu-shugart.exe)
 - ffemu-apple2.cmd - runs the firmware for Apple2 (Apple, Pravetz,
   Agat) floppy drives (bin\ffemu-apple2.exe)
 

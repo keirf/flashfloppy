@@ -4,10 +4,10 @@
 #
 # Usage: make -C tests [O=<path>] [TARGET=shugart|apple2] [run | all | clean]
 #
-# The default, run, builds $(O)/out/fftest/fftest, the tests of the shugart
-# firmware, or for TARGET=apple2 $(O)/out/fftest-apple2/fftest-apple2, those
-# of the apple2 firmware, and runs it; it takes names of tests to run, as in
-# "make -C tests run T=img_pc". all builds it
+# The default, run, builds $(O)/out/tests/unit/$(TARGET)/fftest-$(TARGET):
+# fftest-shugart, the tests of the shugart firmware, or for TARGET=apple2
+# fftest-apple2, those of the apple2 firmware, and runs it; it takes names of
+# tests to run, as in "make -C tests run T=img_pc". all builds it
 # and runs it only when it has changed since the tests last passed, so that a
 # build that leaves it alone costs nothing and a failing test stops the
 # build. EXTRA_CFLAGS goes to every compile and to the link, as in
