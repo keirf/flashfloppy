@@ -80,6 +80,15 @@ class MinimalUI(display.Case, unittest.TestCase):
         self.assertEqual(
             rows, ["/".ljust(16), "/".ljust(16)], r.report())
 
+    def test_show_dir_with_ignored(self):
+        """Directory rows ignore slash styling in minimal UI."""
+        rows, r = self.rows(
+            PROGRAM, [], "hd44780-16x2",
+            flash=["display-order = D,Z", "show-dir-with = prefix-slash"],
+            files={"GAMES/A.DSK": display.DSK["TEST.DSK"]})
+        self.assertEqual(
+            rows, ["GAMES".ljust(16), "GAMES".ljust(16)], r.report())
+
     def test_error_code_only(self):
         """An error screen shows its code without the meaning from fs_hint."""
         bad = {"BAD.HFE": b"HXCPICFE" + bytes(600)}

@@ -182,6 +182,10 @@ struct packed ff_cfg {
     uint16_t selector_display_order;
     uint8_t selector_display_order_wide;
     bool_t display_scroll_by_pixel;
+#define DIRWITH_brackets 0
+#define DIRWITH_prefix_slash 1
+#define DIRWITH_postfix_slash 2
+    uint8_t show_dir_with;
 };
 
 extern struct ff_cfg ff_cfg;

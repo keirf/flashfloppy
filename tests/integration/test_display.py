@@ -1,10 +1,11 @@
 """The LCD's and the OLED's rows as the firmware lays them out: the status
 row's track, in the long form or in short with show-tracks-short, as the apple2
 firmware always gives it, with the phases; display-order's row 4, the image's
-name and its track in short; rows of double width; the folder's name, which
-row 3 scrolls; and a long name's scrolling by pixel. An OLED's rows are read
-as FF OSD gets them, beside it on the I2C bus: the display's text, as many
-columns as it has; or from its pixels, by the firmware's glyphs."""
+name and its track in short; rows of double width; the folders' names, which
+row 3 scrolls and the image selector shows in brackets or after a slash; and
+a long name's scrolling by pixel. An OLED's rows are read as FF OSD gets them,
+beside it on the I2C bus: the display's text, as many columns as it has; or
+from its pixels, by the firmware's glyphs."""
 
 import os
 import re
@@ -922,6 +923,61 @@ class PixelScroll(fr.Case, unittest.TestCase):
                    "display-scroll-by-pixel = yes"],
             files={"ABCDEFGHIJKLMNOPQRSTUVW.IMG": bytes(737280)})
         self.assertWaits(r, 2)
+
+
+class DirWith(Case, unittest.TestCase):
+    """The image selector names folders in brackets, with a prefix slash, or
+    with a postfix slash. Current-directory rows D and Z keep their plain
+    text with brackets and take the same slashes. The selector starts on the
+    folder, then Select enters it and Left reaches its parent entry."""
+
+    FILES = {"GAMES/A.IMG": bytes(737280), "B.IMG": bytes(737280)}
+
+    def check(self, names, flash=(), ff_cfg=""):
+        files = dict(self.FILES)
+        files["FF.CFG"] = "autoselect-folder-secs = 0\n" + ff_cfg
+        # The firmware writes FF.CFG's options to flash and resets, which
+        # ends a wait: slept.
+        r = fr.run(
+            "ffemu", ["sleep 6000", "wait 10000 display " + names[0],
+                      "key select", "sleep 500", "key left",
+                      "wait 10000 display " + names[1]],
+            settings=["display = hd44780-16x2"], flash=flash, files=files)
+        self.assertWaits(r, 2)
+
+    def test_brackets(self):
+        self.check(["[GAMES]", "[..]"])
+
+    def test_prefix_slash(self):
+        self.check(["/GAMES", "/.."],
+                   ff_cfg="show-dir-with = prefix-slash\n")
+
+    def test_prefix_slash_from_flash(self):
+        self.check(["/GAMES", "/.."],
+                   flash=["show-dir-with = prefix-slash"])
+
+    def test_postfix_slash(self):
+        self.check(["GAMES/", "../"],
+                   ff_cfg="show-dir-with = postfix-slash\n")
+
+    def check_current_dir(self, title, flash=()):
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2",
+            flash=["display-order = D,Z"] + list(flash),
+            files={"GAMES/A.IMG": bytes(737280)})
+        self.assertEqual(rows[0], title.ljust(16), r.report())
+        self.assertEqual(rows[1], title.ljust(12) + "0T00", r.report())
+
+    def test_current_dir_brackets(self):
+        self.check_current_dir("GAMES")
+
+    def test_current_dir_prefix_slash(self):
+        self.check_current_dir(
+            "/GAMES", ["show-dir-with = prefix-slash"])
+
+    def test_current_dir_postfix_slash(self):
+        self.check_current_dir(
+            "GAMES/", ["show-dir-with = postfix-slash"])
 
 
 if __name__ == "__main__":

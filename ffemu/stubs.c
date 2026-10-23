@@ -315,6 +315,11 @@ static const struct emu_named display_on_names[] = {
 static const struct emu_named show_filename_ext_names[] = {
     { "no", SHOWEXT_no }, { "yes", SHOWEXT_yes }, { "auto", SHOWEXT_auto }
 };
+static const struct emu_named show_dir_with_names[] = {
+    { "brackets", DIRWITH_brackets },
+    { "prefix-slash", DIRWITH_prefix_slash },
+    { "postfix-slash", DIRWITH_postfix_slash }
+};
 static const struct emu_named font_names[] = {
     { "6x13", FONT_6x13 }, { "8x16", FONT_8x16 }
 };
@@ -378,6 +383,7 @@ static const struct emu_option_info info[OPT_nr] = {
     [OPT_da_report_version] = STRING,
     [OPT_extend_image] = YES_NO,
     [OPT_show_tracks_short] = YES_NO,
+    [OPT_show_dir_with] = NAMED(show_dir_with_names),
     [OPT_display_scroll_by_pixel] = YES_NO
 };
 #undef VALUES

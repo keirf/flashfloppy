@@ -33,6 +33,8 @@ def main(argv):
                 val = "FONT_" + val
             elif opt == "show-filename-ext":
                 val = "SHOWEXT_" + val
+            elif opt == "show-dir-with":
+                val = "DIRWITH_" + val.replace("-", "_")
             elif opt == "display-type":
                 opts = []
                 for x in val.split("-"):
@@ -109,10 +111,10 @@ def main(argv):
                     'no': 'FALSE',
                     'yes': 'TRUE'
                 }.get(val,val)
-            if opt == "display-scroll-by-pixel":
+            if opt in ("display-scroll-by-pixel", "show-dir-with"):
                 out_f.write("#if !defined(MINIMAL_UI) || defined(FF_CFG_ALL_OPTIONS)\n")
             out_f.write("x(%s, %s, %s)\n" % (opt, re.sub('-','_',opt), val))
-            if opt == "display-scroll-by-pixel":
+            if opt in ("display-scroll-by-pixel", "show-dir-with"):
                 out_f.write("#endif\n")
 
 if __name__ == "__main__":

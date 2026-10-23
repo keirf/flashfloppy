@@ -339,7 +339,12 @@ static void display_write_dir(const char *name)
 {
     unsigned int place, w, i;
 
-    snprintf(disp_dir, sizeof(disp_dir), "%s", name);
+    if ((ff_cfg.show_dir_with != DIRWITH_brackets) && strcmp(name, "/"))
+        snprintf(disp_dir, sizeof(disp_dir),
+                 (ff_cfg.show_dir_with == DIRWITH_prefix_slash)
+                 ? "/%s" : "%s/", name);
+    else
+        snprintf(disp_dir, sizeof(disp_dir), "%s", name);
     for (place = DIR_PLACE; place <= DIR_TRACK_PLACE; place++) {
         for (w = 0; w < 2; w++) {
             i = 2 * place + w;
@@ -1818,6 +1823,17 @@ static void read_ff_cfg(void)
                 : SHOWEXT_no;
             break;
 
+#ifndef MINIMAL_UI
+        case FFCFG_show_dir_with:
+            if (!strcmp(opts.arg, "prefix-slash"))
+                ff_cfg.show_dir_with = DIRWITH_prefix_slash;
+            else if (!strcmp(opts.arg, "postfix-slash"))
+                ff_cfg.show_dir_with = DIRWITH_postfix_slash;
+            else
+                ff_cfg.show_dir_with = DIRWITH_brackets;
+            break;
+#endif
+
         case FFCFG_display_scroll_rate:
             ff_cfg.display_scroll_rate = strtol(opts.arg, NULL, 10);
             if (ff_cfg.display_scroll_rate < 100)
@@ -2297,8 +2313,17 @@ static void native_update(uint8_t slot_mode)
         is_dir:
             /* Leave the full pathname cached in fs->fp. */
             cfg.slot.attributes = fs->fp.fattrib;
-            snprintf(cfg.slot.name, sizeof(cfg.slot.name),
-                     "[%s]", fs->fp.fname);
+            {
+                const char *fmt = "[%s]";
+#ifndef MINIMAL_UI
+                if (ff_cfg.show_dir_with == DIRWITH_prefix_slash)
+                    fmt = "/%s";
+                else if (ff_cfg.show_dir_with == DIRWITH_postfix_slash)
+                    fmt = "%s/";
+#endif
+                snprintf(cfg.slot.name, sizeof(cfg.slot.name), fmt,
+                         fs->fp.fname);
+            }
         } else {
             F_open(&fs->file, fs->fp.fname, FA_READ);
             fs->file.obj.attr = fs->fp.fattrib;

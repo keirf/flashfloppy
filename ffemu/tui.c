@@ -3321,7 +3321,7 @@ static const char * const fd_places[] = {
     "display-type", "",
     "oled-font", "",
     "show-filename-ext", "",
-    "show-tracks-short", "|",
+    "show-tracks-short", "show-dir-with", "|",
     "autoselect-file-secs", "autoselect-folder-secs", "nav-loop", "",
     "twobutton-action", "",
     "rotary", "",
@@ -4456,13 +4456,14 @@ static void draw_write_dialog(void)
 /* The options recommended for display @d into @cfg, which holds the
  * defaults: display-type for it where the default does not suit it, the
  * extension of an image where it tells it from another, the track in short,
- * and on an OLED names scrolling by pixel and a display-order with the name
- * double width, combined with the track on a 128x32 panel. None for an LED
- * display. */
+ * folders followed by a slash, and on an OLED names scrolling by pixel and a
+ * display-order with the name double width, combined with the track on a
+ * 128x32 panel. None for an LED display. */
 static void recommend(void *cfg, int d)
 {
     static const char * const opts[] = {
-        "show-filename-ext", "auto", "show-tracks-short", "yes"
+        "show-filename-ext", "auto", "show-tracks-short", "yes",
+        "show-dir-with", "postfix-slash"
     };
     unsigned int i;
 
@@ -4863,6 +4864,8 @@ static const struct {
     { "show-tracks-short",
       "Whether the status row shows the side and track in short, at its "
       "right: 0T17" },
+    { "show-dir-with",
+      "How to mark folder names: [NAME], /NAME or NAME/" },
     { "display-order",
       "N=name S=status I=info D=dir C=name+trk Z=dir+trk B=blank "
       "d=dbl-hgt w=2x" },
