@@ -2,9 +2,10 @@
 #
 # Usage: make -C ffemu [O=<path>] [TARGET=shugart|apple2]
 #
-# The program is built as $(O)/out/ffemu/ffemu, or for the Apple2 firmware
-# as $(O)/out/ffemu-apple2/ffemu-apple2. O defaults to the top of the source
-# tree, as in the main Makefile.
+# The program is built as $(O)/out/ffemu/$(TARGET)/ffemu-$(TARGET):
+# ffemu-shugart for the shugart firmware, or ffemu-apple2 for the Apple2
+# firmware. O defaults to the top of the source tree, as in the main
+# Makefile.
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
 EMU := $(ROOT)/ffemu

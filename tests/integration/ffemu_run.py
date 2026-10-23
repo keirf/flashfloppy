@@ -27,7 +27,7 @@ FIRMWARE_RE = re.compile(r"^firmware: ([^,]*), ")
 
 
 def program(name):
-    """The path of ffemu program @name, ffemu or ffemu-apple2."""
+    """The path of ffemu program @name, ffemu-shugart or ffemu-apple2."""
     path = os.path.join(OUT, *name.split("-"), name)
     if os.path.exists(path + ".exe"):
         return path + ".exe"

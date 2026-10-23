@@ -36,8 +36,8 @@ all: $(PASS_FILE)
 # Every build links the programs anew, with build_info.c compiled again for
 # its time: their other objects tell whether they changed. The tests read the
 # 7-segment display driver's letters and digits too.
-PROGRAM_OBJS := $(shell find $(OUT)/ffemu $(OUT)/ffemu-apple2 -name '*.o' \
-    ! -name build_info.o 2>/dev/null)
+PROGRAM_OBJS := $(shell find $(OUT)/ffemu -name '*.o' ! -name build_info.o \
+    2>/dev/null)
 
 $(PASS_FILE): $(PROGRAM_OBJS) $(wildcard $(TESTS)/*.py) \
     $(ROOT)/src/display/led_7seg.c

@@ -23,18 +23,18 @@ The plain `make` at the top of the tree builds both programs as well, along
 with the firmware and with the same `O=`, so that a firmware change that breaks
 ffemu fails the regular build.
 
-The program is `out/ffemu/ffemu` under `<path>`, which defaults to the top of
-the source tree. `TARGET=apple2` builds `out/ffemu-apple2/ffemu-apple2`
-instead, which runs the Apple2 firmware: it lists only HFE images, and its
-board code is that of the release, which keeps the rotary encoder where the
-Apple2 debug build puts two stepper phases. The two programs keep their
-settings and logs apart, in `ffemu/` and `ffemu-apple2/` of the directories
-below. The build needs a C compiler, `objcopy`, Python 3 (for the font and
-configuration generators of the firmware build) and the wide-character
-"ncurses" library with its headers: `ncurses-devel` on Cygwin/MSYS2,
-`libncurses-dev` on Debian and Ubuntu. On Cygwin/MSYS2 everything but the
-runtime DLL is linked statically, so the program built there also runs in any
-Git Bash.
+The program is `out/ffemu/shugart/ffemu-shugart` under `<path>`, which defaults
+to the top of the source tree. `TARGET=apple2` builds
+`out/ffemu/apple2/ffemu-apple2` instead, which runs the Apple2 firmware: it
+lists only HFE images, and its board code is that of the release, which keeps
+the rotary encoder where the Apple2 debug build puts two stepper phases. The
+two programs keep their settings and logs apart, in `ffemu-shugart/` and
+`ffemu-apple2/` of the directories below. The build needs a C compiler,
+`objcopy`, Python 3 (for the font and configuration generators of the firmware
+build) and the wide-character "ncurses" library with its headers:
+`ncurses-devel` on Cygwin/MSYS2, `libncurses-dev` on Debian and Ubuntu. On
+Cygwin/MSYS2 everything but the runtime DLL is linked statically, so the
+program built there also runs in any Git Bash.
 
 For a Windows with no MSYS2, Cygwin or Git Bash, `ffemu/win/mk_dist.sh <out>
 <folder>`, run in the MSYS2 shell after the build, makes `<folder>` from the
@@ -58,7 +58,7 @@ fallback takes the same font shrunk to three quarters.
 
 ## Running
 
-    ffemu [<directory> | <image> | <disk>]
+    ffemu-shugart [<directory> | <image> | <disk>]
 
 The USB drive holds the files and folders of `<directory>` as a FAT32 volume,
 or as a FAT16 one, chosen in the Externals dialog, key `8`, for what the device
@@ -313,20 +313,22 @@ button some 60 and 100 times. The TUI always runs on the host's clock.
 The firmware's console output (normally available in debug builds on the
 Gotek's UART pins) is shown in the Console pane at the bottom, among ffemu's
 own lines, which start with `ffemu:`, and also written to
-`${XDG_STATE_HOME:-~/.local/state}/ffemu/console.log` (all file paths are shown
-at the bottom of the respective panes). The file is recreated on every start
-and power cycle; the previous one is kept as `console.bak`, replacing the one
-before it. A reset that the firmware does by itself is no power cycle: the file
-and the pane go on after a green line `======= Firmware reset =======`.
+`${XDG_STATE_HOME:-~/.local/state}/ffemu-shugart/console.log`, in
+`ffemu-apple2/` for `ffemu-apple2` (all file paths are shown at the bottom of
+the respective panes). The file is recreated on every start and power cycle;
+the previous one is kept as `console.bak`, replacing the one before it. A reset
+that the firmware does by itself is no power cycle: the file and the pane go on
+after a green line `======= Firmware reset =======`.
 
 ## Settings
 
 The ffemu app settings (not to be confused with the Gotek settings in the flash
 memory or on the USB drive's `FF.CFG`) are stored in a file:
-`${XDG_CONFIG_HOME:-~/.config}/ffemu/ffemurc` holds `name = value` lines; a `#`
-starts a comment line. ffemu writes it with the defaults, and a comment on each
-setting, when it does not exist, and writes a setting changed from the keyboard
-back into it, keeping the other lines as they are.
+`${XDG_CONFIG_HOME:-~/.config}/ffemu-shugart/ffemurc`, in `ffemu-apple2/` for
+`ffemu-apple2`, holds `name = value` lines; a `#` starts a comment line. ffemu
+writes it with the defaults, and a comment on each setting, when it does not
+exist, and writes a setting changed from the keyboard back into it, keeping the
+other lines as they are.
 
 When ffemu has written the file anew and runs in a terminal, it first says
 where it runs, which file it wrote, where the console log goes and which folder
@@ -399,7 +401,8 @@ rest in gray, and the raw numbers in magenta.
 When standard input is not a terminal, ffemu reads commands from it and prints
 to standard output, which is how it can be tested without a terminal:
 
-    printf 'sleep 2500\nkey right\nsleep 500\ndump\nlog\n' | ffemu <directory>
+    printf 'sleep 2500\nkey right\nsleep 500\ndump\nlog\n' \
+        | ffemu-shugart <directory>
 
 The commands are `key <action>`, the action being `select`, `left`, `right`,
 `cw`, `ccw`, `remove`, `insert`, `reset` (Home), `relaunch` (Ctrl+Home), `quit`
