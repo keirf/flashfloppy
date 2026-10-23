@@ -677,8 +677,6 @@ static unsigned int oled_start_i2c(uint8_t *buf)
 
 static unsigned int ssd1306_prep_buffer(void)
 {
-    int size;
-
     /* If we have completed a complete fill of the OLED display, start a new 
      * I2C transaction. The OLED display seems to occasionally silently lose 
      * a byte and then we lose sync with the display address. */
@@ -698,9 +696,7 @@ static unsigned int ssd1306_prep_buffer(void)
     }
 
     /* Convert one row of text[] into buffer[] writes. */
-    size = oled_to_lcd_row(i2c_row);
-    if (size != 0)
-        oled_double_height(buffer, &buffer[(size == 1) ? 128 : 0], 0x3);
+    oled_to_lcd_row(i2c_row);
 
     i2c_row++;
 
@@ -709,7 +705,6 @@ static unsigned int ssd1306_prep_buffer(void)
 
 static unsigned int sh1106_prep_buffer(void)
 {
-    int size;
     uint8_t *p = buffer;
 
     if (i2c_row == (oled_height / 8)) {
@@ -726,14 +721,9 @@ static unsigned int sh1106_prep_buffer(void)
     }
 
     /* Convert one row of text[] into buffer[] writes. */
-    size = oled_to_lcd_row(i2c_row/2);
-    if (size != 0) {
-        oled_double_height(&buffer[128], &buffer[(size == 1) ? 128 : 0],
-                           (i2c_row & 1) + 1);
-    } else {
-        if (!(i2c_row & 1))
-            memcpy(&buffer[128], &buffer[0], 128);
-    }
+    oled_to_lcd_row(i2c_row/2);
+    if (!(i2c_row & 1))
+        memcpy(&buffer[128], &buffer[0], 128);
 
     /* Every 8 rows needs a new page address and hence new I2C transaction. */
     i2c_stop();
