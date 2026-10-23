@@ -143,6 +143,11 @@ void lcd_write(int col, int row, int min, const char *str);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
 extern uint8_t lcd_columns, lcd_rows;
+extern bool_t is_oled_display;
+/* A text cell of OLED_SPINNER plus the stepper phases on, as bits 0 to 3,
+ * is the OLED's Apple2 phase spinner, over it and the next cell: a control
+ * code, so that no text shown, an image's name included, can hold it. */
+#define OLED_SPINNER 0x10
 
 /* FF OSD (On Screen Display) */
 extern bool_t has_osd;

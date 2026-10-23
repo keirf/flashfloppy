@@ -164,6 +164,16 @@ static unsigned int osd_prep_buffer(void)
             memcpy(q, text[i], lcd_columns);
         else
             memset(q, ' ', lcd_columns);
+#if TARGET == TARGET_apple2
+        {
+            /* The OLED's phase spinner goes as a blank: FF OSD has no
+             * glyph for it. */
+            uint8_t *p;
+            for (p = q; p < q + lcd_columns; p++)
+                if ((*p & ~0xf) == OLED_SPINNER)
+                    *p = ' ';
+        }
+#endif
         q += lcd_columns;
     }
 

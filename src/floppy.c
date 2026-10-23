@@ -564,6 +564,9 @@ void floppy_get_track(struct track_info *ti)
     ti->sel = drive.sel;
     ti->writing = (active && dma_wr->state != DMA_inactive);
     ti->in_da_mode = active ? in_da_mode(drive.image, ti->cyl) : FALSE;
+#if TARGET == TARGET_apple2
+    ti->phases = apple2_phases;
+#endif
 }
 
 static bool_t index_is_suppressed(struct drive *drv)
