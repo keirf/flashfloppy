@@ -14,6 +14,10 @@
 #define DEFAULT_SPEED_KHZ 25000
 #define SPI_PIN_SPEED _50MHz
 
+#define SD_SPI_CLK_STEP_1  25000
+#define SD_SPI_CLK_STEP_2  16000
+#define SD_SPI_CLK_STEP_3  8000
+
 #if 0
 #define TRC(f, a...) printk("SD: " f, ## a)
 #else
@@ -52,6 +56,29 @@ static uint8_t cardtype;
 #define spi spi2
 #define PIN_CS 12
 #endif
+
+/**
+ * Selects the SPI clock speed, stepping down to lower frequencies if retries fail.
+ * High-speed clocking (e.g., 25 MHz) can fail over long, unshielded cable connections 
+ * or noisy signal lines. Downclocking improves signal integrity and connection stability.
+ */
+static uint16_t SD_SPI_Clock(void) {
+    static int index = 0;
+    static int retry_count = 0;
+    const uint16_t values[] = {SD_SPI_CLK_STEP_1, SD_SPI_CLK_STEP_2, SD_SPI_CLK_STEP_3};
+    
+    uint16_t val = values[index];
+    
+    retry_count++;
+    if (retry_count >= 3) { // After 3 attempts on the same speed, move to the next slower clock (if available)
+        retry_count = 0;
+        if (index < 2) {
+            index++;
+        }
+    }
+    
+    return val;
+}
 
 static void spi_acquire(void)
 {
@@ -320,6 +347,7 @@ static DSTATUS sd_disk_initialize(BYTE pdrv)
     uint32_t cr1;
     uint16_t rcv;
     uint8_t i;
+    uint16_t current_speed;
 
     if (pdrv)
         return RES_PARERR;
@@ -451,8 +479,9 @@ out:
 
     if (!(status & STA_NOINIT)) {
         delay_us(10); /* XXX small delay here stops SPI getting stuck?? */
-        sd_spi_set_cr(cr1, DEFAULT_SPEED_KHZ);
-        printk("SD Card configured\n");
+        current_speed = SD_SPI_Clock();
+        sd_spi_set_cr(cr1, current_speed);
+        printk("SD Card configured at speed index/value: %u\n", current_speed);
         dump_cid_info();
     } else {
 #if MCU == MCU_rp2350
