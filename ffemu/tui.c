@@ -3196,7 +3196,8 @@ static const char * const fd_places[] = {
     "display-type", "",
     "oled-font", "",
     "display-order", "",
-    "show-filename-ext", "|",
+    "show-filename-ext", "",
+    "show-tracks-short", "|",
     "autoselect-file-secs", "autoselect-folder-secs", "nav-loop", "",
     "twobutton-action", "",
     "rotary", "",
@@ -4689,6 +4690,9 @@ static const struct {
     { "display-type suffix", "Options for OLED displays" },
     { "oled-font", "Font of the OLED display" },
     { "show-filename-ext", "Whether to show floppy filename extensions" },
+    { "show-tracks-short",
+      "Whether the status row shows the side and track in short, at its "
+      "right: 0T17" },
     { "display-order",
       "Rows top down: 0=name, 1=status, 2=info, 3=folder, 7=blank, "
       "d=double-height" },
