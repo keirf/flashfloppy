@@ -140,6 +140,11 @@ int led_7seg_nr_digits(void);
 bool_t lcd_init(void);
 void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
+/* The columns of text row @row that show. */
+unsigned int lcd_row_columns(unsigned int row);
+/* With lcd_write()'s row, the row's layout of half width, which an OLED shows
+ * where display-order draws the row double width. */
+#define LCD_WIDE 8
 /* Writes @name, the image's name as shown, to its row and to that of the name
  * and the track. */
 void display_write_name(const char *name);
