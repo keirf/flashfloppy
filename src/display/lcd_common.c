@@ -75,8 +75,9 @@ static volatile uint8_t refresh_count;
 /* I2C data buffer. Data is DMAed to the I2C peripheral. */
 static uint8_t buffer[256] aligned(4);
 
-/* Text buffer, rendered into I2C data and placed into buffer[]. */
-static char text[4][40];
+/* Text buffer, rendered into I2C data and placed into buffer[]: rows 0 to 3
+ * and 4, the image's name and track, as display-order names them. */
+static char text[5][40];
 
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
@@ -302,7 +303,7 @@ static void oled_to_lcd_row(int in_row)
 
     /* Remap the row */
     row = order & DORD_row;
-    if (row < lcd_rows) {
+    if (row < ARRAY_SIZE(text)) {
         oled_convert_text_row(text[row]);
     } else {
         memset(buffer, 0, 256);
@@ -313,7 +314,7 @@ static void oled_to_lcd_row(int in_row)
         oled_double_height(buffer, &buffer[(half == 1) ? 128 : 0], 0x3);
 
 #if TARGET == TARGET_apple2
-    if (row < lcd_rows)
+    if (row < ARRAY_SIZE(text))
         oled_draw_spinners(text[row], half);
 #endif
 }

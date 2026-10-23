@@ -155,63 +155,189 @@ static void update_disp_name(void)
 
 #define wp_column ((lcd_columns > 16) ? 8 : 7)
 
-/* Scroll long filename. */
-static struct {
-    uint16_t off, end, pause, rate;
-    int32_t ticks;
-} lcd_scroll;
-static void lcd_scroll_init(uint16_t pause, uint16_t rate)
+/* Row 4 of display-order: the image's number where the row has room for it
+ * beside the name, the name, and the track in short at the row's right. */
+
+/* The cells of row 4's track of two digits: a blank and the side, the mode
+ * and the track; in Apple2 mode the phases in place of the side, after the
+ * phase spinner of two cells on an OLED, after the blank on an LCD. */
+static unsigned int track4_cells(void)
 {
-    int diff = lcd_scroll.off - lcd_scroll.end;
+    if (TARGET != TARGET_apple2)
+        return 5;
+    return is_oled_display ? 9 : 8;
+}
+
+/* Row 4's track as last written, empty while no image is in. */
+static char track4[12];
+
+/* The column of row 4 where the name starts: after the image's number, with
+ * an image in, on a row that leaves 8 columns or more to the name. */
+static unsigned int name4_column(void)
+{
+    unsigned int min = (TARGET == TARGET_apple2) ? 24 : 21;
+    return (track4[0] && (lcd_columns >= min)) ? 8 : 0;
+}
+
+/* The cells that row 4's track takes: none while no image is in, one more
+ * for a track of three digits. */
+static unsigned int track4_width(void)
+{
+    return track4[0]
+        ? max_t(unsigned int, strlen(track4), track4_cells()) : 0;
+}
+
+/* Writes row 4's track at the row's right. */
+static void write_track4(void)
+{
+    lcd_write(lcd_columns - track4_width(), 4, -1, track4);
+}
+
+/* Whether display-order shows row 4. */
+static bool_t row4_shown(void)
+{
+    uint16_t order = ff_cfg.display_order;
+    unsigned int i;
+
+    if (order != DORD_default)
+        for (i = 0; i < 4; i++, order >>= DORD_shift)
+            if ((order & DORD_row) == 4)
+                return TRUE;
+    return FALSE;
+}
+
+/* Scroll long filename: in row 0, and in row 4 within the columns that it
+ * leaves the name, each at its own offset. */
+#define SCROLL_ROWS ((1u << 0) | (1u << 4))
+static const unsigned int scroll_gap = 4;
+struct scroll {
+    uint16_t off, end;
+    int32_t ticks;
+};
+static struct {
+    uint16_t pause, rate;
+    struct scroll row[5];
+} lcd_scroll;
+
+/* Writes @s where row @row shows the name, and row 4's track after it. */
+static void scroll_write(unsigned int row, const char *s)
+{
+    if (row == 4) {
+        lcd_write(name4_column(), 4, -1, s);
+        write_track4();
+    } else {
+        lcd_write(0, row, -1, s);
+    }
+}
+
+void display_write_name(const char *name)
+{
+    scroll_write(0, name);
+    scroll_write(4, name);
+}
+
+/* Sets where the scrolling of row @row ends, by the columns that the row has
+ * for the name. */
+static void scroll_init(unsigned int row)
+{
+    struct scroll *sc = &lcd_scroll.row[row];
+    int diff = sc->off - sc->end;
+    unsigned int columns = (row == 4)
+        ? lcd_columns - name4_column() - track4_width() : lcd_columns;
+
+    sc->end = max_t(int, strnlen(disp_name, sizeof(disp_name)) - columns, 0);
+    if (sc->end && !lcd_scroll.pause)
+        sc->end += columns;
+    if (sc->off > sc->end)
+        sc->off = lcd_scroll.pause || !sc->end ? 0 : sc->end + diff;
+}
+
+/* Writes row @row's name at its scrolling offset. */
+static void scroll_draw(unsigned int row)
+{
+    struct scroll *sc = &lcd_scroll.row[row];
+    char msg[lcd_columns+1];
+
+    if (lcd_scroll.pause || !sc->end)
+        snprintf(msg, sizeof(msg), "%s", disp_name + sc->off);
+    else if (sc->off <= sc->end)
+        snprintf(msg, sizeof(msg), "%s%*s%s",
+                 disp_name + sc->off, scroll_gap, "", disp_name);
+    else
+        snprintf(msg, sizeof(msg), "%*s%s",
+                 scroll_gap - (sc->off - sc->end), "", disp_name);
+    scroll_write(row, msg);
+}
+
+/* Takes the name's scrolling back to its start. */
+static void lcd_scroll_reset(void)
+{
+    lcd_scroll.row[0].off = lcd_scroll.row[0].end = 0;
+    lcd_scroll.row[4].off = lcd_scroll.row[4].end = 0;
+}
+
+/* Starts the name's scrolling, at @pause and @rate, its first step @ticks
+ * away. */
+static void lcd_scroll_init(uint16_t pause, uint16_t rate, int32_t ticks)
+{
+    unsigned int row;
+
     update_disp_name();
     lcd_scroll.pause = pause;
     lcd_scroll.rate = rate;
-    lcd_scroll.end = max_t(
-        int, strnlen(disp_name, sizeof(disp_name)) - lcd_columns, 0);
-    if (lcd_scroll.end && !lcd_scroll.pause)
-        lcd_scroll.end += lcd_columns;
-    if (lcd_scroll.off > lcd_scroll.end)
-        lcd_scroll.off = lcd_scroll.pause || !lcd_scroll.end
-            ? 0 : lcd_scroll.end + diff;
-}
-static void lcd_scroll_name(void)
-{
-    static struct track_info ti;
-    char msg[lcd_columns+1];
-
-    if ((lcd_scroll.ticks > 0) || (lcd_scroll.end == 0))
-        return;
-
-    floppy_get_track(&ti);
-    if (ti.in_da_mode) {
-        /* Display controlled by src/image/da.c */
-        return;
-    }
-
-    lcd_scroll.ticks = time_ms(lcd_scroll.rate);
-    if (lcd_scroll.pause != 0) {
-        if (++lcd_scroll.off > lcd_scroll.end)
-            lcd_scroll.off = 0;
-        snprintf(msg, sizeof(msg), "%s", disp_name + lcd_scroll.off);
-        if ((lcd_scroll.off == 0)
-            || (lcd_scroll.off == lcd_scroll.end))
-            lcd_scroll.ticks = time_ms(lcd_scroll.pause);
-    } else {
-        const unsigned int scroll_gap = 4;
-        lcd_scroll.off++;
-        if (lcd_scroll.off <= lcd_scroll.end) {
-            snprintf(msg, sizeof(msg), "%s%*s%s",
-                     disp_name + lcd_scroll.off,
-                     scroll_gap, "", disp_name);
-        } else {
-            snprintf(msg, sizeof(msg), "%*s%s",
-                     scroll_gap - (lcd_scroll.off - lcd_scroll.end), "",
-                     disp_name);
-            if ((lcd_scroll.off - lcd_scroll.end) == scroll_gap)
-                lcd_scroll.off = 0;
+    for (row = 0; row < 5; row++) {
+        if (SCROLL_ROWS & (1u << row)) {
+            scroll_init(row);
+            lcd_scroll.row[row].ticks = ticks;
         }
     }
-    lcd_write(0, 0, -1, msg);
+}
+
+/* Where the name's scrolling ends in the longest of the rows that show it. */
+static unsigned int lcd_scroll_end(void)
+{
+    unsigned int end = lcd_scroll.row[0].end;
+
+    if (row4_shown())
+        end = max_t(unsigned int, end, lcd_scroll.row[4].end);
+    return end;
+}
+
+/* Scrolls each row whose step is due, @ticks after the last call. */
+static void lcd_scroll_name(int32_t ticks)
+{
+    static struct track_info ti;
+    struct scroll *sc;
+    bool_t track_read = FALSE;
+    unsigned int row;
+
+    for (row = 0; row < 5; row++) {
+        sc = &lcd_scroll.row[row];
+        if (!(SCROLL_ROWS & (1u << row)) || ((sc->ticks -= ticks) > 0)
+            || (sc->end == 0))
+            continue;
+
+        if (!track_read) {
+            floppy_get_track(&ti);
+            track_read = TRUE;
+        }
+        if (ti.in_da_mode) {
+            /* Display controlled by src/image/da.c */
+            return;
+        }
+
+        sc->ticks = time_ms(lcd_scroll.rate);
+        sc->off++;
+        if (lcd_scroll.pause != 0) {
+            if (sc->off > sc->end)
+                sc->off = 0;
+            if ((sc->off == 0) || (sc->off == sc->end))
+                sc->ticks = time_ms(lcd_scroll.pause);
+        } else if ((sc->off - sc->end) == scroll_gap) {
+            sc->off = 0;
+        }
+        scroll_draw(row);
+    }
 }
 
 /* Write slot info to display. */
@@ -228,19 +354,17 @@ static void display_write_slot(bool_t nav_mode)
         return;
     }
 
+    /* No track in row 4 until an image is in: the row is the name's. */
+    track4[0] = '\0';
+    scroll_init(4);
+
     if (nav_mode && !cfg_scroll_reset) {
-        lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
-        if (lcd_scroll.end == 0) {
-            snprintf(msg, sizeof(msg), "%s", disp_name);
-            lcd_write(0, 0, -1, msg);
-        } else {
-            lcd_scroll.off--;
-            lcd_scroll.ticks = 0;
-            lcd_scroll_name();
-        }
+        lcd_scroll_init(0, ff_cfg.nav_scroll_rate, 0);
+        scroll_draw(0);
+        scroll_draw(4);
     } else {
         snprintf(msg, sizeof(msg), "%s", disp_name);
-        lcd_write(0, 0, -1, msg);
+        display_write_name(msg);
     }
 
     if (slot_type("v9t9")) {
@@ -306,8 +430,8 @@ static void track_short(char *s, const struct track_info *ti, char mode,
  * side. */
 static void lcd_write_track(const struct track_info *ti, char mode)
 {
-    char msg[lcd_columns+1], s[12];
-    unsigned int n = lcd_columns - 7;
+    char msg[lcd_columns+1], s[12], *p = track4;
+    unsigned int n = lcd_columns - 7, cells = track4_width();
 
     if ((TARGET == TARGET_apple2) || ff_cfg.show_tracks_short) {
         track_short(s, ti, mode, TRUE);
@@ -320,6 +444,27 @@ static void lcd_write_track(const struct track_info *ti, char mode)
                  (mode == 'T') ? ' ' : mode, ti->cyl, ti->side);
         lcd_write(wp_column, 1, -1, msg);
     }
+
+    /* Row 4: a blank between the name and the track, but for the spinner. A
+     * track of three digits takes a column of the name, which scrolls within
+     * the columns left, and gives it back. */
+    if (!((TARGET == TARGET_apple2) && is_oled_display))
+        *p++ = ' ';
+    track_short(p, ti, mode, TRUE);
+    if (track4_width() != cells) {
+        /* The image's number comes with the track. */
+        if ((cells == 0) && (name4_column() != 0)) {
+            snprintf(msg, sizeof(msg), "%03u/%03u",
+                     cfg.slot_nr, cfg.max_slot_nr);
+            lcd_write(0, 4, name4_column(), msg);
+        }
+        scroll_init(4);
+        if (!ti->in_da_mode) {
+            scroll_draw(4);
+            return;
+        }
+    }
+    write_track4();
 }
 
 /* Write track number to LCD. */
@@ -2298,10 +2443,8 @@ static int run_floppy(void *_b)
             lcd_write_track_info(FALSE);
             update_ticks = time_ms(20);
         }
-        if (display_type == DT_LCD_OLED) {
-            lcd_scroll.ticks -= t_diff;
-            lcd_scroll_name();
-        }
+        if (display_type == DT_LCD_OLED)
+            lcd_scroll_name(t_diff);
         canary_check();
         assert_volume_connected();
         t_prev = t_now;
@@ -2392,8 +2535,7 @@ static uint8_t menu_wait_button(bool_t twobutton_eject, const char *led_msg)
             break;
         case DT_LCD_OLED:
             /* Continue to scroll long filename. */
-            lcd_scroll.ticks -= time_ms(1);
-            lcd_scroll_name();
+            lcd_scroll_name(time_ms(1));
             break;
         }
     }
@@ -2813,11 +2955,11 @@ static int floppy_main(void *unused)
 
         volume_space();
 
-        lcd_scroll.ticks = time_ms(ff_cfg.display_scroll_pause)
-            ?: time_ms(ff_cfg.display_scroll_rate);
-        lcd_scroll.off = lcd_scroll.end = 0;
+        lcd_scroll_reset();
         lcd_scroll_init(ff_cfg.display_scroll_pause,
-                        ff_cfg.display_scroll_rate);
+                        ff_cfg.display_scroll_rate,
+                        time_ms(ff_cfg.display_scroll_pause)
+                        ?: time_ms(ff_cfg.display_scroll_rate));
 
         /* Make sure slot index is on a valid slot. Find next valid slot if 
          * not (and update config). */
@@ -2930,7 +3072,7 @@ static int floppy_main(void *unused)
         }
 
     select:
-        lcd_scroll.off = lcd_scroll.end = 0;
+        lcd_scroll_reset();
         do {
             unsigned int wait_ms;
 
@@ -2943,9 +3085,9 @@ static int floppy_main(void *unused)
             /* Wait a few seconds for further button presses before acting on 
              * the new image selection. */
             if (cfg_scroll_reset)
-                lcd_scroll.off = lcd_scroll.end = 0;
-            lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
-            lcd_scroll.ticks = time_ms(ff_cfg.nav_scroll_pause);
+                lcd_scroll_reset();
+            lcd_scroll_init(0, ff_cfg.nav_scroll_rate,
+                            time_ms(ff_cfg.nav_scroll_pause));
             wait_ms = (cfg.slot.attributes & AM_DIR) ?
                 ff_cfg.autoselect_folder_secs : ff_cfg.autoselect_file_secs;
             wait_ms *= 1000;
@@ -2959,7 +3101,7 @@ static int floppy_main(void *unused)
             if (wait_ms && (display_type == DT_LCD_OLED)) {
                 /* Allow time for full name to scroll through. */
                 unsigned int scroll_ms = ff_cfg.nav_scroll_pause;
-                scroll_ms += lcd_scroll.end * ff_cfg.nav_scroll_rate;
+                scroll_ms += lcd_scroll_end() * ff_cfg.nav_scroll_rate;
                 wait_ms = max(wait_ms, scroll_ms);
             }
             for (i = 0; (wait_ms == 0) || (i < wait_ms); i++) {
@@ -2968,8 +3110,7 @@ static int floppy_main(void *unused)
                     break;
                 assert_volume_connected();
                 delay_ms(1);
-                lcd_scroll.ticks -= time_ms(1);
-                lcd_scroll_name();
+                lcd_scroll_name(time_ms(1));
             }
 
             /* Wait for select button to be released. */

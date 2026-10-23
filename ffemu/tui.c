@@ -4694,7 +4694,7 @@ static const struct {
       "Whether the status row shows the side and track in short, at its "
       "right: 0T17" },
     { "display-order",
-      "Rows top down: 0=name, 1=status, 2=info, 3=folder, 7=blank, "
+      "0=name 1=status 2=info 3=folder 4=name&status 7=blank, "
       "d=double-height" },
     { "display-off-secs",
       "Seconds without activity before the display goes dark, 0-255: 0 is "
