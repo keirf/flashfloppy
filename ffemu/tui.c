@@ -4357,8 +4357,8 @@ static void draw_write_dialog(void)
 /* The options recommended for display @d into @cfg, which holds the
  * defaults: display-type for it where the default does not suit it, the
  * extension of an image where it tells it from another, the track in short,
- * and on a 128x32 OLED a display-order combining name and track in row C.
- * None for an LED display, to which none of them applies. */
+ * and on an OLED a display-order with the name double width, combined with
+ * the track on a 128x32 panel. None for an LED display. */
 static void recommend(void *cfg, int d)
 {
     static const char * const opts[] = {
@@ -4376,8 +4376,9 @@ static void recommend(void *cfg, int d)
     }
     for (i = 0; i < ARRAY_SIZE(opts); i += 2)
         emu_flash_set_option(cfg, opts[i], opts[i + 1]);
-    if (DISP_IS_OLED(d) && (DISP_HEIGHT(d) == 32))
-        emu_flash_set_option(cfg, "display-order", "C");
+    if (DISP_IS_OLED(d))
+        emu_flash_set_option(cfg, "display-order",
+                             (DISP_HEIGHT(d) == 64) ? "D,Nw,S" : "Cw");
 }
 
 /* Writes FF.CFG as button @kind asks. A Save button writes what the dialog
@@ -4761,7 +4762,8 @@ static const struct {
       "Whether the status row shows the side and track in short, at its "
       "right: 0T17" },
     { "display-order",
-      "N=name S=status I=info D=dir C=name+trk Z=dir+trk B=blank d=dbl-hgt" },
+      "N=name S=status I=info D=dir C=name+trk Z=dir+trk B=blank "
+      "d=dbl-hgt w=2x" },
     { "display-off-secs",
       "Seconds without activity before the display goes dark, 0-255: 0 is "
       "always off, 255 never" },

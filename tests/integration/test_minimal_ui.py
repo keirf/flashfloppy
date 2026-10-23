@@ -16,6 +16,21 @@ def pixels(r):
 
 class MinimalUI(display.Case, unittest.TestCase):
 
+    def test_wide_is_double_height(self):
+        """A wide row has the same rendering as a double-height row."""
+        runs = []
+        for order in ("0w,1", "0d,1"):
+            r = fr.run(
+                PROGRAM, ["wait 10000 log Name:", "sleep 300", "dump"],
+                settings=["display = ssd1306-128x64"],
+                flash=["display-type = oled-128x64",
+                       "display-order = " + order],
+                files=display.DSK)
+            self.assertWaits(r, 1)
+            runs.append(r)
+        self.assertEqual(pixels(runs[0]), pixels(runs[1]),
+                         runs[0].report() + runs[1].report())
+
     def test_hex_phase_on_oled(self):
         """The Apple2 phase digit is hexadecimal, with no spinner glyph."""
         rows, r = self.rows(
