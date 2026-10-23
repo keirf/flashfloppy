@@ -1,9 +1,10 @@
 """The LCD's and the OLED's rows as the firmware lays them out: the status
 row's track, in the long form or in short with show-tracks-short, as the apple2
 firmware always gives it, with the phases; display-order's row 4, the image's
-name and its track in short; rows of double width; and the folder's name, which
-row 3 scrolls. An OLED's rows are read as FF OSD gets them, beside it on the I2C
-bus: the display's text, as many columns as it has; or from its pixels, by the
+name and its track in short; rows of double width; and the folders' names,
+which row 3 scrolls and the image selector shows in brackets or after a slash.
+An OLED's rows are read as FF OSD gets them, beside it on the I2C bus: the
+display's text, as many columns as it has; or from its pixels, by the
 firmware's glyphs."""
 
 import os
@@ -558,6 +559,37 @@ class FolderScroll(fr.Case, unittest.TestCase):
         osd = {[line for line in part.splitlines() if line.startswith("|")][0]
                for part in r.stdout.split("\nosd: ")[1:]}
         self.assertEqual(osd, {"|ABCDEFGHIJKL         |"}, r.report())
+
+
+class DirSlash(fr.Case, unittest.TestCase):
+    """The image selector names a folder in brackets, or with a leading slash
+    with show-dir-slash = yes, a subfolder's ".." too. It starts on the folder,
+    sorted before the images, and waits there for a button, as
+    autoselect-folder-secs = 0 asks; Select enters it, at its image, and Left
+    goes on to its ".."."""
+
+    FILES = {"GAMES/A.IMG": bytes(737280), "B.IMG": bytes(737280)}
+
+    def check(self, names, flash=(), ff_cfg=""):
+        files = dict(self.FILES)
+        files["FF.CFG"] = "autoselect-folder-secs = 0\n" + ff_cfg
+        # The firmware writes FF.CFG's options to flash and resets, which
+        # ends a wait: slept.
+        r = fr.run(
+            "ffemu", ["sleep 6000", "wait 10000 display " + names[0],
+                      "key select", "sleep 500", "key left",
+                      "wait 10000 display " + names[1]],
+            settings=["display = hd44780-16x2"], flash=flash, files=files)
+        self.assertWaits(r, 2)
+
+    def test_brackets(self):
+        self.check(["[GAMES]", "[..]"])
+
+    def test_slash(self):
+        self.check(["/GAMES", "/.."], ff_cfg="show-dir-slash = yes\n")
+
+    def test_slash_from_flash(self):
+        self.check(["/GAMES", "/.."], flash=["show-dir-slash = yes"])
 
 
 if __name__ == "__main__":

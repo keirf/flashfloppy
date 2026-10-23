@@ -1599,6 +1599,10 @@ static void read_ff_cfg(void)
                 : SHOWEXT_no;
             break;
 
+        case FFCFG_show_dir_slash:
+            ff_cfg.show_dir_slash = yes;
+            break;
+
         case FFCFG_display_scroll_rate:
             ff_cfg.display_scroll_rate = strtol(opts.arg, NULL, 10);
             if (ff_cfg.display_scroll_rate < 100)
@@ -2073,7 +2077,7 @@ static void native_update(uint8_t slot_mode)
             /* Leave the full pathname cached in fs->fp. */
             cfg.slot.attributes = fs->fp.fattrib;
             snprintf(cfg.slot.name, sizeof(cfg.slot.name),
-                     "[%s]", fs->fp.fname);
+                     ff_cfg.show_dir_slash ? "/%s" : "[%s]", fs->fp.fname);
         } else {
             F_open(&fs->file, fs->fp.fname, FA_READ);
             fs->file.obj.attr = fs->fp.fattrib;

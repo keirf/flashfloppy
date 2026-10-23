@@ -3197,7 +3197,7 @@ static const char * const fd_places[] = {
     "oled-font", "",
     "display-order", "",
     "show-filename-ext", "",
-    "show-tracks-short", "|",
+    "show-tracks-short", "show-dir-slash", "|",
     "autoselect-file-secs", "autoselect-folder-secs", "nav-loop", "",
     "twobutton-action", "",
     "rotary", "",
@@ -4693,6 +4693,9 @@ static const struct {
     { "show-tracks-short",
       "Whether the status row shows the side and track in short, at its "
       "right: 0T17" },
+    { "show-dir-slash",
+      "Whether to show folders as /NAME rather than [NAME], a column "
+      "shorter" },
     { "display-order",
       "0=name 1=status 2=info 3=folder 4=name&status 7=blank, "
       "d=tall w=tall&wide" },
