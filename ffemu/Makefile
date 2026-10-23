@@ -10,16 +10,10 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
 EMU := $(ROOT)/ffemu
 
 TARGET ?= shugart
-ifeq ($(TARGET),shugart)
-NAME := ffemu
-else ifeq ($(TARGET),apple2)
-NAME := ffemu-apple2
-else
-$(error TARGET must be shugart or apple2)
-endif
+NAME := ffemu-$(TARGET)
 
 O ?= $(ROOT)
-OUT := $(abspath $(O))/out/$(NAME)
+OUT := $(abspath $(O))/out/ffemu/$(TARGET)
 
 CC ?= cc
 OBJCOPY ?= objcopy
