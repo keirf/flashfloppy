@@ -140,6 +140,9 @@ int led_7seg_nr_digits(void);
 bool_t lcd_init(void);
 void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
+/* Writes @name, the image's name as shown, to its row and to that of the name
+ * and the track. */
+void display_write_name(const char *name);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
 extern uint8_t lcd_columns, lcd_rows;
