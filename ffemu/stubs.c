@@ -375,7 +375,8 @@ static const struct emu_option_info info[OPT_nr] = {
         .kind = EMU_KIND_number, FLAGS(notify_flags),
         .mask = NOTIFY_volume_mask },
     [OPT_da_report_version] = STRING,
-    [OPT_extend_image] = YES_NO
+    [OPT_extend_image] = YES_NO,
+    [OPT_show_tracks_short] = YES_NO
 };
 #undef VALUES
 #undef FLAGS

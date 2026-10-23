@@ -1,6 +1,7 @@
 """The LCD's and the OLED's rows as the firmware lays them out: the status
-row's track. An OLED's rows are read as FF OSD gets them, beside it on the I2C
-bus: the display's text, as many columns as it has."""
+row's track, in the long form or in short with show-tracks-short. An OLED's
+rows are read as FF OSD gets them, beside it on the I2C bus: the display's
+text, as many columns as it has."""
 
 import unittest
 
@@ -45,6 +46,45 @@ class ThreeDigits(Case, unittest.TestCase):
             "ffemu", steps(100), "ssd1306-128x64",
             flash=["oled-font = 8x16"])
         self.assertEqual(rows[2], "000/000  T:100.0", r.report())
+
+
+class TracksShort(Case, unittest.TestCase):
+    """show-tracks-short = yes: the side, `T` and the track at the status
+    row's right; `W` in place of `T` while writing, `*` for a write-protected
+    image."""
+
+    SHORT = ["show-tracks-short = yes"]
+
+    def test_lcd_16_columns(self):
+        rows, r = self.rows(
+            "ffemu", steps(3), "hd44780-16x2", flash=self.SHORT)
+        self.assertEqual(rows[1], "000/000     0T03", r.report())
+
+    def test_lcd_20_columns(self):
+        rows, r = self.rows(
+            "ffemu", steps(3) + ["key side"], "hd44780-20x4",
+            flash=self.SHORT + ["display-type = lcd-20x04"])
+        self.assertEqual(rows[2], "000/000         1T03", r.report())
+
+    def test_oled(self):
+        rows, r = self.rows(
+            "ffemu", steps(100), "ssd1306-128x32", flash=self.SHORT)
+        self.assertEqual(rows[2], "000/000         0T100", r.report())
+
+    def test_writing(self):
+        rows, r = self.rows(
+            "ffemu", ["key write"], "hd44780-16x2", flash=self.SHORT)
+        self.assertEqual(rows[1], "000/000     0W00", r.report())
+
+    def test_write_protected(self):
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2",
+            flash=self.SHORT + ["write-protect = yes"])
+        self.assertEqual(rows[1], "000/000     0*00", r.report())
+
+    def test_long_by_default(self):
+        rows, r = self.rows("ffemu", steps(3), "hd44780-16x2")
+        self.assertEqual(rows[1], "000/000  T:03.0 ", r.report())
 
 
 if __name__ == "__main__":
