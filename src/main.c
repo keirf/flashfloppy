@@ -288,8 +288,13 @@ static bool_t row4_shown(void)
 /* The current folder's name, which rows 3 and 5 show. */
 static char disp_dir[sizeof(cfg.slot.name)];
 
-/* Scroll long names in row 0 and the combined rows, in each layout. */
-static const uint8_t scroll_rows[] = { 0, 4, 5 };
+/* The image and folder names scroll within the columns that their rows leave
+ * them, each layout at its own offset. */
+#define NAME_PLACE 0
+#define COMBINED_PLACE 1
+#define DIR_PLACE 2
+#define DIR_TRACK_PLACE 3
+static const uint8_t scroll_rows[] = { 0, 4, 3, 5 };
 static const unsigned int scroll_gap = 4;
 struct scroll {
     uint16_t off, end;
@@ -327,20 +332,22 @@ void display_write_name(const char *name)
 /* Writes the current folder's name to its plain and combined rows. */
 static void display_write_dir(const char *name)
 {
-    unsigned int w;
+    unsigned int place, w, i;
 
     snprintf(disp_dir, sizeof(disp_dir), "%s", name);
-    for (w = 0; w < 2; w++) {
-        lcd_scroll.v[4 + w].off = lcd_scroll.v[4 + w].end = 0;
-        scroll_write(/*row=*/3, w, disp_dir);
-        scroll_write(/*row=*/5, w, disp_dir);
+    for (place = DIR_PLACE; place <= DIR_TRACK_PLACE; place++) {
+        for (w = 0; w < 2; w++) {
+            i = 2 * place + w;
+            lcd_scroll.v[i].off = lcd_scroll.v[i].end = 0;
+            scroll_write(scroll_rows[place], w, disp_dir);
+        }
     }
 }
 
 /* The text that scrolling place @p scrolls. */
 static const char *scroll_text(unsigned int p)
 {
-    return (scroll_rows[p] == 5) ? disp_dir : disp_name;
+    return ((p == DIR_PLACE) || (p == DIR_TRACK_PLACE)) ? disp_dir : disp_name;
 }
 
 /* Sets where scrolling @i ends, by the columns that its row's layout has
@@ -355,7 +362,10 @@ static void scroll_init(unsigned int i)
     if ((row == 4) || (row == 5))
         columns -= ((row == 4) ? name4_column(wide) : 0)
             + track_combined_width(wide);
-    sc->end = max_t(int, strnlen(scroll_text(i / 2), sizeof(disp_name)) - columns, 0);
+    /* One bound for every text, the largest buffer's, as each text ends
+     * with a NUL within its own: a bound for each would cost code. */
+    sc->end = max_t(
+        int, strnlen(scroll_text(i / 2), sizeof(disp_name)) - columns, 0);
     if (sc->end && !lcd_scroll.pause)
         sc->end += columns;
     if (sc->off > sc->end)
@@ -366,6 +376,7 @@ static void scroll_init(unsigned int i)
 static void scroll_draw(unsigned int i)
 {
     struct scroll *sc = &lcd_scroll.v[i];
+    unsigned int row = scroll_rows[i / 2];
     const char *s = scroll_text(i / 2);
     char msg[lcd_columns+1];
 
@@ -377,7 +388,7 @@ static void scroll_draw(unsigned int i)
     else
         snprintf(msg, sizeof(msg), "%*s%s",
                  scroll_gap - (sc->off - sc->end), "", s);
-    scroll_write(scroll_rows[i / 2], i & 1, msg);
+    scroll_write(row, i & 1, msg);
 }
 
 static void reset_combined_rows(void)
@@ -391,9 +402,9 @@ static void reset_combined_rows(void)
                           /*width=*/0, /*phases=*/0);
         lcd_write_spinner(/*row=*/5 | (w ? LCD_WIDE : 0), /*col=*/0,
                           /*width=*/0, /*phases=*/0);
-        scroll_init(2 + w);
-        scroll_init(4 + w);
-        scroll_draw(4 + w);
+        scroll_init(2 * COMBINED_PLACE + w);
+        scroll_init(2 * DIR_TRACK_PLACE + w);
+        scroll_draw(2 * DIR_TRACK_PLACE + w);
     }
 }
 
@@ -420,14 +431,18 @@ static void write_wide_slot_info(const char *typename)
 }
 #endif
 
-/* Takes the name's scrolling back to its start. */
+/* Takes the name's scrolling back to its start: rows 0 and 4's. */
 static void lcd_scroll_reset(void)
 {
-    memset(lcd_scroll.v, 0, sizeof(lcd_scroll.v));
+#ifdef MINIMAL_UI
+    lcd_scroll.v[0].off = lcd_scroll.v[0].end = 0;
+#else
+    memset(lcd_scroll.v, 0, 4 * sizeof(lcd_scroll.v[0]));
+#endif
 }
 
 /* Starts the name's scrolling, at @pause and @rate, its first step @ticks
- * away. */
+ * away, and the folder's from its start; elsewhere the folder's goes on. */
 static void lcd_scroll_init(uint16_t pause, uint16_t rate, int32_t ticks)
 {
     unsigned int i;
@@ -437,7 +452,8 @@ static void lcd_scroll_init(uint16_t pause, uint16_t rate, int32_t ticks)
     lcd_scroll.rate = rate;
     for (i = 0; i < ARRAY_SIZE(lcd_scroll.v); i++) {
         scroll_init(i);
-        lcd_scroll.v[i].ticks = ticks;
+        if ((i < 4) || (lcd_scroll.v[i].off == 0))
+            lcd_scroll.v[i].ticks = ticks;
     }
 }
 
@@ -650,7 +666,7 @@ static void lcd_write_track(const struct track_info *ti, char mode)
             *p++ = ' ';
         track_short(p, ti, mode, /*spinner_width=*/w ? 1 : 2, &width);
         for (row = 4; row <= 5; row++) {
-            i = (row == 4) ? 2 + w : 4 + w;
+            i = 2 * ((row == 4) ? COMBINED_PLACE : DIR_TRACK_PLACE) + w;
             lcd_write_spinner(/*row=*/row | (w ? LCD_WIDE : 0),
                 layout_columns(w) - track_combined_width(w)
                 + (p - track_combined[w]), width, ti->phases);
