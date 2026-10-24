@@ -180,6 +180,7 @@ struct packed ff_cfg {
      * width as well. */
     uint8_t display_order_wide;
     bool_t show_dir_slash;
+    bool_t display_scroll_by_pixel;
 };
 
 extern struct ff_cfg ff_cfg;

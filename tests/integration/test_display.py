@@ -2,7 +2,8 @@
 row's track, in the long form or in short with show-tracks-short, as the apple2
 firmware always gives it, with the phases; display-order's row 4, the image's
 name and its track in short; rows of double width; and the folders' names,
-which row 3 scrolls and the image selector shows in brackets or after a slash.
+which row 3 scrolls and the image selector shows in brackets or after a slash;
+and a long name's scrolling by pixel.
 An OLED's rows are read as FF OSD gets them, beside it on the I2C bus: the
 display's text, as many columns as it has; or from its pixels, by the
 firmware's glyphs."""
@@ -590,6 +591,151 @@ class DirSlash(fr.Case, unittest.TestCase):
 
     def test_slash_from_flash(self):
         self.check(["/GAMES", "/.."], flash=["show-dir-slash = yes"])
+
+
+def glyph_columns(font, text):
+    """The pixel columns of @text in @font, each a tuple of its 16 pixels, top
+    down, True where lit."""
+    glyphs = {c: g for g, c in oled_glyphs(font).items()}
+    w = FONT_W[font]
+    cols = []
+    for ch in text:
+        g = glyphs[ch]
+        for j in range(w):
+            cols.append(tuple(
+                bool((g[j] if b < 8 else g[w + j]) >> (b % 8) & 1)
+                for b in range(16)))
+    return cols
+
+
+def row_columns(pixels, top, x0, x1, large=False, wide=False):
+    """The pixel columns @x0 to @x1 - 1, at the font's own scale, of the
+    OLED's text row from pixel row @top of @pixels, rows of "." and "#": of
+    double height if @large, of double width too if @wide."""
+    sy, sx = (2 if large else 1), (2 if wide else 1)
+    return [tuple(pixels[top + sy*b][sx*x] == "#" for b in range(16))
+            for x in range(x0, x1)]
+
+
+class PixelScroll(fr.Case, unittest.TestCase):
+    """With display-scroll-by-pixel = yes, an OLED scrolls a long name a pixel
+    column at a time, at the speed that display-scroll-rate, per character,
+    gives: in a double-width row a column of the font, two of the display;
+    in row 4 only the name, beside its track. An LCD goes on by character.
+    The OLED is seen every 25 ms from 1.8 s after the image is in, at
+    display-scroll-rate = 300: 50 ms per pixel column of the 6x13 font after
+    the pause of 2 s; the names are two characters too long."""
+
+    def frames(self, order, font, name,
+               flash=("display-scroll-by-pixel = yes",), nr=70):
+        """@nr frames of a 128x64 OLED's pixels, with display-order @order and
+        the image @name."""
+        r = fr.run(
+            "ffemu", ["wait 10000 log Name:", "sleep 1800"]
+            + ["sleep 25", "dump"] * nr,
+            settings=["display = ssd1306-128x64"],
+            flash=["display-type = oled-128x64", "display-order = " + order,
+                   "oled-font = " + font, "display-scroll-rate = 300"]
+            + list(flash),
+            files={name + ".IMG": bytes(737280)})
+        self.assertWaits(r, 1)
+        pixels = [line for line in r.lines if line and set(line) <= set(".#")]
+        self.assertEqual(len(pixels), 64 * nr, r.report())
+        return [pixels[i:i+64] for i in range(0, len(pixels), 64)], r
+
+    def shifts(self, frames, stream, x0, n, large=False, wide=False):
+        """The name's shift in each frame: the pixel columns of @stream that
+        the top row's @n columns from @x0 show, None where none fit."""
+        out = []
+        for f in frames:
+            cols = row_columns(f, 0, x0, x0 + n, large, wide)
+            out.append(next((s for s in range(len(stream) - n + 1)
+                             if stream[s:s+n] == cols), None))
+        return out
+
+    def check_by_pixel(self, shifts, end, r):
+        """That @shifts go up from 0 to @end, and rest there, a column at a
+        time: two between two looks at most, the OLED showing a new frame
+        every 25 ms or so, which may miss a step."""
+        self.assertNotIn(None, shifts, r.report())
+        self.assertEqual(shifts[0], 0, shifts)
+        self.assertEqual(shifts[-1], end, shifts)
+        self.assertLessEqual(
+            {b - a for a, b in zip(shifts, shifts[1:])}, {0, 1, 2}, shifts)
+
+    def check_speed(self, shifts, w):
+        """That a character of @w pixel columns goes by in the 300 ms that
+        display-scroll-rate gives."""
+        self.assertAlmostEqual(
+            (shifts.index(2 * w) - shifts.index(w)) * 25, 300, delta=25)
+
+    def test_6x13(self):
+        name = "ABCDEFGHIJKLMNOPQRSTUVW"
+        frames, r = self.frames("0,1", "6x13", name)
+        shifts = self.shifts(frames, glyph_columns("6x13", name), 1, 126)
+        self.check_by_pixel(shifts, 12, r)
+        self.check_speed(shifts, 6)
+
+    def test_8x16(self):
+        name = "ABCDEFGHIJKLMNOPQR"
+        frames, r = self.frames("0,1", "8x16", name)
+        shifts = self.shifts(frames, glyph_columns("8x16", name), 0, 128)
+        self.check_by_pixel(shifts, 16, r)
+        self.check_speed(shifts, 8)
+
+    def test_by_character(self):
+        """By default, a character at a time, at the same speed."""
+        name = "ABCDEFGHIJKLMNOPQRSTUVW"
+        frames, r = self.frames("0,1", "6x13", name, flash=())
+        shifts = self.shifts(frames, glyph_columns("6x13", name), 1, 126)
+        self.assertNotIn(None, shifts, r.report())
+        self.assertEqual(sorted(set(shifts)), [0, 6, 12], shifts)
+        self.check_speed(shifts, 6)
+
+    def test_double_width(self):
+        """A column of the font at a time, in the 10 columns that show."""
+        name = "ABCDEFGHIJKL"
+        frames, r = self.frames("0w,1", "6x13", name)
+        shifts = self.shifts(
+            frames, glyph_columns("6x13", name), 1, 60, True, True)
+        self.check_by_pixel(shifts, 12, r)
+
+    def test_name_status(self):
+        """In row 4 the name scrolls within its 8 columns, after the image's
+        number; the track stays."""
+        name = "ABCDEFGHIJ"
+        frames, r = self.frames("4,1", "6x13", name)
+        shifts = self.shifts(frames, glyph_columns("6x13", name), 49, 48)
+        self.check_by_pixel(shifts, 12, r)
+        tracks = {tuple(row_columns(f, 0, 97, 127)) for f in frames}
+        self.assertEqual(
+            tracks, {tuple(glyph_columns("6x13", " 0T00"))}, r.report())
+
+    def test_endless(self):
+        """With display-scroll-pause = 0, on through the gap after the name
+        and round to its start."""
+        name = "ABCDEFGHIJKLMNOPQRSTUVW"
+        frames, r = self.frames(
+            "0,1", "6x13", name, nr=100,
+            flash=("display-scroll-by-pixel = yes",
+                   "display-scroll-pause = 0"))
+        shifts = self.shifts(
+            frames, glyph_columns("6x13", name + "    " + name), 1, 126)
+        self.assertNotIn(None, shifts, r.report())
+        period = 6 * (len(name) + 4)
+        steps = {(b - a) % period for a, b in zip(shifts, shifts[1:])}
+        self.assertEqual(steps, {0, 1}, shifts)
+
+    def test_lcd(self):
+        """An LCD scrolls by character as before."""
+        r = fr.run(
+            "ffemu", ["wait 10000 log Name:",
+                      "wait 5000 display BCDEFGHIJKLMNOPQ"],
+            settings=["display = hd44780-16x2"],
+            flash=["display-type = lcd-16x02",
+                   "display-scroll-by-pixel = yes"],
+            files={"ABCDEFGHIJKLMNOPQRSTUVW.IMG": bytes(737280)})
+        self.assertWaits(r, 2)
 
 
 if __name__ == "__main__":

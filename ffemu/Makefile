@@ -162,8 +162,8 @@ $(OUT)/fw/display/lcd_stm32f105.o: $(ROOT)/src/display/lcd_stm32f105.c
 	@echo CC display/lcd_stm32f105.c
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
-	$(Q)$(OBJCOPY) $(foreach f,init clear write backlight sync row_columns, \
-	    --redefine-sym lcd_$(f)=f105_lcd_$(f)) $@
+	$(Q)$(OBJCOPY) $(foreach f,init clear write write_shifted backlight sync \
+	    row_columns column_pixels,--redefine-sym lcd_$(f)=f105_lcd_$(f)) $@
 
 # stubs.c wraps these with what ffemu adds to them.
 $(OUT)/fw/floppy.o: $(ROOT)/src/floppy.c

@@ -531,21 +531,15 @@ fail:
 
 #ifdef font_extra
 extern const uint8_t oled_font_8x16[];
-static void oled_convert_text_row_8x16(char *pc)
+static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
+                            unsigned int to)
 {
-    unsigned int i, c;
     const uint8_t *p;
-    uint8_t *q = buffer;
     const unsigned int w = 8;
 
-    for (i = 0; i < lcd_columns; i++) {
-        if ((c = *pc++ - 0x20) > 0x5e)
-            c = '.' - 0x20;
-        p = &oled_font_8x16[c * w * 2];
-        memcpy(q, p, w);
-        memcpy(q+128, p+w, w);
-        q += w;
-    }
+    p = &oled_font_8x16[g * w * 2];
+    memcpy(q, p+from, to-from);
+    memcpy(q+128, p+w+from, to-from);
 }
 #endif
 
