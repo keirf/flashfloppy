@@ -10,6 +10,14 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+/*
+ * PLL nominally runs at the same frequency as the timer's clock but with a
+ * 16.16 fixed-point representation. This allows for lots of precision in phase
+ * error calcuations. NOMINAL_PLL_PHASE_STEP is the PLL phase increment which
+ * causes the PLL to exactly equal the timer's frequency.
+ */
+#define NOMINAL_PLL_PHASE_STEP (1 << 16)
+
 /* A DMA buffer for running a timer associated with a floppy-data I/O pin. */
 struct dma_ring {
     /* Current state of DMA (RDATA): 
@@ -33,7 +41,12 @@ struct dma_ring {
     uint16_t cons;
     union {
         uint16_t prod; /* dma_rd: our producer index for flux samples */
-        uint16_t prev_sample; /* dma_wr: previous CCRx sample value */
+        struct {
+            uint32_t phase_step;    /* PLL period */
+            int32_t phase_integral; /* PLL's running sum of phase errors */
+            uint32_t prev_bc_left;  /* PLL timestamp of left edge of previous bitcell */
+            uint32_t curr_bc_left;  /* PLL timestamp of left edge of current bitcell */
+        } wr;
     };
     /* DMA ring buffer of timer values (ARR or CCRx). */
     uint16_t buf[1024];
@@ -405,6 +418,10 @@ static void wdata_start(void)
     }
 
     dma_wr->state = DMA_starting;
+    dma_wr->wr.phase_step = NOMINAL_PLL_PHASE_STEP;
+    dma_wr->wr.phase_integral = 0;
+    dma_wr->wr.prev_bc_left = 0;
+    dma_wr->wr.curr_bc_left = 0;
 
     /* Start timer. */
     tim_wdata->egr = TIM_EGR_UG;
@@ -647,13 +664,15 @@ static void IRQ_rdata_dma(void)
 static void IRQ_wdata_dma(void)
 {
     const uint16_t buf_mask = ARRAY_SIZE(dma_rd->buf) - 1;
-    uint16_t cons, prod, prev, next;
+    uint16_t cons, prod;
     uint32_t bc_dat = 0, bc_prod;
     uint32_t *bc_buf = image->bufs.write_bc.p;
     unsigned int sync = image->sync;
     unsigned int bc_bufmask = (image->bufs.write_bc.len / 4) - 1;
-    int curr, cell = image->write_bc_ticks;
     struct write *write = NULL;
+    uint32_t next_edge, distance_from_prev_bc_left, distance_from_curr_bc_left;
+    uint32_t bc_step;
+    int32_t phase_error;
 
     /* Clear DMA peripheral interrupts. */
     dma1->ifcr = DMA_IFCR_CGIF(dma_wdata_ch);
@@ -673,27 +692,56 @@ static void IRQ_wdata_dma(void)
     }
 
     /* Process the flux timings into the raw bitcell buffer. */
-    prev = dma_wr->prev_sample;
     bc_prod = image->bufs.write_bc.prod;
     bc_dat = image->write_bc_window;
     for (cons = dma_wr->cons; cons != prod; cons = (cons+1) & buf_mask) {
-        next = dma_wr->buf[cons];
-        curr = (int16_t)(next - prev) - (cell >> 1);
-        if (unlikely(curr < 0)) {
-            /* Runt flux, much shorter than bitcell clock. Merge it forward. */
+        /* Calculate duration of a bitcell using the PLL's current period */
+        bc_step = dma_wr->wr.phase_step * (uint32_t)image->write_bc_ticks;
+
+        /*
+         * Incoming sample ticks are shifted up 16-bits to match PLL's internal
+         * precision
+         */
+        next_edge = (uint32_t)dma_wr->buf[cons] << 16;
+
+        /*
+         * If this is the first pulse after WGATE was asserted, treat it as
+         * perfectly in phase.
+         */
+        if (dma_wr->wr.prev_bc_left == 0 && dma_wr->wr.curr_bc_left == 0) {
+            dma_wr->wr.curr_bc_left = next_edge - (bc_step / 2);
+            dma_wr->wr.prev_bc_left = dma_wr->wr.curr_bc_left - bc_step;
+        }
+
+        /* By computing distance, wraparound is accounted for naturally. */
+        distance_from_prev_bc_left = next_edge - dma_wr->wr.prev_bc_left;
+
+        /* If the next edge would fall within the previous bitcell, ignore it. */
+        if (distance_from_prev_bc_left < (dma_wr->wr.curr_bc_left - dma_wr->wr.prev_bc_left))
+        {
             continue;
         }
-        prev = next;
-        while ((curr -= cell) > 0) {
+
+        /* Advance to the current bitcell */
+        distance_from_curr_bc_left = next_edge - dma_wr->wr.curr_bc_left;
+
+        /* Record zeros for each bitcell that passed before this pulse */
+        while (distance_from_curr_bc_left > bc_step)
+        {
             bc_dat <<= 1;
             bc_prod++;
-            if (!(bc_prod&31))
-                bc_buf[((bc_prod-1) / 32) & bc_bufmask] = htobe32(bc_dat);
+
+            if (!(bc_prod & 31))
+                bc_buf[((bc_prod - 1) / 32) & bc_bufmask] = htobe32(bc_dat);
+
+            distance_from_curr_bc_left -= bc_step;
+            dma_wr->wr.curr_bc_left += bc_step;
         }
-        curr += cell >> 1; /* remove the 1/2-cell bias */
-        prev -= curr >> 2; /* de-jitter/precomp: carry 1/4 of phase error */
+
+        /* Record a one for this bitcell */
         bc_dat = (bc_dat << 1) | 1;
         bc_prod++;
+
         switch (sync) {
         case SYNC_fm:
             /* FM clock sync clock byte is 0xc7. Check for:
@@ -708,6 +756,63 @@ static void IRQ_wdata_dma(void)
         }
         if (!(bc_prod&31))
             bc_buf[((bc_prod-1) / 32) & bc_bufmask] = htobe32(bc_dat);
+
+        /*
+         * Calculate per-tick phase error.
+         *
+         * Start with total phase error accumulated since the last flux pulse.
+         * Assume that error was introduced evenly by each clock tick that
+         * occurred during that time.  Divide the total phase error by the
+         * number of ticks to find average per-tick phase error.
+         */
+        phase_error = ((int32_t)distance_from_curr_bc_left - ((int32_t)bc_step / 2)) / (int32_t)image->write_bc_ticks;
+
+        /* Adjust bitcell history for next iteration */
+        dma_wr->wr.prev_bc_left = dma_wr->wr.curr_bc_left;
+        dma_wr->wr.curr_bc_left += bc_step;
+
+        /* Accumulate error into integral, saturating as necessary */
+        if (dma_wr->wr.phase_integral > 0 && phase_error > INT32_MAX - dma_wr->wr.phase_integral) {
+            dma_wr->wr.phase_integral = INT32_MAX;
+        } else if (dma_wr->wr.phase_integral < 0 && phase_error < INT32_MIN - dma_wr->wr.phase_integral) {
+            dma_wr->wr.phase_integral = INT32_MIN;
+        } else {
+            dma_wr->wr.phase_integral += phase_error;
+        }
+
+        /*
+         * Calculate next phase_step by applying a PI loop using the constants
+         * from the following analysis (based on
+         * https://www.dsprelated.com/showarticle/967.php):
+         *
+         *   f_s = NCO base frequency
+         *   k_p = phase detector gain
+         *   k_nco = NCO feedback scaler
+         *   zeta = loop dampening coefficient
+         *   f_n = loop natural frequency
+         *   k_l = proportional scaler
+         *   k_i = integral scaler
+         *
+         *   w_n = f_n * 2 * pi
+         *   Ts = 1 / f_s
+         *   k_l = 2 * zeta * w_n * Ts / (k_p * k_nco)
+         *   k_i = w_n^2 * Ts^2 / (k_p * k_nco)
+         *
+         *  Assumptions:
+         *   f_s = 72,000,000 Hz
+         *   k_p = 1.0
+         *   k_nco = 1.0
+         *   f_n = 1,440,000 Hz (2% of f_s to allow for moderate freq offset)
+         *   zeta = 0.25 (strong jitter rejection for write precomp)
+         *
+         *  Results:
+         *   k_l = 0.06283185307 ~= 1/16
+         *   k_i = 0.01579136704 ~= 1/64
+         */
+        dma_wr->wr.phase_step = (uint32_t)(
+            (int32_t)NOMINAL_PLL_PHASE_STEP
+            + phase_error / 16
+            + dma_wr->wr.phase_integral / 64);
     }
 
     if (bc_prod & 31)
@@ -722,14 +827,12 @@ static void IRQ_wdata_dma(void)
         /* Initialise decoder state for the start of the next write. */
         bc_prod = (bc_prod + 31) & ~31;
         bc_dat = ~0;
-        prev = 0;
     }
 
     /* Save our progress for next time. */
     image->write_bc_window = bc_dat;
     image->bufs.write_bc.prod = bc_prod;
     dma_wr->cons = cons;
-    dma_wr->prev_sample = prev;
 }
 
 /*
