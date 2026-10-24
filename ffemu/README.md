@@ -320,6 +320,22 @@ the previous one is kept as `console.bak`, replacing the one before it. A reset
 that the firmware does by itself is no power cycle: the file and the pane go on
 after a green line `======= Firmware reset =======`.
 
+A fault, such as a write through a bad pointer, ends ffemu with a report on
+standard error and at the end of the console log: the signal, the thread
+(`firmware`, `bus`, `script`, `TUI` or `main`), the registers `rip`, `rsp` and
+`eflags`, and the stack, which `addr2line -f -e <program>` turns into functions
+and lines: each frame's address, ffemu's image being loaded where it was
+linked, or on Linux in a position-independent build the offset in parentheses
+after the program's name, the first frames being the report's own, and each
+frame after the first a return address, which names the line after its call.
+The report takes the place of the `.stackdump` file that Cygwin would write. On
+Windows, under heavy load, ffemu may end with the status 0x80000004 and no
+report: the MSYS2 runtime delivers a signal by setting a thread's single-step
+trap flag, and when the thread gets no time slice within 10 ms, leaves the flag
+set with its own handler gone, and the trap reaches no handler of ffemu's. The
+script command `crash` makes a fault, a write through a null pointer, to test
+the report.
+
 ## Settings
 
 The ffemu app settings (not to be confused with the Gotek settings in the flash
@@ -414,8 +430,9 @@ from a directory and inserts such a drive again as the Externals dialog does,
 between bars, a 7-segment display as its digits drawn with `_` and `|` in
 three rows, a lit point as `.`), `log` (the firmware's console output so far),
 `status`, `flash` (the `[Flash mem]` section as the flash memory is now), `osd`
-(FF OSD's text, its rows between bars), and `save <file>`, which writes the USB
-drive as the firmware sees it, its writes included, to an image file.
+(FF OSD's text, its rows between bars), `save <file>`, which writes the USB
+drive as the firmware sees it, its writes included, to an image file, and
+`crash`, a write through a null pointer, which tests the crash report.
 
 `wait <ms> <log|display|segments> <text>` lets the firmware run until a
 condition holds, checked every 10 ms, or `<ms>` pass, and prints which, as
@@ -470,6 +487,8 @@ with `FFEMU_CLOCK=host` set on the host's.
   `osd_font.h`, a copy of FF OSD's own.
 - `fatimg.c`: the USB drive: the FAT32 or FAT16 volume built from a directory,
   or an image or a disk read as it is, with the firmware's writes kept aside.
+- `crash.c`: the report of a crash, on Linux by glibc's `backtrace()`, on
+  Windows by unwinding the fault's own context.
 - `tui.c`, `script.c`, `rc.c`, `ffemu.c`: the terminal user interface, the
   script driver, the preferences and the main program.
 

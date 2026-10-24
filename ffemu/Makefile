@@ -49,7 +49,7 @@ FONTS := 6x13 8x16
 
 # The host half: everything that touches the host operating system.
 HOST_SRCS := ffemu.c cpu.c ssd1306.c fatimg.c rc.c tui.c script.c usbdisk.c
-HOST_SRCS += cfgfile.c led_7seg.c hd44780.c wincon.c osd.c
+HOST_SRCS += cfgfile.c led_7seg.c hd44780.c wincon.c osd.c crash.c
 
 FW_OBJS := $(patsubst %.c,$(OUT)/fw/%.o,$(FW_SRCS))
 FW_OBJS += $(patsubst %.c,$(OUT)/emu/%.o,$(EMU_FW_SRCS))

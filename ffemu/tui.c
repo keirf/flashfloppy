@@ -4469,6 +4469,7 @@ static void *tui_thread(void *unused)
     uint64_t t;
     wint_t ch;
 
+    crash_name_thread("TUI");
     fitted_display = config.display;
     initscr();
     cbreak();

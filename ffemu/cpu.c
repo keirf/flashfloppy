@@ -612,6 +612,7 @@ int emu_on_hw_thread(void)
 
 static void *hw_thread(void *unused)
 {
+    crash_name_thread("bus");
     /* It must know itself before it runs a model, which pends interrupts. */
     while (!hw_started)
         sleep_us(100);
@@ -650,28 +651,29 @@ static void tty_restore(void)
         tcsetattr(STDIN_FILENO, TCSANOW, &tty_mode);
 }
 
-/* A signal that ends the program: the terminal gets its screen and modes
- * back, as far as a signal handler can do that, and then the signal takes
- * its course. */
-static void on_fatal(int sig)
+/* The terminal's screen and modes back, as far as a signal handler can. */
+static void restore_terminal(void)
 {
-    static const char crashed[] = "\nffemu: crashed with signal ";
-    char nr[3] = { '0' + (sig / 10) % 10, '0' + sig % 10, '\n' };
-
     tui_stop_fatal();
     tty_restore();
+}
 
-    /* A fault re-raised from within the tick's handler can end the program
-     * with status 0 on Cygwin: say so, and leave with a signal's status. */
-    if ((sig == SIGSEGV) || (sig == SIGBUS) || (sig == SIGILL)
-        || (sig == SIGFPE) || (sig == SIGABRT)) {
-        (void)!write(STDERR_FILENO, crashed, sizeof(crashed) - 1);
-        (void)!write(STDERR_FILENO, nr, sizeof(nr));
-        _exit(128 + sig);
-    }
-
+/* A signal that ends the program: the terminal gets its screen and modes
+ * back, and then the signal takes its course. */
+static void on_fatal(int sig)
+{
+    restore_terminal();
     signal(sig, SIG_DFL);
     raise(sig);
+}
+
+/* A fault: the terminal back, a report of where, and the end with a signal's
+ * status, which a fault re-raised from within the tick's handler does not
+ * give on Cygwin. */
+static void on_fault(int sig, siginfo_t *si, void *uc)
+{
+    crash_report(sig, si, uc);
+    _exit(128 + sig);
 }
 
 /* A firmware that waits for a button by spinning on a variable that only its
@@ -1054,8 +1056,11 @@ const char *cpu_restart_state(void)
 
 void cpu_init(char **argv)
 {
+    static const int faults[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT };
     const char *hex = getenv("FFEMU_FLASH"), *tty = getenv("FFEMU_TTY");
     const char *clock = getenv("FFEMU_CLOCK");
+    struct sigaction sa;
+    unsigned int i;
 
     saved_argv = argv;
     clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -1113,11 +1118,16 @@ void cpu_init(char **argv)
     signal(SIGINT, on_fatal);
     signal(SIGQUIT, on_fatal);
     signal(SIGTERM, on_fatal);
-    signal(SIGILL, on_fatal);
-    signal(SIGABRT, on_fatal);
-    signal(SIGFPE, on_fatal);
-    signal(SIGBUS, on_fatal);
-    signal(SIGSEGV, on_fatal);
+    crash_init(log_fd, restore_terminal);
+    crash_name_thread("main");
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = on_fault;
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigemptyset(&sa.sa_mask);
+    /* No tick, which runs the models and interrupts, within the report. */
+    sigaddset(&sa.sa_mask, SIGALRM);
+    for (i = 0; i < ARRAY_SIZE(faults); i++)
+        sigaction(faults[i], &sa, NULL);
 
     /* Threads created from now on must not take the tick. */
     block_tick(SIG_BLOCK);
@@ -1141,6 +1151,7 @@ void cpu_start(void)
     setitimer(ITIMER_REAL, &it, NULL);
 
     fw_tid = pthread_self();
+    crash_name_thread("firmware");
     if (virtual_clock)
         virt_recount(VIRT_STILL_BLOCKS);
     /* Created while the tick is still blocked, which it inherits; on the

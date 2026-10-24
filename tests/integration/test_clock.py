@@ -20,6 +20,7 @@ class VirtualClock(fr.Case, unittest.TestCase):
         self.assertWaits(first, nr_waits)
         for _ in range(2):
             again = fr.run("ffemu", commands, files=files)
+            self.assertEqual(again.returncode, 0, again.report())
             self.assertEqual(again.stdout, first.stdout)
 
     def test_images(self):
