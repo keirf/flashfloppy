@@ -1,9 +1,10 @@
 """The LCD's and the OLED's rows as the firmware lays them out: the status
 row's track, in the long form or in short with show-tracks-short, as the apple2
 firmware always gives it, with the phases; display-order's row 4, the image's
-name and its track in short; and rows of double width. An OLED's rows are read
-as FF OSD gets them, beside it on the I2C bus: the display's text, as many
-columns as it has; or from its pixels, by the firmware's glyphs."""
+name and its track in short; rows of double width; and the folder's name, which
+row 3 scrolls. An OLED's rows are read as FF OSD gets them, beside it on the I2C
+bus: the display's text, as many columns as it has; or from its pixels, by the
+firmware's glyphs."""
 
 import os
 import re
@@ -519,6 +520,44 @@ class DoubleWidth(Case, unittest.TestCase):
         self.assertEqual(r.flash().get("display-order"), "1w,0", r.report())
         pixels = [line for line in r.lines if line and set(line) <= set(".#")]
         self.assertEqual(oled_text(pixels, 0, "6x13", True), "    T:00.0")
+
+
+class FolderScroll(fr.Case, unittest.TestCase):
+    """The folder's name scrolls in row 3, as the image's in row 0, where the
+    row cannot hold it whole; in a double-width row within the columns that
+    show, while FF OSD gets it whole. The image selector starts on the
+    folder, the root's only entry, and enters it after
+    autoselect-folder-secs, then mounts its image."""
+
+    def test_lcd(self):
+        """Once the image is in: the selector's name, the folder's in
+        brackets, scrolls too."""
+        r = fr.run(
+            "ffemu", ["wait 15000 log Name:",
+                      "wait 10000 display BCDEFGHIJKLMNOPQRSTU"],
+            settings=["display = hd44780-20x4"],
+            flash=["display-type = lcd-20x04"],
+            files={"ABCDEFGHIJKLMNOPQRSTUVWXY/A.IMG": bytes(737280)})
+        self.assertWaits(r, 2)
+
+    def test_double_width(self):
+        """Seen every 200 ms for 5 s, through the pauses at its ends."""
+        r = fr.run(
+            "ffemu", ["wait 15000 log Name:"]
+            + ["sleep 200", "dump", "osd"] * 25,
+            settings=["display = ssd1306-128x64"],
+            flash=["display-type = oled-128x64", "display-order = 3w,0",
+                   "osd-display-order = 3,0"],
+            files={"ABCDEFGHIJKL/A.IMG": bytes(737280)})
+        self.assertWaits(r, 1)
+        pixels = [line for line in r.lines if line and set(line) <= set(".#")]
+        wide = {oled_text(pixels[i:i+64], 0, "6x13", True)
+                for i in range(0, len(pixels), 64)}
+        self.assertIn("ABCDEFGHIJ", wide, r.report())
+        self.assertIn("CDEFGHIJKL", wide, r.report())
+        osd = {[line for line in part.splitlines() if line.startswith("|")][0]
+               for part in r.stdout.split("\nosd: ")[1:]}
+        self.assertEqual(osd, {"|ABCDEFGHIJKL         |"}, r.report())
 
 
 if __name__ == "__main__":

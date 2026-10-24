@@ -233,10 +233,14 @@ static bool_t row4_shown(void)
     return FALSE;
 }
 
+/* The current folder's name, which row 3 shows. */
+static char disp_dir[sizeof(cfg.slot.name)];
+
 /* Scroll long filename: in row 0, and in row 4 within the columns that it
- * leaves the name, each at its own offset, in the row's layouts of normal and
- * of half width: scrolling 2 * i + wide is row scroll_rows[i]'s. */
-static const uint8_t scroll_rows[] = { 0, 4 };
+ * leaves the name, and the folder's name in row 3, each at its own offset, in
+ * the row's layouts of normal and of half width: scrolling 2 * i + wide is
+ * row scroll_rows[i]'s. */
+static const uint8_t scroll_rows[] = { 0, 4, 3 };
 static const unsigned int scroll_gap = 4;
 struct scroll {
     uint16_t off, end;
@@ -272,8 +276,27 @@ void display_write_name(const char *name)
     }
 }
 
+/* Writes @name, the current folder's, to row 3, its scrolling back at its
+ * start, which lcd_scroll_init() sets going. */
+static void display_write_dir(const char *name)
+{
+    unsigned int w;
+
+    snprintf(disp_dir, sizeof(disp_dir), "%s", name);
+    for (w = 0; w < 2; w++) {
+        lcd_scroll.v[4 + w].off = lcd_scroll.v[4 + w].end = 0;
+        scroll_write(3, w, disp_dir);
+    }
+}
+
+/* The text that row @row scrolls. */
+static const char *scroll_text(unsigned int row)
+{
+    return (row == 3) ? disp_dir : disp_name;
+}
+
 /* Sets where scrolling @i ends, by the columns that its row's layout has
- * for the name. */
+ * for its text. */
 static void scroll_init(unsigned int i)
 {
     struct scroll *sc = &lcd_scroll.v[i];
@@ -283,38 +306,41 @@ static void scroll_init(unsigned int i)
 
     if (row == 4)
         columns -= name4_column(wide) + track4_width(wide);
-    sc->end = max_t(int, strnlen(disp_name, sizeof(disp_name)) - columns, 0);
+    sc->end = max_t(
+        int, strnlen(scroll_text(row), sizeof(disp_name)) - columns, 0);
     if (sc->end && !lcd_scroll.pause)
         sc->end += columns;
     if (sc->off > sc->end)
         sc->off = lcd_scroll.pause || !sc->end ? 0 : sc->end + diff;
 }
 
-/* Writes the name of scrolling @i at its offset. */
+/* Writes the text of scrolling @i at its offset. */
 static void scroll_draw(unsigned int i)
 {
     struct scroll *sc = &lcd_scroll.v[i];
+    unsigned int row = scroll_rows[i / 2];
+    const char *s = scroll_text(row);
     char msg[lcd_columns+1];
 
     if (lcd_scroll.pause || !sc->end)
-        snprintf(msg, sizeof(msg), "%s", disp_name + sc->off);
+        snprintf(msg, sizeof(msg), "%s", s + sc->off);
     else if (sc->off <= sc->end)
         snprintf(msg, sizeof(msg), "%s%*s%s",
-                 disp_name + sc->off, scroll_gap, "", disp_name);
+                 s + sc->off, scroll_gap, "", s);
     else
         snprintf(msg, sizeof(msg), "%*s%s",
-                 scroll_gap - (sc->off - sc->end), "", disp_name);
-    scroll_write(scroll_rows[i / 2], i & 1, msg);
+                 scroll_gap - (sc->off - sc->end), "", s);
+    scroll_write(row, i & 1, msg);
 }
 
-/* Takes the name's scrolling back to its start. */
+/* Takes the name's scrolling back to its start: rows 0 and 4's. */
 static void lcd_scroll_reset(void)
 {
-    memset(lcd_scroll.v, 0, sizeof(lcd_scroll.v));
+    memset(lcd_scroll.v, 0, 4 * sizeof(lcd_scroll.v[0]));
 }
 
 /* Starts the name's scrolling, at @pause and @rate, its first step @ticks
- * away. */
+ * away, and the folder's from its start; elsewhere the folder's goes on. */
 static void lcd_scroll_init(uint16_t pause, uint16_t rate, int32_t ticks)
 {
     unsigned int i;
@@ -324,7 +350,8 @@ static void lcd_scroll_init(uint16_t pause, uint16_t rate, int32_t ticks)
     lcd_scroll.rate = rate;
     for (i = 0; i < ARRAY_SIZE(lcd_scroll.v); i++) {
         scroll_init(i);
-        lcd_scroll.v[i].ticks = ticks;
+        if ((i < 4) || (lcd_scroll.v[i].off == 0))
+            lcd_scroll.v[i].ticks = ticks;
     }
 }
 
@@ -1806,7 +1833,7 @@ native_mode:
     /* Process IMAGE_A.CFG file. */
     sofar = 0; /* bytes consumed so far */
     fatfs.cdir = cfg.cur_cdir;
-    lcd_write(0, 3, -1, "/");
+    display_write_dir("/");
     for (;;) {
         int nr;
         bool_t ok;
@@ -1821,7 +1848,7 @@ native_mode:
         /* Terminate the name section, push curdir onto stack, then chdir. */
         *p++ = '\0';
         printk("%u:D: '%s'\n", cfg.depth, fs->buf);
-        lcd_write(0, 3, -1, fs->buf);
+        display_write_dir(fs->buf);
         if (cfg.depth == ARRAY_SIZE(cfg.stack))
             F_die(FR_PATH_TOO_DEEP);
         /* Find slot nr, and stack it */
@@ -1902,7 +1929,7 @@ clear_image_a:
     /* Error! Clear the IMAGE_A.CFG file. */
     printk("Bad IMAGE_A.CFG: clearing\n");
     F_lseek(&fs->file, 0);
-    lcd_write(0, 3, -1, "/");
+    display_write_dir("/");
     F_truncate(&fs->file);
     F_close(&fs->file);
     cfg.slot_nr = cfg.depth = 0;
@@ -1986,18 +2013,18 @@ static void native_update(uint8_t slot_mode)
                     fs->buf[sz] = '\0';
                     /* q = pointer to '/' preceding the subfolder name. */
                     q = strrchr(fs->buf, '/');
-                    lcd_write(0, 3, -1, q ? q+1 : fs->buf);
+                    display_write_dir(q ? q+1 : fs->buf);
                     F_lseek(&fs->file, pos);
                 } else {
                     F_lseek(&fs->file, 0);
-                    lcd_write(0, 3, -1, "/");
+                    display_write_dir("/");
                 }
             } else {
                 /* Add name plus '/' */
                 F_write(&fs->file, fs->fp.fname,
                         strnlen(fs->fp.fname, sizeof(fs->fp.fname)), NULL);
                 F_write(&fs->file, "/", 1, NULL);
-                lcd_write(0, 3, -1, fs->fp.fname);
+                display_write_dir(fs->fp.fname);
             }
         } else {
             /* Add name */
