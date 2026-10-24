@@ -931,6 +931,31 @@ void emu_flash_set_display_auto(void *cfg)
     ((struct ff_cfg *)cfg)->display_type = DISPLAY_auto;
 }
 
+int emu_flash_order_fits(const void *cfg, int oled, unsigned int *taken,
+                         unsigned int *room)
+{
+    const struct ff_cfg *f = cfg;
+    uint16_t t = f->display_type, order = f->display_order;
+    unsigned int i, n = 0;
+
+    if (t != DISPLAY_auto)
+        oled = !!(t & DISPLAY_oled);
+    *room = oled ? ((t & DISPLAY_oled_64) ? 4 : 2)
+        : (t == DISPLAY_auto) ? 2
+        : range_t(unsigned int, (t >> _DISPLAY_lcd_rows) & 7, 2, 4);
+    if (order == DORD_default) {
+        *taken = *room;
+        return 1;
+    }
+    /* The rows that the parser fills in after those given are blank. */
+    for (i = *taken = 0; i < 4; i++, order >>= DORD_shift) {
+        n += (oled && (order & DORD_double)) ? 2 : 1;
+        if ((order & 0xf) != 7)
+            *taken = n;
+    }
+    return *taken == *room;
+}
+
 /*
  * Heap: src/arena.c. The real one is what is left of the 32 kB of RAM above
  * the firmware's own data, 26.5 kB. Structures holding pointers are larger

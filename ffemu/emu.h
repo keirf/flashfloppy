@@ -229,6 +229,15 @@ void emu_flash_set_lcd(void *cfg, unsigned int cols, unsigned int rows);
 /* Whether display-type in @cfg lets the firmware look for a display by
  * itself, which is how it finds an LED display; and setting it so. */
 int emu_flash_display_auto(const void *cfg);
+/* Whether display-order in @cfg fills the display that display-type gives
+ * exactly, as the firmware lays it out: rows of 16 pixels on an OLED, of
+ * which a double one, d or w, takes two, and on an LCD the first ones, all
+ * of one row; @oled for the kind of the display fitted, which display-type
+ * auto drives as an OLED of 128x32 or an LCD of 16x2. The rows that it
+ * takes into @taken, up to its last but blank ones, and those that the
+ * display has into @room. */
+int emu_flash_order_fits(const void *cfg, int oled, unsigned int *taken,
+                         unsigned int *room);
 void emu_flash_set_display_auto(void *cfg);
 
 #endif /* FFEMU_EMU_H */

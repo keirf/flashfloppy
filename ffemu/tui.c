@@ -159,7 +159,7 @@ enum {
  * and the display that the display dialog has selected. */
 static enum {
     DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul,
-    DLG_externals, DLG_message, DLG_fdfile, DLG_unpack, DLG_write,
+    DLG_order, DLG_externals, DLG_message, DLG_fdfile, DLG_unpack, DLG_write,
     DLG_fdhelp, DLG_nr
 } dialog;
 /* The message box over a dialog: what it says, and the dialog it returns
@@ -1873,7 +1873,7 @@ static void draw_bars(void)
 static bool takes_yes_no(int d)
 {
     return (d == DLG_quit) || (d == DLG_rows) || (d == DLG_emul)
-        || (d == DLG_fdfile);
+        || (d == DLG_order) || (d == DLG_fdfile);
 }
 
 /* The bottom line: the keys of the dialog open, or else of ffemu. */
@@ -2775,6 +2775,66 @@ static void draw_emul_dialog(void)
     button(y + 5, x + w / 2 + 4, button_attr(1), "  No  ");
 }
 
+/* The configuration in flash before the power cycle that brings in the
+ * display fitted, whose display-order does not fill that display: the order
+ * dialog offers to reset it to default. As emu_flash_order_fits() gives
+ * them, the rows that it takes and those that the display has, and the
+ * display's kind; and what FF.CFG on the drive says about display-order,
+ * as for the rows dialog. */
+static uint8_t order_cfg[256];
+static unsigned int order_taken, order_room;
+static bool order_oled;
+static int order_file;
+static char order_file_value[64];
+
+/* display-order's default for an OLED if @oled, else for an LCD, of 4 rows
+ * if @tall, else of 2. */
+static const char *default_order(bool oled, bool tall)
+{
+    return !tall ? "0,1" : oled ? "3,0d,1" : "3,0,1,2";
+}
+
+static void draw_order_dialog(void)
+{
+    char value[64], line[4][160];
+    int w = 32, y, x, h, i, nr = 3;
+
+    option_value(order_cfg, "display-order", value, sizeof(value));
+    snprintf(line[0], sizeof(line[0]), "Flash mem has display-order = %s.",
+             value);
+    if (order_oled)
+        snprintf(line[1], sizeof(line[1]), "An OLED driven as 128x%u has "
+                 "room for %u rows; this gives %u, d and w ones counting 2.",
+                 (order_room == 4) ? 64 : 32, order_room, order_taken);
+    else if (order_taken > order_room)
+        snprintf(line[1], sizeof(line[1]), "A %u-row LCD shows only the "
+                 "first %u of the %u rows this gives.", order_room,
+                 order_room, order_taken);
+    else
+        snprintf(line[1], sizeof(line[1]), "A %u-row LCD leaves %u of its "
+                 "rows blank with this.", order_room,
+                 order_room - order_taken);
+    snprintf(line[2], sizeof(line[2]), "Reset it to default (%s here)?",
+             default_order(order_oled, order_room == 4));
+    if (order_file == ROWS_FILE_writable)
+        snprintf(line[nr++], sizeof(line[0]), "FF.CFG on the drive sets %s "
+                 "too: it is changed as well.", order_file_value);
+    else if (order_file == ROWS_FILE_image)
+        snprintf(line[nr++], sizeof(line[0]), "FF.CFG in the drive's image "
+                 "sets %s and will override this on boot.",
+                 order_file_value);
+    for (i = 0; i < nr; i++)
+        if ((int)strlen(line[i]) + 8 > w)
+            w = strlen(line[i]) + 8;
+    h = nr + 5;
+
+    dialog_box(w, h, "Display order", &y, &x);
+    for (i = 0; i < nr; i++)
+        put(y + 2 + i, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", line[i]);
+    button(y + h - 3, x + w / 2 - 12, button_attr(0), "  Yes  ");
+    button(y + h - 3, x + w / 2 + 4, button_attr(1), "  No  ");
+}
+
 static void draw_dialog(void)
 {
     switch (dialog) {
@@ -2795,6 +2855,9 @@ static void draw_dialog(void)
         break;
     case DLG_emul:
         draw_emul_dialog();
+        break;
+    case DLG_order:
+        draw_order_dialog();
         break;
     case DLG_externals:
         draw_externals_dialog();
@@ -2831,8 +2894,8 @@ static void draw_dialog(void)
 /* What a key did in a dialog. */
 enum {
     DK_none, DK_taken, DK_quit, DK_display, DK_rows_yes, DK_rows_no,
-    DK_emul_yes, DK_emul_no, DK_externals, DK_drive, DK_fdfile_yes,
-    DK_fdfile_no,
+    DK_emul_yes, DK_emul_no, DK_order_yes, DK_order_no, DK_externals,
+    DK_drive, DK_fdfile_yes, DK_fdfile_no,
     DK_unpack, DK_write, DK_recommend
 };
 
@@ -3004,15 +3067,20 @@ static int dialog_key(int key)
         return ((key == '\n') && (dialog_button == 0)) ? done : DK_taken;
     }
 
-    /* The rows and emul dialogs have no way back: the display or the flash
-     * has changed already. */
-    if ((dialog == DLG_rows) || (dialog == DLG_emul)) {
+    /* The rows, emul and order dialogs have no way back: the display or the
+     * flash has changed already. */
+    if ((dialog == DLG_rows) || (dialog == DLG_emul)
+        || (dialog == DLG_order)) {
         bool yes = (key == '\n') && (dialog_button == 0);
         if ((key != 27) && (key != '\n'))
             return DK_taken;
         if (dialog == DLG_emul) {
             dialog = DLG_none;
             return yes ? DK_emul_yes : DK_emul_no;
+        }
+        if (dialog == DLG_order) {
+            dialog = DLG_none;
+            return yes ? DK_order_yes : DK_order_no;
         }
         dialog = DLG_none;
         return yes ? DK_rows_yes : DK_rows_no;
@@ -3176,6 +3244,34 @@ static void drop_sequence(wint_t c)
     }
 }
 
+/* Power-cycles the device, which brings in the display fitted and what flash
+ * holds; first, for an OLED or an LCD, asking to reset display-order in
+ * flash to default if it does not fill the display exactly. */
+static void restart_display(void)
+{
+    uint8_t cfg[256];
+
+    emu_flash_get(order_cfg);
+    order_oled = DISP_IS_OLED(config.display);
+    if (DISP_IS_LED(config.display)
+        || emu_flash_order_fits(order_cfg, order_oled, &order_taken,
+                                &order_room))
+        leave(KEY_ACT_reset);
+    /* FF.CFG on the drive would set it again on the next boot. */
+    order_file = ROWS_FILE_none;
+    memcpy(cfg, order_cfg, sizeof(cfg));
+    emu_flash_set_option(cfg, "display-order", "default");
+    if (ff_cfg_overrides(cfg, "display-order", order_file_value,
+                         sizeof(order_file_value))) {
+        struct usb_info usb;
+        usb_get_info(&usb);
+        order_file = (usb.kind == USB_image)
+            ? ROWS_FILE_image : ROWS_FILE_writable;
+    }
+    dialog = DLG_order;
+    dialog_button = 0;
+}
+
 /* Fits display @display and makes the firmware run the display driver of MCU
  * @mcu, EMU_MCU_*, if either is another than it is, and power-cycles the
  * device; first asking to change display-type in flash if that does not
@@ -3196,7 +3292,7 @@ static void set_display(int display, int mcu)
         return;
     }
     if (rows_restart)
-        leave(KEY_ACT_reset);
+        restart_display();
 }
 
 /*
@@ -4127,7 +4223,7 @@ static void fd_commit(const uint8_t *cfg)
     emu_flash_save(cfg, fdf_erase ? 0 : emu_flash_cfg_size());
     dialog = DLG_none;
     if (!fd_offer_display(fdf_old_type))
-        leave(KEY_ACT_reset);
+        restart_display();
 }
 
 /* What OK goes on with once @cfg holds what flash is to: the question of
@@ -4978,7 +5074,7 @@ static const char *fd_default_display_order(void)
         oled = !strncmp(t, "oled-", 5);
         tall = !strcmp(t, "oled-128x64") || !strcmp(t, "lcd-20x04");
     }
-    return !tall ? "0,1" : oled ? "3,0d,1" : "3,0,1,2";
+    return default_order(oled, tall);
 }
 
 /* The help of the buttons. */
@@ -5457,17 +5553,32 @@ static void handle_key(int key)
             ff_cfg_set_option("display-type", then, msg, sizeof(msg));
             host_log("%s", msg);
         }
-        leave(KEY_ACT_reset);
+        restart_display();
+        return;
     }
     case DK_rows_no:
         if (rows_restart)
-            leave(KEY_ACT_reset);
+            restart_display();
         return;
     case DK_emul_yes:
         config.display = emul_display;
         rc_save();
-        leave(KEY_ACT_reset);
+        restart_display();
+        return;
     case DK_emul_no:
+        restart_display();
+        return;
+    case DK_order_yes: {
+        char msg[160];
+        emu_flash_set_option(order_cfg, "display-order", "default");
+        emu_flash_save(order_cfg, emu_flash_cfg_size());
+        if (order_file == ROWS_FILE_writable) {
+            ff_cfg_set_option("display-order", "default", msg, sizeof(msg));
+            host_log("%s", msg);
+        }
+        leave(KEY_ACT_reset);
+    }
+    case DK_order_no:
         leave(KEY_ACT_reset);
     case DK_externals:
         ui_usb_set_fat16(dialog_usb_fat == 1);
@@ -5902,6 +6013,20 @@ static void check_dialog_states(int d)
         open_externals_dialog();
         for (dialog_focus = 0; dialog_focus < EF_nr; dialog_focus++)
             check_dialog(d);
+        break;
+    case DLG_order:
+        emu_flash_get(order_cfg);
+        snprintf(order_file_value, sizeof(order_file_value), "3,0d,1,2");
+        for (i = 0; i < 8; i++) {
+            /* An OLED or an LCD of 2 or 4 rows, given more or fewer. */
+            order_oled = i & 1;
+            order_room = (i & 2) ? 4 : 2;
+            order_taken = (i & 4) ? order_room + 2 : order_room - 1;
+            for (j = ROWS_FILE_none; j <= ROWS_FILE_image; j++) {
+                order_file = j;
+                check_buttons(d, 2);
+            }
+        }
         break;
     case DLG_message:
         fd_open();
