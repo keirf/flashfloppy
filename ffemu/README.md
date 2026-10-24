@@ -333,8 +333,9 @@ Windows, under heavy load, ffemu may end with the status 0x80000004 and no
 report: the MSYS2 runtime delivers a signal by setting a thread's single-step
 trap flag, and when the thread gets no time slice within 10 ms, leaves the flag
 set with its own handler gone, and the trap reaches no handler of ffemu's. The
-script command `crash` makes a fault, a write through a null pointer, to test
-the report.
+virtual clock has no tick signal, so a script on it does not meet that death.
+The script command `crash` makes a fault, a write through a null pointer, to
+test the report.
 
 ## Settings
 
@@ -478,8 +479,8 @@ with `FFEMU_CLOCK=host` set on the host's.
   of the firmware's floppy code: an idle in the loop that runs while an image
   is mounted, and the image's name for the Status window.
 - `cpu.c`: the interrupt controller, a 1 ms tick delivered as a signal to the
-  thread that runs the firmware, cancellable calls, and reset, which
-  re-executes the program.
+  thread that runs the firmware on the host's clock, cancellable calls, and
+  reset, which re-executes the program.
 - `ssd1306.c`: the OLED's controller, an SSD1306 or an SH1106, as an I2C slave.
 - `hd44780.c`: the LCD, an HD44780 controller behind a PCF8574 port expander as
   an I2C slave, and its characters as pixels from the font of the character ROM
