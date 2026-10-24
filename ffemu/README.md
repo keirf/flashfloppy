@@ -160,11 +160,18 @@ changes it in `FF.CFG` on the drive as well when the file sets it, for a drive
 made from a directory or a mounted disk (an image's `FF.CFG` cannot be changed,
 and the dialog warns that it will override the flash on the next boot), and
 when `display-type` is changed in the Flash mem dialog, it offers to fit the
-display that suits it. When the firmware drives another display than the one
-fitted, for instance because `FF.CFG` on the drive says so, the display's frame
-shows "display type mismatch". The firmware finds an LED display only when
-`display-type` is `auto`, so fitting one offers to set that; the display is
-drawn with its unlit segments faint, in the same three renderings as the OLED.
+display that suits it. Before the power cycle that brings in a display or flash
+changed in those dialogs, ffemu checks that `display-order` fills the display
+exactly, as the firmware lays it out by `display-type`: on an OLED its rows of
+16 pixels, of which a double one, `d` or `w`, takes two, and on an LCD its
+rows, which show the first entries alone; if it gives more or fewer, ffemu
+offers to reset it to `default`, in `FF.CFG` on the drive as well when the file
+sets it, warning as above for an image. When the firmware drives another
+display than the one fitted, for instance because `FF.CFG` on the drive says
+so, the display's frame shows "display type mismatch". The firmware finds an
+LED display only when `display-type` is `auto`, so fitting one offers to set
+that; the display is drawn with its unlit segments faint, in the same three
+renderings as the OLED.
 The firmware sizes an LCD by `display-type`, e.g. `display-type = lcd-20x04`,
 and drives one that it finds with `auto` as a 16x2; the LCD is drawn dark on
 its lit panel, in the color of the settings (white on blue, dark or bright),
