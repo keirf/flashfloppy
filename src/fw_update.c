@@ -467,6 +467,20 @@ int main(void)
         else
             snprintf(msg, sizeof(msg), "E%02u", fail_code);
         msg_display(msg);
+        if (display_type == DT_LCD_OLED) {
+            /* What it means as well, over the whole row. */
+            static const char * const fail_hint[] = {
+                [FC_no_file] = "No .upd file",
+                [FC_multiple_files] = "Multiple upd",
+                [FC_bad_file] = "Invalid upd",
+                [FC_bad_crc] = "Corrupt upd",
+                [FC_bad_prg] = "Flash failed"
+            };
+            snprintf(msg + 3, sizeof(msg) - 3, " %s",
+                     fres ? fresult_hint(fres) : fail_hint[fail_code]);
+            lcd_write(0, 1, -1, msg);
+            lcd_sync();
+        }
 
         /* If we had modified flash, fully erase the main firmware area. */
         if (old_firmware_erased)
