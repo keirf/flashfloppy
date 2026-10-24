@@ -479,9 +479,29 @@ static bool_t parse_display_type(char *s, uint32_t *v)
     return TRUE;
 }
 
+/* display-order's content rows by their initials, as FF.CFG documents
+ * them: N, S, I, D, and B for the blank row 7; x marks rows with no initial. */
+static const char display_order_initials[] = "NSIDxxxB";
+
+/* The content row of display-order's item @c, its digit or its initial in
+ * either case, or -1 if it names none. */
+static int display_order_row(char c)
+{
+    unsigned int i;
+
+    if ((c >= '0') && (c <= '7'))
+        return c - '0';
+    for (i = 0; i < sizeof(display_order_initials) - 1; i++)
+        if ((display_order_initials[i] != 'x')
+            && (display_order_initials[i] == (c & ~0x20)))
+            return i;
+    return -1;
+}
+
 static bool_t parse_display_order(char *s, uint32_t *v)
 {
     unsigned int sh = 0;
+    int row = -1;
     char *next;
 
     if (!strcmp(s, "default")) {
@@ -491,10 +511,10 @@ static bool_t parse_display_order(char *s, uint32_t *v)
     *v = 0;
     for (; s != NULL; s = next) {
         next = next_token(s, ',');
-        if ((sh >= 16) || (s[0] < '0') || (s[0] > '7')
+        if ((sh >= 16) || ((row = display_order_row(s[0])) < 0)
             || ((s[1] != '\0') && ((s[1] != 'd') || (s[2] != '\0'))))
             return FALSE;
-        *v |= ((s[0] - '0') | ((s[1] == 'd') ? DORD_double : 0)) << sh;
+        *v |= (row | ((s[1] == 'd') ? DORD_double : 0)) << sh;
         sh += DORD_shift;
     }
     /* Blank rows for the rest, within the 16 bits that the option has. */
@@ -643,7 +663,8 @@ store:
     return TRUE;
 }
 
-/* A display order: its rows, less the blank ones that the parser adds. */
+/* A display order: its rows by their initials, less the blank ones that the
+ * parser adds. Rows 4 to 6, which no initial names, keep their digits. */
 static void format_display_order(char *buf, unsigned int size, uint16_t v)
 {
     unsigned int nr = 4, i, n = 0;
@@ -657,8 +678,11 @@ static void format_display_order(char *buf, unsigned int size, uint16_t v)
     buf[0] = '\0';
     for (i = 0; i < nr; i++) {
         unsigned int row = (v >> (i * DORD_shift)) & 15;
-        n += snprintf(buf + n, size - n, "%s%u%s", i ? "," : "",
-                      row & DORD_row, (row & DORD_double) ? "d" : "");
+        char c = display_order_initials[row & DORD_row];
+
+        n += snprintf(buf + n, size - n, "%s%c%s", i ? "," : "",
+                      (c != 'x') ? c : '0' + (row & DORD_row),
+                      (row & DORD_double) ? "d" : "");
     }
 }
 

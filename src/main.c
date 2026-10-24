@@ -1072,16 +1072,33 @@ static uint8_t parse_pin_str(const char *s)
     return pin;
 }
 
+/* The content row of display-order's item @c: its digit, or its row's
+ * initial in either case; B, the blank row 7, and anything else blank. */
+static unsigned int display_order_row(char c)
+{
+    static const char initials[] = "NSID";
+    unsigned int i;
+
+    if ((unsigned int)(c - '0') < 10)
+        return (c - '0') & 7;
+    for (i = 0; i < sizeof(initials) - 1; i++)
+        if (initials[i] == (c & ~0x20))
+            return i;
+    return 7;
+}
+
 static uint16_t parse_display_order(const char *p)
 {
     int sh = 0;
     uint16_t order = 0;
+    unsigned int row;
 
     if (!strcmp(p, "default"))
         return DORD_default;
 
     while (p != NULL) {
-        order |= ((p[0]-'0')&7) << sh;
+        row = display_order_row(p[0]);
+        order |= row << sh;
         if (p[1] == 'd')
             order |= DORD_double << sh;
         sh += DORD_shift;
