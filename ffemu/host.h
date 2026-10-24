@@ -319,6 +319,20 @@ void usb_ff_cfg_place(const char *dir, char *buf, size_t size);
 /* Writes the drive as the firmware sees it to file @path; if that fails,
  * says why in @err. */
 bool usb_save(const char *path, char *err, size_t size);
+/* The firmware's writes as files: the drive's files that they made differ
+ * from the medium's, kept in the folder drive/ under ffemu's state folder
+ * @dir, which usb_drive_dir() names. */
+void usb_set_state_dir(const char *dir);
+const char *usb_drive_dir(void);
+/* A pass over the drive's files, keeping the folder up to date; _written()
+ * only if the firmware wrote since the last pass; _finish() before a quit,
+ * waiting for its writes to be quiet first if @wait. */
+void usb_drive_pass(void);
+void usb_drive_pass_written(void);
+void usb_drive_finish(bool wait);
+/* Makes a pass once the firmware's writes have been quiet for a while, on
+ * the host's clock. */
+void *usb_drive_thread(void *unused);
 
 /*
  * cfgfile.c
