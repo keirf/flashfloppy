@@ -10,6 +10,7 @@
  */
 
 /* FF.CFG: Compiled default values. */
+#define FF_CFG_ALL_OPTIONS
 const struct ff_cfg dfl_ff_cfg = {
     .version = FFCFG_VERSION,
     .size = sizeof(struct ff_cfg),

@@ -148,6 +148,14 @@ unsigned int lcd_row_columns(unsigned int row);
 /* With lcd_write()'s row, the row's layout of half width, which an OLED shows
  * where display-order draws the row double width. */
 #define LCD_WIDE 8
+/* lcd_write() of @str from column @col to the row's end, of which an OLED
+ * shows the @nr columns from @col @px pixels to the left, fewer than
+ * lcd_column_pixels(), the pixels so freed at their right from @str[@nr],
+ * which must be a character of @str unless @px is 0. */
+void lcd_write_shifted(int col, int row, int nr, unsigned int px,
+                       const char *str);
+/* The pixel columns of an OLED's text column. */
+unsigned int lcd_column_pixels(void);
 /* Text rows stored by the display drivers, including combined rows 4 and 5
  * when supported. */
 #ifdef MINIMAL_UI

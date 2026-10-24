@@ -3329,7 +3329,7 @@ static const char * const fd_places[] = {
     "sort-priority", "|",
     "display-order", "selector-display-order", "",
     "display-scroll-rate", "display-scroll-pause", "nav-scroll-rate",
-        "nav-scroll-pause", "",
+        "nav-scroll-pause", "display-scroll-by-pixel", "",
     "display-off-secs", "",
     "display-on-activity", "",
     "image-on-startup", "",
@@ -4456,8 +4456,9 @@ static void draw_write_dialog(void)
 /* The options recommended for display @d into @cfg, which holds the
  * defaults: display-type for it where the default does not suit it, the
  * extension of an image where it tells it from another, the track in short,
- * and on an OLED a display-order with the name double width, combined with
- * the track on a 128x32 panel. None for an LED display. */
+ * and on an OLED names scrolling by pixel and a display-order with the name
+ * double width, combined with the track on a 128x32 panel. None for an LED
+ * display. */
 static void recommend(void *cfg, int d)
 {
     static const char * const opts[] = {
@@ -4475,9 +4476,11 @@ static void recommend(void *cfg, int d)
     }
     for (i = 0; i < ARRAY_SIZE(opts); i += 2)
         emu_flash_set_option(cfg, opts[i], opts[i + 1]);
-    if (DISP_IS_OLED(d))
+    if (DISP_IS_OLED(d)) {
+        emu_flash_set_option(cfg, "display-scroll-by-pixel", "yes");
         emu_flash_set_option(cfg, "display-order",
                              (DISP_HEIGHT(d) == 64) ? "D,Nw,S" : "Cw");
+    }
 }
 
 /* Writes FF.CFG as button @kind asks. A Save button writes what the dialog
@@ -4869,17 +4872,20 @@ static const struct {
       "Seconds without activity before the display goes dark, 0-255: 0 is "
       "always off, 255 never" },
     { "display-scroll-rate",
-      "Milliseconds per step of a long name scroll, 100..65535: less is "
-      "faster" },
+      "Milliseconds per character of a long name scroll, 100..65535: less "
+      "is faster" },
     { "display-scroll-pause",
       "Milliseconds a long name scroll rests at each end, 0..65535: 0 "
       "scrolls without rest" },
     { "nav-scroll-rate",
-      "Milliseconds per scroll step while browsing, 0..65535: less is "
-      "faster" },
+      "Milliseconds per character of a scroll while browsing, 0..65535: "
+      "less is faster" },
     { "nav-scroll-pause",
       "Milliseconds before a long name starts to scroll while browsing, "
       "0..65535" },
+    { "display-scroll-by-pixel",
+      "Whether a long name scrolls on an OLED a pixel at a time, not a "
+      "character, at the same speed" },
     { "nav-mode", "How floppies are found on the USB drive" },
     { "folder-sort",
       "A sorted folder must fit in RAM: \"always\" cuts big ones, \"small\" "

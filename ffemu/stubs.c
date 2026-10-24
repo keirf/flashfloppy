@@ -128,6 +128,7 @@ void console_crash_on_input(void)
  * half, which keeps it in the settings file.
  */
 
+#define FF_CFG_ALL_OPTIONS
 const struct ff_cfg dfl_ff_cfg = {
     .version = FFCFG_VERSION,
     .size = sizeof(struct ff_cfg),
@@ -376,7 +377,8 @@ static const struct emu_option_info info[OPT_nr] = {
         .mask = NOTIFY_volume_mask },
     [OPT_da_report_version] = STRING,
     [OPT_extend_image] = YES_NO,
-    [OPT_show_tracks_short] = YES_NO
+    [OPT_show_tracks_short] = YES_NO,
+    [OPT_display_scroll_by_pixel] = YES_NO
 };
 #undef VALUES
 #undef FLAGS

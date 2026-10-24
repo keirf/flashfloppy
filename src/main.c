@@ -299,24 +299,29 @@ static const unsigned int scroll_gap = 4;
 struct scroll {
     uint16_t off, end;
     int32_t ticks;
+    /* The pixels shifted beyond off, on an OLED that scrolls by pixel. */
+    uint8_t px;
 };
 static struct {
     uint16_t pause, rate;
     struct scroll v[2 * ARRAY_SIZE(scroll_rows)];
 } lcd_scroll;
 
-/* Writes @s where row @row shows its text, with a combined row's track. */
+/* Writes @s to row @row, shifted @px pixels left, with a combined row's track
+ * after it. */
 static void scroll_write(unsigned int row, unsigned int wide,
-                         const char *s)
+                         const char *s, unsigned int px)
 {
-    unsigned int r = row | (wide ? LCD_WIDE : 0);
+    unsigned int r = row | (wide ? LCD_WIDE : 0), col = 0;
+    unsigned int nr = layout_columns(wide);
 
     if ((row == 4) || (row == 5)) {
-        lcd_write(/*col=*/(row == 4) ? name4_column(wide) : 0, r, /*min=*/-1, s);
-        write_track_combined(row, wide);
-    } else {
-        lcd_write(/*col=*/0, r, /*min=*/-1, s);
+        col = (row == 4) ? name4_column(wide) : 0;
+        nr -= col + track_combined_width(wide);
     }
+    lcd_write_shifted(/*col=*/col, r, nr, px, s);
+    if ((row == 4) || (row == 5))
+        write_track_combined(row, wide);
 }
 
 void display_write_name(const char *name)
@@ -324,8 +329,8 @@ void display_write_name(const char *name)
     unsigned int w;
 
     for (w = 0; w < 2; w++) {
-        scroll_write(/*row=*/0, w, name);
-        scroll_write(/*row=*/4, w, name);
+        scroll_write(/*row=*/0, w, name, /*px=*/0);
+        scroll_write(/*row=*/4, w, name, /*px=*/0);
     }
 }
 
@@ -339,7 +344,8 @@ static void display_write_dir(const char *name)
         for (w = 0; w < 2; w++) {
             i = 2 * place + w;
             lcd_scroll.v[i].off = lcd_scroll.v[i].end = 0;
-            scroll_write(scroll_rows[place], w, disp_dir);
+            lcd_scroll.v[i].px = 0;
+            scroll_write(scroll_rows[place], w, disp_dir, 0);
         }
     }
 }
@@ -368,17 +374,20 @@ static void scroll_init(unsigned int i)
         int, strnlen(scroll_text(i / 2), sizeof(disp_name)) - columns, 0);
     if (sc->end && !lcd_scroll.pause)
         sc->end += columns;
-    if (sc->off > sc->end)
+    if (!sc->end || (sc->off > sc->end)) {
         sc->off = lcd_scroll.pause || !sc->end ? 0 : sc->end + diff;
+        sc->px = 0;
+    }
 }
 
-/* Writes the text of scrolling @i at its offset. */
+/* Writes the text of scrolling @i at its offset, and the character after the
+ * columns that show it. */
 static void scroll_draw(unsigned int i)
 {
     struct scroll *sc = &lcd_scroll.v[i];
     unsigned int row = scroll_rows[i / 2];
     const char *s = scroll_text(i / 2);
-    char msg[lcd_columns+1];
+    char msg[lcd_columns+2];
 
     if (lcd_scroll.pause || !sc->end)
         snprintf(msg, sizeof(msg), "%s", s + sc->off);
@@ -388,7 +397,7 @@ static void scroll_draw(unsigned int i)
     else
         snprintf(msg, sizeof(msg), "%*s%s",
                  scroll_gap - (sc->off - sc->end), "", s);
-    scroll_write(row, i & 1, msg);
+    scroll_write(row, i & 1, msg, sc->px);
 }
 
 static void reset_combined_rows(void)
@@ -473,14 +482,18 @@ static unsigned int lcd_scroll_end(void)
 }
 
 /* Scrolls each row whose step is due, in each layout, @ticks after the last
- * call. */
+ * call: by a pixel on an OLED with display-scroll-by-pixel, else by a
+ * column. */
 static void lcd_scroll_name(int32_t ticks)
 {
 #ifndef MINIMAL_UI
     static struct track_info ti;
     struct scroll *sc;
     bool_t track_read = FALSE;
-    unsigned int i;
+    unsigned int i, steps = 1;
+
+    if (ff_cfg.display_scroll_by_pixel && is_oled_display)
+        steps = lcd_column_pixels();
 
     for (i = 0; i < ARRAY_SIZE(lcd_scroll.v); i++) {
         sc = &lcd_scroll.v[i];
@@ -496,7 +509,16 @@ static void lcd_scroll_name(int32_t ticks)
             return;
         }
 
-        sc->ticks = time_ms(lcd_scroll.rate);
+        /* The next step a step after this one was due, so that the steps by
+         * pixel take as long as one by column. */
+        sc->ticks = max_t(int32_t, 0,
+                          sc->ticks + time_ms(lcd_scroll.rate) / steps);
+        if ((++sc->px < steps)
+            && ((lcd_scroll.pause == 0) || (sc->off < sc->end))) {
+            scroll_draw(i);
+            continue;
+        }
+        sc->px = 0;
         sc->off++;
         if (lcd_scroll.pause != 0) {
             if (sc->off > sc->end)
@@ -1802,6 +1824,12 @@ static void read_ff_cfg(void)
                 ff_cfg.display_scroll_rate = 100;
             cfg.ffcfg_has_display_scroll_rate = TRUE;
             break;
+
+#ifndef MINIMAL_UI
+        case FFCFG_display_scroll_by_pixel:
+            ff_cfg.display_scroll_by_pixel = yes;
+            break;
+#endif
 
         case FFCFG_display_scroll_pause:
             ff_cfg.display_scroll_pause = strtol(opts.arg, NULL, 10);

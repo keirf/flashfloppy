@@ -520,6 +520,7 @@ fail:
 
 #ifdef font_extra
 extern const uint8_t oled_font_8x16[];
+#ifdef MINIMAL_UI
 static void oled_convert_text_row_8x16(char *pc)
 {
     unsigned int i, c;
@@ -536,6 +537,18 @@ static void oled_convert_text_row_8x16(char *pc)
         q += w;
     }
 }
+#else
+static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
+                            unsigned int to)
+{
+    const uint8_t *p;
+    const unsigned int w = 8;
+
+    p = &oled_font_8x16[g * w * 2];
+    memcpy(q, p+from, to-from);
+    memcpy(q+128, p+w+from, to-from);
+}
+#endif
 #endif
 
 static unsigned int oled_start_i2c(uint8_t *buf)

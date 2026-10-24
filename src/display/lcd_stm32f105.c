@@ -594,6 +594,7 @@ fail:
 #define OLED_FONT_8x16_SYNTH 0
 #endif
 extern const uint8_t oled_font_8x16[];
+#ifdef MINIMAL_UI
 static void oled_convert_text_row_8x16(char *pc)
 {
     unsigned int i, j, c;
@@ -625,6 +626,34 @@ static void oled_convert_text_row_8x16(char *pc)
         q += w;
     }
 }
+#else
+static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
+                            unsigned int to)
+{
+    unsigned int j;
+    const uint8_t *p;
+    const unsigned int w = 8;
+
+    /* Testing a macro at runtime allows the build system to supply a
+     * runtime condition.
+     */
+    if (OLED_FONT_8x16_SYNTH) {
+        /* The 6x13 glyph made bold by a second copy a column to the
+         * right, 7 columns by 13 rows: centered in the cell and rounded
+         * up and left, it is at the left, a row down, where the 6x13
+         * font already has it in its 16 rows. */
+        p = &oled_font_6x13[g * 6 * 2];
+        for (j = from; j < to; j++, q++) {
+            q[0] = ((j < 6) ? p[j] : 0) | ((j-1 < 6) ? p[j-1] : 0);
+            q[128] = ((j < 6) ? p[6+j] : 0) | ((j-1 < 6) ? p[5+j] : 0);
+        }
+    } else {
+        p = &oled_font_8x16[g * w * 2];
+        memcpy(q, p+from, to-from);
+        memcpy(q+128, p+w+from, to-from);
+    }
+}
+#endif
 #endif
 
 static unsigned int oled_start_i2c(uint8_t *buf)

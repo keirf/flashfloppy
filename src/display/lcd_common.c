@@ -93,6 +93,17 @@ static struct oled_spinner {
 } oled_spinners[ARRAY_SIZE(text)];
 #endif
 
+#ifndef MINIMAL_UI
+/* Of each text row, in its layouts of normal and of half width, the columns
+ * that an OLED shows px pixels to the left in the normal display mode, from
+ * col to col + nr - 1, the pixels so freed at their right from next's glyph:
+ * see lcd_write_shifted(). */
+static struct oled_shift {
+    uint8_t col, nr, px, wide_col, wide_nr, wide_px;
+    char next, wide_next;
+} oled_shift[ARRAY_SIZE(text)];
+#endif
+
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
 
@@ -114,7 +125,12 @@ static void timeout_fn(void *unused)
 static bool_t i2c_probe(uint8_t a);
 static bool_t i2c_sync_write(uint8_t b);
 #ifdef font_extra
+#ifdef MINIMAL_UI
 static void oled_convert_text_row_8x16(char *pc);
+#else
+static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
+                            unsigned int to);
+#endif
 #endif
 
 /* Emit a 4-bit command to the HD44780 via the DMA buffer. */
@@ -159,6 +175,9 @@ void lcd_clear(void)
 #endif
 #if OLED_SPINNER_ENABLED
     memset(oled_spinners, 0, sizeof(oled_spinners));
+#endif
+#ifndef MINIMAL_UI
+    memset(oled_shift, 0, sizeof(oled_shift));
 #endif
 }
 
@@ -217,6 +236,35 @@ void lcd_write(int col, int row, int min, const char *str)
 
     IRQ_restore(oldpri);
 }
+
+#ifndef MINIMAL_UI
+void lcd_write_shifted(int col, int row, int nr, unsigned int px,
+                       const char *str)
+{
+    bool_t wide = row & LCD_WIDE;
+    struct oled_shift *s = &oled_shift[row & ~LCD_WIDE];
+    uint32_t oldpri = IRQ_save(I2C_IRQ_PRI);
+
+    if (wide) {
+        s->wide_col = col;
+        s->wide_nr = nr;
+        s->wide_px = px;
+        s->wide_next = px ? str[nr] : ' ';
+    } else {
+        s->col = col;
+        s->nr = nr;
+        s->px = px;
+        s->next = px ? str[nr] : ' ';
+    }
+    lcd_write(col, row, -1, str);
+    IRQ_restore(oldpri);
+}
+
+unsigned int lcd_column_pixels(void)
+{
+    return (oled_font == FONT_8x16) ? 8 : 6;
+}
+#endif
 
 void lcd_backlight(bool_t on)
 {
@@ -292,6 +340,8 @@ static void oled_draw_spinner(unsigned int row, unsigned int half,
 #endif
 
 extern const uint8_t oled_font_6x13[];
+
+#ifdef MINIMAL_UI
 static void oled_convert_text_row_6x13(char *pc)
 {
     unsigned int i, c;
@@ -325,6 +375,62 @@ static void oled_convert_text_row(char *pc)
 #endif
         oled_convert_text_row_6x13(pc);
 }
+#else
+/* Writes pixel columns @from to @to - 1 of the glyph of @c to buffer[] at @q,
+ * its top and bottom pages. */
+static void oled_glyph(uint8_t *q, char c, unsigned int from,
+                       unsigned int to)
+{
+    unsigned int g = (uint8_t)c - 0x20;
+    const uint8_t *p;
+
+    if (g > 0x5e)
+        g = '.' - 0x20;
+#ifdef font_extra
+    if (oled_font == FONT_8x16) {
+        oled_glyph_8x16(q, g, from, to);
+        return;
+    }
+#endif
+    p = &oled_font_6x13[g * 6 * 2];
+    memcpy(q, p+from, to-from);
+    memcpy(q+128, p+6+from, to-from);
+}
+
+/* Renders text row @pc into buffer[], its columns shifted as @s says in the
+ * normal or selector display mode. */
+static void oled_convert_text_row(const char *pc, const struct oled_shift *s,
+                                  bool_t wide)
+{
+    unsigned int i, from, w = lcd_column_pixels();
+    unsigned int col = wide ? s->wide_col : s->col;
+    unsigned int nr = wide ? s->wide_nr : s->nr;
+    unsigned int px = normal_mode ? (wide ? s->wide_px : s->px) : 0;
+    char next = wide ? s->wide_next : s->next;
+    uint8_t *q = buffer;
+
+    if (w == 6) {
+        q[0] = q[128] = 0;
+        q++;
+    }
+
+    for (i = 0; i <= lcd_columns; i++) {
+        if (i == col + nr) {
+            oled_glyph(q, next, 0, px);
+            q += px;
+        }
+        if (i == lcd_columns)
+            break;
+        from = (i == col) ? px : 0;
+        oled_glyph(q, pc[i], from, w);
+        q += w - from;
+    }
+
+    /* Fill remainder of buffer[] with zeroes. */
+    memset(q, 0, buffer+128-q);
+    memset(q+128, 0, buffer+128-q);
+}
+#endif
 
 static unsigned int oled_queue_cmds(
     uint8_t *buf, const uint8_t *cmds, unsigned int nr)
@@ -440,7 +546,11 @@ static void oled_to_lcd_row(int in_row)
         pc = text_wide[row];
 #endif
     if (pc != NULL) {
+#ifdef MINIMAL_UI
         oled_convert_text_row(pc);
+#else
+        oled_convert_text_row(pc, &oled_shift[row], wide);
+#endif
 #if OLED_SPINNER_ENABLED
         if (wide)
             oled_draw_spinner(row, /*half=*/0, /*wide=*/TRUE, /*stretched=*/TRUE);

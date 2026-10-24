@@ -181,6 +181,7 @@ struct packed ff_cfg {
     uint8_t display_order_wide;
     uint16_t selector_display_order;
     uint8_t selector_display_order_wide;
+    bool_t display_scroll_by_pixel;
 };
 
 extern struct ff_cfg ff_cfg;
