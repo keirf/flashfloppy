@@ -138,14 +138,15 @@ def read_tree(top):
 
 
 def run(name, commands, settings=(), flash=(), ffemurc=None, files=None,
-        timeout=120, state=None, clock=None):
+        timeout=120, state=None, clock=None, drive_image=None):
     """Runs program @name on @commands, then quits it. Its settings are the
     lines @settings, then a [Flash mem] section of the lines @flash if any,
     unless @ffemurc gives the whole file; its USB drive is a folder holding
-    @files, a dict of paths and contents. Its state folder is @state, else
-    one of its own; its clock @clock, else CLOCK's. A run that exits with 0
-    but does not print "quit" last raises an error: it died, as an MSYS2
-    parent sees a process that an exception ended."""
+    @files, a dict of paths and contents, or image file @drive_image. Its
+    state folder is @state, else one of its own; its clock @clock, else
+    CLOCK's. A run that exits with 0 but does not print "quit" last raises
+    an error: it died, as an MSYS2 parent sees a process that an exception
+    ended."""
     if name == "ffemu": name = "ffemu-shugart"
     with tempfile.TemporaryDirectory(prefix="ffemu-test-") as tmp:
         config = os.path.join(tmp, "config")
@@ -171,7 +172,8 @@ def run(name, commands, settings=(), flash=(), ffemurc=None, files=None,
             FFEMU_CLOCK=clock or CLOCK)
         script = "".join(c + "\n" for c in list(commands) + ["key quit"])
         with subprocess.Popen(
-                [program(name), drive], stdin=subprocess.PIPE,
+                [program(name), drive_image or drive],
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 env=env) as p:
             try:

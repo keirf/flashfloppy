@@ -101,6 +101,8 @@ enum {
     CP_dlg_help,  /* blue on light gray: the help of the control in focus */
     CP_input,     /* bright white on blue: an input line */
     CP_button_def, /* bright cyan on green: the default button */
+    CP_button_hot, /* yellow on green, bright: a button's hotkey */
+    CP_button_off, /* dark gray on green: a disabled button */
     CP_signal,    /* black on dark yellow: an active signal of the host */
     CP_key,       /* red on blue: key names, bright, or dark where dimmed */
     CP_lcd,       /* black on the color of the settings: the LCD, lit */
@@ -182,13 +184,16 @@ static const char * const df_label[DF_nr] = {
  * fitted, and the places of its focus. */
 static int dialog_usb_fat;
 static bool dialog_osd;
-enum { EF_fat, EF_osd, EF_ok, EF_cancel, EF_nr };
+enum { EF_fat, EF_osd, EF_drive, EF_ok, EF_cancel, EF_nr };
 /* The Externals dialog's labels, by the control each names, `~` around the
  * letter that moves the focus to it. */
 static const char * const ef_label[EF_nr] = {
     [EF_fat] = "File ~s~ystem of a USB drive made from a directory",
     [EF_osd] = "FF ~O~SD: the display's text over the host's video",
 };
+/* What the drive button wrote, its path between MSG_USER marks, on the
+ * dialog's last row. */
+static char ef_note[1200];
 static void draw_dialog(void);
 static void draw_fdfile_dialog(void);
 static void draw_unpack_dialog(void);
@@ -2200,17 +2205,36 @@ static void draw_display_dialog(void)
             mcu_help[dialog_mcu]);
 }
 
+/* The caption of the Externals dialog's drive button, by the drive's kind,
+ * and whether it is enabled, while a drive is in. */
+static const char *drive_caption(bool *enabled)
+{
+    struct usb_info info;
+
+    usb_get_info(&info);
+    if (enabled != NULL)
+        *enabled = info.inserted;
+    return (info.kind == USB_image) ? "Unpack drive ~i~mage to folder"
+        : "Save drive to ~i~mage file";
+}
+
 /* What the device is connected to, each as radio buttons: the file system of
- * a USB drive made from a directory; and FF OSD, as a check box. */
+ * a USB drive made from a directory; and FF OSD, as a check box. Below them
+ * the drive button, which saves the drive as an image or unpacks an image
+ * drive, into ffemu's state folder. */
 static void draw_externals_dialog(void)
 {
     static const char * const fat_label[2] = {
         "FAT32", "FAT16: up to 2 GB, a root folder of 512 entries"
     };
-    int w = 68, h = 6, y, x, i, row;
+    int w = 68, h = 7, y, x, i, row;
+    char caption[40];
+    const char *c;
+    bool enabled;
 
-    /* The frame, its empty first row and the buttons, then each cluster's
-     * label, options and empty row, and its note below them all. */
+    /* The frame, its empty first row, the buttons and the row of what the
+     * drive button wrote, then each cluster's label, options and empty row,
+     * and its note below them all. */
     h += 1 + 2 + 1 + 1;
     h += 1 + 1 + 1 + 1;
     dialog_box(w, h, "Externals", &y, &x);
@@ -2234,10 +2258,58 @@ static void draw_externals_dialog(void)
     /* OK is the default while the focus is on no button. Both are at the
      * bottom right, as in Turbo Pascal's dialogs, Cancel's shadow at the
      * clusters' right edge, two columns between OK's shadow and Cancel. */
-    button(y + h - 3, x + w - 23,
+    button(y + h - 4, x + w - 23,
            button_face(dialog_focus == EF_ok, dialog_focus < EF_ok), "  OK  ");
-    button(y + h - 3, x + w - 14,
+    button(y + h - 4, x + w - 14,
            button_face(dialog_focus == EF_cancel, false), "  Cancel  ");
+    /* The drive button at the left, its hotkey letter as the labels'. */
+    c = drive_caption(&enabled);
+    caption[0] = caption[1] = ' ';
+    for (i = 2; (*c != '\0') && (i < (int)sizeof(caption) - 3); c++)
+        if (*c != '~')
+            caption[i++] = *c;
+    caption[i++] = ' ';
+    caption[i++] = ' ';
+    caption[i] = '\0';
+    button(y + h - 4, x + 3, !enabled ? COLOR_PAIR(CP_button_off)
+           : button_face(dialog_focus == EF_drive, false), caption);
+    if (enabled)
+        put_marked(y + h - 4, x + 5, w - 8,
+                   button_face(dialog_focus == EF_drive, false),
+                   BRIGHT(CP_button_hot), drive_caption(NULL));
+    if (ef_note[0] != '\0'
+        && put_message(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_bar_crop),
+                       ef_note))
+        put(y + h - 2, x + w - 1, 1, BRIGHT(CP_bar_crop), ">");
+}
+
+/* The drive button pressed: the drive saved as an image file, or an image
+ * drive unpacked as a folder, in the folder saved/ of ffemu's state. */
+static void drive_button(void)
+{
+    struct usb_info info;
+    char path[700], err[800], buf[1024];
+    bool unpack, ok;
+
+    usb_get_info(&info);
+    if (!info.inserted)
+        return;
+    unpack = info.kind == USB_image;
+    if (!usb_saved_path(unpack ? "" : ".img", path, sizeof(path))) {
+        show_message(DLG_externals, unpack ? "Unpack" : "Save",
+                     "ffemu has no state folder to write to");
+        return;
+    }
+    ok = unpack ? usb_unpack(path, err, sizeof(err))
+        : usb_save(path, err, sizeof(err));
+    if (!ok) {
+        show_message(DLG_externals, unpack ? "Unpack" : "Save", err);
+        return;
+    }
+    snprintf(ef_note, sizeof(ef_note), "%s %c%s%c",
+             unpack ? "Unpacked to" : "Saved to", MSG_USER,
+             user_path(path, buf, sizeof(buf)), MSG_USER);
+    host_log("%s", ef_note);
 }
 
 /* The configuration in flash when the display changed, which may not suit
@@ -2438,7 +2510,8 @@ static void draw_dialog(void)
 /* What a key did in a dialog. */
 enum {
     DK_none, DK_taken, DK_quit, DK_display, DK_rows_yes, DK_rows_no,
-    DK_emul_yes, DK_emul_no, DK_externals, DK_fdfile_yes, DK_fdfile_no,
+    DK_emul_yes, DK_emul_no, DK_externals, DK_drive, DK_fdfile_yes,
+    DK_fdfile_no,
     DK_unpack, DK_write
 };
 
@@ -2502,8 +2575,12 @@ static int display_dialog_key(int key)
  * a label marks, which moves the focus to its control. */
 static int externals_dialog_key(int key)
 {
+    static const int round[] = { EF_drive, EF_ok, EF_cancel };
     int step = 0, d = (key == KEY_DOWN) ? 1 : -1, i;
+    bool enabled;
+    const char *label;
 
+    drive_caption(&enabled);
     switch (key) {
     case '\t':
         step = 1;
@@ -2512,10 +2589,13 @@ static int externals_dialog_key(int key)
         step = -1;
         break;
     case KEY_LEFT: case KEY_RIGHT:
-        if (dialog_focus == EF_ok)
-            dialog_focus = EF_cancel;
-        else if (dialog_focus == EF_cancel)
-            dialog_focus = EF_ok;
+        /* Round the buttons, the drive button while it is enabled. */
+        if (dialog_focus < EF_drive)
+            break;
+        do {
+            i = (dialog_focus - EF_drive + ((key == KEY_RIGHT) ? 1 : 2)) % 3;
+            dialog_focus = round[i];
+        } while ((dialog_focus == EF_drive) && !enabled);
         break;
     case ' ':
         if (dialog_focus == EF_osd)
@@ -2530,17 +2610,25 @@ static int externals_dialog_key(int key)
         dialog = DLG_none;
         return DK_taken;
     case '\n':
+        if (dialog_focus == EF_drive)
+            return DK_drive;
         dialog = DLG_none;
         return (dialog_focus == EF_cancel) ? DK_taken : DK_externals;
     default:
-        for (i = 0; i < EF_nr; i++)
-            if ((key > 0) && (key < 0x80)
-                && (hotkey_of(ef_label[i]) == tolower(key)))
+        for (i = 0; i < EF_nr; i++) {
+            label = (i == EF_drive) ? (enabled ? drive_caption(NULL) : NULL)
+                : ef_label[i];
+            if ((key > 0) && (key < 0x80) && (label != NULL)
+                && (hotkey_of(label) == tolower(key)))
                 dialog_focus = i;
+        }
         break;
     }
-    if (step != 0)
+    if (step != 0) {
         dialog_focus = (dialog_focus + EF_nr + step) % EF_nr;
+        if ((dialog_focus == EF_drive) && !enabled)
+            dialog_focus = (dialog_focus + EF_nr + step) % EF_nr;
+    }
     dialog_button = (dialog_focus == EF_cancel);
     return DK_taken;
 }
@@ -4342,6 +4430,9 @@ static void handle_key(int key)
             leave(KEY_ACT_reset);
         }
         return;
+    case DK_drive:
+        drive_button();
+        return;
     case DK_fdfile_yes: {
         const char *values[EMU_OPTIONS_MAX];
         char msg[160];
@@ -4406,6 +4497,7 @@ static void handle_key(int key)
         dialog_usb_fat = config.usb_fat16;
         dialog_osd = config.osd;
         dialog_focus = EF_fat;
+        ef_note[0] = '\0';
         return;
     }
 
@@ -4537,6 +4629,9 @@ static void *tui_thread(void *unused)
         init_pair(CP_dlg_help, COLOR_BLUE, COLOR_WHITE);
         init_pair(CP_input, COLOR_WHITE, COLOR_BLUE);
         init_pair(CP_button_def, COLOR_CYAN, COLOR_GREEN);
+        init_pair(CP_button_hot, COLOR_YELLOW, COLOR_GREEN);
+        init_pair(CP_button_off, (COLORS >= 16) ? 8 : COLOR_BLACK,
+                  COLOR_GREEN);
         init_pair(CP_signal, COLOR_BLACK, COLOR_YELLOW);
         init_pair(CP_key, COLOR_RED, COLOR_BLUE);
         init_pair(CP_osd, COLOR_GREEN, COLOR_BLACK);
