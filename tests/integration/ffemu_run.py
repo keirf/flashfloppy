@@ -50,13 +50,16 @@ def program(name):
 
 
 class Run:
-    """What one run of a program printed, and the settings it left."""
+    """What one run of a program printed, the settings it left, and the
+    files of its state folder's drive/, the firmware's writes as files, by
+    their paths there."""
 
-    def __init__(self, stdout, stderr, returncode, ffemurc):
+    def __init__(self, stdout, stderr, returncode, ffemurc, files=None):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
         self.ffemurc = ffemurc
+        self.files = files or {}
         self.lines = stdout.splitlines()
 
     def waits(self):
@@ -123,14 +126,26 @@ def threads(pid):
         return "(not listed: %s)" % e
 
 
+def read_tree(top):
+    """The files under folder @top, by their paths relative to it."""
+    out = {}
+    for d, _, names in os.walk(top):
+        for n in names:
+            path = os.path.join(d, n)
+            with open(path, "rb") as f:
+                out[os.path.relpath(path, top).replace(os.sep, "/")] = f.read()
+    return out
+
+
 def run(name, commands, settings=(), flash=(), ffemurc=None, files=None,
-        timeout=120):
+        timeout=120, state=None, clock=None):
     """Runs program @name on @commands, then quits it. Its settings are the
     lines @settings, then a [Flash mem] section of the lines @flash if any,
     unless @ffemurc gives the whole file; its USB drive is a folder holding
-    @files, a dict of names and contents. A run that exits with 0 but does
-    not print "quit" last raises an error: it died, as an MSYS2 parent sees
-    a process that an exception ended."""
+    @files, a dict of paths and contents. Its state folder is @state, else
+    one of its own; its clock @clock, else CLOCK's. A run that exits with 0
+    but does not print "quit" last raises an error: it died, as an MSYS2
+    parent sees a process that an exception ended."""
     if name == "ffemu": name = "ffemu-shugart"
     with tempfile.TemporaryDirectory(prefix="ffemu-test-") as tmp:
         config = os.path.join(tmp, "config")
@@ -146,11 +161,14 @@ def run(name, commands, settings=(), flash=(), ffemurc=None, files=None,
         drive = os.path.join(tmp, "drive")
         os.makedirs(drive)
         for fname, data in (files or {}).items():
-            with open(os.path.join(drive, fname), "wb") as f:
+            path = os.path.join(drive, fname)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
                 f.write(data if isinstance(data, bytes) else data.encode())
+        state = state or os.path.join(tmp, "state")
         env = dict(
-            os.environ, XDG_CONFIG_HOME=config,
-            XDG_STATE_HOME=os.path.join(tmp, "state"), FFEMU_CLOCK=CLOCK)
+            os.environ, XDG_CONFIG_HOME=config, XDG_STATE_HOME=state,
+            FFEMU_CLOCK=clock or CLOCK)
         script = "".join(c + "\n" for c in list(commands) + ["key quit"])
         with subprocess.Popen(
                 [program(name), drive], stdin=subprocess.PIPE,
@@ -169,9 +187,10 @@ def run(name, commands, settings=(), flash=(), ffemurc=None, files=None,
                         err.decode(errors="replace"))) from None
         with open(rc, newline="") as f:
             left = f.read()
+        written = read_tree(os.path.join(state, name, "drive"))
     r = Run(
         out.decode(errors="replace"), err.decode(errors="replace"),
-        p.returncode, left)
+        p.returncode, left, written)
     if r.returncode == 0 and r.lines[-1:] != ["quit"]:
         raise RuntimeError(
             "%s exited with 0 without printing quit last: it died, as an "

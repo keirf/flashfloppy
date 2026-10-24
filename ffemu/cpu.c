@@ -331,6 +331,9 @@ static void virt_move(uint64_t t)
 {
     uint64_t limit;
 
+    /* The firmware's files as they stand when the script takes over. */
+    if (t > virt_limit)
+        usb_drive_pass_written();
     /* One read of the limit, which the script may raise meanwhile. */
     while (t > (limit = virt_limit)) {
         if (virt_now < limit)
@@ -810,6 +813,7 @@ static void open_log(void)
     else
         return;
     make_dirs(dir);
+    usb_set_state_dir(dir);
 
     snprintf(path, sizeof(path), "%s/console.log", dir);
     snprintf(bak, sizeof(bak), "%s/console.bak", dir);
@@ -1021,12 +1025,16 @@ void cpu_restart(void)
  * leaves to the tick handler only what must happen in the firmware thread. */
 void cpu_request_restart(void)
 {
+    usb_drive_pass();
     prepare_restart();
     request = REQ_restart;
 }
 
 void cpu_request_quit(void)
 {
+    /* On the virtual clock the firmware waits for the script: it writes no
+     * more. */
+    usb_drive_finish(!virtual_clock);
     fflush(NULL);
     request = REQ_quit;
 }
@@ -1038,6 +1046,7 @@ void cpu_request_relaunch(void)
     uint32_t layout;
     int fd;
 
+    usb_drive_pass();
     usb_get_store(&fd, &layout);
     if (fd >= 0)
         fcntl(fd, F_SETFD, FD_CLOEXEC);
@@ -1168,6 +1177,13 @@ void cpu_start(void)
     if (!virtual_clock
         && (pthread_create(&hw_tid, NULL, hw_thread, NULL) == 0))
         hw_started = true;
+    /* The firmware's files are kept by a thread of their own on the host's
+     * clock, by the firmware's thread as it waits for the script on the
+     * virtual one. */
+    if (!virtual_clock) {
+        pthread_t drive_tid;
+        pthread_create(&drive_tid, NULL, usb_drive_thread, NULL);
+    }
 
     block_tick(SIG_UNBLOCK);
 }

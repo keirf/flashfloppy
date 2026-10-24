@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <wctype.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #ifdef __CYGWIN__
 #define WIN32_LEAN_AND_MEAN
@@ -85,10 +86,13 @@ struct extent {
     struct node *node;
 };
 
-/* Where a sector that the firmware wrote is in the store of such sectors. */
+/* Where a sector that the firmware wrote is in the store of such sectors,
+ * and the count of the writes as of its last one, for the passes that keep
+ * the written files in the folder drive/. */
 struct overlay {
     uint32_t sec_plus_1; /* 0: free slot */
     uint32_t rec;
+    uint32_t gen;
 };
 #define NO_REC (~0u)
 
@@ -128,6 +132,16 @@ static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 #define REC_SIZE (4 + SEC)
 static int store_fd = -1;
 static uint32_t store_layout;
+
+/* The writes' count, as of the last write and of the last pass over the
+ * files, and the host's time of the last write. */
+static volatile uint32_t write_gen, passed_gen;
+static volatile uint64_t last_write_ns;
+static void drive_pass(void);
+/* The folder that the passes keep the written files in, under ffemu's state
+ * folder. One pass at a time, and no insertion or removal during one. */
+static char drive_dir[512];
+static pthread_mutex_t pass_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void put16(uint8_t *p, unsigned int x)
 {
@@ -1530,6 +1544,14 @@ static struct image *open_image(const char *path, const struct stat *st)
  * Sector access, from the firmware thread.
  */
 
+static uint64_t now_ns(void)
+{
+    struct timespec t;
+
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000u + t.tv_nsec;
+}
+
 /* Returns the sector's slot in the overlay, or NULL if it has none. */
 static struct overlay *ovl_find(struct image *im, uint32_t sec, bool create)
 {
@@ -1622,6 +1644,11 @@ static void store_load(struct image *im)
         ovl_find(im, sec, true)->rec = i;
     }
     im->nr_recs = i;
+    /* Newer than the last pass, which the next makes over every one of
+     * them, the order of the writes being lost with the process. */
+    write_gen = passed_gen + 1;
+    for (i = 0; i < im->ovl_size; i++)
+        im->ovl[i].gen = write_gen;
 }
 
 static void read_file(struct image *im, struct node *n, uint64_t offs,
@@ -1753,16 +1780,19 @@ int emu_usb_write(const void *buf, uint32_t sector, unsigned int count)
         return -1;
 
     pthread_mutex_lock(&lock);
+    write_gen++;
     for (; (rc == 0) && (count != 0); count--, p += SEC) {
         struct overlay *o = ovl_find(im, sector, true);
         uint8_t rec[REC_SIZE];
         if (o->rec == NO_REC)
             o->rec = im->nr_recs++;
+        o->gen = write_gen;
         put32(rec, sector++);
         memcpy(rec + 4, p, SEC);
         if (!store_write(rec, REC_SIZE, (off_t)o->rec * REC_SIZE))
             rc = -1;
     }
+    last_write_ns = now_ns();
     pthread_mutex_unlock(&lock);
     im->nr_writes++;
     return rc;
@@ -1772,12 +1802,17 @@ int emu_usb_write(const void *buf, uint32_t sector, unsigned int count)
  * Insertion and removal, from the user interface thread.
  */
 
-bool usb_insert(const char *path, bool keep_writes)
+static void remove_drive(void);
+static void drive_rotate(void);
+
+static bool insert_drive(const char *path, bool keep_writes)
 {
     struct image *im;
     struct stat st;
+    char buf[600];
 
-    usb_remove();
+    drive_pass();
+    remove_drive();
     last_info.error[0] = '\0';
     if (stat(path, &st) != 0) {
         snprintf(last_info.error, sizeof(last_info.error), "%s: %s", path,
@@ -1799,11 +1834,26 @@ bool usb_insert(const char *path, bool keep_writes)
             && (st.st_size != 0);
         if (ftruncate(store_fd, 0) != 0)
             cpu_quit(3, "ffemu: cannot empty the temporary file");
+        /* A session of writes begins: the last one's files go to .bak. */
+        drive_rotate();
+        if (drive_dir[0] != '\0')
+            host_log("USB drive's writes go to %s",
+                     user_path(drive_dir, buf, sizeof(buf)));
     }
     store_layout = im->layout;
 
     cur = im;
     return true;
+}
+
+bool usb_insert(const char *path, bool keep_writes)
+{
+    bool ok;
+
+    pthread_mutex_lock(&pass_lock);
+    ok = insert_drive(path, keep_writes);
+    pthread_mutex_unlock(&pass_lock);
+    return ok;
 }
 
 void usb_get_store(int *fd, uint32_t *layout)
@@ -1823,6 +1873,14 @@ void usb_set_store(int fd, uint32_t layout)
 }
 
 void usb_remove(void)
+{
+    pthread_mutex_lock(&pass_lock);
+    drive_pass();
+    remove_drive();
+    pthread_mutex_unlock(&pass_lock);
+}
+
+static void remove_drive(void)
 {
     struct image *im = cur;
 
@@ -1987,6 +2045,581 @@ bool usb_save(const char *path, char *err, size_t size)
         ok = false;
     }
     return ok;
+}
+
+/*
+ * The firmware's writes as files: the files of the drive as the firmware
+ * sees it that differ from the medium's, kept in the folder drive/ of
+ * ffemu's state by passes over the volume, a view of the store, which stays
+ * the firmware's truth.
+ */
+
+/* Writes quiet for this long make a pass, on the host's clock. */
+#define QUIET_NS 500000000u
+
+/* A sorted list of sector numbers. */
+struct secs {
+    uint32_t *v;
+    unsigned int nr, size;
+};
+
+struct pass {
+    struct vol live, medium;
+    /* Every sector the firmware wrote; those written since the last pass. */
+    struct secs written, touched;
+    /* The paths of the volume's files, relative to the folder, sorted. */
+    char **seen;
+    unsigned int nr_seen, seen_size;
+};
+
+static void secs_add(struct secs *s, uint32_t sec)
+{
+    if (s->nr == s->size) {
+        s->size = s->size ? 2 * s->size : 256;
+        s->v = realloc(s->v, s->size * sizeof(*s->v));
+        if (s->v == NULL)
+            cpu_quit(3, "ffemu: out of memory");
+    }
+    s->v[s->nr++] = sec;
+}
+
+static int u32_cmp(const void *a, const void *b)
+{
+    uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
+
+    return (x > y) - (x < y);
+}
+
+/* Whether @s holds a sector of the @n from @first. */
+static bool secs_any(const struct secs *s, uint32_t first, uint32_t n)
+{
+    unsigned int lo = 0, hi = s->nr, mid;
+
+    while (lo < hi) {
+        mid = (lo + hi) / 2;
+        if (s->v[mid] < first)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return (lo < s->nr) && (s->v[lo] - first < n);
+}
+
+static void seen_add(struct pass *p, const char *path)
+{
+    if (p->nr_seen == p->seen_size) {
+        p->seen_size = p->seen_size ? 2 * p->seen_size : 64;
+        p->seen = realloc(p->seen, p->seen_size * sizeof(*p->seen));
+        if (p->seen == NULL)
+            cpu_quit(3, "ffemu: out of memory");
+    }
+    p->seen[p->nr_seen] = strdup(path);
+    if (p->seen[p->nr_seen++] == NULL)
+        cpu_quit(3, "ffemu: out of memory");
+}
+
+static int str_cmp(const void *a, const void *b)
+{
+    return strcmp(*(char * const *)a, *(char * const *)b);
+}
+
+static bool seen_has(const struct pass *p, const char *path)
+{
+    return bsearch(&path, p->seen, p->nr_seen, sizeof(*p->seen), str_cmp)
+        != NULL;
+}
+
+/* UTF-16 @u of @n units as UTF-8 into @buf of @size. */
+static void utf16_to_utf8(const uint16_t *u, unsigned int n, char *buf,
+                          size_t size)
+{
+    size_t k = 0;
+    unsigned int i;
+
+    for (i = 0; (i < n) && (k + 5 < size); i++) {
+        uint32_t c = u[i];
+        if ((c >= 0xd800) && (c < 0xdc00) && (i + 1 < n)
+            && (u[i + 1] >= 0xdc00) && (u[i + 1] < 0xe000))
+            c = 0x10000 + ((c - 0xd800) << 10) + (u[++i] - 0xdc00);
+        if (c < 0x80) {
+            buf[k++] = c;
+        } else if (c < 0x800) {
+            buf[k++] = 0xc0 | (c >> 6);
+            buf[k++] = 0x80 | (c & 0x3f);
+        } else if (c < 0x10000) {
+            buf[k++] = 0xe0 | (c >> 12);
+            buf[k++] = 0x80 | ((c >> 6) & 0x3f);
+            buf[k++] = 0x80 | (c & 0x3f);
+        } else {
+            buf[k++] = 0xf0 | (c >> 18);
+            buf[k++] = 0x80 | ((c >> 12) & 0x3f);
+            buf[k++] = 0x80 | ((c >> 6) & 0x3f);
+            buf[k++] = 0x80 | (c & 0x3f);
+        }
+    }
+    buf[k] = '\0';
+}
+
+/* The checksum of a short name that its long name's entries carry. */
+static unsigned int lfn_sum(const uint8_t *sfn)
+{
+    unsigned int i, sum = 0;
+
+    for (i = 0; i < 11; i++)
+        sum = (((sum & 1) << 7) + (sum >> 1) + sfn[i]) & 0xff;
+    return sum;
+}
+
+/* The long name collected from the entries before a short one. */
+struct lfn {
+    uint16_t u[260];
+    int len; /* -1: none */
+    unsigned int sum;
+};
+
+static void lfn_add(struct lfn *l, const uint8_t *e)
+{
+    static const uint8_t offs[13] = {
+        1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30
+    };
+    unsigned int ord = e[0] & 0x3f, i, at;
+
+    if ((ord == 0) || (ord > 20) || ((e[0] & 0x40) == 0 && (l->len < 0)))
+        return;
+    if (e[0] & 0x40) {
+        l->len = ord * 13;
+        l->sum = e[13];
+    }
+    for (i = 0; i < 13; i++) {
+        at = (ord - 1) * 13 + i;
+        l->u[at] = get16(e + offs[i]);
+        if ((l->u[at] == 0) && (at < (unsigned int)l->len))
+            l->len = at;
+    }
+}
+
+/* The name of short entry @e as the host gets it, in UTF-8: its long name
+ * if @l holds one for it, else its short name's bytes, taken as Latin-1. */
+static void host_name(const uint8_t *e, const struct lfn *l, char *buf,
+                      size_t size)
+{
+    uint16_t u[12];
+    char sfn[13];
+    unsigned int i, n;
+
+    if ((l->len > 0) && (l->sum == lfn_sum(e))) {
+        utf16_to_utf8(l->u, l->len, buf, size);
+        return;
+    }
+    entry_name(e, sfn);
+    for (i = n = 0; sfn[i] != '\0'; i++)
+        u[n++] = (uint8_t)sfn[i];
+    utf16_to_utf8(u, n, buf, size);
+}
+
+/* Name @name made a safe component of a host path: a separator, which a
+ * damaged or made-up long name can hold, as "_", and "." and ".." with a
+ * leading "_"; true if it changed. */
+static bool safe_name(char *name)
+{
+    bool changed = false;
+    char *c;
+
+    for (c = name; *c != '\0'; c++) {
+#ifdef __CYGWIN__
+        if (*c == '\\')
+            *c = '/';
+#endif
+        if (*c == '/') {
+            *c = '_';
+            changed = true;
+        }
+    }
+    if (!strcmp(name, ".") || !strcmp(name, "..")) {
+        memmove(name + 1, name, strlen(name) + 1);
+        name[0] = '_';
+        changed = true;
+    }
+    return changed;
+}
+
+/* The file of entry @e: its first cluster's chain, @nr clusters. */
+static uint32_t chain_next(struct vol *v, uint32_t clus, uint32_t *nr)
+{
+    if (*nr == 0)
+        return 0;
+    if (--*nr == 0)
+        return 0;
+    return vol_next(v, clus);
+}
+
+/* Whether the file of live entry @e, at offset @eoff of sector @esec,
+ * differs from the medium's file there: by its name, kind or size, or by a
+ * sector of its data that the firmware wrote, or that lies elsewhere. */
+static bool file_differs(struct pass *p, const uint8_t *e, uint32_t esec,
+                         unsigned int eoff)
+{
+    uint8_t m[SEC], a[SEC], b[SEC];
+    uint32_t size = get32(e + 28), lc, mc, nl, nm, s0, s1, k, j;
+    struct vol *lv = &p->live, *mv = &p->medium;
+
+    if (!vol_read(mv, m, esec))
+        return true;
+    if (memcmp(m + eoff, e, 11) || ((m[eoff + 11] ^ e[11]) & ATTR_DIR)
+        || (get32(m + eoff + 28) != size))
+        return true;
+    lc = entry_clus(lv, e);
+    mc = entry_clus(mv, m + eoff);
+    nl = nm = (size + lv->spc * SEC - 1) / (lv->spc * SEC);
+    for (k = 0; (k < size) && (lc >= 2) && (mc >= 2); ) {
+        s0 = lv->data + (lc - 2) * lv->spc;
+        s1 = mv->data + (mc - 2) * mv->spc;
+        for (j = 0; (j < lv->spc) && (k < size); j++, k += SEC) {
+            if ((s0 != s1) || secs_any(&p->written, s0 + j, 1)) {
+                unsigned int n = (size - k < SEC) ? size - k : SEC;
+                if (!vol_read(lv, a, s0 + j) || !vol_read(mv, b, s1 + j)
+                    || memcmp(a, b, n))
+                    return true;
+            }
+        }
+        lc = chain_next(lv, lc, &nl);
+        mc = chain_next(mv, mc, &nm);
+    }
+    return k < size;
+}
+
+/* Path @rel under the folder into @buf; false if it does not fit. */
+static bool drive_path(const char *rel, char *buf, size_t size)
+{
+    return snprintf(buf, size, "%s/%s", drive_dir, rel) < (int)size;
+}
+
+/* The FAT time of entry @e as the host's time. */
+static time_t entry_time(const uint8_t *e)
+{
+    unsigned int t = get16(e + 22), d = get16(e + 24);
+    struct tm tm;
+
+    memset(&tm, 0, sizeof(tm));
+    tm.tm_sec = (t & 31) * 2;
+    tm.tm_min = (t >> 5) & 63;
+    tm.tm_hour = t >> 11;
+    tm.tm_mday = (d & 31) ? (d & 31) : 1;
+    tm.tm_mon = ((d >> 5) & 15) ? ((d >> 5) & 15) - 1 : 0;
+    tm.tm_year = 80 + (d >> 9);
+    tm.tm_isdst = -1;
+    return mktime(&tm);
+}
+
+/* Opens file @rel under the folder for writing, making its folders; where
+ * the host refuses its name, such as a device's name on Windows, under the
+ * name with a leading underscore. */
+static int open_out(const char *rel, char *path, size_t size)
+{
+    char *slash;
+    int fd;
+
+    if (!drive_path(rel, path, size))
+        return -1;
+    slash = strrchr(path, '/');
+    *slash = '\0';
+    make_dirs(path);
+    *slash = '/';
+    fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0644);
+    if (fd < 0) {
+        const char *name = strrchr(rel, '/');
+        name = name ? name + 1 : rel;
+        if (snprintf(slash + 1, size - (slash + 1 - path), "_%s", name)
+            >= (int)(size - (slash + 1 - path)))
+            return -1;
+        fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0644);
+        if (fd >= 0)
+            host_log("USB drive's %s kept as %s: the host refuses its name",
+                     rel, slash + 1);
+    }
+    return fd;
+}
+
+/* Copies the file of live entry @e to @rel under the folder, its name made
+ * safe from @orig unless NULL. The store's lock is held while a sector is
+ * read, never while the host file is written, so that a slow disk does not
+ * stall the firmware's writes. */
+static void copy_out(struct pass *p, const uint8_t *e, const char *rel,
+                     const char *orig)
+{
+    uint8_t b[SEC];
+    uint32_t size = get32(e + 28), clus = entry_clus(&p->live, e), k;
+    char path[2048];
+    struct timeval tv[2];
+    bool ok = true;
+    int fd = open_out(rel, path, sizeof(path));
+
+    if (fd < 0) {
+        host_log("USB drive's %s: cannot write %s: %s", rel, path,
+                 strerror(errno));
+        return;
+    }
+    if (orig != NULL)
+        host_log("USB drive's file named %s kept as %s: the host refuses "
+                 "its name", orig, rel);
+    for (k = 0; ok && (k * SEC < size); k++) {
+        unsigned int n = (size - k * SEC < SEC) ? size - k * SEC : SEC;
+        ok = vol_sector(&p->live, &clus, k, b)
+            && (write(fd, b, n) == (ssize_t)n);
+    }
+    close(fd);
+    own_file(path);
+    tv[0].tv_sec = tv[1].tv_sec = entry_time(e);
+    tv[0].tv_usec = tv[1].tv_usec = 0;
+    utimes(path, tv);
+}
+
+/* Removes @rel from the folder, under either spelling. */
+static void remove_out(const char *rel)
+{
+    char path[2048], *slash;
+    const char *name = strrchr(rel, '/');
+    size_t room;
+
+    if (!drive_path(rel, path, sizeof(path)))
+        return;
+    unlink(path);
+    slash = strrchr(path, '/');
+    room = sizeof(path) - (slash + 1 - path);
+    if (snprintf(slash + 1, room, "_%s", name ? name + 1 : rel) < (int)room)
+        unlink(path);
+}
+
+/* The file of live entry @e, at offset @eoff of sector @esec, path @rel:
+ * copied if the firmware wrote it since the last pass and it differs from
+ * the medium's, removed from the folder if it no longer does. */
+static void pass_file(struct pass *p, const uint8_t *e, uint32_t esec,
+                      unsigned int eoff, const char *rel, const char *orig)
+{
+    struct vol *v = &p->live;
+    uint32_t size = get32(e + 28), clus = entry_clus(v, e);
+    uint32_t nr = (size + v->spc * SEC - 1) / (v->spc * SEC);
+    bool touched = secs_any(&p->touched, esec, 1);
+
+    seen_add(p, rel);
+    for (; !touched && (clus >= 2); clus = chain_next(v, clus, &nr))
+        touched = secs_any(&p->touched, v->data + (clus - 2) * v->spc,
+                           v->spc);
+    if (!touched)
+        return;
+    if (file_differs(p, e, esec, eoff))
+        copy_out(p, e, rel, orig);
+    else
+        remove_out(rel);
+}
+
+/* The folder at cluster @dir of the live volume, 0 for the root, path @rel,
+ * and those under it. */
+static void pass_dir(struct pass *p, uint32_t dir, const char *rel,
+                     unsigned int depth)
+{
+    struct vol *v = &p->live;
+    uint8_t b[SEC], *e;
+    struct lfn l;
+    uint32_t clus = dir, k, sec;
+    unsigned int i;
+    char name[800], orig[800], sub[2048];
+    bool renamed;
+
+    l.len = -1;
+    for (k = 0; (k < 65536) && vol_sector(v, &clus, k, b); k++) {
+        sec = (clus == 0) ? v->root + k
+            : v->data + (clus - 2) * v->spc + k % v->spc;
+        for (i = 0; i < SEC; i += 32) {
+            e = b + i;
+            if (e[0] == 0)
+                return;
+            if ((e[11] & ATTR_LFN) == ATTR_LFN) {
+                if (e[0] != 0xe5)
+                    lfn_add(&l, e);
+                continue;
+            }
+            if ((e[0] == 0xe5) || (e[11] & ATTR_VOLUME) || (e[0] == '.')) {
+                l.len = -1;
+                continue;
+            }
+            host_name(e, &l, name, sizeof(name));
+            l.len = -1;
+            snprintf(orig, sizeof(orig), "%s", name);
+            renamed = safe_name(name);
+            if (snprintf(sub, sizeof(sub), "%s%s%s", rel, rel[0] ? "/" : "",
+                         name) >= (int)sizeof(sub))
+                continue;
+            if (!(e[11] & ATTR_DIR))
+                pass_file(p, e, sec, i, sub, renamed ? orig : NULL);
+            else if ((depth < MAX_DEPTH) && (entry_clus(v, e) >= 2))
+                pass_dir(p, entry_clus(v, e), sub, depth + 1);
+        }
+    }
+}
+
+/* Removes from folder @dir, path @rel under the folder, the files that the
+ * volume no longer has, under either spelling, and folders left empty. */
+static void sweep(struct pass *p, const char *dir, const char *rel)
+{
+    DIR *d = opendir(dir);
+    struct dirent *de;
+    struct stat st;
+    char path[2048], sub[2048];
+
+    if (d == NULL)
+        return;
+    while ((de = readdir(d)) != NULL) {
+        if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
+            continue;
+        if ((snprintf(path, sizeof(path), "%s/%s", dir, de->d_name)
+             >= (int)sizeof(path))
+            || (snprintf(sub, sizeof(sub), "%s%s%s", rel, rel[0] ? "/" : "",
+                         de->d_name) >= (int)sizeof(sub))
+            || (lstat(path, &st) != 0))
+            continue;
+        if (S_ISDIR(st.st_mode)) {
+            sweep(p, path, sub);
+            rmdir(path);
+        } else if (!seen_has(p, sub)) {
+            char plain[2048];
+            const char *name = strrchr(sub, '/');
+            name = name ? name + 1 : sub;
+            if ((snprintf(plain, sizeof(plain), "%.*s%s", (int)(name - sub),
+                          sub, name + (name[0] == '_')) >= (int)sizeof(plain))
+                || (name[0] != '_') || !seen_has(p, plain))
+                unlink(path);
+        }
+    }
+    closedir(d);
+}
+
+/* One pass, with pass_lock held. */
+static void drive_pass(void)
+{
+    struct image *im = cur;
+    struct pass p;
+    uint32_t gen = write_gen;
+    unsigned int i;
+
+    if ((im == NULL) || (drive_dir[0] == '\0') || (gen == passed_gen))
+        return;
+    memset(&p, 0, sizeof(p));
+    pthread_mutex_lock(&lock);
+    gen = write_gen;
+    for (i = 0; i < im->ovl_size; i++) {
+        const struct overlay *o = &im->ovl[i];
+        if (o->sec_plus_1 == 0)
+            continue;
+        secs_add(&p.written, o->sec_plus_1 - 1);
+        if (o->gen > passed_gen)
+            secs_add(&p.touched, o->sec_plus_1 - 1);
+    }
+    pthread_mutex_unlock(&lock);
+    qsort(p.written.v, p.written.nr, sizeof(uint32_t), u32_cmp);
+    qsort(p.touched.v, p.touched.nr, sizeof(uint32_t), u32_cmp);
+
+    /* A volume that does not open leaves its writes for the next pass. */
+    if (vol_open(&p.live, im, true) && vol_open(&p.medium, im, false)) {
+        pass_dir(&p, 0, "", 0);
+        qsort(p.seen, p.nr_seen, sizeof(*p.seen), str_cmp);
+        sweep(&p, drive_dir, "");
+        passed_gen = gen;
+    }
+
+    for (i = 0; i < p.nr_seen; i++)
+        free(p.seen[i]);
+    free(p.seen);
+    free(p.written.v);
+    free(p.touched.v);
+}
+
+/* Removes folder @dir and everything under it. */
+static void remove_tree(const char *dir)
+{
+    DIR *d = opendir(dir);
+    struct dirent *de;
+    struct stat st;
+    char path[2048];
+
+    if (d == NULL)
+        return;
+    while ((de = readdir(d)) != NULL) {
+        if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")
+            || (snprintf(path, sizeof(path), "%s/%s", dir, de->d_name)
+                >= (int)sizeof(path)))
+            continue;
+        if ((lstat(path, &st) == 0) && S_ISDIR(st.st_mode))
+            remove_tree(path);
+        else
+            unlink(path);
+    }
+    closedir(d);
+    rmdir(dir);
+}
+
+/* The folder goes to drive.bak, the last one there removed. */
+static void drive_rotate(void)
+{
+    char bak[600];
+
+    if (drive_dir[0] == '\0')
+        return;
+    if (snprintf(bak, sizeof(bak), "%s.bak", drive_dir) >= (int)sizeof(bak))
+        return;
+    remove_tree(bak);
+    rename(drive_dir, bak);
+}
+
+void usb_set_state_dir(const char *dir)
+{
+    snprintf(drive_dir, sizeof(drive_dir), "%s/drive", dir);
+}
+
+const char *usb_drive_dir(void)
+{
+    return drive_dir;
+}
+
+void usb_drive_pass(void)
+{
+    pthread_mutex_lock(&pass_lock);
+    drive_pass();
+    pthread_mutex_unlock(&pass_lock);
+}
+
+void usb_drive_pass_written(void)
+{
+    if (write_gen != passed_gen)
+        usb_drive_pass();
+}
+
+void usb_drive_finish(bool wait)
+{
+    uint64_t end = now_ns() + QUIET_NS;
+    struct timespec t = { 0, 10000000 };
+
+    usb_drive_pass();
+    if (!wait)
+        return;
+    while ((now_ns() < end) && (now_ns() - last_write_ns < QUIET_NS))
+        nanosleep(&t, NULL);
+    usb_drive_pass_written();
+}
+
+void *usb_drive_thread(void *unused)
+{
+    struct timespec t = { 0, 100000000 };
+
+    (void)unused;
+    crash_name_thread("drive");
+    for (;;) {
+        nanosleep(&t, NULL);
+        if ((write_gen != passed_gen)
+            && (now_ns() - last_write_ns >= QUIET_NS))
+            usb_drive_pass();
+    }
+    return NULL;
 }
 
 /*

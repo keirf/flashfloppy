@@ -90,6 +90,14 @@ no such file, and alone while the drive is out. Such writes never reach the
 host files, the image or the disk: they go to a temporary file and last until
 the drive is removed. They survive a power cycle, as on a real drive, provided
 that the files of the directory, or the image, have not changed in between.
+The files that they change are also kept as files, in the folder `drive/`
+beside the console log, at their paths on the drive, as `drive/IMAGE_A.CFG`
+or `drive/FF/FLASH.DMP`: half a second after the firmware's last write, and
+whenever the drive is removed, the device power-cycled or ffemu ended, a file
+that the firmware deletes, or writes back as the medium has it, leaving it.
+The folder goes on through a power cycle, as the writes do; when the writes
+are dropped, it is renamed `drive.bak/`, the previous one removed. A name that
+the host refuses gets a leading `_`, which the console says.
 Status names the `FF.CFG` that the firmware reads: the one in folder `FF` if
 the drive has that folder, even when that one is missing, else the one in the
 root; names match in any letter case.

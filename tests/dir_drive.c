@@ -43,6 +43,35 @@ void cpu_quit(int code, const char *msg)
     exit(code);
 }
 
+/* The firmware's writes kept as files need these, which no test reaches:
+ * the tests set no state folder, so no pass is made. */
+void make_dirs(char *dir)
+{
+    (void)dir;
+}
+
+void own_file(const char *path)
+{
+    (void)path;
+}
+
+void host_log(const char *fmt, ...)
+{
+    (void)fmt;
+}
+
+const char *user_path(const char *path, char *buf, size_t size)
+{
+    (void)buf;
+    (void)size;
+    return path;
+}
+
+void crash_name_thread(const char *name)
+{
+    (void)name;
+}
+
 static char dir[512];
 
 static void fail(const char *what)

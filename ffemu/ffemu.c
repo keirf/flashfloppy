@@ -540,6 +540,9 @@ static void first_run_note(void)
            user_path(config.path, buf, sizeof(buf)));
     printf("The log will appear here: %s\n",
            user_path(log_file_name, buf, sizeof(buf)));
+    if (usb_drive_dir()[0] != '\0')
+        printf("The firmware's writes to the USB drive will appear here: "
+               "%s\n", user_path(usb_drive_dir(), buf, sizeof(buf)));
     printf("Temporary files go here: %s\n",
            user_path(usb_store_dir(), buf, sizeof(buf)));
     wait_key();
