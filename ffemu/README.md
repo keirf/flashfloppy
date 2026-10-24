@@ -209,7 +209,7 @@ options recommended for the display chosen that differ from the defaults:
 `display-type` where the default does not suit the display, `show-filename-ext
 = auto`, `show-tracks-short = yes` and `show-dir-slash = yes`, and on an OLED
 `display-scroll-by-pixel = yes` and a `display-order` with the name double
-width, `4w` on a 128x32 panel and `3,0w,1` on a 128x64; none of them applies to
+width, `Cw` on a 128x32 panel and `D,Nw,S` on a 128x64; none of them applies to
 a 7-segment display.
 
 FF OSD, the on-screen display that shares the I2C bus at 0x10 and shows the

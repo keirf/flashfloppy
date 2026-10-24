@@ -2791,7 +2791,7 @@ static char order_file_value[64];
  * if @tall, else of 2. */
 static const char *default_order(bool oled, bool tall)
 {
-    return !tall ? "0,1" : oled ? "3,0d,1" : "3,0,1,2";
+    return !tall ? "N,S" : oled ? "D,Nd,S" : "D,N,S,I";
 }
 
 static void draw_order_dialog(void)
@@ -4482,7 +4482,7 @@ static void recommend(void *cfg, int d)
     if (DISP_IS_OLED(d)) {
         emu_flash_set_option(cfg, "display-scroll-by-pixel", "yes");
         emu_flash_set_option(cfg, "display-order",
-                             (DISP_HEIGHT(d) == 64) ? "3,0w,1" : "4w");
+                             (DISP_HEIGHT(d) == 64) ? "D,Nw,S" : "Cw");
     }
 }
 
@@ -4870,7 +4870,7 @@ static const struct {
       "Whether to show folders as /NAME rather than [NAME], a column "
       "shorter" },
     { "display-order",
-      "0=name 1=status 2=info 3=folder 4=name&status 7=blank, "
+      "N=name S=status I=info D=dir C=combined B=blank, "
       "d=tall w=tall&wide" },
     { "display-off-secs",
       "Seconds without activity before the display goes dark, 0-255: 0 is "
@@ -6016,7 +6016,7 @@ static void check_dialog_states(int d)
         break;
     case DLG_order:
         emu_flash_get(order_cfg);
-        snprintf(order_file_value, sizeof(order_file_value), "3,0d,1,2");
+        snprintf(order_file_value, sizeof(order_file_value), "D,Nw,S,I");
         for (i = 0; i < 8; i++) {
             /* An OLED or an LCD of 2 or 4 rows, given more or fewer. */
             order_oled = i & 1;

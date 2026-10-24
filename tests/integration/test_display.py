@@ -512,16 +512,78 @@ class DoubleWidth(Case, unittest.TestCase):
 
     def test_ff_cfg(self):
         """From FF.CFG, which the firmware puts in flash and resets: a reset
-        ends a wait, so it is slept through."""
+        ends a wait, so it is slept through. ffemu gives the rows by their
+        letters."""
         files = dict(PC, **{"FF.CFG": "display-order = 1w,0\n"})
         r = fr.run(
             "ffemu", ["sleep 6000", "wait 10000 log Name:", "sleep 500",
                       "dump", "flash"],
             settings=["display = ssd1306-128x32"], files=files)
         self.assertWaits(r, 1)
-        self.assertEqual(r.flash().get("display-order"), "1w,0", r.report())
+        self.assertEqual(r.flash().get("display-order"), "Sw,N", r.report())
         pixels = [line for line in r.lines if line and set(line) <= set(".#")]
         self.assertEqual(oled_text(pixels, 0, "6x13", True), "    T:00.0")
+
+
+class Letters(Case, unittest.TestCase):
+    """display-order's rows by their initials, N, S, I, D, C, and B for the
+    blank row: the same layouts as the digits, which stay taken, in either
+    case, in osd-display-order too; ffemu writes the letters back."""
+
+    def oled(self, order):
+        """A 128x64 OLED's pixels with display-order @order, once the image
+        is in."""
+        r = fr.run(
+            "ffemu", ["wait 10000 log Name:"] + steps(3)
+            + ["sleep 500", "dump"],
+            settings=["display = ssd1306-128x64"],
+            flash=["display-type = oled-128x64", "display-order = " + order],
+            files=PC)
+        self.assertWaits(r, 1)
+        return [line for line in r.lines if line and set(line) <= set(".#")]
+
+    def test_oled(self):
+        self.assertEqual(self.oled("D,Nw,S"), self.oled("3,0w,1"))
+
+    def test_lower_case(self):
+        self.assertEqual(self.oled("d,nw,s"), self.oled("3,0w,1"))
+
+    def test_lcd(self):
+        """Combined, blank, status, info on a 20x4 LCD."""
+        flash = ["display-type = lcd-20x04"]
+        letters, r = self.rows("ffemu", steps(3), "hd44780-20x4",
+                               flash + ["display-order = C,B,S,I"])
+        digits, _ = self.rows("ffemu", steps(3), "hd44780-20x4",
+                              flash + ["display-order = 4,7,1,2"])
+        self.assertEqual(letters, digits, r.report())
+        self.assertEqual(letters[1], " " * 20, r.report())
+
+    def test_osd(self):
+        letters, r = self.rows("ffemu", steps(3), "hd44780-16x2",
+                               ["osd-display-order = S,N"])
+        digits, _ = self.rows("ffemu", steps(3), "hd44780-16x2",
+                              ["osd-display-order = 1,0"])
+        self.assertEqual(letters, digits, r.report())
+
+    def test_ff_cfg(self):
+        """Through the firmware's own parser, from FF.CFG, in either case:
+        the flash that it writes, as ffemu gives it."""
+        files = dict(PC, **{"FF.CFG": "display-order = b,Sw,n\n"})
+        r = fr.run("ffemu", ["sleep 6000", "wait 10000 log Name:", "flash"],
+                   files=files)
+        self.assertWaits(r, 1)
+        self.assertEqual(r.flash().get("display-order"), "B,Sw,N",
+                         r.report())
+
+    def test_written_back(self):
+        """Letters in flash come back as letters, digits as letters too."""
+        for order, back in (("D,Nd,S", "D,Nd,S"), ("c,b,s", "C,B,S"),
+                            ("4w,1", "Cw,S")):
+            with self.subTest(order=order):
+                r = fr.run("ffemu", ["flash"],
+                           flash=["display-order = " + order])
+                self.assertEqual(r.flash().get("display-order"), back,
+                                 r.report())
 
 
 class FolderScroll(fr.Case, unittest.TestCase):
