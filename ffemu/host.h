@@ -549,5 +549,9 @@ void tui_stop_fatal(void);
 void script_start(unsigned int sleep_ms);
 /* Milliseconds left of the script's current sleep. */
 unsigned int script_sleep_left(void);
+/* Writes the line "quit", which ends a script's output when ffemu ends by a
+ * request to quit, if a script runs: by write() alone, stdout being flushed
+ * by then. */
+void script_end(void);
 
 #endif /* FFEMU_HOST_H */

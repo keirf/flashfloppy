@@ -433,6 +433,9 @@ three rows, a lit point as `.`), `log` (the firmware's console output so far),
 (FF OSD's text, its rows between bars), `save <file>`, which writes the USB
 drive as the firmware sees it, its writes included, to an image file, and
 `crash`, a write through a null pointer, which tests the crash report.
+When the commands end with `key quit`, or the input ends, ffemu prints `quit`
+as its last line, so that a caller can tell that end from a death, which a
+parent in the MSYS2 runtime sees as an exit with 0.
 
 `wait <ms> <log|display|segments> <text>` lets the firmware run until a
 condition holds, checked every 10 ms, or `<ms>` pass, and prints which, as

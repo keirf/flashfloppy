@@ -128,7 +128,9 @@ def run(name, commands, settings=(), flash=(), ffemurc=None, files=None,
     """Runs program @name on @commands, then quits it. Its settings are the
     lines @settings, then a [Flash mem] section of the lines @flash if any,
     unless @ffemurc gives the whole file; its USB drive is a folder holding
-    @files, a dict of names and contents."""
+    @files, a dict of names and contents. A run that exits with 0 but does
+    not print "quit" last raises an error: it died, as an MSYS2 parent sees
+    a process that an exception ended."""
     if name == "ffemu": name = "ffemu-shugart"
     with tempfile.TemporaryDirectory(prefix="ffemu-test-") as tmp:
         config = os.path.join(tmp, "config")
@@ -167,9 +169,15 @@ def run(name, commands, settings=(), flash=(), ffemurc=None, files=None,
                         err.decode(errors="replace"))) from None
         with open(rc, newline="") as f:
             left = f.read()
-    return Run(
+    r = Run(
         out.decode(errors="replace"), err.decode(errors="replace"),
         p.returncode, left)
+    if r.returncode == 0 and r.lines[-1:] != ["quit"]:
+        raise RuntimeError(
+            "%s exited with 0 without printing quit last: it died, as an "
+            "MSYS2 parent sees a process that an exception ended\n%s" % (
+                name, r.report()))
+    return r
 
 
 _versions = {}

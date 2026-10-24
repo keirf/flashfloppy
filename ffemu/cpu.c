@@ -724,6 +724,7 @@ static void take_request(void)
     tui_stop();
     if (request == REQ_restart)
         restart();
+    script_end();
     _exit(0);
 }
 
