@@ -364,9 +364,12 @@ void *usb_drive_thread(void *unused);
  */
 
 /* The options that ff_cfg_write() writes: every one; those whose value
- * differs from the defaults or from the flash memory's; or only those that
- * differ from the flash memory's. */
-enum ff_cfg_set { FF_CFG_all, FF_CFG_nondefault, FF_CFG_changed };
+ * differs from the defaults or from the flash memory's; only those that
+ * differ from the flash memory's; or only those that differ from the
+ * defaults. */
+enum ff_cfg_set {
+    FF_CFG_all, FF_CFG_nondefault, FF_CFG_changed, FF_CFG_from_defaults
+};
 
 /* Writes FF.CFG on the USB drive from configuration @cfg, as the flash
  * memory keeps one, which comes from @source, as the file's first line

@@ -201,6 +201,13 @@ display". A change restarts the device. Reading from that I2C leaves no trace
 that the model could see, so every byte of a read is its last: the driver's one
 read of more than a byte, its probe of an SH1106, takes the last.
 
+The dialog's button `Save recommended FF.CFG` writes `FF.CFG` as the Flash mem
+dialog's Save buttons do, asking first for a drive made from an image, with the
+options recommended for the display chosen that differ from the defaults:
+`display-type` where the default does not suit the display, `show-filename-ext
+= auto` and `show-tracks-short = yes`; none of them applies to a 7-segment
+display.
+
 FF OSD, the on-screen display that shares the I2C bus at 0x10 and shows the
 display's text over the host computer's video, is fitted beside an OLED or an
 LCD unless unticked in the Externals dialog (key `8`), kept as
