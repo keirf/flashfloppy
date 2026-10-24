@@ -3751,6 +3751,55 @@ static void ff_osd_configure(void)
     }
 }
 
+#ifndef MINIMAL_UI
+/* Shows every code of the display with its glyph, 16 to a text row and
+ * their codes on the row below, a page of one or two such pairs at a time:
+ * Left and Right page through the codes, Select goes back. */
+static void font_test(void)
+{
+    unsigned int pairs = lcd_shown_rows() / 2, base = 0, i;
+    char label[24];
+    uint8_t b;
+
+    display_mode = DM_glyphs;
+
+    for (;;) {
+
+        for (i = 0; i < pairs; i++) {
+            unsigned int first = (base + 16*i) & 0xff;
+            lcd_write_glyphs(2*i, first);
+            snprintf(label, sizeof(label), "%02X-%02X", first, first + 15);
+            lcd_write(/*col=*/0, /*row=*/2*i + 1, /*min=*/-1, label);
+        }
+        lcd_on();
+
+        /* Wait for buttons to be released. */
+        while (buttons != 0)
+            continue;
+
+        /* Wait for any button to be pressed. */
+        while ((b = buttons) == 0)
+            continue;
+        b = wait_twobutton_press(b);
+
+        if (b & B_SELECT)
+            break;
+        if (b & B_LEFT)
+            base -= 16*pairs;
+        if (b & B_RIGHT)
+            base += 16*pairs;
+
+    }
+
+    /* Wait for buttons to be released. */
+    while (buttons)
+        continue;
+
+    lcd_clear();
+    display_mode = DM_menu;
+}
+#endif
+
 static void main_menu(void)
 {
     const static char *menu[] = {
@@ -3759,6 +3808,9 @@ static void main_menu(void)
         "Update Firmware",
         "Configure FF OSD",
         "Save FLASH.DMP",
+#ifndef MINIMAL_UI
+        "Font Test",
+#endif
         "Exit",
     };
 
@@ -3821,7 +3873,12 @@ static void main_menu(void)
                 lcd_write(0, 1, -1, "Insert USB drive");
                 delay_ms(1500);
                 goto out;
-            case 5: /* Exit */
+#ifndef MINIMAL_UI
+            case 5: /* Font Test */
+                font_test();
+                break;
+#endif
+            case ARRAY_SIZE(menu) - 1: /* Exit */
                 goto out;
             }
         }

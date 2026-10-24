@@ -112,6 +112,10 @@ uint8_t display_mode = DM_banner;
 #define normal_mode (display_mode <= DM_selector)
 #define menu_mode (display_mode == DM_menu)
 #ifndef MINIMAL_UI
+#define glyphs_mode (display_mode == DM_glyphs)
+#define DISPLAY_ORDER(a,b,c,d) \
+    ((a) | ((b) << DORD_shift) | ((c) << (2 * DORD_shift)) | \
+    ((d) << (3 * DORD_shift)))
 #define error_mode (display_mode >= DM_error)
 enum { ERR_NAME, ERR_STATUS, ERR_BLANK = 7 };
 #define ERR_TALL(row) ((row) | DORD_double)
@@ -268,6 +272,24 @@ void lcd_write(int col, int row, int min, const char *str)
 }
 
 #ifndef MINIMAL_UI
+void lcd_write_glyphs(int row, unsigned int base)
+{
+    unsigned int i;
+    uint32_t oldpri = IRQ_save(I2C_IRQ_PRI);
+
+    memset(text[row], ' ', lcd_columns);
+    for (i = 0; i < 16; i++)
+        text[row][i] = base + i;
+
+    IRQ_restore(oldpri);
+}
+
+unsigned int lcd_shown_rows(void)
+{
+    /* FF OSD alone shows two: the font test gives it no more. */
+    return (is_oled_display || i2c_addr) ? display_rows : 2;
+}
+
 void lcd_write_shifted(int col, int row, int nr, unsigned int px,
                        const char *str)
 {
@@ -565,6 +587,8 @@ static void oled_to_lcd_row(int in_row)
 #ifndef MINIMAL_UI
     else if (error_mode)
         order = error_display_order();
+    else if (glyphs_mode)
+        order = DISPLAY_ORDER(0, 1, 2, 3);
 #endif
 
     for (;;) {

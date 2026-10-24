@@ -22,6 +22,8 @@
 #define lcd_backlight at435_lcd_backlight
 #define lcd_sync at435_lcd_sync
 #define lcd_row_columns at435_lcd_row_columns
+#define lcd_write_glyphs at435_lcd_write_glyphs
+#define lcd_shown_rows at435_lcd_shown_rows
 #define lcd_columns at435_lcd_columns
 #define display_rows at435_display_rows
 #define display_mode at435_display_mode
@@ -51,6 +53,8 @@ void lcd_clear(void);
 #undef lcd_backlight
 #undef lcd_sync
 #undef lcd_row_columns
+#undef lcd_write_glyphs
+#undef lcd_shown_rows
 #undef lcd_columns
 #undef display_rows
 #undef display_mode
@@ -279,6 +283,10 @@ unsigned int f105_lcd_column_pixels(void);
 void f105_lcd_backlight(bool_t on);
 void f105_lcd_sync(void);
 unsigned int f105_lcd_row_columns(unsigned int row);
+#ifndef MINIMAL_UI
+void f105_lcd_write_glyphs(int row, unsigned int base);
+unsigned int f105_lcd_shown_rows(void);
+#endif
 
 #define at435 (emu_mcu == EMU_MCU_at32f435)
 
@@ -360,6 +368,21 @@ unsigned int lcd_row_columns(unsigned int row)
     follow();
     return at435_lcd_row_columns(row);
 }
+
+#ifndef MINIMAL_UI
+void lcd_write_glyphs(int row, unsigned int base)
+{
+    if (at435)
+        at435_lcd_write_glyphs(row, base);
+    else
+        f105_lcd_write_glyphs(row, base);
+}
+
+unsigned int lcd_shown_rows(void)
+{
+    return at435 ? at435_lcd_shown_rows() : f105_lcd_shown_rows();
+}
+#endif
 
 /*
  * Local variables:

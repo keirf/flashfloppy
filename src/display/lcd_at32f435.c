@@ -138,6 +138,8 @@ static unsigned int osd_prep_buffer(void)
 #ifndef MINIMAL_UI
     else if (error_mode)
         order = error_display_order();
+    else if (glyphs_mode)
+        order = DISPLAY_ORDER(0, 1, 7, 7);
 #endif
 
     heights = rows = 0;
@@ -204,6 +206,8 @@ static unsigned int lcd_prep_buffer(void)
 #ifndef MINIMAL_UI
     else if (error_mode)
         order = error_display_order();
+    else if (glyphs_mode)
+        order = DISPLAY_ORDER(0, 1, 2, 3);
 #endif
 
     row = map_content_row((order >> (i2c_row * DORD_shift)) & DORD_row);
