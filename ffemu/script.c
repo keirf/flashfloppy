@@ -458,6 +458,11 @@ static void *script_thread(void *arg_sleep_ms)
             if (!usb_save(line + 5, err, sizeof(err)))
                 fprintf(stderr, "ffemu: cannot save the USB drive: %s\n",
                         err);
+        } else if (!strncmp(line, "unpack ", 7)) {
+            char err[600];
+            if (!usb_unpack(line + 7, err, sizeof(err)))
+                fprintf(stderr, "ffemu: cannot unpack the USB drive: %s\n",
+                        err);
         } else if (!strcmp(line, "crash")) {
             /* A fault, which tests the crash report. */
             volatile int *volatile p = NULL;

@@ -543,6 +543,9 @@ static void first_run_note(void)
     if (usb_drive_dir()[0] != '\0')
         printf("The firmware's writes to the USB drive will appear here: "
                "%s\n", user_path(usb_drive_dir(), buf, sizeof(buf)));
+    if (usb_saved_dir()[0] != '\0')
+        printf("The Externals dialog saves or unpacks the drive here: %s\n",
+               user_path(usb_saved_dir(), buf, sizeof(buf)));
     printf("Temporary files go here: %s\n",
            user_path(usb_store_dir(), buf, sizeof(buf)));
     wait_key();

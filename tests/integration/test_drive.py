@@ -79,5 +79,43 @@ class Drive(fr.Case, unittest.TestCase):
             self.assertEqual(bak, {"IMAGE_A.CFG": b"\\EJ"}, r.report())
 
 
+class DriveImage(fr.Case, unittest.TestCase):
+    """The drive as an image file, by the script's save, and an image drive
+    as a folder, by its unpack, as the Externals dialog's button makes them
+    in the state folder."""
+
+    def test_save_unpack(self):
+        """A drive from a folder saved, the eject's IMAGE_A.CFG in it; that
+        image as the drive, which starts ejected, mounted by Select and
+        unpacked: its files at their paths, a long name in UTF-8, and
+        IMAGE_A.CFG as the mount left it. The folder is FF, which the image
+        selector does not show."""
+        files = dict(PC, **{
+            "FF/Read me.txt": b"Mine.\n",
+            "FF/\u0427\u0442\u0435\u043d\u0438\u0435.txt": b"X"})
+        with tempfile.TemporaryDirectory(prefix="ffemu-test-") as tmp:
+            image = os.path.join(tmp, "drive.img")
+            first = fr.run("ffemu", MOUNT + EJECT + ["save " + image],
+                           files=files)
+            self.assertTrue(os.path.exists(image), first.report())
+            out = os.path.join(tmp, "out")
+            r = fr.run("ffemu", ["sleep 2000", "key select"] + MOUNT
+                       + ["unpack " + out], drive_image=image)
+            self.assertWaits(r, 1)
+            self.assertEqual(fr.read_tree(out),
+                             dict(files, **{"FF/IMAGE_A.CFG": b""}),
+                             r.report())
+
+    def test_no_drive(self):
+        """Nothing to unpack while the drive is out: a message, no folder."""
+        with tempfile.TemporaryDirectory(prefix="ffemu-test-") as tmp:
+            out = os.path.join(tmp, "out")
+            r = fr.run("ffemu", ["key remove", "sleep 500", "unpack " + out],
+                       files=PC)
+            self.assertIn("cannot unpack the USB drive: no USB drive",
+                          r.stderr, r.report())
+            self.assertFalse(os.path.exists(out), r.report())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -98,6 +98,15 @@ that the firmware deletes, or writes back as the medium has it, leaving it.
 The folder goes on through a power cycle, as the writes do; when the writes
 are dropped, it is renamed `drive.bak/`, the previous one removed. A name that
 the host refuses gets a leading `_`, which the console says.
+The Externals dialog's button below its choices saves the drive as the
+firmware sees it, its writes included: "Save drive to image file" writes a
+drive made from a directory or read from a disk as an image file,
+`saved/drive-YYYYMMDD-HHMMSS.img` beside the console log; "Unpack drive image
+to folder" writes the files and folders of a drive read from an image file
+to the folder `saved/drive-YYYYMMDD-HHMMSS/`, long names in UTF-8, as the
+folder `drive/` has them; a second one within a second gets a count after
+the time, so that nothing is overwritten. The dialog's last row names what
+was written; the button is dimmed while the drive is out.
 Status names the `FF.CFG` that the firmware reads: the one in folder `FF` if
 the drive has that folder, even when that one is missing, else the one in the
 root; names match in any letter case.
@@ -440,7 +449,8 @@ between bars, a 7-segment display as its digits drawn with `_` and `|` in
 three rows, a lit point as `.`), `log` (the firmware's console output so far),
 `status`, `flash` (the `[Flash mem]` section as the flash memory is now), `osd`
 (FF OSD's text, its rows between bars), `save <file>`, which writes the USB
-drive as the firmware sees it, its writes included, to an image file, and
+drive as the firmware sees it, its writes included, to an image file,
+`unpack <folder>`, which writes its files and folders under a folder, and
 `crash`, a write through a null pointer, which tests the crash report.
 When the commands end with `key quit`, or the input ends, ffemu prints `quit`
 as its last line, so that a caller can tell that end from a death, which a

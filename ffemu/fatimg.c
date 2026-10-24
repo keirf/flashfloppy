@@ -141,6 +141,8 @@ static void drive_pass(void);
 /* The folder that the passes keep the written files in, under ffemu's state
  * folder. One pass at a time, and no insertion or removal during one. */
 static char drive_dir[512];
+/* The folder saved/ of ffemu's state, beside drive/. */
+static char saved_dir[512];
 static pthread_mutex_t pass_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void put16(uint8_t *p, unsigned int x)
@@ -2070,6 +2072,11 @@ struct pass {
     /* The paths of the volume's files, relative to the folder, sorted. */
     char **seen;
     unsigned int nr_seen, seen_size;
+    /* The folder written to; whether every file goes there, for an unpack,
+     * and how many of them could not be written. */
+    const char *out;
+    bool all;
+    unsigned int nr_failed;
 };
 
 static void secs_add(struct secs *s, uint32_t sec)
@@ -2311,15 +2318,16 @@ static time_t entry_time(const uint8_t *e)
     return mktime(&tm);
 }
 
-/* Opens file @rel under the folder for writing, making its folders; where
+/* Opens file @rel under folder @out for writing, making its folders; where
  * the host refuses its name, such as a device's name on Windows, under the
  * name with a leading underscore. */
-static int open_out(const char *rel, char *path, size_t size)
+static int open_out(const char *out, const char *rel, char *path,
+                    size_t size)
 {
     char *slash;
     int fd;
 
-    if (!drive_path(rel, path, size))
+    if (snprintf(path, size, "%s/%s", out, rel) >= (int)size)
         return -1;
     slash = strrchr(path, '/');
     *slash = '\0';
@@ -2352,11 +2360,12 @@ static void copy_out(struct pass *p, const uint8_t *e, const char *rel,
     char path[2048];
     struct timeval tv[2];
     bool ok = true;
-    int fd = open_out(rel, path, sizeof(path));
+    int fd = open_out(p->out, rel, path, sizeof(path));
 
     if (fd < 0) {
         host_log("USB drive's %s: cannot write %s: %s", rel, path,
                  strerror(errno));
+        p->nr_failed++;
         return;
     }
     if (orig != NULL)
@@ -2366,6 +2375,10 @@ static void copy_out(struct pass *p, const uint8_t *e, const char *rel,
         unsigned int n = (size - k * SEC < SEC) ? size - k * SEC : SEC;
         ok = vol_sector(&p->live, &clus, k, b)
             && (write(fd, b, n) == (ssize_t)n);
+    }
+    if (!ok) {
+        host_log("USB drive's %s: cannot write all of %s", rel, path);
+        p->nr_failed++;
     }
     close(fd);
     own_file(path);
@@ -2401,6 +2414,10 @@ static void pass_file(struct pass *p, const uint8_t *e, uint32_t esec,
     uint32_t nr = (size + v->spc * SEC - 1) / (v->spc * SEC);
     bool touched = secs_any(&p->touched, esec, 1);
 
+    if (p->all) {
+        copy_out(p, e, rel, orig);
+        return;
+    }
     seen_add(p, rel);
     for (; !touched && (clus >= 2); clus = chain_next(v, clus, &nr))
         touched = secs_any(&p->touched, v->data + (clus - 2) * v->spc,
@@ -2411,6 +2428,17 @@ static void pass_file(struct pass *p, const uint8_t *e, uint32_t esec,
         copy_out(p, e, rel, orig);
     else
         remove_out(rel);
+}
+
+/* Makes folder @rel under the folder written to, so that an empty one is
+ * unpacked too. */
+static void make_out_dir(struct pass *p, const char *rel)
+{
+    char path[2048];
+
+    if (snprintf(path, sizeof(path), "%s/%s", p->out, rel)
+        < (int)sizeof(path))
+        make_dirs(path);
 }
 
 /* The folder at cluster @dir of the live volume, 0 for the root, path @rel,
@@ -2450,10 +2478,13 @@ static void pass_dir(struct pass *p, uint32_t dir, const char *rel,
             if (snprintf(sub, sizeof(sub), "%s%s%s", rel, rel[0] ? "/" : "",
                          name) >= (int)sizeof(sub))
                 continue;
-            if (!(e[11] & ATTR_DIR))
+            if (!(e[11] & ATTR_DIR)) {
                 pass_file(p, e, sec, i, sub, renamed ? orig : NULL);
-            else if ((depth < MAX_DEPTH) && (entry_clus(v, e) >= 2))
+            } else if ((depth < MAX_DEPTH) && (entry_clus(v, e) >= 2)) {
+                if (p->all)
+                    make_out_dir(p, sub);
                 pass_dir(p, entry_clus(v, e), sub, depth + 1);
+            }
         }
     }
 }
@@ -2505,6 +2536,7 @@ static void drive_pass(void)
     if ((im == NULL) || (drive_dir[0] == '\0') || (gen == passed_gen))
         return;
     memset(&p, 0, sizeof(p));
+    p.out = drive_dir;
     pthread_mutex_lock(&lock);
     gen = write_gen;
     for (i = 0; i < im->ovl_size; i++) {
@@ -2574,6 +2606,75 @@ static void drive_rotate(void)
 void usb_set_state_dir(const char *dir)
 {
     snprintf(drive_dir, sizeof(drive_dir), "%s/drive", dir);
+    snprintf(saved_dir, sizeof(saved_dir), "%s/saved", dir);
+}
+
+const char *usb_saved_dir(void)
+{
+    return saved_dir;
+}
+
+bool usb_saved_path(const char *suffix, char *buf, size_t size)
+{
+    time_t t = time(NULL);
+    struct tm tm;
+    char dir[600];
+    unsigned int n;
+    int len;
+
+    if (saved_dir[0] == '\0')
+        return false;
+    snprintf(dir, sizeof(dir), "%s", saved_dir);
+    make_dirs(dir);
+    localtime_r(&t, &tm);
+    len = snprintf(buf, size, "%s/drive-%04d%02d%02d-%02d%02d%02d", dir,
+                   tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
+                   tm.tm_min, tm.tm_sec);
+    /* A second one within the same second gets a count. */
+    for (n = 1; (len > 0) && (len < (int)size); n++) {
+        if (n > 1)
+            snprintf(buf + len, size - len, "-%u", n);
+        if (strlen(buf) + strlen(suffix) >= size)
+            return false;
+        strcat(buf, suffix);
+        if (access(buf, F_OK) != 0)
+            return true;
+        buf[len] = '\0';
+    }
+    return false;
+}
+
+bool usb_unpack(const char *dir, char *err, size_t size)
+{
+    struct image *im = cur;
+    struct pass p;
+    char path[600];
+    bool ok;
+
+    if (im == NULL) {
+        snprintf(err, size, "no USB drive");
+        return false;
+    }
+    if (snprintf(path, sizeof(path), "%s", dir) >= (int)sizeof(path)) {
+        snprintf(err, size, "%s: name too long", dir);
+        return false;
+    }
+    memset(&p, 0, sizeof(p));
+    p.out = path;
+    p.all = true;
+    pthread_mutex_lock(&pass_lock);
+    ok = vol_open(&p.live, im, true);
+    if (ok) {
+        make_dirs(path);
+        pass_dir(&p, 0, "", 0);
+    }
+    pthread_mutex_unlock(&pass_lock);
+    if (!ok)
+        snprintf(err, size, "the drive holds no FAT volume");
+    else if (p.nr_failed != 0)
+        snprintf(err, size, "%u file%s not written to %s, as the log says",
+                 p.nr_failed, (p.nr_failed == 1) ? "" : "s", path);
+    return ok && (p.nr_failed == 0);
 }
 
 const char *usb_drive_dir(void)

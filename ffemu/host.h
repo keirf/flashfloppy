@@ -319,6 +319,15 @@ void usb_ff_cfg_place(const char *dir, char *buf, size_t size);
 /* Writes the drive as the firmware sees it to file @path; if that fails,
  * says why in @err. */
 bool usb_save(const char *path, char *err, size_t size);
+/* Writes the files of the drive as the firmware sees it, and its folders,
+ * under directory @dir, as the firmware's writes are kept as files; if that
+ * fails, says why in @err. */
+bool usb_unpack(const char *dir, char *err, size_t size);
+/* The folder saved/ beside drive/, "" if ffemu has no state folder; the
+ * path of a new drive-YYYYMMDD-HHMMSS@suffix in it, which _path() makes,
+ * false if there is none. */
+const char *usb_saved_dir(void);
+bool usb_saved_path(const char *suffix, char *buf, size_t size);
 /* The firmware's writes as files: the drive's files that they made differ
  * from the medium's, kept in the folder drive/ under ffemu's state folder
  * @dir, which usb_drive_dir() names. */
