@@ -123,7 +123,7 @@ static void dma_start(unsigned int sz)
 /* Snapshot text buffer into the command buffer. */
 static unsigned int osd_prep_buffer(void)
 {
-    uint16_t order = menu_mode ? 0x7903 : 0x7183;
+    uint16_t order = glyphs_mode ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
     uint8_t *q = buffer;
     unsigned int row, rows, heights;
     int i;
@@ -164,6 +164,7 @@ static unsigned int osd_prep_buffer(void)
             memcpy(q, text[i], lcd_columns);
         else
             memset(q, ' ', lcd_columns);
+
         q += lcd_columns;
     }
 
@@ -195,7 +196,7 @@ static unsigned int lcd_prep_buffer(void)
         refresh_count++;
     }
 
-    order = (lcd_rows == 2) ? 0x7710 : 0x2103;
+    order = glyphs_mode ? 0x3210 : (lcd_rows == 2) ? 0x7710 : 0x2103;
     if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
         order = ff_cfg.display_order;
 

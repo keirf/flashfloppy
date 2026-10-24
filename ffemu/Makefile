@@ -163,7 +163,7 @@ $(OUT)/fw/display/lcd_stm32f105.o: $(ROOT)/src/display/lcd_stm32f105.c
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
 	$(Q)$(OBJCOPY) $(foreach f,init clear write write_spinner write_shifted \
-	    backlight sync row_columns column_pixels, \
+	    backlight sync row_columns column_pixels write_glyphs shown_rows, \
 	    --redefine-sym lcd_$(f)=f105_lcd_$(f)) $@
 
 # stubs.c wraps these with what ffemu adds to them.
