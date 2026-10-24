@@ -98,6 +98,7 @@ uint8_t lcd_columns, lcd_rows;
 /* Current display mode: Affects row ordering and sizing. */
 uint8_t display_mode = DM_banner;
 #define menu_mode (display_mode == DM_menu)
+#define glyphs_mode (display_mode == DM_glyphs)
 
 /* Occasionally the I2C/DMA engine seems to get stuck. Detect this with 
  * a timeout timer and unwedge it by calling the I2C error handler. */
@@ -184,6 +185,24 @@ void lcd_write(int col, int row, int min, const char *str)
         *p++ = ' ';
 
     IRQ_restore(oldpri);
+}
+
+void lcd_write_glyphs(int row, unsigned int base)
+{
+    unsigned int i;
+    uint32_t oldpri = IRQ_save(I2C_IRQ_PRI);
+
+    memset(text[row], ' ', lcd_columns);
+    for (i = 0; i < 16; i++)
+        text[row][i] = base + i;
+
+    IRQ_restore(oldpri);
+}
+
+unsigned int lcd_shown_rows(void)
+{
+    /* FF OSD alone shows two: the font test gives it no more. */
+    return is_oled_display ? oled_height / 16 : i2c_addr ? lcd_rows : 2;
 }
 
 void lcd_write_shifted(int col, int row, int nr, unsigned int px,
@@ -369,7 +388,8 @@ static void oled_to_lcd_row(int in_row)
     bool_t large = FALSE, wide;
     char *pc;
 
-    order = (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
+    order = glyphs_mode ? 0x3210 : (oled_height == 32) ? 0x7710
+        : menu_mode ? 0x7903 : 0x7183;
     if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
         order = ff_cfg.display_order;
 
@@ -398,7 +418,7 @@ static void oled_to_lcd_row(int in_row)
         oled_double_height(buffer, &buffer[(half == 1) ? 128 : 0], 0x3);
 
 #if TARGET == TARGET_apple2
-    if (pc != NULL)
+    if ((pc != NULL) && !glyphs_mode)
         oled_draw_spinners(pc, half, wide);
 #endif
 }

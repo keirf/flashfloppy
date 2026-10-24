@@ -3,7 +3,7 @@ row's track, in the long form or in short with show-tracks-short, as the apple2
 firmware always gives it, with the phases; display-order's row 4, the image's
 name and its track in short; rows of double width; and the folders' names,
 which row 3 scrolls and the image selector shows in brackets or after a slash;
-and a long name's scrolling by pixel.
+a long name's scrolling by pixel; and the Main Menu's font test.
 An OLED's rows are read as FF OSD gets them, beside it on the I2C bus: the
 display's text, as many columns as it has; or from its pixels, by the
 firmware's glyphs."""
@@ -53,12 +53,14 @@ def oled_glyphs(font):
     return {data[i*n:(i+1)*n]: chr(0x20 + i) for i in range(0x7f - 0x20)}
 
 
-def oled_text(pixels, top, font, wide):
-    """The text of the OLED's row of double height from pixel row @top of
-    @pixels, rows of "." and "#", of double width too if @wide: each cell as
-    the glyph that it shows, "@" for none, such as the phase spinner's."""
+def oled_text(pixels, top, font, wide, tall=True):
+    """The text of the OLED's row of double height, or of single height
+    unless @tall, from pixel row @top of @pixels, rows of "." and "#", of
+    double width too if @wide: each cell as the glyph that it shows, "@" for
+    none, such as the phase spinner's."""
     glyphs, w = oled_glyphs(font), FONT_W[font]
     margin, sx = (1 if w == 6 else 0), (2 if wide else 1)
+    sy = 2 if tall else 1
     text = ""
     for i in range((128 - margin) // w // sx):
         cols = []
@@ -66,7 +68,7 @@ def oled_text(pixels, top, font, wide):
             for j in range(w):
                 x = sx * (margin + i*w + j)
                 cols.append(sum(
-                    (pixels[top + 2 * (page+b)][x] == "#") << b
+                    (pixels[top + sy * (page+b)][x] == "#") << b
                     for b in range(8)))
         text += glyphs.get(bytes(cols), "@")
     return text
@@ -798,6 +800,116 @@ class PixelScroll(fr.Case, unittest.TestCase):
                    "display-scroll-by-pixel = yes"],
             files={"ABCDEFGHIJKLMNOPQRSTUVW.IMG": bytes(737280)})
         self.assertWaits(r, 2)
+
+
+def rom_cells(codes, rom="cyr"):
+    """Codes @codes as ffemu's LCD of character ROM @rom shows them in a
+    dump: the character that each code's glyph stands for, from ffemu's
+    table, and a white square for one without, the user-defined codes below
+    the ROM's first among them."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                        "..", "ffemu", "lcd_font_%s.h" % rom)
+    with open(path) as f:
+        text = f.read()
+    uni = {}
+    for m in re.finditer(r"/\* 0x([0-9a-f]{2}) \*/((?:\s*0x[0-9a-f]{4},?)+)",
+                         text):
+        for i, u in enumerate(re.findall(r"0x([0-9a-f]{4})", m.group(2))):
+            uni[int(m.group(1), 16) + i] = int(u, 16)
+    return "".join(chr(uni.get(c, 0) or 0x25a1) for c in codes)
+
+
+# The Main Menu, entered with no drive mounted, and its item Font Test, two
+# steps back from the first, past Exit.
+FONT_TEST = ["key remove", "sleep 500", "key select", "sleep 500",
+             "key left", "sleep 200", "key left", "sleep 200", "key select",
+             "sleep 500"]
+
+
+class FontTest(Case, unittest.TestCase):
+    """The Main Menu's Font Test: every code of the display with its glyph,
+    16 to a row and their codes on the row below, a page of one or two such
+    pairs; Left and Right page, Select goes back to the menu."""
+
+    LCD20 = ["display-type = lcd-20x04"]
+    OLED64 = ["display-type = oled-128x64"]
+
+    def oled(self, name, keys, flash, files=PC, display="ssd1306-128x64"):
+        """The OLED's pixel rows on the font test's page that @keys show."""
+        r = fr.run(name, ["wait 10000 log Name:"] + FONT_TEST + list(keys)
+                   + ["sleep 300", "dump"], settings=["display = " + display],
+                   flash=flash, files=files)
+        self.assertWaits(r, 1)
+        return [line for line in r.lines if line and set(line) <= set(".#")]
+
+    def test_lcd_16x2(self):
+        """One pair a page, the codes from 0x00, to the ROM as they are:
+        CGRAM's eight, then MELT's capital soft sign and the rest; the keys
+        in short; FF OSD beside it with the same rows."""
+        rows, r = self.rows("ffemu", FONT_TEST, "hd44780-16x2")
+        self.assertEqual(rows, [rom_cells(range(0x00, 0x10)),
+                                "00-0F  Sel=exit "], r.report())
+        osd = r.stdout.split("\nosd: ")[1].splitlines()
+        self.assertEqual(osd[2], "|00-0F  Sel=exit |", r.report())
+
+    def test_paging(self):
+        """Right to the next 16 codes, Left from the first to the last 16,
+        Select back to the menu."""
+        rows, r = self.rows("ffemu", FONT_TEST + ["key right"],
+                            "hd44780-16x2")
+        self.assertEqual(rows, [rom_cells(range(0x10, 0x20)),
+                                "10-1F  Sel=exit "], r.report())
+        rows, r = self.rows("ffemu", FONT_TEST + ["key left"],
+                            "hd44780-16x2")
+        self.assertEqual(rows, [rom_cells(range(0xf0, 0x100)),
+                                "F0-FF  Sel=exit "], r.report())
+        rows, r = self.rows("ffemu", FONT_TEST + ["key select"],
+                            "hd44780-16x2")
+        self.assertEqual(rows, ["**Main Menu**   ", "Font Test       "],
+                         r.report())
+
+    def test_lcd_20x4(self):
+        """Two pairs a page, in the rows' own order, the keys in full."""
+        rows, r = self.rows("ffemu", FONT_TEST + ["key right"],
+                            "hd44780-20x4", self.LCD20)
+        self.assertEqual(rows, [rom_cells(range(0x20, 0x30)) + "    ",
+                                "20-2F  Select: exit ",
+                                rom_cells(range(0x30, 0x40)) + "    ",
+                                "30-3F" + " " * 15], r.report())
+
+    def test_oled_128x64(self):
+        """Four rows of single height, read by the firmware's glyphs, in each
+        font: ASCII's at 0x40, the keys short where 16 columns are all."""
+        for font, keys in (("6x13", "  Select: exit"), ("8x16", "  Sel=exit")):
+            with self.subTest(font=font):
+                pixels = self.oled("ffemu", ["key right", "sleep 200",
+                                             "key right"],
+                                   self.OLED64 + ["oled-font = " + font])
+                width = len(oled_text(pixels, 0, font, False, False))
+                self.assertEqual(
+                    [oled_text(pixels, top, font, False, False)
+                     for top in (0, 16, 32, 48)],
+                    [row.ljust(width) for row in (
+                        "@ABCDEFGHIJKLMNO", "40-4F" + keys,
+                        "PQRSTUVWXYZ[\\]^_", "50-5F")])
+
+    def test_oled_codes_without_glyph(self):
+        """The control codes draw alike, as the font's mark of a code without
+        a glyph, 0x10 and on too, the phase spinner's in the apple2
+        firmware, which the font test draws as a glyph, on a 128x32 OLED of
+        one pair a page."""
+        r = fr.run("ffemu-apple2", ["wait 10000 log Name:"] + FONT_TEST
+                   + ["dump", "key right", "sleep 300", "dump"],
+                   settings=["display = ssd1306-128x32"], files=DSK)
+        self.assertWaits(r, 1)
+        lines = [line for line in r.lines if line and set(line) <= set(".#")]
+        pages = (lines[:32], lines[32:64])
+        cells = [tuple(row[1 + 6*i:7 + 6*i] for row in page[:16])
+                 for page in pages for i in range(16)]
+        self.assertEqual(set(cells), {cells[0]}, r.report())
+        self.assertTrue(any("#" in row for row in cells[0]), r.report())
+        self.assertEqual(oled_text(pages[1], 16, "6x13", False, False),
+                         "10-1F  Select: exit  ")
 
 
 if __name__ == "__main__":

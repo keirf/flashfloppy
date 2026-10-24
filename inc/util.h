@@ -156,6 +156,11 @@ unsigned int lcd_column_pixels(void);
 /* Writes @name, the image's name as shown, to its row and to that of the name
  * and the track. */
 void display_write_name(const char *name);
+/* Writes the 16 codes from @base on, as they are, to text row @row, and
+ * blanks after them. */
+void lcd_write_glyphs(int row, unsigned int base);
+/* The text rows that the display shows. */
+unsigned int lcd_shown_rows(void);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
 extern uint8_t lcd_columns, lcd_rows;
@@ -183,7 +188,8 @@ void set_slot_name(const char *name);
 bool_t get_img_cfg(struct slot *slot);
 void IRQ_rotary(void);
 
-enum { DM_normal=0, DM_banner, DM_menu };
+/* DM_glyphs: the font test's pages, every row single height. */
+enum { DM_normal=0, DM_banner, DM_menu, DM_glyphs };
 extern uint8_t display_mode;
 extern uint8_t board_id;
 extern uint8_t has_kc30_header;

@@ -152,7 +152,7 @@ static void dma_start(unsigned int sz)
 /* Snapshot text buffer into the command buffer. */
 static unsigned int osd_prep_buffer(void)
 {
-    uint16_t order = menu_mode ? 0x7903 : 0x7183;
+    uint16_t order = glyphs_mode ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
     uint8_t *q = buffer;
     unsigned int row, rows, heights;
     int i;
@@ -196,9 +196,9 @@ static unsigned int osd_prep_buffer(void)
         else
             memset(q, ' ', lcd_columns);
 #if TARGET == TARGET_apple2
-        {
+        if (!glyphs_mode) {
             /* The OLED's phase spinner goes as a blank: FF OSD has no
-             * glyph for it. */
+             * glyph for it. The font test sends its code as it is. */
             uint8_t *p;
             for (p = q; p < q + lcd_columns; p++)
                 if ((*p & ~0xf) == OLED_SPINNER)
@@ -243,7 +243,7 @@ static unsigned int lcd_prep_buffer(void)
         i2c->cr1 |= I2C_CR1_START;
     }
 
-    order = (lcd_rows == 2) ? 0x7710 : 0x2103;
+    order = glyphs_mode ? 0x3210 : (lcd_rows == 2) ? 0x7710 : 0x2103;
     if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
         order = ff_cfg.display_order;
 
