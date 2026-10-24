@@ -15,12 +15,25 @@ in the commands are the firmware's."""
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.environ.get("FFEMU_OUT", os.path.join(ROOT, "out"))
 CLOCK = os.environ.get("FFEMU_CLOCK", "virtual")
 LED_7SEG_C = os.path.join(ROOT, "src", "display", "led_7seg.c")
+
+# What the status of a run that Windows ended by an exception means.
+EXCEPTIONS = {
+    0x80000004: "STATUS_SINGLE_STEP: a trap that the MSYS2 runtime leaves "
+    "behind when a signal's delivery times out under load, see "
+    "ffemu/README.md",
+}
+# The threads of Windows process {pid}: state, wait reason and CPU time.
+WINDOWS_THREADS = (
+    "(Get-Process -Id {pid}).Threads | ForEach-Object {{ '{{0}} {{1}} {{2}} "
+    "{{3}}' -f $_.Id, $_.ThreadState, $(if ($_.ThreadState -eq 'Wait') "
+    "{{ $_.WaitReason }} else {{ '-' }}), $_.TotalProcessorTime }}")
 
 WAIT_RE = re.compile(r"^wait (\w+) (.*): (ok|timed out) after (\d+) ms$")
 FIRMWARE_RE = re.compile(r"^firmware: ([^,]*), ")
@@ -70,8 +83,44 @@ class Run:
 
     def report(self):
         """The output, for a failure's message."""
-        return "exit %d\n--- stdout:\n%s--- stderr:\n%s" % (
-            self.returncode, self.stdout, self.stderr)
+        return "%s\n--- stdout:\n%s--- stderr:\n%s" % (
+            status(self.returncode), self.stdout, self.stderr)
+
+
+def status(code):
+    """Exit status @code in words: on Windows the code of an exception that
+    ended the run, in hex."""
+    if code < 0x80000000:
+        return "exit %d" % code
+    return "exit 0x%08x %s" % (code, EXCEPTIONS.get(code, "(an exception)"))
+
+
+def threads(pid):
+    """The threads of running process @pid, a line each, or why not."""
+    try:
+        if sys.platform.startswith("linux"):
+            lines = []
+            task = "/proc/%d/task" % pid
+            for t in sorted(os.listdir(task), key=int):
+                fields = []
+                for name in ("comm", "status", "wchan"):
+                    with open(os.path.join(task, t, name)) as f:
+                        fields.append(f.read().strip())
+                state = re.search(r"^State:\s*(.*)$", fields[1], re.M)
+                lines.append("%s %s %s %s" % (
+                    t, fields[0], state.group(1) if state else "?",
+                    fields[2]))
+            return "\n".join(lines)
+        if sys.platform in ("cygwin", "msys"):
+            with open("/proc/%d/winpid" % pid) as f:
+                pid = int(f.read())
+        p = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command",
+             WINDOWS_THREADS.format(pid=pid)],
+            capture_output=True, text=True, timeout=60)
+        return (p.stdout + p.stderr).rstrip()
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
+        return "(not listed: %s)" % e
 
 
 def run(name, commands, settings=(), flash=(), ffemurc=None, files=None,
@@ -101,13 +150,25 @@ def run(name, commands, settings=(), flash=(), ffemurc=None, files=None,
             os.environ, XDG_CONFIG_HOME=config,
             XDG_STATE_HOME=os.path.join(tmp, "state"), FFEMU_CLOCK=CLOCK)
         script = "".join(c + "\n" for c in list(commands) + ["key quit"])
-        p = subprocess.run(
-            [program(name), drive], input=script.encode(), env=env,
-            capture_output=True, timeout=timeout)
+        with subprocess.Popen(
+                [program(name), drive], stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                env=env) as p:
+            try:
+                out, err = p.communicate(script.encode(), timeout=timeout)
+            except subprocess.TimeoutExpired:
+                listed = threads(p.pid)
+                p.kill()
+                out, err = p.communicate()
+                raise TimeoutError(
+                    "%s did not end within %d s; its threads:\n%s\n"
+                    "--- stdout:\n%s--- stderr:\n%s" % (
+                        name, timeout, listed, out.decode(errors="replace"),
+                        err.decode(errors="replace"))) from None
         with open(rc, newline="") as f:
             left = f.read()
     return Run(
-        p.stdout.decode(errors="replace"), p.stderr.decode(errors="replace"),
+        out.decode(errors="replace"), err.decode(errors="replace"),
         p.returncode, left)
 
 
