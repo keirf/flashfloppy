@@ -170,10 +170,13 @@ static int dialog_button;
 static int dialog_display;
 /* The Display type dialog's character ROM and 8x16 font, and its focus: the
  * displays, the ROMs, which only an LCD uses, the font's check box, which
- * only an OLED uses, OK and Cancel. */
+ * only an OLED uses, the MCUs, the button that saves FF.CFG, OK and
+ * Cancel. */
 static int dialog_lcd_rom, dialog_mcu, dialog_focus;
 static bool dialog_oled_synth;
-enum { DF_display, DF_rom, DF_synth, DF_mcu, DF_ok, DF_cancel, DF_nr };
+enum {
+    DF_display, DF_rom, DF_synth, DF_mcu, DF_save, DF_ok, DF_cancel, DF_nr
+};
 /* The Display type dialog's labels, by the control each names, `~` around
  * the letter that moves the focus to it. */
 static const char * const df_label[DF_nr] = {
@@ -197,6 +200,7 @@ static const char * const ef_label[EF_nr] = {
  * dialog's last row. */
 static char ef_note[1200];
 static void draw_dialog(void);
+static void draw_display_dialog(void);
 static void draw_fdfile_dialog(void);
 static void draw_unpack_dialog(void);
 static void draw_write_dialog(void);
@@ -205,6 +209,12 @@ static void draw_fdhelp(void);
 static int hotkey_of(const char *s);
 static void put_marked(int y, int x, int w, attr_t attr, attr_t hot,
                        const char *s);
+/* What the last Save of FF.CFG did, on the bottom line of the dialog it came
+ * from until the next key. */
+static char fd_note[4200];
+/* The dialog that a Save of FF.CFG came from, which the question before it
+ * and a message after it go back to. */
+static int write_return = DLG_flash;
 
 #define FRAME_MS 20
 #define SPEAKER_SHOWN_NS 120000000u
@@ -2470,13 +2480,27 @@ static void draw_display_dialog(void)
         "%s", "Changing the display or MCU restarts the device.");
     /* OK is the default while the focus is on no button. Both are at the
      * bottom right, as in Turbo Pascal's dialogs, Cancel's shadow at the
-     * clusters' right edge, two columns between OK's shadow and Cancel. */
+     * clusters' right edge, two columns between OK's shadow and Cancel; the
+     * Save button at the left. */
+    button(y + h - 4, x + 3,
+           button_face(dialog_focus == DF_save, false),
+           " Save recommended FF.CFG ");
     button(y + h - 4, x + w - 23,
-           button_face(dialog_focus == DF_ok, dialog_focus < DF_ok), "  OK  ");
+           button_face(dialog_focus == DF_ok, dialog_focus < DF_save),
+           "  OK  ");
     button(y + h - 4, x + w - 14,
            button_face(dialog_focus == DF_cancel, false), "  Cancel  ");
     probe_part("help row");
-    if (dialog_focus == DF_rom)
+    /* What the last Save did, its path shortened to fit, as in the Flash
+     * mem dialog. */
+    if (fd_note[0]) {
+        if (put_message(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_bar_crop),
+                        fd_note))
+            put(y + h - 2, x + w - 1, 1, BRIGHT(CP_bar_crop), ">");
+    } else if (dialog_focus == DF_save)
+        put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
+            "Save options recommended for the display to FF.CFG");
+    else if (dialog_focus == DF_rom)
         put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
             lcd_rom_help[dialog_lcd_rom]);
     else if (dialog_focus == DF_synth)
@@ -2783,7 +2807,10 @@ static void draw_dialog(void)
         draw_unpack_dialog();
         break;
     case DLG_write:
-        draw_flash_dialog();
+        if (write_return == DLG_display)
+            draw_display_dialog();
+        else
+            draw_flash_dialog();
         draw_write_dialog();
         break;
     case DLG_fdhelp:
@@ -2794,6 +2821,8 @@ static void draw_dialog(void)
         /* Over the dialog it came from. */
         if (msg_return == DLG_flash)
             draw_flash_dialog();
+        else if (msg_return == DLG_display)
+            draw_display_dialog();
         draw_message_box();
         break;
     }
@@ -2804,18 +2833,19 @@ enum {
     DK_none, DK_taken, DK_quit, DK_display, DK_rows_yes, DK_rows_no,
     DK_emul_yes, DK_emul_no, DK_externals, DK_drive, DK_fdfile_yes,
     DK_fdfile_no,
-    DK_unpack, DK_write
+    DK_unpack, DK_write, DK_recommend
 };
 
 /* The Display type dialog's keys: Tab and Shift+Tab move the focus over
  * every control, and so does the letter a label marks to its control; Up
  * and Down choose in the cluster in focus, Space toggles the check box,
  * Left and Right go between the buttons; Enter takes the choice, unless
- * Cancel is in focus. */
+ * Cancel is in focus, or saves FF.CFG, leaving the dialog open. */
 static int display_dialog_key(int key)
 {
     int step = 0, d = (key == KEY_DOWN) ? 1 : -1, i;
 
+    fd_note[0] = '\0';
     switch (key) {
     case '\t':
         step = 1;
@@ -2824,10 +2854,9 @@ static int display_dialog_key(int key)
         step = -1;
         break;
     case KEY_LEFT: case KEY_RIGHT:
-        if (dialog_focus == DF_ok)
-            dialog_focus = DF_cancel;
-        else if (dialog_focus == DF_cancel)
-            dialog_focus = DF_ok;
+        if (dialog_focus >= DF_save)
+            dialog_focus = DF_save + (dialog_focus - DF_save
+                                      + ((key == KEY_RIGHT) ? 1 : 2)) % 3;
         break;
     case ' ':
         if (dialog_focus == DF_synth)
@@ -2848,6 +2877,8 @@ static int display_dialog_key(int key)
         dialog = DLG_none;
         return DK_taken;
     case '\n':
+        if (dialog_focus == DF_save)
+            return DK_recommend;
         dialog = DLG_none;
         return (dialog_focus == DF_cancel) ? DK_taken : DK_display;
     default:
@@ -2969,7 +3000,7 @@ static int dialog_key(int key)
         int done = (dialog == DLG_unpack) ? DK_unpack : DK_write;
         if ((key != 27) && (key != '\n'))
             return DK_taken;
-        dialog = DLG_flash;
+        dialog = (dialog == DLG_write) ? write_return : DLG_flash;
         return ((key == '\n') && (dialog_button == 0)) ? done : DK_taken;
     }
 
@@ -3179,6 +3210,9 @@ static void set_display(int display, int mcu)
 enum { FV_radio, FV_check, FV_input, FV_ok, FV_cancel,
        FV_save_all, FV_save_nondefault, FV_save_changed, FV_save_dump,
        FV_dump_cfg, FV_load_cfg };
+/* What the Display type dialog's Save button writes, as the write dialog
+ * names the button it asks for. */
+#define FV_save_recommended (FV_load_cfg + 1)
 
 enum { FT_emulated, FT_other, FT_actions, FT_nr };
 static const char * const fd_tab_name[FT_nr] = {
@@ -3290,8 +3324,6 @@ static int fd_focus, fd_tab, fd_w, fd_h, fd_top, fd_top_actions;
 /* When the PgUp and PgDn that switch tabs were pressed, until when they are
  * lit. */
 static uint64_t fd_up_lit, fd_down_lit;
-/* What the last Save did, on the bottom line until the next key. */
-static char fd_note[4200];
 
 /* @s without its '~' marks, into @buf. */
 static const char *unmarked(const char *s, char *buf, size_t size)
@@ -4298,6 +4330,10 @@ static void draw_write_dialog(void)
     } else if (write_kind == FV_save_all) {
         title = "Save all to FF.CFG";
         ask = "Save all options to a file next to the image?";
+    } else if (write_kind == FV_save_recommended) {
+        title = "Save recommended FF.CFG";
+        ask = "Save the options recommended for the display to a file next to "
+            "the image?";
     } else if (write_kind == FV_save_nondefault) {
         title = "Save diff-from-defaults to FF.CFG";
         ask = "Save the options that differ from the defaults or from flash to "
@@ -4323,19 +4359,59 @@ static void draw_write_dialog(void)
     question_box(title, l, nr);
 }
 
+/* The options recommended for display @d into @cfg, which holds the
+ * defaults: display-type for it where the default does not suit it, the
+ * extension of an image where it tells it from another, the track in short,
+ * folders after a slash, and on an OLED the names scrolling by pixel and
+ * display-order with the name double width as well. None for an LED
+ * display, to which none of them applies. */
+static void recommend(void *cfg, int d)
+{
+    static const char * const opts[] = {
+        "show-filename-ext", "auto", "show-tracks-short", "yes",
+        "show-dir-slash", "yes"
+    };
+    unsigned int i;
+
+    if (DISP_IS_LED(d))
+        return;
+    if (!display_type_fits(cfg, d)) {
+        if (DISP_IS_LCD(d))
+            emu_flash_set_lcd(cfg, DISP_LCD_COLS(d), DISP_LCD_ROWS(d));
+        else
+            emu_flash_set_oled_rows(cfg, DISP_HEIGHT(d));
+    }
+    for (i = 0; i < ARRAY_SIZE(opts); i += 2)
+        emu_flash_set_option(cfg, opts[i], opts[i + 1]);
+    if (DISP_IS_OLED(d)) {
+        emu_flash_set_option(cfg, "display-scroll-by-pixel", "yes");
+        emu_flash_set_option(cfg, "display-order",
+                             (DISP_HEIGHT(d) == 64) ? "3,0w,1" : "4w");
+    }
+}
+
 /* Writes FF.CFG as button @kind asks. A Save button writes what the dialog
  * shows, edits included, and nothing else moves: flash waits for OK, and
  * the firmware reads the file when the drive is next inserted. The Unpack
  * button writes every option of FLASH.DMP, and a file of another size gets
- * a message box. */
+ * a message box. The Display type dialog's Save button writes the options
+ * recommended for the display it has chosen. */
 static void fd_save(int kind)
 {
     uint8_t cfg[256];
+    char source[64];
     unsigned int slot;
     long len;
     int r;
 
-    if (kind == FV_dump_cfg) {
+    snprintf(source, sizeof(source), "%s",
+             (kind == FV_dump_cfg) ? "FLASH.DMP" : "the flash memory");
+    if (kind == FV_save_recommended) {
+        emu_flash_cfg_defaults(cfg);
+        recommend(cfg, dialog_display);
+        snprintf(source, sizeof(source), "the recommendation for %s",
+                 display_label[dialog_display]);
+    } else if (kind == FV_dump_cfg) {
         r = fd_read_dump(cfg, &slot, &len);
         if (r < 0)
             return;
@@ -4348,10 +4424,10 @@ static void fd_save(int kind)
     }
     if (!ff_cfg_write(cfg, (kind == FV_save_changed) ? FF_CFG_changed
                       : (kind == FV_save_nondefault) ? FF_CFG_nondefault
+                      : (kind == FV_save_recommended) ? FF_CFG_from_defaults
                       : FF_CFG_all,
-                      (kind == FV_dump_cfg) ? "FLASH.DMP" : "the flash memory",
-                      fd_note, sizeof(fd_note))) {
-        show_message(DLG_flash, "FF.CFG", fd_note);
+                      source, fd_note, sizeof(fd_note))) {
+        show_message(write_return, "FF.CFG", fd_note);
         fd_note[0] = '\0';
         return;
     }
@@ -4368,13 +4444,14 @@ static void fd_ask_write(int kind)
 
     usb_get_info(&usb);
     write_image = (usb.kind == USB_image);
+    write_return = (kind == FV_save_recommended) ? DLG_display : DLG_flash;
     if (!write_image && (kind != FV_dump_cfg)) {
         fd_save(kind);
         return;
     }
     if (!ff_cfg_target(dir, sizeof(dir), place, sizeof(place), &write_exists,
                        msg, sizeof(msg))) {
-        show_message(DLG_flash, "FF.CFG", msg);
+        show_message(write_return, "FF.CFG", msg);
         return;
     }
     if (write_image) {
@@ -5306,6 +5383,7 @@ static void open_display_dialog(void)
     dialog_oled_synth = config.oled_synth;
     dialog_mcu = config.mcu;
     dialog_focus = DF_display;
+    fd_note[0] = '\0';
 }
 
 /* Opens the Externals dialog with the settings in use. */
@@ -5428,6 +5506,13 @@ static void handle_key(int key)
         return;
     case DK_write:
         fd_save(write_kind);
+        return;
+    case DK_recommend:
+        if (DISP_IS_LED(dialog_display))
+            snprintf(fd_note, sizeof(fd_note), "Nothing to recommend for %s",
+                     display_label[dialog_display]);
+        else
+            fd_ask_write(FV_save_recommended);
         return;
     }
 
@@ -5750,7 +5835,8 @@ static void check_buttons(int d, int nr)
 static void check_dialog_states(int d)
 {
     static const int write_kinds[] = {
-        FV_dump_cfg, FV_save_all, FV_save_nondefault, FV_save_changed
+        FV_dump_cfg, FV_save_all, FV_save_nondefault, FV_save_changed,
+        FV_save_recommended
     };
     static const int message_over[] = {
         DLG_none, DLG_flash, DLG_display, DLG_externals
@@ -5840,6 +5926,7 @@ static void check_dialog_states(int d)
         break;
     case DLG_write:
         fd_open();
+        open_display_dialog();
         snprintf(write_from, sizeof(write_from),
                  "From: FF/FLASH.DMP on drive ");
         snprintf(write_from_drive, sizeof(write_from_drive), "%s", check_path);
@@ -5847,6 +5934,8 @@ static void check_dialog_states(int d)
         for (i = 0; i < ARRAY_SIZE(write_kinds); i++) {
             for (j = 0; j < 2; j++) {
                 write_kind = write_kinds[i];
+                write_return = (write_kind == FV_save_recommended)
+                    ? DLG_display : DLG_flash;
                 write_image = j;
                 snprintf(write_to, sizeof(write_to), "%s",
                          j ? "To: " : "To: FF/FF.CFG on drive ");
