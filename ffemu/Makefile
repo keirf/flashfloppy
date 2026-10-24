@@ -162,14 +162,8 @@ $(OUT)/fw/display/lcd_stm32f105.o: $(ROOT)/src/display/lcd_stm32f105.c
 	@echo CC display/lcd_stm32f105.c
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
-<<<<<<< HEAD
-	$(Q)$(OBJCOPY) $(foreach f,init clear write write_spinner backlight sync, \
-||||||| parent of 00f03057 (display: Add `w` to display-order - double height and double width)
-	$(Q)$(OBJCOPY) $(foreach f,init clear write backlight sync, \
-=======
-	$(Q)$(OBJCOPY) $(foreach f,init clear write write_spinner backlight sync \
-	    row_columns, \
->>>>>>> 00f03057 (display: Add `w` to display-order - double height and double width)
+	$(Q)$(OBJCOPY) $(foreach f,init clear write write_spinner write_shifted \
+	    backlight sync row_columns column_pixels, \
 	    --redefine-sym lcd_$(f)=f105_lcd_$(f)) $@
 
 # stubs.c wraps these with what ffemu adds to them.
