@@ -398,6 +398,7 @@ static void *script_thread(void *arg_sleep_ms)
     unsigned int i, ms = (uintptr_t)arg_sleep_ms;
     int n;
 
+    crash_name_thread("script");
     if (ms != 0)
         run_for(ms);
 
@@ -455,6 +456,10 @@ static void *script_thread(void *arg_sleep_ms)
             if (!usb_save(line + 5, err, sizeof(err)))
                 fprintf(stderr, "ffemu: cannot save the USB drive: %s\n",
                         err);
+        } else if (!strcmp(line, "crash")) {
+            /* A fault, which tests the crash report. */
+            volatile int *volatile p = NULL;
+            *p = 0;
         } else if ((line[0] != '\0') && (line[0] != '#')) {
             fprintf(stderr, "ffemu: no such command: %s\n", line);
         }

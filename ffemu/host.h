@@ -19,6 +19,7 @@
 #define FFEMU_APPLE2 0
 #endif
 
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include "emu.h"
@@ -511,6 +512,21 @@ void host_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 /* The line where the firmware reset itself, which is no power cycle: the
  * console goes on after it. */
 #define LOG_FW_RESET "======= Firmware reset ======="
+
+/*
+ * crash.c
+ */
+
+/* Prepares the report of a crash: written to standard error, and to @log_fd
+ * unless it is -1, after @restore has given the terminal back. */
+void crash_init(int log_fd, void (*restore)(void));
+/* Names the calling thread in a report of its crash, and gives it a stack of
+ * its own for the report, a handler with SA_ONSTACK running on it. */
+void crash_name_thread(const char *name);
+/* Writes the report of fault @sig, with @si and @uc as its SA_SIGINFO handler
+ * got them, the terminal given back first; a fault while reporting ends the
+ * program. */
+void crash_report(int sig, const siginfo_t *si, void *uc);
 
 /*
  * tui.c
