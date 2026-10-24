@@ -37,6 +37,8 @@ static unsigned int log_printed;
 /* When the current sleep ends, or zero. A reset by the firmware itself cuts
  * a sleep short: the rest of it is then slept after the power cycle. */
 static volatile uint64_t sleep_end;
+/* Whether commands come from stdin, the user interface not running. */
+static bool started;
 
 unsigned int script_sleep_left(void)
 {
@@ -476,9 +478,16 @@ void script_start(unsigned int sleep_ms)
 {
     pthread_t thread;
 
+    started = true;
     if (pthread_create(&thread, NULL, script_thread,
                        (void *)(uintptr_t)sleep_ms) != 0)
         cpu_quit(3, "ffemu: cannot create a thread");
+}
+
+void script_end(void)
+{
+    if (started)
+        (void)!write(STDOUT_FILENO, "quit\n", 5);
 }
 
 /*
