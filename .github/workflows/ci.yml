@@ -48,7 +48,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v6
       with:
-        name: FlashFloppy.CI.${{ steps.vars.outputs.sha_short }}
+        name: flashfloppy-ci-${{ steps.vars.outputs.sha_short }}
         path: _cidist
 
   build-windows:
@@ -82,10 +82,10 @@ jobs:
       run: |
         export VER=${{ steps.vars.outputs.sha_short }}
         mkdir -p _cidist
-        ffemu/win/mk_dist.sh out _cidist/ffemu-win-$VER
+        ffemu/win/mk_dist.sh out _cidist/ffemu-win64-$VER
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v6
       with:
-        name: FlashFloppy.CI.${{ steps.vars.outputs.sha_short }}.ffemu-win
+        name: ffemu-win64-ci-${{ steps.vars.outputs.sha_short }}
         path: _cidist
