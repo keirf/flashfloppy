@@ -481,9 +481,28 @@ static bool_t parse_display_type(char *s, uint32_t *v)
     return TRUE;
 }
 
+/* display-order's content rows by their initials, as FF.CFG documents
+ * them: N, S, I, D, C, and B for the blank row 7. */
+static const char dord_initials[] = "NSIDC  B";
+
+/* The content row of display-order's item @c, its digit or its initial in
+ * either case, or -1 if it names none. */
+static int dord_row(char c)
+{
+    unsigned int i;
+
+    if ((c >= '0') && (c <= '7'))
+        return c - '0';
+    for (i = 0; i < sizeof(dord_initials) - 1; i++)
+        if ((dord_initials[i] != ' ') && (dord_initials[i] == (c & ~0x20)))
+            return i;
+    return -1;
+}
+
 static bool_t parse_display_order(char *s, uint32_t *v, uint8_t *wide)
 {
     unsigned int sh = 0;
+    int row;
     char *next;
 
     *wide = 0;
@@ -494,13 +513,13 @@ static bool_t parse_display_order(char *s, uint32_t *v, uint8_t *wide)
     *v = 0;
     for (; s != NULL; s = next) {
         next = next_token(s, ',');
-        if ((sh >= 16) || (s[0] < '0') || (s[0] > '7')
+        if ((sh >= 16) || ((row = dord_row(s[0])) < 0)
             || ((s[1] != '\0')
                 && (((s[1] != 'd') && (s[1] != 'w')) || (s[2] != '\0'))))
             return FALSE;
-        *v |= ((s[0] - '0') | ((s[1] != '\0') ? DORD_double : 0)) << sh;
+        *v |= (row | ((s[1] != '\0') ? DORD_double : 0)) << sh;
         if (s[1] == 'w')
-            *wide |= 1 << (s[0] - '0');
+            *wide |= 1 << row;
         sh += DORD_shift;
     }
     /* Blank rows for the rest, within the 16 bits that the option has. */
@@ -653,8 +672,9 @@ store:
     return TRUE;
 }
 
-/* A display order: its rows, less the blank ones that the parser adds;
- * @wide has a bit for each content row drawn double width. */
+/* A display order: its rows by their initials, less the blank ones that the
+ * parser adds; @wide has a bit for each content row drawn double width.
+ * Rows 5 and 6, which no initial names, keep their digits. */
 static void format_display_order(char *buf, unsigned int size, uint16_t v,
                                  uint8_t wide)
 {
@@ -669,8 +689,11 @@ static void format_display_order(char *buf, unsigned int size, uint16_t v,
     buf[0] = '\0';
     for (i = 0; i < nr; i++) {
         unsigned int row = (v >> (i * DORD_shift)) & 15;
-        n += snprintf(buf + n, size - n, "%s%u%s", i ? "," : "",
-                      row & DORD_row, !(row & DORD_double) ? ""
+        char c = dord_initials[row & DORD_row];
+
+        n += snprintf(buf + n, size - n, "%s%c%s", i ? "," : "",
+                      (c != ' ') ? c : '0' + (row & DORD_row),
+                      !(row & DORD_double) ? ""
                       : (wide & (1 << (row & DORD_row))) ? "w" : "d");
     }
 }
