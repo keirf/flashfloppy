@@ -31,6 +31,7 @@ SUBDIRS += display gotek
 else ifeq ($(target),bootloader)
 
 OBJS += fw_update.o
+OBJS += fs_hint.o
 SUBDIRS += display fatfs gotek usb
 
 else

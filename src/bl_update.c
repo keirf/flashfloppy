@@ -146,8 +146,13 @@ int main(void)
 
     }
 
-    /* An error occurred. Report it on the display. */
+    /* An error occurred. Report it on the display: on an LCD or OLED as the
+     * code that the header above gives, and what it means. */
     msg_display("ERR");
+    if (display_type == DT_LCD_OLED) {
+        lcd_write(0, 1, -1, "E05 Flash failed");
+        lcd_sync();
+    }
 
     /* Erase the bootloader. It's now damaged. */
     erase_old_firmware();
