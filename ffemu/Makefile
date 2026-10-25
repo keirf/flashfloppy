@@ -36,7 +36,7 @@ endif
 # The firmware half: firmware sources as they are, plus the stand-ins for the
 # hardware they need. The model is an AT32F415, which shares the STM32F105
 # code, and the build level is "debug" for its assertions and console output.
-FW_SRCS := main.c config.c fs.c volume.c cache.c crc.c string.c util.c
+FW_SRCS := main.c config.c fs.c fs_hint.c volume.c cache.c crc.c string.c util.c
 FW_SRCS += time.c timer.c build_info.c spi.c sd_spi.c
 FW_SRCS += fatfs/ff.c fatfs/ffunicode.c
 FW_SRCS += display/display.c display/lcd_stm32f105.c display/led_7seg.c
