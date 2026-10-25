@@ -340,7 +340,7 @@ static bool_t dsk_read_track(struct image *im)
     uint16_t _r = (r);                                   \
     bc_b[bc_p++ & bc_mask] = htobe16(_r & ~(pr << 15));  \
     pr = _r; })
-#define emit_byte(b) emit_raw(mfmtab[(uint8_t)(b)])
+#define emit_byte(b) emit_raw(bintomfm(b))
 
     if (im->dsk.decode_pos == 0) {
         /* Post-index track gap */
