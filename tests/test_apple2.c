@@ -9,7 +9,7 @@
  * their CRC32s from the same made-up disks converted by apple2-disk-convert
  * of github.com/mike-shevchenko/retro-tools, an independent implementation.
  *
- * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
+ * Written & released by Mike Shevchenko <mike.shevchenko@gmail.com>
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.

@@ -4,7 +4,7 @@
  * ffemu's USB drive made from a directory, FAT32 or FAT16, as the
  * firmware's FatFS reads it.
  *
- * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
+ * Written & released by Mike Shevchenko <mike.shevchenko@gmail.com>
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.

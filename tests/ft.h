@@ -7,7 +7,7 @@
  * Tests are compiled with the firmware's headers, the runner with the
  * host's, so this header uses the types of neither.
  *
- * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
+ * Written & released by Mike Shevchenko <mike.shevchenko@gmail.com>
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
