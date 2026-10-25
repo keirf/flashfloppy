@@ -207,7 +207,9 @@ void set_slot_name(const char *name);
 bool_t get_img_cfg(struct slot *slot);
 void IRQ_rotary(void);
 
-enum { DM_normal=0, DM_selector, DM_banner, DM_menu };
+/* DM_error: an error's message alone; DM_error_name: below the image's name.
+ * The two stay last, as the display tests them by order. */
+enum { DM_normal=0, DM_selector, DM_banner, DM_menu, DM_error, DM_error_name };
 extern uint8_t display_mode;
 extern uint8_t board_id;
 extern uint8_t has_kc30_header;

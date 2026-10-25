@@ -288,13 +288,17 @@ static bool_t row4_shown(void)
 /* The current folder's name, which rows 3 and 5 show. */
 static char disp_dir[sizeof(cfg.slot.name)];
 
-/* The image and folder names scroll within the columns that their rows leave
- * them, each layout at its own offset. */
+/* The image and folder names scroll within the columns that their combined
+ * rows leave them, each layout at its own offset. */
 #define NAME_PLACE 0
 #define COMBINED_PLACE 1
 #define DIR_PLACE 2
 #define DIR_TRACK_PLACE 3
-static const uint8_t scroll_rows[] = { 0, 4, 3, 5 };
+#define ERR_PLACE 4
+static const uint8_t scroll_rows[] = { 0, 4, 3, 5, 1 };
+/* The error's message while one is shown, the image's name after it where
+ * the error screen has a row for both, else "". */
+static char err_msg[17 + 2 + sizeof(disp_name)];
 static const unsigned int scroll_gap = 4;
 struct scroll {
     uint16_t off, end;
@@ -358,7 +362,8 @@ static void display_write_dir(const char *name)
 /* The text that scrolling place @p scrolls. */
 static const char *scroll_text(unsigned int p)
 {
-    return ((p == DIR_PLACE) || (p == DIR_TRACK_PLACE)) ? disp_dir : disp_name;
+    return (p == ERR_PLACE) ? err_msg
+        : ((p == DIR_PLACE) || (p == DIR_TRACK_PLACE)) ? disp_dir : disp_name;
 }
 
 /* Sets where scrolling @i ends, by the columns that its row's layout has
@@ -376,7 +381,7 @@ static void scroll_init(unsigned int i)
     /* One bound for every text, the largest buffer's, as each text ends
      * with a NUL within its own: a bound for each would cost code. */
     sc->end = max_t(
-        int, strnlen(scroll_text(i / 2), sizeof(disp_name)) - columns, 0);
+        int, strnlen(scroll_text(i / 2), sizeof(err_msg)) - columns, 0);
     if (sc->end && !lcd_scroll.pause)
         sc->end += columns;
     if (!sc->end || (sc->off > sc->end)) {
@@ -1846,6 +1851,11 @@ static void read_ff_cfg(void)
             ff_cfg.display_scroll_by_pixel = yes;
             break;
 #endif
+#ifndef MINIMAL_UI
+        case FFCFG_display_error_wide:
+            ff_cfg.display_error_wide = yes;
+            break;
+#endif
 
         case FFCFG_display_scroll_pause:
             ff_cfg.display_scroll_pause = strtol(opts.arg, NULL, 10);
@@ -2947,14 +2957,45 @@ static void error_text(char *msg, size_t size, FRESULT fres)
 #endif
 }
 
+#ifndef MINIMAL_UI
+/* Shows error message @msg, and the image's name @name after it unless
+ * NULL, in the status row, which the error screen's modes show, both
+ * layouts, scrolling at the display's scroll rate where the row cannot hold
+ * it. */
+static void show_error(const char *msg, const char *name)
+{
+    unsigned int i;
+
+    snprintf(err_msg, sizeof(err_msg), name ? "%s: %s" : "%s", msg, name);
+    status_write(err_msg);
+    lcd_scroll.pause = ff_cfg.display_scroll_pause;
+    lcd_scroll.rate = ff_cfg.display_scroll_rate;
+    for (i = 2 * ERR_PLACE; i < 2 * ERR_PLACE + 2; i++) {
+        memset(&lcd_scroll.v[i], 0, sizeof(lcd_scroll.v[i]));
+        scroll_init(i);
+        lcd_scroll.v[i].ticks = time_ms(lcd_scroll.pause);
+        scroll_draw(i);
+    }
+}
+
+/* Ends show_error() and the error screen: the status row keeps the message
+ * until written again. */
+static void end_error(void)
+{
+    display_mode = DM_normal;
+    err_msg[0] = '\0';
+    memset(&lcd_scroll.v[2 * ERR_PLACE], 0, 2 * sizeof(lcd_scroll.v[0]));
+}
+#endif
+
 static uint8_t noinline display_error(FRESULT fres, uint8_t b)
 {
+#ifdef MINIMAL_UI
     bool_t twobutton_eject =
         (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject;
     char msg[17];
 
     display_mode = DM_menu;
-
     error_text(msg, sizeof(msg), fres);
     switch (display_type) {
     case DT_LED_7SEG:
@@ -2962,7 +3003,46 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
         break;
     case DT_LCD_OLED:
         /* The whole status row, the slot counter's place included. */
-        lcd_write(0, 1, -1, msg);
+        lcd_write(/*col=*/0, /*row=*/1, /*min=*/-1, msg);
+        lcd_on();
+        break;
+    }
+
+    while (buttons != 0)
+        continue;
+    b = menu_wait_button(twobutton_eject, msg);
+    while (b & B_SELECT) {
+        b = buttons;
+        if (twobutton_eject && b) {
+            /* Wait for 2-button release. */
+            b = B_SELECT;
+        }
+    }
+    display_mode = DM_normal;
+    return b;
+#else
+    bool_t twobutton_eject =
+        (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject;
+    char msg[17];
+    unsigned int w;
+    bool_t one_row;
+
+    error_text(msg, sizeof(msg), fres);
+    switch (display_type) {
+    case DT_LED_7SEG:
+        led_7seg_write_string(msg);
+        break;
+    case DT_LCD_OLED:
+        /* The image is out: row 4 is its name alone, as row 0 is. The error
+         * screen shows the name above the message, or on a 128x32 OLED after
+         * it in one double row. */
+        reset_combined_rows();
+        for (w = 0; w < 2; w++)
+            scroll_draw(2 + w);
+        one_row = is_oled_display
+            && !(ff_cfg.display_type & DISPLAY_oled_64);
+        display_mode = one_row ? DM_error : DM_error_name;
+        show_error(msg, one_row ? disp_name : NULL);
         lcd_on();
         break;
     }
@@ -2982,8 +3062,9 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
         }
     }
 
-    display_mode = DM_normal;
+    end_error();
     return b;
+#endif
 }
 
 static bool_t confirm(const char *op)
@@ -3880,9 +3961,18 @@ static void handle_errors(FRESULT fres)
         led_7seg_write_string(msg);
         break;
     case DT_LCD_OLED:
+#ifdef MINIMAL_UI
         display_mode = DM_menu; /* double-height row 1 */
-        lcd_write(0, 0, -1, "***************");
-        lcd_write(0, 1, -1, msg);
+        lcd_write(/*col=*/0, /*row=*/0, /*min=*/-1, "***************");
+        lcd_write(/*col=*/0, /*row=*/1, /*min=*/-1, msg);
+#else
+        /* The message alone on the error screen. */
+        display_mode = DM_error;
+        lcd_clear();
+        reset_combined_rows();
+        memset(lcd_scroll.v, 0, sizeof(lcd_scroll.v));
+        show_error(msg, NULL);
+#endif
         lcd_on();
         break;
     }
@@ -3890,10 +3980,20 @@ static void handle_errors(FRESULT fres)
     /* Wait for buttons to be released, pressed and released again. */
     while (buttons)
         continue;
+#ifdef MINIMAL_UI
     while (!buttons && (pwr || volume_connected()))
         continue;
+#else
+    while (!buttons && (pwr || volume_connected())) {
+        delay_ms(1);
+        lcd_scroll_name(time_ms(1));
+    }
+#endif
     while (buttons)
         continue;
+#ifndef MINIMAL_UI
+    end_error();
+#endif
 
     /* On USB power fault we simply reset. */
     if (pwr)

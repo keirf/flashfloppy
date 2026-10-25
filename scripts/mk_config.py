@@ -111,10 +111,10 @@ def main(argv):
                     'no': 'FALSE',
                     'yes': 'TRUE'
                 }.get(val,val)
-            if opt in ("display-scroll-by-pixel", "show-dir-with"):
+            if opt in ("display-scroll-by-pixel", "show-dir-with", "display-error-wide"):
                 out_f.write("#if !defined(MINIMAL_UI) || defined(FF_CFG_ALL_OPTIONS)\n")
             out_f.write("x(%s, %s, %s)\n" % (opt, re.sub('-','_',opt), val))
-            if opt in ("display-scroll-by-pixel", "show-dir-with"):
+            if opt in ("display-scroll-by-pixel", "show-dir-with", "display-error-wide"):
                 out_f.write("#endif\n")
 
 if __name__ == "__main__":

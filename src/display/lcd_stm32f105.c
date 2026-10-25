@@ -165,6 +165,10 @@ static unsigned int osd_prep_buffer(void)
 
     if ((ff_cfg.osd_display_order != DORD_default) && normal_mode)
         order = ff_cfg.osd_display_order;
+#ifndef MINIMAL_UI
+    else if (error_mode)
+        order = error_display_order();
+#endif
 
     heights = rows = 0;
     /* FF OSD takes three rows at most: its row count is two bits. */
@@ -235,6 +239,10 @@ static unsigned int lcd_prep_buffer(void)
     order = (display_rows == 2) ? 0x7710 : 0x2103;
     if ((configured != DORD_default) && normal_mode)
         order = configured;
+#ifndef MINIMAL_UI
+    else if (error_mode)
+        order = error_display_order();
+#endif
 
     row = map_content_row((order >> (i2c_row * DORD_shift)) & DORD_row);
     p = (_bl && row < ARRAY_SIZE(text)) ? text[row] : NULL;
@@ -489,7 +497,7 @@ bool_t lcd_init(void)
             lcd_columns = (oled_font == FONT_8x16) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrower) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
-            display_rows = 4;
+            display_rows = oled_height / 16;
         } else {
             lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
             display_rows = (ff_cfg.display_type >> _DISPLAY_lcd_rows) & 7;

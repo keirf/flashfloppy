@@ -3320,6 +3320,7 @@ static const char * const fd_tab_name[FT_nr] = {
 static const char * const fd_places[] = {
     "display-type", "",
     "oled-font", "",
+
     "show-filename-ext", "",
     "show-tracks-short", "show-dir-with", "|",
     "autoselect-file-secs", "autoselect-folder-secs", "nav-loop", "",
@@ -3327,7 +3328,7 @@ static const char * const fd_places[] = {
     "rotary", "",
     "folder-sort", "",
     "sort-priority", "|",
-    "display-order", "selector-display-order", "",
+    "display-order", "display-error-wide", "selector-display-order", "",
     "display-scroll-rate", "display-scroll-pause", "nav-scroll-rate",
         "nav-scroll-pause", "display-scroll-by-pixel", "",
     "display-off-secs", "",
@@ -4456,9 +4457,9 @@ static void draw_write_dialog(void)
 /* The options recommended for display @d into @cfg, which holds the
  * defaults: display-type for it where the default does not suit it, the
  * extension of an image where it tells it from another, the track in short,
- * folders followed by a slash, and on an OLED names scrolling by pixel and a
- * display-order with the name double width, combined with the track on a
- * 128x32 panel. None for an LED display. */
+ * folders followed by a slash, and on an OLED names scrolling by pixel, a
+ * display-order with the name double width, and an error screen's double rows
+ * too. None for an LED display. */
 static void recommend(void *cfg, int d)
 {
     static const char * const opts[] = {
@@ -4479,6 +4480,7 @@ static void recommend(void *cfg, int d)
         emu_flash_set_option(cfg, opts[i], opts[i + 1]);
     if (DISP_IS_OLED(d)) {
         emu_flash_set_option(cfg, "display-scroll-by-pixel", "yes");
+        emu_flash_set_option(cfg, "display-error-wide", "yes");
         emu_flash_set_option(cfg, "display-order",
                              (DISP_HEIGHT(d) == 64) ? "D,Nw,S" : "Cw");
     }
@@ -4871,6 +4873,9 @@ static const struct {
       "d=dbl-hgt w=2x" },
     { "selector-display-order",
       "Rows while browsing; default uses display-order" },
+    { "display-error-wide",
+      "Whether an error's double-height rows on an OLED are double width "
+      "too, scrolling where long" },
     { "display-off-secs",
       "Seconds without activity before the display goes dark, 0-255: 0 is "
       "always off, 255 never" },

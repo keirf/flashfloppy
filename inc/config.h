@@ -186,6 +186,7 @@ struct packed ff_cfg {
 #define DIRWITH_prefix_slash 1
 #define DIRWITH_postfix_slash 2
     uint8_t show_dir_with;
+    bool_t display_error_wide;
 };
 
 extern struct ff_cfg ff_cfg;

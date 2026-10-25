@@ -111,6 +111,36 @@ uint8_t lcd_columns, display_rows;
 uint8_t display_mode = DM_banner;
 #define normal_mode (display_mode <= DM_selector)
 #define menu_mode (display_mode == DM_menu)
+#ifndef MINIMAL_UI
+#define error_mode (display_mode >= DM_error)
+enum { ERR_NAME, ERR_STATUS, ERR_BLANK = 7 };
+#define ERR_TALL(row) ((row) | DORD_double)
+#define ERR_ORDER(a,b,c,d) \
+    ((a) | ((b) << DORD_shift) | ((c) << (2 * DORD_shift)) | \
+    ((d) << (3 * DORD_shift)))
+
+/* An error screen's rows, the message in the status row: below the image's
+ * name, or alone below a blank row, double height where the display has
+ * room, and alone double height on any OLED. */
+static uint16_t error_display_order(void)
+{
+    bool_t oled_4rows = is_oled_display && (display_rows == 4);
+
+    if (display_mode == DM_error_name)
+        return oled_4rows
+            ? ERR_ORDER(
+                ERR_TALL(ERR_NAME), ERR_TALL(ERR_STATUS), ERR_BLANK, ERR_BLANK)
+            : ERR_ORDER(ERR_NAME, ERR_STATUS, ERR_BLANK, ERR_BLANK);
+    if (oled_4rows)
+        return ERR_ORDER(
+            ERR_TALL(ERR_BLANK), ERR_TALL(ERR_STATUS), ERR_BLANK, ERR_BLANK);
+    if (is_oled_display)
+        return ERR_ORDER(ERR_TALL(ERR_STATUS), ERR_BLANK, ERR_BLANK, ERR_BLANK);
+    return ERR_ORDER(ERR_BLANK, ERR_STATUS, ERR_BLANK, ERR_BLANK);
+}
+#undef ERR_TALL
+#undef ERR_ORDER
+#endif
 
 /* Occasionally the I2C/DMA engine seems to get stuck. Detect this with 
  * a timeout timer and unwedge it by calling the I2C error handler. */
@@ -405,7 +435,8 @@ static void oled_convert_text_row(const char *pc, const struct oled_shift *s,
     unsigned int i, from, w = lcd_column_pixels();
     unsigned int col = wide ? s->wide_col : s->col;
     unsigned int nr = wide ? s->wide_nr : s->nr;
-    unsigned int px = normal_mode ? (wide ? s->wide_px : s->px) : 0;
+    unsigned int px = (normal_mode || error_mode)
+        ? (wide ? s->wide_px : s->px) : 0;
     char next = wide ? s->wide_next : s->next;
     uint8_t *q = buffer;
 
@@ -499,13 +530,18 @@ static void oled_double_width(void)
 
 unsigned int lcd_row_columns(unsigned int row)
 {
+    /* As oled_to_lcd_row() takes display_order on the normal screen, and on
+     * an error screen its double rows by display-error-wide. */
 #ifdef MINIMAL_UI
     /* Only double height in minimal builds. */
     return lcd_columns;
 #else
-    /* As oled_to_lcd_row() takes the order, on the normal or selector screen. */
-    if (is_oled_display && normal_mode
-        && (lcd_display_order_wide() & (1 << row)))
+    if (!is_oled_display)
+        return lcd_columns;
+    if (normal_mode
+        ? (lcd_display_order_wide() & (1 << row))
+        : (error_mode && ff_cfg.display_error_wide
+           && ((display_rows == 4) || (display_mode == DM_error))))
         return lcd_columns / 2;
     return lcd_columns;
 #endif
@@ -526,6 +562,10 @@ static void oled_to_lcd_row(int in_row)
     order = (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
     if ((configured != DORD_default) && normal_mode)
         order = configured;
+#ifndef MINIMAL_UI
+    else if (error_mode)
+        order = error_display_order();
+#endif
 
     for (;;) {
         large = !!(order & DORD_double);
