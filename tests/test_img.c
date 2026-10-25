@@ -5,7 +5,7 @@
  * they stream, decoded back into sectors and compared with the image, and
  * sectors written to them.
  *
- * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
+ * Written & released by Mike Shevchenko <mike.shevchenko@gmail.com>
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.

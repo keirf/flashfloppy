@@ -4,7 +4,7 @@
  * What the tests have of the firmware's environment: a USB drive in RAM,
  * and an image mounted from it and driven as the floppy code drives it.
  *
- * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
+ * Written & released by Mike Shevchenko <mike.shevchenko@gmail.com>
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.

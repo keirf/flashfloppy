@@ -5,7 +5,7 @@
  * the firmware writes to it, taken as FF OSD's own firmware takes them, and
  * what it reads back, FF OSD's version and buttons.
  *
- * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
+ * Written & released by Mike Shevchenko <mike.shevchenko@gmail.com>
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.

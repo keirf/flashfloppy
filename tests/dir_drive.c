@@ -5,7 +5,7 @@
  * what fatimg.c needs of the rest of ffemu, and the folders of files that
  * the tests have it built from.
  *
- * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
+ * Written & released by Mike Shevchenko <mike.shevchenko@gmail.com>
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.

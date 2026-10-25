@@ -5,7 +5,7 @@
  * a FAT16 volume, the console kept for the tests, and an image mounted and
  * driven as the floppy code does it.
  *
- * Written & released by Mike Shevchenko <mike.shevchenko.kz@gmail.com>
+ * Written & released by Mike Shevchenko <mike.shevchenko@gmail.com>
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
