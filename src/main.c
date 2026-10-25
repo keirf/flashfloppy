@@ -2340,6 +2340,17 @@ static uint8_t menu_wait_button(bool_t twobutton_eject, const char *led_msg)
     return twobutton_eject ? wait_twobutton_press(b) : b;
 }
 
+/* Error @fres as the display shows it into @msg of @size: its code, `E` for
+ * FlashFloppy's own and `F` for FatFS's, and on an LCD or OLED what it
+ * means. */
+static void error_text(char *msg, size_t size, FRESULT fres)
+{
+    snprintf(msg, size, "%c%02u %s", (fres >= FR_DISK_FULL) ? 'E' : 'F',
+             fres, fresult_hint(fres));
+    if (display_type == DT_LED_7SEG)
+        msg[3] = '\0';
+}
+
 static uint8_t noinline display_error(FRESULT fres, uint8_t b)
 {
     bool_t twobutton_eject =
@@ -2348,17 +2359,14 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
 
     display_mode = DM_menu;
 
+    error_text(msg, sizeof(msg), fres);
     switch (display_type) {
     case DT_LED_7SEG:
-        snprintf(msg, sizeof(msg), "%c%02u",
-                 (fres >= 30) ? 'E' : 'F', fres);
         led_7seg_write_string(msg);
         break;
     case DT_LCD_OLED:
-        snprintf(msg, sizeof(msg), "*%s*%02u*",
-                 (fres >= 30) ? "ERR" : "FAT", fres);
-        lcd_write(wp_column+1, 1, -1, "");
-        lcd_write((lcd_columns > 16) ? 10 : 8, 1, 0, msg);
+        /* The whole status row, the slot counter's place included. */
+        lcd_write(0, 1, -1, msg);
         lcd_on();
         break;
     }
@@ -3261,12 +3269,8 @@ static void handle_errors(FRESULT fres)
         printk("USB Power Fault detected!\n");
         snprintf(msg, sizeof(msg), "USB Power Fault");
     } else if (volume_connected() && (fres != FR_OK)) {
-        printk("**Error %u\n", fres);
-        snprintf(msg, sizeof(msg),
-                 (display_type == DT_LED_7SEG)
-                 ? ((fres >= 30) ? "E%02u" : "F%02u")
-                 : ((fres >= 30) ? "*ERROR* %02u" : "*FATFS* %02u"),
-                 fres);
+        printk("**Error %u %s\n", fres, fresult_hint(fres));
+        error_text(msg, sizeof(msg), fres);
     } else {
         /* No error. Do nothing. */
         return;

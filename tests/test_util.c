@@ -17,6 +17,24 @@ TEST(util_crc16_ccitt)
     CHECK_EQ(crc16_ccitt("123456789", 9, 0xffff), 0x29b1);
 }
 
+/* Every code that can occur has a hint that fits beside it on 16 columns. */
+TEST(util_fresult_hint)
+{
+    FRESULT fr;
+    bool_t occurs;
+
+    for (fr = FR_OK; fr <= FR_PATH_TOO_DEEP; fr++) {
+        occurs = ((fr >= FR_DISK_ERR) && (fr <= FR_NO_FILESYSTEM))
+            || (fr == FR_NOT_ENOUGH_CORE) || (fr == FR_INVALID_PARAMETER)
+            || (fr >= FR_DISK_FULL);
+        CHECK_EQ(strlen(fresult_hint(fr)) > 0, occurs);
+        CHECK(strlen(fresult_hint(fr)) <= 12);
+    }
+    CHECK_STR(fresult_hint(FR_BAD_IMAGE), "Bad image");
+    CHECK_STR(fresult_hint(FR_NO_FILESYSTEM), "Not FAT disk");
+    CHECK_STR(fresult_hint(FR_PATH_TOO_DEEP + 1), "");
+}
+
 TEST(util_snprintf)
 {
     char s[32];

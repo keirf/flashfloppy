@@ -12,6 +12,9 @@
 FRESULT F_call_cancellable(int (*fn)(void *), void *arg);
 
 void F_die(FRESULT fr);
+/* What @fr means, in 12 characters at most; "" for a code that cannot
+ * occur. */
+const char *fresult_hint(FRESULT fr);
 
 FRESULT F_try_open(FIL *fp, const TCHAR *path, BYTE mode);
 void F_open(FIL *fp, const TCHAR *path, BYTE mode);
