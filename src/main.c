@@ -237,10 +237,14 @@ static bool_t row4_shown(void)
 static char disp_dir[sizeof(cfg.slot.name)];
 
 /* Scroll long filename: in row 0, and in row 4 within the columns that it
- * leaves the name, and the folder's name in row 3, each at its own offset, in
- * the row's layouts of normal and of half width: scrolling 2 * i + wide is
- * row scroll_rows[i]'s. */
-static const uint8_t scroll_rows[] = { 0, 4, 3 };
+ * leaves the name, the folder's name in row 3, and an error's message in the
+ * status row, each at its own offset, in the row's layouts of normal and of
+ * half width: scrolling 2 * i + wide is row scroll_rows[i]'s. */
+#define ERR_PLACE 3
+static const uint8_t scroll_rows[] = { 0, 4, 3, 1 };
+/* The error's message while one is shown, the image's name after it where
+ * the error screen has a row for both, else "". */
+static char err_msg[17 + 2 + sizeof(disp_name)];
 static const unsigned int scroll_gap = 4;
 struct scroll {
     uint16_t off, end;
@@ -294,10 +298,11 @@ static void display_write_dir(const char *name)
     }
 }
 
-/* The text that row @row scrolls. */
-static const char *scroll_text(unsigned int row)
+/* The text that scrolling place @p scrolls. */
+static const char *scroll_text(unsigned int p)
 {
-    return (row == 3) ? disp_dir : disp_name;
+    return (p == ERR_PLACE) ? err_msg
+        : (scroll_rows[p] == 3) ? disp_dir : disp_name;
 }
 
 /* Sets where scrolling @i ends, by the columns that its row's layout has
@@ -311,8 +316,10 @@ static void scroll_init(unsigned int i)
 
     if (row == 4)
         columns -= name4_column(wide) + track4_width(wide);
+    /* One bound for every text, the largest buffer's, as each text ends
+     * with a NUL within its own: a bound for each would cost code. */
     sc->end = max_t(
-        int, strnlen(scroll_text(row), sizeof(disp_name)) - columns, 0);
+        int, strnlen(scroll_text(i / 2), sizeof(err_msg)) - columns, 0);
     if (sc->end && !lcd_scroll.pause)
         sc->end += columns;
     if (!sc->end || (sc->off > sc->end)) {
@@ -327,7 +334,7 @@ static void scroll_draw(unsigned int i)
 {
     struct scroll *sc = &lcd_scroll.v[i];
     unsigned int row = scroll_rows[i / 2];
-    const char *s = scroll_text(row);
+    const char *s = scroll_text(i / 2);
     char msg[lcd_columns+2];
 
     if (lcd_scroll.pause || !sc->end)
@@ -424,6 +431,17 @@ static void lcd_scroll_name(int32_t ticks)
     }
 }
 
+/* No track in row 4 while no image is in: the row is the name's. */
+static void clear_track4(void)
+{
+    unsigned int i;
+
+    for (i = 0; i < 2; i++) {
+        track4[i][0] = '\0';
+        scroll_init(2 + i);
+    }
+}
+
 /* Write slot info to display. */
 static void display_write_slot(bool_t nav_mode)
 {
@@ -438,11 +456,7 @@ static void display_write_slot(bool_t nav_mode)
         return;
     }
 
-    /* No track in row 4 until an image is in: the row is the name's. */
-    for (i = 0; i < 2; i++) {
-        track4[i][0] = '\0';
-        scroll_init(2 + i);
-    }
+    clear_track4();
 
     if (nav_mode && !cfg_scroll_reset) {
         lcd_scroll_init(0, ff_cfg.nav_scroll_rate, 0);
@@ -1651,6 +1665,9 @@ static void read_ff_cfg(void)
         case FFCFG_display_scroll_by_pixel:
             ff_cfg.display_scroll_by_pixel = yes;
             break;
+        case FFCFG_display_error_wide:
+            ff_cfg.display_error_wide = yes;
+            break;
 
         case FFCFG_display_scroll_pause:
             ff_cfg.display_scroll_pause = strtol(opts.arg, NULL, 10);
@@ -2711,27 +2728,66 @@ static uint8_t menu_wait_button(bool_t twobutton_eject, const char *led_msg)
     return twobutton_eject ? wait_twobutton_press(b) : b;
 }
 
+/* Error @fres as the display shows it into @msg of @size: its code, `E` for
+ * FlashFloppy's own and `F` for FatFS's. */
+static void error_text(char *msg, size_t size, FRESULT fres)
+{
+    snprintf(msg, size, "%c%02u", (fres >= FR_DISK_FULL) ? 'E' : 'F', fres);
+}
+
+/* Shows error message @msg, and the image's name @name after it unless
+ * NULL, in the status row, which the error screen's modes show, both
+ * layouts, scrolling at the display's scroll rate where the row cannot hold
+ * it. */
+static void show_error(const char *msg, const char *name)
+{
+    unsigned int i;
+
+    snprintf(err_msg, sizeof(err_msg), name ? "%s: %s" : "%s", msg, name);
+    status_write(err_msg);
+    lcd_scroll.pause = ff_cfg.display_scroll_pause;
+    lcd_scroll.rate = ff_cfg.display_scroll_rate;
+    for (i = 2 * ERR_PLACE; i < 2 * ERR_PLACE + 2; i++) {
+        memset(&lcd_scroll.v[i], 0, sizeof(lcd_scroll.v[i]));
+        scroll_init(i);
+        lcd_scroll.v[i].ticks = time_ms(lcd_scroll.pause);
+        scroll_draw(i);
+    }
+}
+
+/* Ends show_error() and the error screen: the status row keeps the message
+ * until written again. */
+static void end_error(void)
+{
+    display_mode = DM_normal;
+    err_msg[0] = '\0';
+    memset(&lcd_scroll.v[2 * ERR_PLACE], 0, 2 * sizeof(lcd_scroll.v[0]));
+}
+
 static uint8_t noinline display_error(FRESULT fres, uint8_t b)
 {
     bool_t twobutton_eject =
         (ff_cfg.twobutton_action & TWOBUTTON_mask) == TWOBUTTON_eject;
     char msg[17];
+    unsigned int w;
+    bool_t one_row;
 
-    display_mode = DM_menu;
-
+    error_text(msg, sizeof(msg), fres);
     switch (display_type) {
     case DT_LED_7SEG:
-        snprintf(msg, sizeof(msg), "%c%02u",
-                 (fres >= 30) ? 'E' : 'F', fres);
         led_7seg_write_string(msg);
         break;
     case DT_LCD_OLED:
-        snprintf(msg, sizeof(msg), "*%s*%02u*",
-                 (fres >= 30) ? "ERR" : "FAT", fres);
-        /* The track goes, in Apple2 mode with the phase spinner, which
-         * would cover the message's first cell. */
-        lcd_write((TARGET == TARGET_apple2) ? 7 : wp_column+1, 1, -1, "");
-        lcd_write((lcd_columns > 16) ? 10 : 8, 1, 0, msg);
+        /* The image is out: row 4 is its name alone, as row 0 is. The error
+         * screen shows the name above the message, or on a 128x32 OLED after
+         * it in one double row. */
+        clear_track4();
+        for (w = 0; w < 2; w++)
+            scroll_draw(2 + w);
+        one_row = is_oled_display
+            && !(ff_cfg.display_type & DISPLAY_oled_64);
+        display_mode = one_row ? DM_error : DM_error_name;
+        show_error(msg, one_row ? disp_name : NULL);
         lcd_on();
         break;
     }
@@ -2751,7 +2807,7 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
         }
     }
 
-    display_mode = DM_normal;
+    end_error();
     return b;
 }
 
@@ -3687,11 +3743,7 @@ static void handle_errors(FRESULT fres)
         snprintf(msg, sizeof(msg), "USB Power Fault");
     } else if (volume_connected() && (fres != FR_OK)) {
         printk("**Error %u\n", fres);
-        snprintf(msg, sizeof(msg),
-                 (display_type == DT_LED_7SEG)
-                 ? ((fres >= 30) ? "E%02u" : "F%02u")
-                 : ((fres >= 30) ? "*ERROR* %02u" : "*FATFS* %02u"),
-                 fres);
+        error_text(msg, sizeof(msg), fres);
     } else {
         /* No error. Do nothing. */
         return;
@@ -3702,9 +3754,12 @@ static void handle_errors(FRESULT fres)
         led_7seg_write_string(msg);
         break;
     case DT_LCD_OLED:
-        display_mode = DM_menu; /* double-height row 1 */
-        lcd_write(0, 0, -1, "***************");
-        lcd_write(0, 1, -1, msg);
+        /* The message alone on the error screen. */
+        display_mode = DM_error;
+        lcd_clear();
+        clear_track4();
+        memset(lcd_scroll.v, 0, sizeof(lcd_scroll.v));
+        show_error(msg, NULL);
         lcd_on();
         break;
     }
@@ -3712,10 +3767,13 @@ static void handle_errors(FRESULT fres)
     /* Wait for buttons to be released, pressed and released again. */
     while (buttons)
         continue;
-    while (!buttons && (pwr || volume_connected()))
-        continue;
+    while (!buttons && (pwr || volume_connected())) {
+        delay_ms(1);
+        lcd_scroll_name(time_ms(1));
+    }
     while (buttons)
         continue;
+    end_error();
 
     /* On USB power fault we simply reset. */
     if (pwr)

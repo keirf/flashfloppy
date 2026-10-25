@@ -3,7 +3,8 @@ row's track, in the long form or in short with show-tracks-short, as the apple2
 firmware always gives it, with the phases; display-order's row 4, the image's
 name and its track in short; rows of double width; and the folders' names,
 which row 3 scrolls and the image selector shows in brackets or after a slash;
-a long name's scrolling by pixel; and the Main Menu's font test.
+a long name's scrolling by pixel; the Main Menu's font test; and the error
+screen in its own layout.
 An OLED's rows are read as FF OSD gets them, beside it on the I2C bus: the
 display's text, as many columns as it has; or from its pixels, by the
 firmware's glyphs."""
@@ -215,20 +216,14 @@ class Apple2(Case, unittest.TestCase):
         self.check_spinner("8x16", 7*8, 16)
 
     def test_error(self):
-        """A mount error, on 16 columns right after the image's number,
-        takes the spinner away, whose second cell would cover it."""
-        r = fr.run(
-            "ffemu-apple2", ["wait 10000 log Name:", "sleep 1000", "dump"],
-            settings=["display = ssd1306-128x64"],
+        """A mount error takes the whole status row, the phase spinner with
+        it, as FF OSD gets the error screen's rows: the name, the message."""
+        rows, r = self.rows(
+            "ffemu-apple2", ["sleep 1000"], "ssd1306-128x64",
             flash=["display-type = oled-128x64", "oled-font = 8x16"],
             files={"BAD.HFE": b"HXCPICFE" + bytes(600)})
-        self.assertWaits(r, 1)
-        # Row 1 of double height, under rows 3 and 0 of the menus' layout:
-        # cell 7 blank, the message from cell 8.
-        tall = [line for line in r.lines
-                if line and set(line) <= set(".#")][32:64]
-        self.assertEqual({row[56:64] for row in tall}, {"." * 8}, r.report())
-        self.assertIn("#", "".join(row[64:72] for row in tall), r.report())
+        self.assertTrue(rows[1].startswith("E31"), r.report())
+        self.assertNotIn("000", rows[1], r.report())
 
 
 class NameStatus(Case, unittest.TestCase):
@@ -910,6 +905,183 @@ class FontTest(Case, unittest.TestCase):
         self.assertTrue(any("#" in row for row in cells[0]), r.report())
         self.assertEqual(oled_text(pages[1], 16, "6x13", False, False),
                          "10-1F  Select: exit  ")
+
+
+class Errors(fr.Case, unittest.TestCase):
+    """An error's code, `E` for FlashFloppy's own and `F` for FatFS's, on an
+    error screen of its own, whatever display-order says: a mount error with the image's name above the message, both rows
+    double height on a 128x64 OLED and single height on an LCD, and on a
+    128x32 OLED the name after the message in one double row; the end of
+    the drive's session, here a drive without an image, with the message
+    alone in the status row, double height on an OLED. With
+    display-error-wide the double rows are double width too, the message
+    scrolling from its code. The message is the code and whatever follows
+    it, so that these hold with the code's meaning after it and without."""
+
+    BAD = {"BAD.HFE": b"HXCPICFE" + bytes(600)}
+    NONE = {"README.TXT": b"No image here.\n"}
+
+    def run_error(self, files, display, flash=(), wait="log **Error",
+                  after=()):
+        """The run, once the error is shown and @after has run."""
+        r = fr.run(
+            "ffemu", ["wait 10000 " + wait, "sleep 500", "dump", "osd"]
+            + list(after),
+            settings=["display = " + display], flash=flash, files=files)
+        self.assertWaits(r, 1)
+        return r
+
+    def lcd(self, files, display, flash=(), wait="log **Error"):
+        """The LCD's rows once the error is shown."""
+        r = self.run_error(files, display, flash, wait)
+        rows = [line[1:-1] for line in r.stdout.split("\nosd: ")[0]
+                .splitlines() if line.startswith("|") and line.endswith("|")]
+        return rows, r
+
+    def oled(self, files, height, flash=(), wait="log **Error"):
+        """The OLED's pixel rows once the error is shown."""
+        r = self.run_error(
+            files, "ssd1306-128x%u" % height,
+            ["display-type = oled-128x%u" % height] + list(flash), wait)
+        return [line for line in r.lines
+                if line and set(line) <= set(".#")], r
+
+    def test_mount_error(self):
+        rows, r = self.lcd(self.BAD, "hd44780-16x2", wait="log Name:")
+        self.assertEqual(rows[0], "BAD".ljust(16), r.report())
+        self.assertTrue(rows[1].startswith("E31"), r.report())
+
+    def test_mount_error_20x4(self):
+        """The other rows blank."""
+        rows, r = self.lcd(self.BAD, "hd44780-20x4",
+                           flash=["display-type = lcd-20x04"],
+                           wait="log Name:")
+        self.assertEqual(rows[0], "BAD".ljust(20), r.report())
+        self.assertTrue(rows[1].startswith("E31"), r.report())
+        self.assertEqual(rows[2:], [" " * 20] * 2, r.report())
+
+    def test_mount_error_oled64(self):
+        """Both rows double height."""
+        pixels, r = self.oled(self.BAD, 64, wait="log Name:")
+        self.assertEqual(oled_text(pixels, 0, "6x13", False),
+                         "BAD".ljust(21), r.report())
+        self.assertTrue(oled_text(pixels, 32, "6x13", False).startswith("E31"),
+                        r.report())
+
+    def frames(self, files, flash, wide, wait="log Name:"):
+        """The texts of a 128x32 OLED's double row, seen every 250 ms for 7 s
+        once the error is shown: at rest first."""
+        r = fr.run(
+            "ffemu", ["wait 10000 " + wait]
+            + ["sleep 250", "dump", "osd"] * 28,
+            settings=["display = ssd1306-128x32"],
+            flash=["display-type = oled-128x32"] + list(flash), files=files)
+        self.assertWaits(r, 1)
+        pixels = [line for line in r.lines if line and set(line) <= set(".#")]
+        return [oled_text(pixels[i:i+32], 0, "6x13", wide)
+                for i in range(0, len(pixels), 32)], r
+
+    def test_mount_error_oled32(self):
+        """The message and the name after it in one double row."""
+        pixels, r = self.oled(self.BAD, 32, wait="log Name:")
+        text = oled_text(pixels, 0, "6x13", False)
+        self.assertTrue(text.startswith("E31"), r.report())
+        self.assertTrue(text.rstrip().endswith(": BAD"), r.report())
+
+    def test_mount_error_oled32_scrolls(self):
+        """A long name scrolls into view after the message, which the row
+        rests on first, until its end is at the row's end."""
+        texts, r = self.frames(
+            {"AVERYLONGIMAGENAME.HFE": b"HXCPICFE" + bytes(600)}, (), False)
+        self.assertTrue(texts[0].startswith("E31"), r.report())
+        self.assertNotIn("NAME", texts[0], r.report())
+        self.assertTrue(any(t.endswith(": AVERYLONGIMAGENAME"[-21:])
+                            for t in texts), r.report())
+
+    def test_mount_error_oled32_wide(self):
+        """Double width with display-error-wide, the name in view or
+        scrolling by."""
+        texts, r = self.frames(self.BAD, ["display-error-wide = yes"], True)
+        self.assertTrue(texts[0].startswith("E31"), r.report())
+        self.assertTrue(any("BAD" in t for t in texts), r.report())
+
+    def test_session_end(self):
+        """In the status row, the first blank; the log line says what the
+        error means too."""
+        rows, r = self.lcd(self.NONE, "hd44780-16x2",
+                           wait="log **Error 34")
+        self.assertEqual(rows[0], " " * 16, r.report())
+        self.assertTrue(rows[1].startswith("E34"), r.report())
+
+    def test_session_end_20x4(self):
+        rows, r = self.lcd(self.NONE, "hd44780-20x4",
+                           flash=["display-type = lcd-20x04"])
+        self.assertEqual(rows[0], " " * 20, r.report())
+        self.assertTrue(rows[1].startswith("E34"), r.report())
+        self.assertEqual(rows[2:], [" " * 20] * 2, r.report())
+
+    def test_session_end_oled32(self):
+        """Double height over the whole panel."""
+        pixels, r = self.oled(self.NONE, 32)
+        self.assertTrue(oled_text(pixels, 0, "6x13", False).startswith("E34"),
+                        r.report())
+
+    def test_session_end_oled64(self):
+        """Double height where the mount error has it, below a blank row."""
+        pixels, r = self.oled(self.NONE, 64)
+        self.assertEqual(oled_text(pixels, 0, "6x13", False), " " * 21,
+                         r.report())
+        self.assertTrue(oled_text(pixels, 32, "6x13", False).startswith("E34"),
+                        r.report())
+
+    def test_display_order_ignored(self):
+        """The user's display-order, the folder's row alone here, does not
+        change the error screen, and comes back with the next button."""
+        r = self.run_error(
+            {"DIR/BAD.HFE": b"HXCPICFE" + bytes(600)}, "hd44780-16x2",
+            ["display-order = 3"], wait="log Name:",
+            after=["key right", "sleep 500", "dump"])
+        rows = [line[1:-1] for line in r.stdout.splitlines()
+                if line.startswith("|") and line.endswith("|")]
+        self.assertEqual(rows[0], "BAD".ljust(16), r.report())
+        self.assertTrue(rows[1].startswith("E31"), r.report())
+        self.assertEqual(rows[-2:], ["DIR             ", " " * 16],
+                         r.report())
+
+    def test_display_order_w_ignored(self):
+        """A `w` row of display-order, here the only one, neither."""
+        pixels, r = self.oled(self.BAD, 64, ["display-order = 4w"],
+                              wait="log Name:")
+        self.assertTrue(oled_text(pixels, 32, "6x13", False).startswith("E31"),
+                        r.report())
+
+    def test_wide(self):
+        """With display-error-wide the message scrolls, its code first; FF
+        OSD gets the status row whole. Seen every 250 ms for 5 s."""
+        r = fr.run(
+            "ffemu", ["wait 10000 log **Error"]
+            + ["sleep 250", "dump", "osd"] * 20,
+            settings=["display = ssd1306-128x32"],
+            flash=["display-type = oled-128x32", "display-error-wide = yes"],
+            files=self.NONE)
+        self.assertWaits(r, 1)
+        pixels = [line for line in r.lines if line and set(line) <= set(".#")]
+        wide = {oled_text(pixels[i:i+32], 0, "6x13", True)
+                for i in range(0, len(pixels), 32)}
+        self.assertTrue(any(t.startswith("E34") for t in wide), r.report())
+        osd = {line for part in r.stdout.split("\nosd: ")[1:]
+               for line in part.splitlines() if "E34" in line}
+        self.assertEqual(len(osd), 1, r.report())
+        self.assertTrue(osd.pop().startswith("|E34"), r.report())
+
+    def test_wide_mount_error_oled64(self):
+        """Both rows double width on a 128x64."""
+        pixels, r = self.oled(self.BAD, 64, ["display-error-wide = yes"],
+                              wait="log Name:")
+        self.assertEqual(oled_text(pixels, 0, "6x13", True), "BAD".ljust(10),
+                         r.report())
+        self.assertTrue(oled_text(pixels, 32, "6x13", True).startswith("E31"),
+                        r.report())
 
 
 if __name__ == "__main__":

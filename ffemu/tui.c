@@ -3325,7 +3325,7 @@ static const char * const fd_tab_name[FT_nr] = {
 static const char * const fd_places[] = {
     "display-type", "",
     "oled-font", "",
-    "display-order", "",
+    "display-order", "display-error-wide", "",
     "show-filename-ext", "",
     "show-tracks-short", "show-dir-slash", "|",
     "autoselect-file-secs", "autoselect-folder-secs", "nav-loop", "",
@@ -4459,8 +4459,9 @@ static void draw_write_dialog(void)
  * defaults: display-type for it where the default does not suit it, the
  * extension of an image where it tells it from another, the track in short,
  * folders after a slash, and on an OLED the names scrolling by pixel and
- * display-order with the name double width as well. None for an LED
- * display, to which none of them applies. */
+ * display-order with the name double width as well, and an error screen's
+ * double rows too. None for an LED display, to which none of them
+ * applies. */
 static void recommend(void *cfg, int d)
 {
     static const char * const opts[] = {
@@ -4481,6 +4482,7 @@ static void recommend(void *cfg, int d)
         emu_flash_set_option(cfg, opts[i], opts[i + 1]);
     if (DISP_IS_OLED(d)) {
         emu_flash_set_option(cfg, "display-scroll-by-pixel", "yes");
+        emu_flash_set_option(cfg, "display-error-wide", "yes");
         emu_flash_set_option(cfg, "display-order",
                              (DISP_HEIGHT(d) == 64) ? "D,Nw,S" : "Cw");
     }
@@ -4872,6 +4874,9 @@ static const struct {
     { "display-order",
       "N=name S=status I=info D=dir C=combined B=blank, "
       "d=tall w=tall&wide" },
+    { "display-error-wide",
+      "Whether an error's double-height rows on an OLED are double width "
+      "too, scrolling where long" },
     { "display-off-secs",
       "Seconds without activity before the display goes dark, 0-255: 0 is "
       "always off, 255 never" },

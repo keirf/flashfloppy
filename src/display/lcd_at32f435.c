@@ -136,6 +136,8 @@ static unsigned int osd_prep_buffer(void)
     if ((ff_cfg.osd_display_order != DORD_default)
         && (display_mode == DM_normal))
         order = ff_cfg.osd_display_order;
+    else if (error_mode)
+        order = error_order();
 
     heights = rows = 0;
     /* FF OSD takes three rows at most: its row count is two bits. */
@@ -208,6 +210,8 @@ static unsigned int lcd_prep_buffer(void)
     order = glyphs_mode ? 0x3210 : (lcd_rows == 2) ? 0x7710 : 0x2103;
     if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
         order = ff_cfg.display_order;
+    else if (error_mode)
+        order = error_order();
 
     row = (order >> (i2c_row * DORD_shift)) & DORD_row;
     p = (_bl && row < ARRAY_SIZE(text)) ? text[row] : NULL;
