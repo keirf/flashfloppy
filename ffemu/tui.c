@@ -1321,7 +1321,7 @@ static void draw_flash(int y, int x, int w)
     uint8_t cfg[256];
     char value[64];
     unsigned int len = emu_flash_load(cfg, sizeof(cfg)), flags;
-    int row, nr_lines = emu_flash_nr_options();
+    int row, c, nr_lines = emu_flash_nr_options();
     const char *name;
     attr_t attr;
 
@@ -1351,12 +1351,19 @@ static void draw_flash(int y, int x, int w)
     for (row = 0; (row < flash_rows) && (flash_top + row < nr_lines); row++) {
         name = emu_flash_option(flash_top + row, cfg, value, sizeof(value),
                                 &flags);
+        if (flags & EMU_OPT_hex_only)
+            snprintf(value, sizeof(value), "(only in the hex)");
+        if (!(flags & (EMU_OPT_changed | EMU_OPT_raw | EMU_OPT_hex_only))) {
+            put(y + 1 + row, x + 1, w - 2, COLOR_PAIR(CP_text), "%s = %s",
+                name, value);
+            continue;
+        }
         attr = (flags & (EMU_OPT_raw | EMU_OPT_hex_only))
-            ? BRIGHT(CP_raw)
-            : (flags & EMU_OPT_changed) ? BRIGHT(CP_value)
-            : COLOR_PAIR(CP_text);
-        put(y + 1 + row, x + 1, w - 2, attr, "%s = %s", name,
-            (flags & EMU_OPT_hex_only) ? "(only in the hex)" : value);
+            ? BRIGHT(CP_raw) : BRIGHT(CP_path);
+        c = piece(y + 1 + row, x + 1, x + w - 1, BRIGHT(CP_value), "%s",
+                  name);
+        c = piece(y + 1 + row, c, x + w - 1, COLOR_PAIR(CP_path), " = ");
+        piece(y + 1 + row, c, x + w - 1, attr, "%s", value);
     }
     if (nr_lines <= flash_rows)
         return;
@@ -1630,22 +1637,29 @@ static void path_label(int y, int x, int w, attr_t attr, const char *name)
     pane_right = x + w - 1;
 }
 
-/* Line @s of @n bytes at (@y,@x) in @w columns, in color pair @cp, bright,
- * or dark if @dim, as are its marks: a carriage return
- * at its end, of a CRLF, dropped; a tab as a space; and the other bytes that
- * are not printable ASCII, a lone carriage return among them, as a '?' in
- * magenta. */
-static void put_line(int y, int x, int w, bool dim, int cp, const char *s,
-                     size_t n)
-{
+/* Bright, or dark if @dim: the ink of a line of a file. */
 #define INK(cp) (dim ? COLOR_PAIR(cp) : BRIGHT(cp))
+
+/* The mark of a line of a window cut short at its right edge, as put()
+ * makes it: bright, or dark if @dim. */
+static void cut_mark(int y, bool dim)
+{
+    if (pane_right >= 0)
+        put_wide(y, pane_right, INK(CP_crop), L">", 1);
+}
+
+/* Piece @s of @n bytes of a line at (@y,@x) of @w columns, from column @col
+ * on, in color pair @cp, bright, or dark if @dim, as are its marks: a tab
+ * as a space, and a byte that is not printable ASCII as a '?' in magenta.
+ * The column after it, or -1 if the line is cut short there, which the
+ * caller marks. */
+static int put_run(int y, int x, int w, bool dim, int cp, const char *s,
+                   size_t n, int col)
+{
     attr_t attr = INK(cp);
     char run[512];
     size_t i, k = 0;
-    int col = 0;
 
-    if ((n != 0) && (s[n-1] == '\r'))
-        n--;
     /* Runs of printable characters, between the question marks. */
     for (i = 0; (i < n) && (col + (int)k < w); i++) {
         unsigned char c = (s[i] == '\t') ? ' ' : s[i];
@@ -1663,11 +1677,67 @@ static void put_line(int y, int x, int w, bool dim, int cp, const char *s,
     }
     run[k] = '\0';
     put(y, x + col, w - col, attr, "%s", run);
+    return (i == n) ? col + (int)k : -1;
+}
 
-    /* More than fits: marked as put() marks a line cut short. */
-    if ((i < n) && (pane_right >= 0))
-        put_wide(y, pane_right, INK(CP_crop), L">", 1);
-#undef INK
+/* Line @s of @n bytes at (@y,@x) in @w columns, in color pair @cp, bright,
+ * or dark if @dim, as are its marks, as put_run() draws it; a carriage
+ * return at its end, of a CRLF, dropped. */
+static void put_line(int y, int x, int w, bool dim, int cp, const char *s,
+                     size_t n)
+{
+    if ((n != 0) && (s[n-1] == '\r'))
+        n--;
+    if (put_run(y, x, w, dim, cp, s, n, 0) < 0)
+        cut_mark(y, dim);
+}
+
+/* Whether @c may be in an option's or a section's name: the characters that
+ * the firmware's parser of FF.CFG and IMG.CFG takes. */
+static bool cfg_name_char(char c)
+{
+    return isalnum((unsigned char)c) || (strchr(",-._:", c) != NULL)
+        || (c == '[') || (c == ']');
+}
+
+/* Line @s of @n bytes of FF.CFG or IMG.CFG at (@y,@x) in @w columns, as
+ * put_line() draws it, colored by what it is: a comment in light gray; a
+ * setting, "name = value" or "[section]", its name in bright yellow, the
+ * blanks and the '=' after it in cyan, its value in bright cyan; all in
+ * dark gray if @dim, the window being dimmed, which only then dims the
+ * mark of a line cut short too. */
+static void put_cfg_line(int y, int x, int w, bool dim, const char *s,
+                         size_t n)
+{
+    size_t i, j, k;
+    int col;
+
+    if ((n != 0) && (s[n-1] == '\r'))
+        n--;
+    for (i = 0; (i < n) && ((s[i] == ' ') || (s[i] == '\t')); i++)
+        continue;
+    for (j = i; (j < n) && cfg_name_char(s[j]); j++)
+        continue;
+    if (dim || (i == j) || (i == n) || (s[i] == '#')) {
+        if (put_run(y, x, w, dim || (i == n) || (s[i] == '#'), CP_text, s, n,
+                    0) < 0)
+            cut_mark(y, dim);
+        return;
+    }
+    for (k = j; (k < n) && ((s[k] == ' ') || (s[k] == '\t')); k++)
+        continue;
+    if ((k < n) && (s[k] == '='))
+        for (k++; (k < n) && ((s[k] == ' ') || (s[k] == '\t')); k++)
+            continue;
+    col = put_run(y, x, w, true, CP_text, s, i, 0);
+    if (col >= 0)
+        col = put_run(y, x, w, false, CP_value, s + i, j - i, col);
+    if (col >= 0)
+        col = put_run(y, x, w, true, CP_path, s + j, k - j, col);
+    if (col >= 0)
+        col = put_run(y, x, w, false, CP_path, s + k, n - k, col);
+    if (col < 0)
+        cut_mark(y, dim);
 }
 
 static void draw_log(int y, int x, int w, int h)
@@ -1936,8 +2006,8 @@ static void draw_ff_cfg(int y, int x, int w, int h)
     for (row = 0, p = text; row < ff_cfg_top; row++)
         p += strcspn(p, "\n") + 1;
     for (row = 0; (row < rows) && (*p != '\0'); row++) {
-        put_line(y + 1 + row, x + 1, w - 2, !usb.inserted,
-                 usb.inserted ? CP_value : CP_text, p, strcspn(p, "\n"));
+        put_cfg_line(y + 1 + row, x + 1, w - 2, !usb.inserted, p,
+                     strcspn(p, "\n"));
         p += strcspn(p, "\n");
         if (*p == '\n')
             p++;
