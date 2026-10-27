@@ -237,10 +237,12 @@ Braille, gives a nearly even grid: in mintty, `FontChoice=|Braille Patterns:1`
 with `Font1=DejaVu Sans` takes the Braille block from it, and in Windows
 Terminal a font list such as `"face": "Consolas, DejaVu Sans"` falls back to
 it. Beside the display, the `FF.CFG` that the firmware reads is
-shown; while the USB drive is ejected, it stays there, in light gray: for a
-drive made from a directory, as the file is on the host now, looked for and
-read again on every Del, so that an edit shows what the next insertion will
-give the firmware; for an image or a disk, as last read from it. The dash in
+shown, its comments in light gray and each setting with its name in bright
+yellow, its `=` in cyan and its value in bright cyan; while the USB drive is
+ejected, it stays there, all in light gray: for a drive made from a directory,
+as the file is on the host now, looked for and read again on every Del, so
+that an edit shows what the next insertion will give the firmware; for an
+image or a disk, as last read from it. The dash in
 the museum's name at the top right turns every half second, which shows that
 ffemu runs; ffemu ends when two of its turns in a row cannot be written, as
 happens when the window of the terminal is killed and no hangup signal comes.
@@ -443,8 +445,9 @@ so that lines can be copied between the two; a number after `0x` stands for
 bytes that no `FF.CFG` value gives. On loading, the hex applies first and the
 options on top, with a warning in the console for an option that differs from
 the hex, is not in this firmware, or has a value that does not fit. The Flash
-mem pane shows the same options: those changed from the defaults in yellow, the
-rest in gray, and the raw numbers in magenta.
+mem pane shows the same options: those at their defaults in light gray, the
+others colored as the settings of `FF.CFG` beside the display, with a raw
+number in magenta.
 
 ## Scripting
 
