@@ -311,6 +311,22 @@ bool usb_medium_has(const char *name83);
 /* Whether the drive holds that file as the firmware wrote it, its data in
  * ffemu's store of the firmware's writes. */
 bool usb_written_file(const char *name83);
+/* The section of IMG.CFG that the firmware applies to the image mounted,
+ * chosen as the firmware chooses it, for the IMG.CFG window and the script;
+ * read again when the drive is written or FF.CFG is read again. */
+enum {
+    IMGCFG_none,       /* no drive, no raw sector image mounted, no IMG.CFG */
+    IMGCFG_no_section, /* no section of IMG.CFG applies to the image */
+    IMGCFG_section,    /* the section @header names, @text its lines */
+};
+struct imgcfg_view {
+    int state;         /* IMGCFG_* */
+    char header[80];   /* "[tag::size]" as parsed; "" for the default */
+    const char *text;  /* from the section's header line to its last */
+    unsigned int nr_lines;
+};
+void imgcfg_get_view(struct imgcfg_view *v);
+
 /* While the drive is out, usb_get_info() and usb_ff_cfg_text() tell of the
  * FF.CFG of the last drive. */
 /* Where FF.CFG is, or would be, under directory @dir, as a path relative

@@ -1256,8 +1256,10 @@ static void scroll_bar(int y, int x, int w, int h, bool dim, int top,
     put_wide(y + h - 2, x + w - 1, attr, down, 1);
 }
 
-/* The codes that curses gives Ctrl+PgUp, Ctrl+PgDn and Ctrl+Home. */
+/* The codes that curses gives Ctrl+PgUp, Ctrl+PgDn, Ctrl+Home, Alt+PgUp
+ * and Alt+PgDn. */
 static int key_ctrl_pgup = -1, key_ctrl_pgdn = -1, key_ctrl_home = -1;
+static int key_alt_pgup = -1, key_alt_pgdn = -1;
 
 /* The code of the key that terminfo names @cap, or that sends @seq if it has
  * no such name; @code if curses knows neither, which it then learns. */
@@ -2022,6 +2024,58 @@ static void draw_ff_cfg(int y, int x, int w, int h)
                  ff_cfg_top + rows < nr_lines);
 }
 
+/* The first line that the IMG.CFG window shows, and how many it shows:
+ * Alt+PgUp and Alt+PgDn move it, pressed a moment ago until these times. */
+static int imgcfg_top, imgcfg_rows = 1;
+static uint64_t imgcfg_up_lit, imgcfg_down_lit;
+
+/* The section of IMG.CFG that the firmware applies to the image mounted,
+ * @v, at (@y,@x) of @w by @h: its lines colored as FF.CFG's, named by its
+ * header, or that no section applies. */
+static void draw_imgcfg(int y, int x, int w, int h,
+                        const struct imgcfg_view *v)
+{
+    char title[96];
+    const char *p;
+    int row, rows = h - 2, nr_lines = v->nr_lines;
+
+    if ((w < 16) || (h < 3))
+        return;
+    if (v->state != IMGCFG_section) {
+        frame(y, x, w, h, "IMG.CFG - no section applies", COLOR_PAIR(CP_off),
+              COLOR_PAIR(CP_off));
+        return;
+    }
+    if (v->header[0] == '\0')
+        snprintf(title, sizeof(title), "IMG.CFG default section");
+    else
+        snprintf(title, sizeof(title), "IMG.CFG %s", v->header);
+    frame(y, x, w, h, title, COLOR_PAIR(CP_text), COLOR_PAIR(CP_text));
+
+    imgcfg_rows = rows;
+    if (imgcfg_top > nr_lines - rows)
+        imgcfg_top = nr_lines - rows;
+    if (imgcfg_top < 0)
+        imgcfg_top = 0;
+
+    /* The scroll bar first: the '>' of a line cut short goes over it. */
+    if (nr_lines > rows)
+        scroll_bar(y, x, w, h, false, imgcfg_top, nr_lines);
+    for (row = 0, p = v->text; row < imgcfg_top; row++)
+        p += strcspn(p, "\n") + 1;
+    for (row = 0; (row < rows) && (*p != '\0'); row++) {
+        put_cfg_line(y + 1 + row, x + 1, w - 2, false, p, strcspn(p, "\n"));
+        p += strcspn(p, "\n");
+        if (*p == '\n')
+            p++;
+    }
+    if (nr_lines > rows)
+        page_keys(y + h - 1, x, w, false, imgcfg_up_lit, imgcfg_down_lit,
+                  "Alt");
+    scroll_marks(y, x, h, false, imgcfg_top > 0,
+                 imgcfg_top + rows < nr_lines);
+}
+
 /* How the last update of the screen ended: 0 or the error of a write. */
 static int write_errno;
 
@@ -2033,8 +2087,9 @@ static void redraw(void)
     struct lcd_view cv;
     struct osd_view ov;
     bool led = DISP_IS_LED(fitted_display), lcd = DISP_IS_LCD(fitted_display);
-    bool too_small, mismatch, osd_text, osd_px;
-    int style, cw, ch, fw, dh, y, kw, sw, bottom = LINES - 1;
+    struct imgcfg_view iv;
+    bool too_small, mismatch, osd_text, osd_px, imgcfg;
+    int style, cw, ch, fw, dh, y, kw, sw, band, ix, bottom = LINES - 1;
     char title[96];
 
     if (led) {
@@ -2080,18 +2135,33 @@ static void redraw(void)
     sw = (COLS - kw) / 2;
     if (sw < STATUS_MIN_W)
         sw = (COLS - kw < STATUS_MIN_W) ? COLS - kw : STATUS_MIN_W;
-    flash_rows = PANE_ROWS + (osd_text ? OSD_TEXT_H : 0);
+    /* IMG.CFG's section in FF OSD's band, to its right, or in its place
+     * when there is no FF OSD: the band is FF OSD's text rows, below
+     * which Flash mem reaches, or its braille rows, below which it does
+     * not. */
+    imgcfg_get_view(&iv);
+    imgcfg = (iv.state != IMGCFG_none);
+    band = osd_px ? osd_braille_rows(&ov) + 2
+        : (osd_text || imgcfg) ? OSD_TEXT_H : 0;
+    flash_rows = PANE_ROWS + (osd_px ? 0 : band);
     draw_keys(y, 0, kw);
     draw_status(y, kw, sw);
     draw_flash(y, kw + sw, COLS - kw - sw);
     y += PANE_ROWS + 2;
     if (osd_text) {
         draw_osd(y, 0, OSD_TEXT_H, false, &ov);
-        y += OSD_TEXT_H;
+        ix = osd_columns(&ov) + 2;
+        if (imgcfg)
+            draw_imgcfg(y, ix, kw + sw - ix, band, &iv);
     } else if (osd_px) {
-        draw_osd(y, 0, osd_braille_rows(&ov) + 2, true, &ov);
-        y += osd_braille_rows(&ov) + 2;
+        draw_osd(y, 0, band, true, &ov);
+        ix = 4 * osd_columns(&ov) + 2;
+        if (imgcfg)
+            draw_imgcfg(y, ix, COLS - ix, band, &iv);
+    } else if (imgcfg) {
+        draw_imgcfg(y, 0, kw + sw, band, &iv);
     }
+    y += band;
     draw_log(y, 0, COLS, bottom - y);
 
     draw_dialog();
@@ -5347,6 +5417,14 @@ static void handle_key(int key)
         return;
     }
 
+    if ((key == key_alt_pgup) || (key == key_alt_pgdn)) {
+        int step = (imgcfg_rows > 1) ? imgcfg_rows - 1 : 1;
+        imgcfg_top += (key == key_alt_pgdn) ? step : -step;
+        *((key == key_alt_pgdn) ? &imgcfg_down_lit : &imgcfg_up_lit) =
+            lit_end();
+        return;
+    }
+
     if ((key == KEY_PPAGE) || (key == KEY_NPAGE)) {
         /* A page less a line, which stays in view. */
         flash_top += (key == KEY_NPAGE) ? flash_rows - 1 : 1 - flash_rows;
@@ -5506,6 +5584,8 @@ static void *tui_thread(void *unused)
     key_ctrl_pgup = ctrl_key("kPRV5", "\033[5;5~", KEY_MAX + 0x101);
     key_ctrl_pgdn = ctrl_key("kNXT5", "\033[6;5~", KEY_MAX + 0x102);
     key_ctrl_home = ctrl_key("kHOM5", "\033[1;5H", KEY_MAX + 0x103);
+    key_alt_pgup = ctrl_key("kPRV3", "\033[5;3~", KEY_MAX + 0x104);
+    key_alt_pgdn = ctrl_key("kNXT3", "\033[6;3~", KEY_MAX + 0x105);
     curs_set(0);
     /* A lone Esc is held back this long for the rest of a key's sequence:
      * htop's 25 ms where the terminal writes it whole, 200 ms in an ssh
