@@ -238,7 +238,7 @@ bool ff_cfg_write(const void *cfg, enum ff_cfg_set set, const char *source,
         return false;
     snprintf(msg, size, "%c%s/%s%c written with %u option%s%s", MSG_USER,
              dir, place, MSG_USER, nr, (nr == 1) ? "" : "s",
-             had_old ? ", the old one kept as .BAK" : "");
+             had_old ? " (made .BAK)" : "");
     return true;
 }
 
@@ -285,6 +285,111 @@ bool ff_cfg_file_option(const char *name, char *value, size_t size)
         }
     }
     return found;
+}
+
+bool ff_cfg_load(void *cfg, unsigned int *nr_set, unsigned int *nr_bad)
+{
+    static char text[65536];
+    const char *p;
+    char name[32], value[80];
+
+    if (!usb_read_text("FF      CFG", text, sizeof(text)))
+        return false;
+    *nr_set = *nr_bad = 0;
+    /* Line by line, as the firmware reads them, a later line for an option
+     * over an earlier one. */
+    for (p = text; *p != '\0'; p += strcspn(p, "\n"), p += (*p == '\n')) {
+        size_t len = strcspn(p, "\n");
+        if (!option_line(p, len, name, sizeof(name)))
+            continue;
+        line_value(p, len, value, sizeof(value));
+        if (emu_flash_set_option(cfg, name, value) == EMU_SET_ok)
+            (*nr_set)++;
+        else
+            (*nr_bad)++;
+    }
+    return true;
+}
+
+/* The lines of the example, split once: their starts and lengths, without
+ * their line ends. */
+static const char *ex_line[1024];
+static int ex_len[1024];
+static unsigned int ex_nr;
+
+/* The line of the example that sets option @name, or -1. */
+static int example_option(const char *name)
+{
+    char lname[32];
+    const char *p;
+    unsigned int k;
+
+    if (ex_nr == 0) {
+        for (p = ff_cfg_example; (*p != '\0') && (ex_nr < ARRAY_SIZE(ex_line));
+             ex_nr++) {
+            ex_line[ex_nr] = p;
+            ex_len[ex_nr] = strcspn(p, "\n");
+            p += ex_len[ex_nr];
+            p += (*p == '\n');
+            if ((ex_len[ex_nr] > 0)
+                && (ex_line[ex_nr][ex_len[ex_nr] - 1] == '\r'))
+                ex_len[ex_nr]--;
+        }
+    }
+    for (k = 0; k < ex_nr; k++)
+        if (option_line(ex_line[k], ex_len[k], lname, sizeof(lname))
+            && !strcmp(lname, name))
+            return k;
+    return -1;
+}
+
+unsigned int ff_cfg_doc(const char *name, const char **lines, int *len,
+                        unsigned int max)
+{
+    int k = example_option(name), a, b, i;
+    unsigned int out = 0;
+    char lname[32];
+
+    if (k < 0)
+        return 0;
+    /* The option lines next to it, and the comment above the first. */
+    for (a = k; (a > 0) && option_line(ex_line[a - 1], ex_len[a - 1], lname,
+                                       sizeof(lname)); a--)
+        continue;
+    while ((a > 0) && (ex_len[a - 1] > 0) && (ex_line[a - 1][0] == '#'))
+        a--;
+    for (b = k + 1; (b < (int)ex_nr)
+             && option_line(ex_line[b], ex_len[b], lname, sizeof(lname)); b++)
+        continue;
+    for (i = a; (i < b) && (out < max); i++) {
+        lines[out] = ex_line[i];
+        len[out++] = ex_len[i];
+    }
+    return out;
+}
+
+bool ff_cfg_item_doc(const char *name, const char *item, char *buf,
+                     size_t size)
+{
+    const char *lines[64], *p;
+    int len[64], l;
+    unsigned int nr = ff_cfg_doc(name, lines, len, ARRAY_SIZE(lines)), i;
+    size_t n = strlen(item);
+
+    for (i = 0; i < nr; i++) {
+        for (p = lines[i], l = len[i]; (l > 0) && ((*p == '#')
+                                                   || (*p == ' ')); l--)
+            p++;
+        if ((l > 0) && (*p == '-')) {
+            p++;
+            l--;
+        }
+        if (((size_t)l > n) && !strncmp(p, item, n) && (p[n] == ':')) {
+            snprintf(buf, size, "%.*s", l, p);
+            return true;
+        }
+    }
+    return false;
 }
 
 bool ff_cfg_set_options(const char *const *names, const char *const *values,
@@ -361,10 +466,10 @@ bool ff_cfg_set_options(const char *const *names, const char *const *values,
         return false;
     if (nr == 1)
         snprintf(msg, size, "%s/%s: %s = %s%s", dir, place, names[0],
-                 values[0], had_old ? ", the old file kept as .BAK" : "");
+                 values[0], had_old ? " (made .BAK)" : "");
     else
         snprintf(msg, size, "%s/%s: %u options set%s", dir, place, nr_set,
-                 had_old ? ", the old file kept as .BAK" : "");
+                 had_old ? " (made .BAK)" : "");
     return true;
 }
 

@@ -111,6 +111,7 @@ enum {
     CP_lcd_dot,   /* the LCD's unlit dots, faint, on its panel */
     CP_lcd_inkdot, /* the LCD's unlit dots on its ink */
     CP_osd,       /* green on black, bright: FF OSD's text */
+    CP_cluster_raw, /* magenta on cyan: a raw value among radio buttons */
     CP_nr
 };
 
@@ -159,7 +160,7 @@ enum {
 static enum {
     DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul,
     DLG_externals, DLG_message, DLG_fdfile, DLG_unpack, DLG_write,
-    DLG_nr
+    DLG_fdhelp, DLG_nr
 } dialog;
 /* The message box over a dialog: what it says, and the dialog it returns
  * to when closed. */
@@ -200,6 +201,7 @@ static void draw_fdfile_dialog(void);
 static void draw_unpack_dialog(void);
 static void draw_write_dialog(void);
 static void draw_flash_dialog(void);
+static void draw_fdhelp(void);
 static int hotkey_of(const char *s);
 static void put_marked(int y, int x, int w, attr_t attr, attr_t hot,
                        const char *s);
@@ -354,6 +356,21 @@ static void put_char(int y, int x, attr_t attr, wchar_t wc)
     attroff(attr);
 }
 
+/* Notes that text is cut at (@y,@x), for the dialog check. */
+static void probe_cut(int y, int x)
+{
+    if (probing && (probe_now != 0))
+        probe_find("cut at its width", y, x);
+}
+
+/* Takes what is drawn next as part of the frame of the box being checked,
+ * as a scroll bar or a tab's handle is. */
+static void probe_frame(void)
+{
+    if (probing)
+        probe_now = 0;
+}
+
 /* Writes at most @w columns of @s at (@y,@x), clipped to the screen, and
  * marks the line as cut if it did not fit. */
 static void put(int y, int x, int w, attr_t attr, const char *fmt, ...)
@@ -384,6 +401,8 @@ static void put(int y, int x, int w, attr_t attr, const char *fmt, ...)
     if (PAIR_NUMBER(attr) == 0)
         attr |= COLOR_PAIR(CP_text);
     put_wide(y, x, attr, ws, w);
+    if (n > (size_t)w)
+        probe_cut(y, x + w);
 
     if ((n > (size_t)w) && (pane_right >= 0))
         put_wide(y, pane_right, BRIGHT(CP_crop), cut, 1);
@@ -1777,10 +1796,21 @@ static void draw_key_bar(void)
     pane_right = -1;
     put(LINES - 1, 0, COLS, COLOR_PAIR(CP_bar), "%*s", COLS, "");
     /* In a dialog, the dialog's keys, in the order of its buttons. */
+    if (dialog == DLG_fdhelp) {
+        x = hotkey(x, "Esc", "Close");
+        x = hotkey(x, "^/v/PgUp/PgDn", "Scroll");
+        return;
+    }
     if (dialog != DLG_none) {
         x = hotkey(x, "Enter", "OK");
         x = hotkey(x, "Esc", "Cancel");
-        x = hotkey(x, "Tab/Shift+Tab/</>/^/v", "Navigate");
+        if (dialog == DLG_flash) {
+            x = hotkey(x, "Tab/Shift+Tab/^/v/</>", "Navigate");
+            x = hotkey(x, "Space", "Switch");
+            x = hotkey(x, "F1", "Help");
+        } else {
+            x = hotkey(x, "Tab/Shift+Tab/</>/^/v", "Navigate");
+        }
         if (x - 1 > COLS)
             put(LINES - 1, COLS - 1, 1, BRIGHT(CP_bar_crop), ">");
         return;
@@ -2053,21 +2083,19 @@ static void button(int y, int x, attr_t attr, const char *text)
     put_wide(y + 1, x + 1, COLOR_PAIR(CP_dialog), below, n);
 }
 
-/* A box of @w by @h in the middle of the screen, @inside, with a double-line
- * frame in @frame_attr with @title in it; returns its top left corner in
- * @py, @px. */
-static void colored_box(int w, int h, const char *title, attr_t inside,
-                        attr_t frame_attr, int *py, int *px)
+/* A box of @w by @h at (@y,@x), @inside, with a double-line frame in
+ * @frame_attr with @title in it, from column @title_x on, or in the middle
+ * if that is negative. */
+static void colored_box_at(int y, int x, int w, int h, const char *title,
+                           int title_x, attr_t inside, attr_t frame_attr)
 {
     static const wchar_t dual[6] = {
         0x2554, 0x2557, 0x255a, 0x255d, 0x2550, 0x2551 };
-    int y, x, i;
+    int i;
     wchar_t line[256];
 
     if (w > (int)ARRAY_SIZE(line))
         w = ARRAY_SIZE(line);
-    y = (LINES - h) / 2;
-    x = (COLS - w) / 2;
     if (probing) {
         probe_y = y;
         probe_x = x;
@@ -2093,11 +2121,22 @@ static void colored_box(int w, int h, const char *title, attr_t inside,
         put_wide(y + i, x, frame_attr, dual + 5, 1);
         put_wide(y + i, x + w-1, frame_attr, dual + 5, 1);
     }
-    put(y, x + (w - strlen(title) - 2) / 2, w, frame_attr, " %s ", title);
+    put(y, (title_x >= 0) ? title_x : x + (w - strlen(title) - 2) / 2, w,
+        frame_attr, " %s ", title);
     probe_part("text");
+}
 
-    *py = y;
-    *px = x;
+/* A box of @w by @h in the middle of the screen, @inside, with a double-line
+ * frame in @frame_attr with @title in it; returns its top left corner in
+ * @py, @px. */
+static void colored_box(int w, int h, const char *title, attr_t inside,
+                        attr_t frame_attr, int *py, int *px)
+{
+    if (w > 256)
+        w = 256;
+    *py = (LINES - h) / 2;
+    *px = (COLS - w) / 2;
+    colored_box_at(*py, *px, w, h, title, -1, inside, frame_attr);
 }
 
 /* A gray Turbo Vision dialog of @w by @h in the middle of the screen, with
@@ -2594,6 +2633,10 @@ static void draw_dialog(void)
         draw_flash_dialog();
         draw_write_dialog();
         break;
+    case DLG_fdhelp:
+        draw_flash_dialog();
+        draw_fdhelp();
+        break;
     case DLG_message:
         /* Over the dialog it came from. */
         if (msg_return == DLG_flash)
@@ -2974,169 +3017,126 @@ static void set_display(int display, int mcu)
 }
 
 /*
- * The Flash mem dialog: the options of the configuration in flash whose
- * effect ffemu can show, edited as FF.CFG has them. OK writes those changed
+ * The Flash mem dialog: every option of the configuration in flash, edited
+ * as FF.CFG has them, on two tabs, those whose effect ffemu shows and the
+ * others, which help to prepare FF.CFG; a third tab has the buttons that
+ * write FF.CFG, take FLASH.DMP or load FF.CFG. OK writes the options changed
  * into flash and power-cycles the device.
  */
 
-enum { FV_radio, FV_check, FV_input, FV_ok, FV_cancel, FV_save_all,
-       FV_save_nondefault, FV_save_changed, FV_save_dump, FV_dump_cfg };
-/* The buttons, the last entries of fviews[], in the order of Tab: the three
- * Save and two Unpack ones, which stand above, then OK and Cancel. */
-#define FD_BUTTONS 7
+enum { FV_radio, FV_check, FV_input, FV_ok, FV_cancel,
+       FV_save_all, FV_save_nondefault, FV_save_changed, FV_save_dump,
+       FV_dump_cfg, FV_load_cfg };
 
-/* The width of each column, so that the dialog with its shadow fits 99
- * columns; and in each, where the fields of input lines start. */
-static const int fd_col_w[3] = { 31, 31, 26 };
-static int fd_field[3];
-#define FD_W(v) fd_col_w[(v)->col]
+enum { FT_emulated, FT_other, FT_actions, FT_nr };
+static const char * const fd_tab_name[FT_nr] = {
+    "Emulated features", "Non-ffemu features", "Actions"
+};
 
-#define FD_ITEMS 8
+/* The options of the two tabs of options, as they are laid out: in columns,
+ * which "|" ends, the first tab's last "||"; and in groups, which "" ends,
+ * of options that belong closely together, a blank row between groups. A
+ * radio group, or another cluster with a label, has a blank row above and
+ * below it in any case, but for its option's flags, which go right under
+ * it. An option that this lacks, as one that a later firmware adds, goes at
+ * the end of the second tab, in a group of its own. */
+static const char * const fd_places[] = {
+    "display-type", "",
+    "oled-font", "",
+    "display-order", "",
+    "show-filename-ext", "|",
+    "autoselect-file-secs", "autoselect-folder-secs", "nav-loop", "",
+    "twobutton-action", "",
+    "rotary", "",
+    "folder-sort", "",
+    "sort-priority", "|",
+    "display-scroll-rate", "display-scroll-pause", "nav-scroll-rate",
+        "nav-scroll-pause", "",
+    "display-off-secs", "",
+    "display-on-activity", "",
+    "image-on-startup", "",
+    "ejected-on-startup", "",
+    "nav-mode", "",
+    "indexed-prefix", "",
+    "osd-display-order", "osd-columns", "",
+    "step-volume", "notify-volume", "||",
+    "interface", "",
+    "host", "|",
+    "pin02", "",
+    "pin34", "",
+    "write-protect", "",
+    "max-cyl", "",
+    "side-select-glitch-filter", "|",
+    "track-change", "",
+    "write-drain", "",
+    "index-suppression", "",
+    "head-settle-ms", "motor-delay", "",
+    "chgrst", "",
+    "display-probe-ms", "",
+    "oled-contrast", "",
+    "hfe-step", "hfe-rpm", "",
+    "da-report-version", "",
+    "extend-image"
+};
+
+#define FD_ITEMS 24
+#define FD_VIEWS (2 * EMU_OPTIONS_MAX + 12)
+#define FD_COLS 3
+
+/* The dialog's width, so that with its shadow it fits 99 columns; and that
+ * of a text field, which scrolls, narrowed as far as needed for that. */
+#define FD_MAX_W 97
+#define FD_TEXT_W 10
+#define FD_TEXT_MIN_W 6
+static int fd_text_w = FD_TEXT_W;
+
+/* display-type's types and suffixes, which it takes in a form of its own. */
+static const char * const fd_display_types[] = {
+    "auto", "oled-128x32", "oled-128x64", "lcd-16x02", "lcd-20x02",
+    "lcd-20x04", "lcd-40x02"
+};
+static const char * const fd_display_suffixes[] = {
+    "rotate", "hflip", "narrow", "narrower", "inverse", "ztech", "slow"
+};
 
 static struct fview {
-    int type, col;
-    const char *label;  /* '~' around the hotkey letter; NULL for none */
+    int type;
+    int tab;            /* -1: on every tab */
+    char label[40];     /* '~' around the hotkey letter; "" for none */
     const char *opt;    /* the option it edits */
-    const char *help;   /* for the bottom line */
+    int kind;           /* the option's EMU_KIND_* */
+    unsigned int size;  /* the option's size in bytes */
+    int group;          /* its group of options in fd_places[] */
     /* Radio buttons: the values; check boxes: what each checks, a suffix or
      * flag of @opt, or @opt itself as yes or no if @boolean. */
     const char *items[FD_ITEMS];
-    bool boolean, gap;  /* gap: an empty row follows */
-    /* Laid out, and set from flash, when the dialog opens. */
-    int y, x;
-    unsigned int shown; /* check boxes: the items shown */
-    int cur;            /* the chosen radio button, or check box in focus */
+    int nr_items;
+    bool boolean;
+    /* Laid out when the dialog opens: its column, its place and width, and
+     * where an input line's field starts in it. */
+    int col, y, x, w, field;
+    /* Set from flash when the dialog opens. */
+    int cur;            /* the chosen value, or the check box in focus */
     unsigned int on;    /* the check boxes checked */
     unsigned int dfl;   /* the items checked or chosen by default */
-    char extra[64];     /* radio buttons: a value from flash that none has */
+    char extra[64];     /* a value from flash that no item has */
     char raw[64];       /* a boolean that is neither yes nor no */
     char text[64];      /* an input line */
-} fviews[] = {
-    { FV_radio, 0, "display-~t~ype", "display-type",
-      "Type of the display connected",
-      { "auto", "oled-128x32", "oled-128x64", "lcd-16x02", "lcd-20x02",
-        "lcd-20x04", "lcd-40x02" }, false, true },
-    { FV_check, 0, "display-type suffi~x~", "display-type",
-      "Options for OLED displays",
-      { "rotate", "hflip", "narrow", "narrower", "inverse", "ztech",
-        "slow" }, false, true },
-    { FV_radio, 0, "oled-~f~ont", "oled-font",
-      "Font of the OLED display",
-      { "6x13", "8x16" }, false, true },
-    { FV_radio, 0, "s~h~ow-filename-ext", "show-filename-ext",
-      "Whether to show floppy filename extensions",
-      { "no", "yes", "auto" }, false, true },
-    { FV_input, 0, "~d~isplay-order", "display-order",
-      "Rows top down: 0=name, 1=status, 2=info, 3=folder, 7=blank, "
-      "d=double-height", { NULL }, false, false },
-    { FV_input, 0, "display-~o~ff-secs", "display-off-secs",
-      "Seconds without activity before the display goes dark, 0-255: 0 is "
-      "always off, 255 never",
-      { NULL }, false, false },
-    { FV_input, 0, "display-scroll-~r~ate", "display-scroll-rate",
-      "Milliseconds per step of a long name scroll, 100..65535: less is "
-      "faster",
-      { NULL }, false, false },
-    { FV_input, 0, "display-scroll-~p~ause", "display-scroll-pause",
-      "Milliseconds a long name scroll rests at each end, 0..65535: 0 "
-      "scrolls without rest",
-      { NULL }, false, false },
-    { FV_input, 0, "nav-scroll-r~a~te", "nav-scroll-rate",
-      "Milliseconds per scroll step while browsing, 0..65535: less is faster",
-      { NULL }, false, false },
-    { FV_input, 0, "nav-scroll-pa~u~se", "nav-scroll-pause",
-      "Milliseconds before a long name starts to scroll while browsing, "
-      "0..65535",
-      { NULL }, false, false },
-    { FV_radio, 1, "nav-~m~ode", "nav-mode",
-      "How floppies are found on the USB drive",
-      { "default", "indexed", "native" },
-      false, true },
-    { FV_radio, 1, "folder-~s~ort", "folder-sort",
-      "A sorted folder must fit in RAM: \"always\" cuts big ones, \"small\" "
-      "leaves big ones in FAT order",
-      { "always", "never", "small" }, false, true },
-    { FV_radio, 1, "sort-pr~i~ority", "sort-priority",
-      "Where the folders go in a sorted folder: before the files, after "
-      "them, or mixed by name",
-      { "folders", "files", "none" }, false, true },
-    { FV_check, 1, NULL, "nav-loop",
-      "Whether file/folder navigation loops from the last item to the first "
-      "one and vice versa",
-      { "nav-~l~oop" }, true, true },
-    { FV_input, 1, "autos~e~lect-file-secs", "autoselect-file-secs",
-      "Seconds a highlighted floppy waits before auto-insert, 0..255: 0 "
-      "waits for a button",
-      { NULL }, false, false },
-    { FV_input, 1, "autoselect-folder-se~c~s", "autoselect-folder-secs",
-      "Seconds a highlighted folder waits before it is entered, 0..255: 0 "
-      "waits for a button",
-      { NULL }, false, false },
-    { FV_input, 1, "i~n~dexed-prefix", "indexed-prefix",
-      "For \"nav-mode = indexed\", gives the prefix to the floppy numbers, "
-      "up to 7 chars or empty",
-      { NULL }, false, false },
-    { FV_radio, 2, "t~w~obutton-action", "twobutton-action",
-      "What the two front buttons do",
-      { "zero", "eject", "rotary", "rotary-fast", "htu" },
-      false, false },
-    { FV_check, 2, NULL, "twobutton-action",
-      "Swap the left and right buttons", { "re~v~erse" }, false, true },
-    { FV_radio, 2, "ima~g~e-on-startup", "image-on-startup",
-      "Floppy chosen on startup", { "last", "static", "init" }, false, false },
-    { FV_check, 2, NULL, "ejected-on-startup",
-      "Power up with the floppy ejected, until a button inserts it",
-      { "e~j~ected-on-startup" }, true, true },
-    { FV_input, 2, "notif~y~-volume", "notify-volume",
-      "Speaker volume of the insert, eject and floppy-number beeps, 0..15: 0 "
-      "is silent",
-      { NULL }, false, false },
-    { FV_check, 2, NULL, "notify-volume",
-      "Beep the floppy number when a floppy is inserted: long beeps count as "
-      "5, short - as 1",
-      { "slotnr" }, false, true },
-    { FV_save_all, 0, NULL, NULL,
-      "Write all options to FF.CFG on the USB drive as shown, old one kept "
-      "as .BAK; flash unchanged",
-      { NULL }, false, false },
-    { FV_save_nondefault, 0, NULL, NULL,
-      "Write options that differ from defaults or flash to FF.CFG, old one as "
-      ".BAK; flash unchanged",
-      { NULL }, false, false },
-    { FV_save_changed, 0, NULL, NULL,
-      "Write the options that differ from flash to FF.CFG, old one kept as "
-      ".BAK; flash unchanged",
-      { NULL }, false, false },
-    { FV_save_dump, 0, NULL, NULL,
-      "Put the settings in FLASH.DMP into flash and ffemurc, and power-cycle",
-      { NULL }, false, false },
-    { FV_dump_cfg, 0, NULL, NULL,
-      "Write all options from FLASH.DMP to FF.CFG, old one kept as .BAK; "
-      "flash unchanged",
-      { NULL }, false, false },
-    { FV_ok, 0, NULL, NULL,
-      "Write the changed options into flash and power-cycle; FF.CFG on the "
-      "drive is checked first",
-      { NULL }, false, false },
-    { FV_cancel, 0, NULL, NULL,
-      "Close without writing anything; flash and FF.CFG stay as they are",
-      { NULL }, false, false }
-};
-#define FD_NR ARRAY_SIZE(fviews)
+} fviews[FD_VIEWS];
+static int fd_nr;
 
-/* The options that the dialog edits, and their values when it opened. */
-static const char * const fd_opts[] = {
-    "display-type", "oled-font", "show-filename-ext", "display-order",
-    "display-off-secs",
-    "display-scroll-rate", "display-scroll-pause", "nav-scroll-rate",
-    "nav-scroll-pause", "nav-mode", "folder-sort", "sort-priority",
-    "nav-loop", "autoselect-file-secs", "autoselect-folder-secs",
-    "indexed-prefix", "twobutton-action", "image-on-startup",
-    "ejected-on-startup", "notify-volume"
-};
-static char fd_orig[ARRAY_SIZE(fd_opts)][64];
+/* The options, in the configuration's order, and their values when the
+ * dialog opened. */
+static const char *fd_opt[EMU_OPTIONS_MAX];
+static unsigned int fd_nr_opts;
+static char fd_orig[EMU_OPTIONS_MAX][64];
 
-static int fd_focus, fd_w, fd_h;
+/* The rows where the options' columns start, and the Actions tab's buttons:
+ * below each one's paragraph. */
+static int fd_focus, fd_tab, fd_w, fd_h, fd_top, fd_top_actions;
+/* When the PgUp and PgDn that switch tabs were pressed, until when they are
+ * lit. */
+static uint64_t fd_up_lit, fd_down_lit;
 /* What the last Save did, on the bottom line until the next key. */
 static char fd_note[4200];
 
@@ -3174,47 +3174,46 @@ static void put_marked(int y, int x, int w, attr_t attr, attr_t hot,
         put(y, x++, 1, in ? hot : attr, "%c", *s);
         w--;
     }
-}
-
-static int fd_nr_items(const struct fview *v)
-{
-    int n = 0;
-
-    while ((n < FD_ITEMS) && (v->items[n] != NULL))
-        n++;
-    return n;
+    for (; (*s == '~'); s++)
+        continue;
+    if (*s != '\0')
+        probe_cut(y, x);
 }
 
 /* The rows of a cluster: radio buttons with the value from flash that none
- * has, or the check boxes shown. */
+ * has, or the check boxes. */
 static int fd_rows(const struct fview *v)
 {
-    int n = 0, i;
-
-    if (v->type == FV_radio)
-        return fd_nr_items(v) + (v->extra[0] ? 1 : 0);
-    for (i = 0; i < FD_ITEMS; i++)
-        n += (v->shown >> i) & 1;
-    return n;
+    return v->nr_items + (((v->type == FV_radio) && v->extra[0]) ? 1 : 0);
 }
 
-/* The item of check box row @row. */
-static int fd_item_of_row(const struct fview *v, int row)
+/* The rows that view @v takes, its label's included. */
+static int fd_height(const struct fview *v)
 {
-    int i;
-
-    for (i = 0; i < FD_ITEMS; i++)
-        if (((v->shown >> i) & 1) && (row-- == 0))
-            return i;
-    return 0;
+    if ((v->type != FV_radio) && (v->type != FV_check))
+        return 1;
+    return ((v->label[0] && !v->boolean) ? 1 : 0) + fd_rows(v);
 }
 
 static struct fview *fd_find(int type, const char *opt)
 {
-    unsigned int i;
+    int i;
 
-    for (i = 0; i < FD_NR; i++)
+    for (i = 0; i < fd_nr; i++)
         if ((fviews[i].type == type) && fviews[i].opt
+            && !strcmp(fviews[i].opt, opt))
+            return &fviews[i];
+    return NULL;
+}
+
+/* The check box of @opt as yes or no if @boolean, else the check boxes of
+ * its suffixes or flags; NULL if it has none. */
+static struct fview *fd_find_check(const char *opt, bool boolean)
+{
+    int i;
+
+    for (i = 0; i < fd_nr; i++)
+        if ((fviews[i].type == FV_check) && (fviews[i].boolean == boolean)
             && !strcmp(fviews[i].opt, opt))
             return &fviews[i];
     return NULL;
@@ -3223,36 +3222,32 @@ static struct fview *fd_find(int type, const char *opt)
 /* The value of radio buttons @v as chosen. */
 static const char *fd_radio_value(const struct fview *v)
 {
-    return (v->cur < fd_nr_items(v)) ? v->items[v->cur] : v->extra;
+    return (v->cur < v->nr_items) ? v->items[v->cur] : v->extra;
 }
 
 static void fd_radio_set(struct fview *v, const char *value)
 {
     int i;
 
-    for (i = 0; i < fd_nr_items(v); i++) {
+    for (i = 0; i < v->nr_items; i++) {
         if (!strcmp(v->items[i], value)) {
             v->cur = i;
             return;
         }
     }
     snprintf(v->extra, sizeof(v->extra), "%s", value);
-    v->cur = fd_nr_items(v);
+    v->cur = v->nr_items;
 }
 
-/* Sets check box @token of the one for @opt, if it is there. */
+/* Checks check box @token of the suffixes or flags of @opt. */
 static void fd_check_set(const char *opt, const char *token)
 {
-    struct fview *v = fd_find(FV_check, opt);
-    char item[32];
+    struct fview *v = fd_find_check(opt, false);
     int i;
 
-    for (i = 0; v && (i < fd_nr_items(v)); i++) {
-        if (!strcmp(unmarked(v->items[i], item, sizeof(item)), token)) {
+    for (i = 0; v && (i < v->nr_items); i++)
+        if (!strcmp(v->items[i], token))
             v->on |= 1u << i;
-            v->shown |= 1u << i;
-        }
-    }
 }
 
 /* Sets the dialog up from @value, the value of option @opt in flash. */
@@ -3282,28 +3277,21 @@ static void fd_load(const char *opt, const char *value)
         fd_radio_set(fd_find(FV_radio, opt), s);
         return;
     }
-    if (!strcmp(opt, "twobutton-action") || !strcmp(opt, "notify-volume")) {
-        /* A value, then flags after commas; or a raw number. */
-        if (strncmp(s, "0x", 2)) {
-            for (p = strchr(s, ','); p != NULL; p = next) {
-                *p++ = '\0';
-                next = strchr(p, ',');
-                if (next)
-                    *next = '\0';
-                fd_check_set(opt, p);
-                if (next)
-                    *next = ',';
-            }
+    /* A value, then its flags after commas; or a raw number. */
+    if (fd_find_check(opt, false) && strncmp(s, "0x", 2)) {
+        for (p = strchr(s, ','); p != NULL; p = next) {
+            *p++ = '\0';
+            next = strchr(p, ',');
+            if (next)
+                *next = '\0';
+            fd_check_set(opt, p);
+            if (next)
+                *next = ',';
         }
-        if ((v = fd_find(FV_radio, opt)) != NULL)
-            fd_radio_set(v, s);
-        else if ((v = fd_find(FV_input, opt)) != NULL)
-            snprintf(v->text, sizeof(v->text), "%s", s);
-        return;
     }
     if ((v = fd_find(FV_radio, opt)) != NULL) {
         fd_radio_set(v, s);
-    } else if ((v = fd_find(FV_check, opt)) != NULL) {
+    } else if ((v = fd_find_check(opt, true)) != NULL) {
         if (!strcmp(s, "yes"))
             v->on = 1;
         else if (strcmp(s, "no"))
@@ -3311,7 +3299,8 @@ static void fd_load(const char *opt, const char *value)
     } else if ((v = fd_find(FV_input, opt)) != NULL) {
         /* A string without its quotes. */
         p = s;
-        if ((p[0] == '"') && (strlen(p) >= 2)) {
+        if ((v->kind == EMU_KIND_string) && (p[0] == '"')
+            && (strlen(p) >= 2)) {
             p[strlen(p) - 1] = '\0';
             p++;
         }
@@ -3322,19 +3311,18 @@ static void fd_load(const char *opt, const char *value)
 /* The value of option @opt as the dialog has it, into @buf. */
 static void fd_value(const char *opt, char *buf, size_t size)
 {
-    struct fview *r = fd_find(FV_radio, opt), *c = fd_find(FV_check, opt);
-    struct fview *in = fd_find(FV_input, opt);
+    struct fview *r = fd_find(FV_radio, opt), *in = fd_find(FV_input, opt);
+    struct fview *b = fd_find_check(opt, true), *c = fd_find_check(opt, false);
     const char *base = r ? fd_radio_value(r) : in ? in->text : "";
-    char item[32];
     size_t n;
     int i;
 
-    if (c && c->boolean) {
-        snprintf(buf, size, "%s", c->raw[0] ? c->raw
-                 : c->on ? "yes" : "no");
+    if (b != NULL) {
+        snprintf(buf, size, "%s", b->raw[0] ? b->raw
+                 : b->on ? "yes" : "no");
         return;
     }
-    if (!strcmp(opt, "indexed-prefix")) {
+    if (in && (in->kind == EMU_KIND_string)) {
         snprintf(buf, size, "\"%s\"", base);
         return;
     }
@@ -3343,13 +3331,12 @@ static void fd_value(const char *opt, char *buf, size_t size)
         return;
     if (!strcmp(opt, "display-type") && strncmp(base, "oled-", 5))
         return;
-    for (i = 0; i < fd_nr_items(c); i++) {
+    for (i = 0; i < c->nr_items; i++) {
         if (!(c->on & (1u << i)))
             continue;
         n = strlen(buf);
         snprintf(buf + n, size - n, "%s%s",
-                 strcmp(opt, "display-type") ? "," : "-",
-                 unmarked(c->items[i], item, sizeof(item)));
+                 strcmp(opt, "display-type") ? "," : "-", c->items[i]);
     }
 }
 
@@ -3357,62 +3344,85 @@ static void fd_value(const char *opt, char *buf, size_t size)
  * dialog's width. */
 static const char fd_explanation[] =
     "Here are settings stored in the device flash memory. The values are "
-    "overwritten by FF.CFG on start. Only options used by ffemu are offered "
-    "here. Factory defaults are marked with \"=\".";
-#define FD_EXPL_MAX 4
+    "overwritten by FF.CFG on start. The first tab has the options whose "
+    "effect ffemu shows, the second the others, which help to prepare "
+    "FF.CFG. Factory defaults are marked with \"=\".";
+/* The Actions tab's, what its buttons have in common. */
+static const char fd_actions_explanation[] =
+    "The \"Save/Unpack ... to FF.CFG\" buttons write FF.CFG on the USB "
+    "drive: into its FF folder if it has one, else its root; for a drive "
+    "made from an image file, beside the image as <image>.FF.CFG, which the "
+    "firmware does not see. An old FF.CFG is kept as FF.CFG.BAK. Flash "
+    "changes only on OK, except by the \"Unpack FLASH.DMP to ffemurc\" "
+    "button, which also power-cycles the device.";
+#define FD_EXPL_MAX 5
 
-/* Whether the drive held FLASH.DMP when last looked at, and the drive's
- * writes and FF.CFG generation then; ~0 for none yet. */
-static bool fd_dump;
-static unsigned long fd_dump_writes = ~0ul;
-static unsigned int fd_dump_gen;
+/* Whether the drive held a file beside FF.CFG, as the firmware sees it, when
+ * last looked at, and the drive's writes and FF.CFG generation then: looked
+ * for again when the drive has been written. */
+struct fd_seen {
+    const char *name;
+    bool present;
+    unsigned long writes;
+    unsigned int gen;
+};
+static struct fd_seen fd_dump_seen = { "FLASH   DMP", false, ~0ul, 0 };
+static struct fd_seen fd_cfg_seen = { "FF      CFG", false, ~0ul, 0 };
 
-/* Whether the drive holds FLASH.DMP, beside FF.CFG, as the firmware sees
- * it: looked for again when the drive has been written. */
-static bool fd_dump_present(void)
+static bool fd_present(struct fd_seen *s)
 {
     struct usb_info usb;
 
     usb_get_info(&usb);
     if (!usb.inserted) {
-        fd_dump_writes = ~0ul;
-        return fd_dump = false;
+        s->writes = ~0ul;
+        return s->present = false;
     }
-    if ((usb.nr_writes != fd_dump_writes) || (usb.ff_cfg_gen != fd_dump_gen)) {
-        fd_dump = usb_read_file("FLASH   DMP", NULL, 0) >= 0;
-        fd_dump_writes = usb.nr_writes;
-        fd_dump_gen = usb.ff_cfg_gen;
+    if ((usb.nr_writes != s->writes) || (usb.ff_cfg_gen != s->gen)) {
+        s->present = usb_read_file(s->name, NULL, 0) >= 0;
+        s->writes = usb.nr_writes;
+        s->gen = usb.ff_cfg_gen;
     }
-    return fd_dump;
+    return s->present;
 }
 
 /* Whether fview @i is disabled: the display-type suffixes, which only an
- * OLED display type has, while another is chosen; the FLASH.DMP button
- * while the drive holds no such file. */
+ * OLED display type has, while another is chosen; the FLASH.DMP buttons
+ * while the drive holds no such file, and Load FF.CFG while it holds no
+ * FF.CFG. */
 static bool fd_disabled(int i)
 {
     const struct fview *v = &fviews[i], *r;
 
     if ((v->type == FV_save_dump) || (v->type == FV_dump_cfg))
-        return !fd_dump_present();
-    if ((v->type != FV_check) || !v->opt || strcmp(v->opt, "display-type"))
+        return !fd_present(&fd_dump_seen);
+    if (v->type == FV_load_cfg)
+        return !fd_present(&fd_cfg_seen);
+    if ((v->type != FV_check) || v->boolean || strcmp(v->opt, "display-type"))
         return false;
     r = fd_find(FV_radio, "display-type");
     return r && strncmp(fd_radio_value(r), "oled-", 5);
 }
 
-/* Moves the focus by @dir, 1 or -1, over the disabled fviews. */
+/* Whether fview @i is on the tab shown. */
+static bool fd_shown(int i)
+{
+    return (fviews[i].tab < 0) || (fviews[i].tab == fd_tab);
+}
+
+/* Moves the focus by @dir, 1 or -1, over the fviews of other tabs and the
+ * disabled ones. */
 static void fd_step(int dir)
 {
     do
-        fd_focus = (fd_focus + FD_NR + dir) % FD_NR;
-    while (fd_disabled(fd_focus));
+        fd_focus = (fd_focus + fd_nr + dir) % fd_nr;
+    while (!fd_shown(fd_focus) || fd_disabled(fd_focus));
 }
 
 /* Whether fview @i is one of the buttons. */
 static bool fd_is_button(int i)
 {
-    return i >= (int)FD_NR - FD_BUTTONS;
+    return fviews[i].type >= FV_ok;
 }
 
 static const char *fd_button_text(int type)
@@ -3425,115 +3435,424 @@ static const char *fd_button_text(int type)
     case FV_save_changed: return " Save diff-from-flash to FF.CFG ";
     case FV_save_dump: return " Unpack FLASH.DMP to ffemurc ";
     case FV_dump_cfg: return " Unpack FLASH.DMP to FF.CFG ";
+    case FV_load_cfg: return " Load FF.CFG over defaults ";
     }
     return "";
+}
+
+/* The buttons of the Actions tab, in their order. */
+static const int fd_actions[] = {
+    FV_save_all, FV_save_nondefault, FV_save_changed, FV_save_dump,
+    FV_dump_cfg, FV_load_cfg
+};
+
+/* The width of the Actions tab's buttons: that of the longest. */
+static int fd_action_w(void)
+{
+    unsigned int i;
+    int n, w = 0;
+
+    for (i = 0; i < ARRAY_SIZE(fd_actions); i++)
+        if ((n = strlen(fd_button_text(fd_actions[i]))) > w)
+            w = n;
+    return w;
+}
+
+/* A new fview of @type on tab @tab for option @opt, its items @items of
+ * @nr, and its label @label; NULL if there is no room. */
+static struct fview *fd_add(int type, int tab, const char *opt,
+                            const struct emu_option_info *o,
+                            const char * const *items, int nr,
+                            const char *label)
+{
+    struct fview *v;
+    int i;
+
+    if (fd_nr == FD_VIEWS)
+        return NULL;
+    v = &fviews[fd_nr++];
+    memset(v, 0, sizeof(*v));
+    v->type = type;
+    v->tab = tab;
+    v->opt = opt;
+    v->kind = o ? o->kind : EMU_KIND_text;
+    v->size = o ? o->size : 0;
+    for (i = 0; (i < nr) && (i < FD_ITEMS); i++)
+        v->items[i] = items[i];
+    v->nr_items = i;
+    snprintf(v->label, sizeof(v->label), "%s", label ? label : "");
+    return v;
+}
+
+/* Marks a letter of each label as the hotkey that moves the focus to its
+ * control: the first letter of one of its words that no label before it on
+ * its tab has, else any such letter of it. */
+static void fd_hotkeys(void)
+{
+    unsigned int used[FT_nr] = { 0 }, bit;
+    char s[40];
+    int i, n, k, pass;
+
+    for (i = 0; i < fd_nr; i++) {
+        struct fview *v = &fviews[i];
+        if ((v->tab < 0) || !v->label[0])
+            continue;
+        for (k = -1, pass = 0; (pass < 2) && (k < 0); pass++) {
+            for (n = 0; (v->label[n] != '\0') && (k < 0); n++) {
+                if (!islower((unsigned char)v->label[n])
+                    || (used[v->tab] & (1u << (v->label[n] - 'a'))))
+                    continue;
+                if ((pass == 0) && (n != 0) && (v->label[n - 1] != '-')
+                    && (v->label[n - 1] != ' '))
+                    continue;
+                k = n;
+            }
+        }
+        if (k < 0)
+            continue;
+        bit = 1u << (v->label[k] - 'a');
+        used[v->tab] |= bit;
+        snprintf(s, sizeof(s), "%.*s~%c~%s", k, v->label, v->label[k],
+                 v->label + k + 1);
+        snprintf(v->label, sizeof(v->label), "%s", s);
+    }
+}
+
+/* Adds the controls of option @i, as its kind wants them, on tab @tab, in
+ * column @col and group @group. */
+static void fd_add_option(unsigned int i, int tab, int col, int group)
+{
+    struct emu_option_info o;
+    const char *names[FD_ITEMS], *opt = fd_opt[i];
+    char label[40];
+    struct fview *v;
+    unsigned int j, k, nr;
+    int first = fd_nr;
+
+    emu_flash_option_info(i, &o);
+    if (!strcmp(opt, "display-type")) {
+        fd_add(FV_radio, tab, opt, &o, fd_display_types,
+               ARRAY_SIZE(fd_display_types), opt);
+        snprintf(label, sizeof(label), "%s suffix", opt);
+        fd_add(FV_check, tab, opt, &o, fd_display_suffixes,
+               ARRAY_SIZE(fd_display_suffixes), label);
+    } else {
+        switch (o.kind) {
+        case EMU_KIND_yes_no:
+            names[0] = opt;
+            if ((v = fd_add(FV_check, tab, opt, &o, names, 1, opt)))
+                v->boolean = true;
+            break;
+        case EMU_KIND_named:
+            /* The names less the aliases. */
+            for (j = nr = 0; (j < o.nr_values) && (nr < FD_ITEMS); j++) {
+                for (k = 0; k < j; k++)
+                    if (o.values[k].value == o.values[j].value)
+                        break;
+                if (k == j)
+                    names[nr++] = o.values[j].name;
+            }
+            fd_add(FV_radio, tab, opt, &o, names, nr, opt);
+            break;
+        default:
+            fd_add(FV_input, tab, opt, &o, NULL, 0, opt);
+            break;
+        }
+        if (o.nr_flags != 0) {
+            for (j = 0; (j < o.nr_flags) && (j < FD_ITEMS); j++)
+                names[j] = o.flags[j].name;
+            fd_add(FV_check, tab, opt, &o, names, j, NULL);
+        }
+    }
+    for (; first < fd_nr; first++) {
+        fviews[first].col = col;
+        fviews[first].group = group;
+    }
+}
+
+/* The fviews: on the first two tabs the controls of each option, where
+ * fd_places[] puts them, then the buttons of the Actions tab, then OK and
+ * Cancel. */
+static void fd_build(void)
+{
+    bool placed[EMU_OPTIONS_MAX] = { false };
+    char value[64];
+    unsigned int i, p, flags;
+    uint8_t cfg[256];
+    int tab = FT_emulated, col = 0, group = 0;
+    const char *s;
+
+    emu_flash_cfg_defaults(cfg);
+    fd_nr = 0;
+    fd_nr_opts = emu_flash_nr_options();
+    for (i = 0; i < fd_nr_opts; i++)
+        fd_opt[i] = emu_flash_option(i, cfg, value, sizeof(value), &flags);
+    for (p = 0; p < ARRAY_SIZE(fd_places); p++) {
+        s = fd_places[p];
+        if (!strcmp(s, "||")) {
+            tab = FT_other;
+            col = 0;
+        } else if (!strcmp(s, "|")) {
+            col++;
+        } else if (s[0] != '\0') {
+            for (i = 0; (i < fd_nr_opts) && strcmp(fd_opt[i], s); i++)
+                continue;
+            if ((i < fd_nr_opts) && !placed[i]) {
+                placed[i] = true;
+                fd_add_option(i, tab, col, group);
+            }
+            continue;
+        }
+        group++;
+    }
+    /* The options that fd_places[] lacks, at the end of the second tab. */
+    for (i = 0; i < fd_nr_opts; i++)
+        if (!placed[i])
+            fd_add_option(i, FT_other, col, ++group);
+    for (i = 0; i < ARRAY_SIZE(fd_actions); i++)
+        fd_add(fd_actions[i], FT_actions, NULL, NULL, NULL, 0, NULL);
+    fd_add(FV_ok, -1, NULL, NULL, NULL, 0, NULL);
+    fd_add(FV_cancel, -1, NULL, NULL, NULL, 0, NULL);
+    fd_hotkeys();
+}
+
+/* The width of the field of input line @v: room for its value and for the
+ * cursor. */
+static int fd_field_w(const struct fview *v)
+{
+    switch (v->kind) {
+    case EMU_KIND_number:
+        return ((v->size == 1) ? 3 : (v->size == 2) ? 5 : 10) + 2;
+    case EMU_KIND_string:
+        return v->size + 1;
+    }
+    return fd_text_w;
+}
+
+/* The width that fview @v needs, its field at @field if it has one. */
+static int fd_view_w(const struct fview *v, int field)
+{
+    char s[40];
+    int i, n = strlen(unmarked(v->label, s, sizeof(s)));
+
+    switch (v->type) {
+    case FV_radio:
+    case FV_check:
+        if (v->boolean)
+            return n + 6;
+        for (i = 0; i < v->nr_items; i++)
+            if ((int)strlen(v->items[i]) + 6 > n)
+                n = strlen(v->items[i]) + 6;
+        return n;
+    case FV_input:
+        return field + fd_field_w(v);
+    }
+    return 0;
+}
+
+/* Whether fview @v is a cluster with a label, as radio buttons are. */
+static bool fd_labeled_cluster(const struct fview *v)
+{
+    return ((v->type == FV_radio) || (v->type == FV_check)) && v->label[0]
+        && !v->boolean;
+}
+
+/* Whether a blank row goes between fviews @a and @b, one under the other:
+ * between groups, and above and below a cluster with a label, but for its
+ * option's flags, which go right under it. */
+static bool fd_gap(const struct fview *a, const struct fview *b)
+{
+    return (a->group != b->group) || fd_labeled_cluster(b)
+        || (fd_labeled_cluster(a)
+            && (b->label[0] || strcmp(a->opt, b->opt)));
+}
+
+/* Places the fviews of tab @tab in their columns, top down: rows from the
+ * top of the columns. Returns the number of columns, and the rows that the
+ * tallest takes in @used. */
+static int fd_fill(int tab, int *used)
+{
+    const struct fview *prev = NULL;
+    int i, col = -1, row = 0, nr = 0;
+
+    *used = 0;
+    for (i = 0; i < fd_nr; i++) {
+        struct fview *v = &fviews[i];
+        if ((v->tab != tab) || fd_is_button(i))
+            continue;
+        if (v->col != col) {
+            col = v->col;
+            row = 0;
+            prev = NULL;
+        }
+        if ((prev != NULL) && fd_gap(prev, v))
+            row++;
+        v->y = row;
+        row += fd_height(v);
+        if (row > *used)
+            *used = row;
+        if (col + 1 > nr)
+            nr = col + 1;
+        prev = v;
+    }
+    return nr;
 }
 
 static void fd_layout(void)
 {
     const char *lines[FD_EXPL_MAX];
-    int col_y[3], col_x[3], len[FD_EXPL_MAX], h = 0, i, n;
+    int len[FD_EXPL_MAX], col_w[FT_nr][FD_COLS], field[FT_nr][FD_COLS];
+    int nr_cols[FT_nr], tab_w[FT_nr], h, used, i, c, n, w, x, tab;
     char label[40];
     struct fview *v;
 
-    col_x[0] = 2;
-    col_x[1] = col_x[0] + fd_col_w[0] + 2;
-    col_x[2] = col_x[1] + fd_col_w[1] + 2;
-    fd_w = col_x[2] + fd_col_w[2] + 2;
-    /* The paragraph starts on row 2; the columns a row below it. */
-    col_y[0] = col_y[1] = col_y[2] = 3
-        + wrap_text(fd_explanation, fd_w - 4, lines, len, FD_EXPL_MAX);
-    fd_field[0] = fd_field[1] = fd_field[2] = 0;
-    for (i = 0; i < (int)FD_NR; i++) {
-        v = &fviews[i];
-        if ((v->type != FV_input) || !v->label)
-            continue;
-        n = strlen(unmarked(v->label, label, sizeof(label))) + 1;
-        if (n > fd_field[v->col])
-            fd_field[v->col] = n;
+    /* Each tab of options in its columns, and the width that they need, the
+     * text fields narrowed as far as needed for the widest tab to fit. */
+    for (fd_text_w = FD_TEXT_W; ; fd_text_w--) {
+        h = 0;
+        for (tab = FT_emulated; tab <= FT_other; tab++) {
+            nr_cols[tab] = fd_fill(tab, &used);
+            if (used > h)
+                h = used;
+            for (c = 0; c < FD_COLS; c++)
+                col_w[tab][c] = field[tab][c] = 0;
+            for (i = 0; i < fd_nr; i++) {
+                v = &fviews[i];
+                if ((v->tab != tab) || fd_is_button(i)
+                    || (v->type != FV_input))
+                    continue;
+                n = strlen(unmarked(v->label, label, sizeof(label))) + 1;
+                if (n > field[tab][v->col])
+                    field[tab][v->col] = n;
+            }
+            for (i = 0; i < fd_nr; i++) {
+                v = &fviews[i];
+                if ((v->tab != tab) || fd_is_button(i))
+                    continue;
+                v->field = field[tab][v->col];
+                n = fd_view_w(v, v->field);
+                if (n > col_w[tab][v->col])
+                    col_w[tab][v->col] = n;
+            }
+            tab_w[tab] = 2;
+            for (c = 0; c < nr_cols[tab]; c++)
+                tab_w[tab] += col_w[tab][c] + 2;
+        }
+        if (((tab_w[FT_emulated] <= FD_MAX_W) && (tab_w[FT_other] <= FD_MAX_W))
+            || (fd_text_w == FD_TEXT_MIN_W))
+            break;
     }
 
-    for (i = 0; i < (int)FD_NR; i++) {
+    /* The dialog as wide as it may be, which gives the help row and the
+     * Actions tab's texts their room, or as its widest tab if wider. */
+    fd_w = FD_MAX_W;
+    if (tab_w[FT_emulated] > fd_w)
+        fd_w = tab_w[FT_emulated];
+    if (tab_w[FT_other] > fd_w)
+        fd_w = tab_w[FT_other];
+
+    /* The paragraph from row 2 on, the columns a row below it; each tab's
+     * columns widened alike to the dialog's width. */
+    fd_top = 3 + wrap_text(fd_explanation, fd_w - 4, lines, len,
+                           FD_EXPL_MAX);
+    fd_top_actions = 3 + wrap_text(fd_actions_explanation, fd_w - 4, lines,
+                                   len, FD_EXPL_MAX);
+    for (tab = FT_emulated; tab <= FT_other; tab++) {
+        w = (fd_w - tab_w[tab]) / nr_cols[tab];
+        for (c = 0, x = 2; c < nr_cols[tab]; c++) {
+            col_w[tab][c] += w;
+            if (c == nr_cols[tab] - 1)
+                col_w[tab][c] = fd_w - 2 - x;
+            for (i = 0; i < fd_nr; i++) {
+                v = &fviews[i];
+                if ((v->tab != tab) || fd_is_button(i) || (v->col != c))
+                    continue;
+                v->x = x;
+                v->y += fd_top;
+                v->w = col_w[tab][c];
+            }
+            x += col_w[tab][c] + 2;
+        }
+    }
+
+    /* The Actions tab's buttons one under another. */
+    n = fd_top_actions - fd_top + 2 * ARRAY_SIZE(fd_actions) - 1;
+    if (n > h)
+        h = n;
+    for (i = 0; i < fd_nr; i++) {
         v = &fviews[i];
-        if (fd_is_button(i))
+        if (v->tab != FT_actions)
             continue;
-        v->x = col_x[v->col];
-        v->y = col_y[v->col];
-        col_y[v->col] += (v->label && (v->type != FV_input) ? 1 : 0)
-            + ((v->type == FV_input) ? 1 : fd_rows(v)) + (v->gap ? 1 : 0);
-        if (col_y[v->col] > h)
-            h = col_y[v->col];
+        for (c = 0; fd_actions[c] != v->type; c++)
+            continue;
+        v->x = 2;
+        v->y = fd_top_actions + 2 * c;
+        v->w = fd_action_w();
     }
-    fd_h = h + 5;
-    /* The Save and Unpack buttons one over another at the right, among the
-     * controls, below the third column's fields; OK and Cancel under them,
-     * at the bottom right, as in Turbo Pascal's dialogs. */
-    n = fd_h - 2 * FD_BUTTONS;
-    if (n < col_y[2]) {
-        fd_h += col_y[2] - n;
-        n = col_y[2];
+
+    /* OK and Cancel at the bottom right, as in Turbo Pascal's dialogs, two
+     * columns between OK's shadow and Cancel. */
+    fd_h = fd_top + h + 5;
+    for (i = 0; i < fd_nr; i++) {
+        v = &fviews[i];
+        if (v->type == FV_cancel) {
+            v->y = fd_h - 4;
+            v->x = fd_w - 3 - strlen(fd_button_text(FV_cancel));
+        } else if (v->type == FV_ok) {
+            v->y = fd_h - 4;
+            v->x = fd_w - 6 - strlen(fd_button_text(FV_cancel))
+                - strlen(fd_button_text(FV_ok));
+        }
     }
-    for (i = 0; i < FD_BUTTONS - 2; i++) {
-        fviews[FD_NR - FD_BUTTONS + i].y = n + 2 * i;
-        fviews[FD_NR - FD_BUTTONS + i].x =
-            fd_w - 3 - strlen(fd_button_text(FV_save_nondefault));
-    }
-    fviews[FD_NR - 2].y = fviews[FD_NR - 1].y = fd_h - 4;
-    fviews[FD_NR - 1].x = fd_w - 3 - strlen(fd_button_text(FV_cancel));
-    /* Two columns between OK's shadow and Cancel. */
-    fviews[FD_NR - 2].x = fviews[FD_NR - 1].x - 3
-        - strlen(fd_button_text(FV_ok));
 }
 
 /* Sets the dialog up from configuration @cfg, the values of its options
- * into @orig, if given. */
+ * into @orig, if given, and lays it out for the rows that it then has. */
 static void fd_load_all(const uint8_t *cfg, char (*orig)[64])
 {
     char value[64];
-    unsigned int i;
+    unsigned int i, flags;
 
-    for (i = 0; i < FD_NR; i++) {
+    for (i = 0; i < (unsigned int)fd_nr; i++) {
         struct fview *v = &fviews[i];
         v->cur = 0;
         v->on = 0;
         v->extra[0] = v->raw[0] = v->text[0] = '\0';
-        /* Check boxes for what ffemu does not emulate show if checked. */
-        v->shown = (v->type == FV_check)
-            ? (1u << fd_nr_items(v)) - 1 : 0;
-        if ((v->type == FV_check) && !strcmp(v->opt, "display-type"))
-            v->shown = 0x1f;
     }
-    for (i = 0; i < ARRAY_SIZE(fd_opts); i++) {
-        option_value(cfg, fd_opts[i], orig ? orig[i] : value, sizeof(value));
-        fd_load(fd_opts[i], orig ? orig[i] : value);
+    for (i = 0; i < fd_nr_opts; i++) {
+        emu_flash_option(i, cfg, value, sizeof(value), &flags);
+        if (orig != NULL)
+            snprintf(orig[i], sizeof(orig[i]), "%s", value);
+        fd_load(fd_opt[i], value);
     }
+    fd_layout();
 }
 
 static void fd_open(void)
 {
     uint8_t cfg[256];
-    unsigned int i;
+    int i;
 
+    fd_build();
     /* The items that the firmware's defaults choose or check. */
     emu_flash_cfg_defaults(cfg);
     fd_load_all(cfg, NULL);
-    for (i = 0; i < FD_NR; i++) {
+    for (i = 0; i < fd_nr; i++) {
         struct fview *v = &fviews[i];
         v->dfl = (v->type == FV_check) && !v->raw[0] ? v->on
-            : (v->type == FV_radio) && (v->cur < fd_nr_items(v))
+            : (v->type == FV_radio) && (v->cur < v->nr_items)
             ? 1u << v->cur : 0;
     }
     emu_flash_get(cfg);
     fd_load_all(cfg, fd_orig);
-    fd_layout();
-    fd_focus = 0;
+    fd_tab = FT_emulated;
+    fd_focus = fd_nr - 1;
+    fd_step(1);
     fd_note[0] = '\0';
-    fd_dump_writes = ~0ul;
+    fd_dump_seen.writes = fd_cfg_seen.writes = ~0ul;
     dialog = DLG_flash;
 }
 
-/* Writes the options changed into flash: TRUE if any were, FALSE if none
- * were or one cannot be, which a message box then says. */
 /* The configuration in flash with the dialog's edits applied, into @cfg:
  * 1 if an edit changed it, 0 if none did, -1 for a value that its option
  * does not take, which a message box reports. */
@@ -3541,24 +3860,28 @@ static int fd_edited(uint8_t *cfg)
 {
     char value[80];
     bool changed = false;
-    unsigned int i, j;
+    unsigned int i;
+    int j;
 
     emu_flash_get(cfg);
-    for (i = 0; i < ARRAY_SIZE(fd_opts); i++) {
-        fd_value(fd_opts[i], value, sizeof(value));
+    for (i = 0; i < fd_nr_opts; i++) {
+        fd_value(fd_opt[i], value, sizeof(value));
         /* An option that only the hex holds stays as it is if untouched. */
         if (!strcmp(value, fd_orig[i])
             || (!fd_orig[i][0] && !strcmp(value, "\"\"")))
             continue;
-        if (emu_flash_set_option(cfg, fd_opts[i], value) != EMU_SET_ok) {
+        if (emu_flash_set_option(cfg, fd_opt[i], value) != EMU_SET_ok) {
             char text[160];
             snprintf(text, sizeof(text), "%s = %s: not a value that it takes",
-                     fd_opts[i], value);
+                     fd_opt[i], value);
             show_message(DLG_flash, "Flash mem", text);
-            for (j = 0; j < FD_NR; j++)
-                if (fviews[j].opt && !strcmp(fviews[j].opt, fd_opts[i]))
+            for (j = 0; j < fd_nr; j++)
+                if (fviews[j].opt && !strcmp(fviews[j].opt, fd_opt[i]))
                     break;
-            fd_focus = j;
+            if (j < fd_nr) {
+                fd_tab = (fviews[j].tab < 0) ? fd_tab : fviews[j].tab;
+                fd_focus = j;
+            }
             return -1;
         }
         changed = true;
@@ -3566,7 +3889,6 @@ static int fd_edited(uint8_t *cfg)
     return changed;
 }
 
-/* Writes the dialog's edits into flash; whether any changed it. */
 /* The options OK changes that FF.CFG on the drive sets to another value,
  * which would undo the change on the next boot, all of them, for the
  * fdfile dialog: their names and new values; the configuration to write
@@ -3591,14 +3913,14 @@ static void fd_check_file(const uint8_t *cfg, bool all)
     char text[80], file[512];
     const char *name;
     unsigned int i, flags;
-    unsigned int nr = all ? emu_flash_nr_options() : ARRAY_SIZE(fd_opts);
+    unsigned int nr = all ? emu_flash_nr_options() : fd_nr_opts;
 
     fdf_nr = 0;
     for (i = 0; i < nr; i++) {
         if (all) {
             name = emu_flash_option(i, cfg, text, sizeof(text), &flags);
         } else {
-            name = fd_opts[i];
+            name = fd_opt[i];
             fd_value(name, text, sizeof(text));
             if (!strcmp(text, fd_orig[i]))
                 continue;
@@ -3997,20 +4319,28 @@ static bool fd_offer_display(const char *old_type)
     return true;
 }
 
-/* Whether input line @v takes a plain number. */
-static bool fd_numeric(const struct fview *v)
+/* Sets the dialog up from FF.CFG on the drive over the firmware's defaults:
+ * an option that the file names as the file has it, every other as by
+ * default. Flash changes only on OK. */
+static void fd_load_cfg(void)
 {
-    static const char * const opts[] = {
-        "display-off-secs", "display-scroll-rate", "display-scroll-pause",
-        "nav-scroll-rate", "nav-scroll-pause", "autoselect-file-secs",
-        "autoselect-folder-secs", "notify-volume"
-    };
-    unsigned int i;
+    uint8_t cfg[256];
+    unsigned int nr_set, nr_bad;
+    char bad[48] = "";
 
-    for (i = 0; i < ARRAY_SIZE(opts); i++)
-        if (!strcmp(v->opt, opts[i]))
-            return true;
-    return false;
+    emu_flash_cfg_defaults(cfg);
+    if (!ff_cfg_load(cfg, &nr_set, &nr_bad)) {
+        show_message(DLG_flash, "FF.CFG", "The drive holds no FF.CFG");
+        return;
+    }
+    fd_load_all(cfg, NULL);
+    if (nr_bad != 0)
+        snprintf(bad, sizeof(bad), ", %u line%s not taken", nr_bad,
+                 (nr_bad == 1) ? "" : "s");
+    snprintf(fd_note, sizeof(fd_note), "Loaded %u option%s of FF.CFG over "
+             "the defaults%s; OK writes them to flash", nr_set,
+             (nr_set == 1) ? "" : "s", bad);
+    host_log("%s", fd_note);
 }
 
 /* Whether the dialog with its shadow fits the window. */
@@ -4019,12 +4349,58 @@ static bool fd_fits(void)
     return (fd_w + 2 <= COLS) && (fd_h + 1 <= LINES);
 }
 
+/* Shows the tab @dir after the one shown, round; the focus goes to its
+ * first control unless it is on one of every tab. */
+static void fd_switch_tab(int dir)
+{
+    fd_tab = (fd_tab + FT_nr + dir) % FT_nr;
+    if (!fd_shown(fd_focus) || fd_disabled(fd_focus)) {
+        fd_focus = fd_nr - 1;
+        fd_step(1);
+    }
+}
+
+/* The check boxes or input line next to fview @i in its block, below it if
+ * @dir is 1, above it if -1, with no blank row between them; -1 if none, or
+ * if that one is disabled. */
+static int fd_block_next(int i, int dir)
+{
+    const struct fview *v = &fviews[i];
+    int j, top = v->y, bottom = v->y + fd_height(v) - 1;
+
+    for (j = 0; j < fd_nr; j++) {
+        const struct fview *u = &fviews[j];
+        if ((j == i) || (u->tab != v->tab) || fd_is_button(j)
+            || (u->col != v->col)
+            || ((u->type != FV_check) && (u->type != FV_input)))
+            continue;
+        if ((dir > 0) ? (u->y == bottom + 1)
+            : (u->y + fd_height(u) - 1 == top - 1))
+            return fd_disabled(j) ? -1 : j;
+    }
+    return -1;
+}
+
+/* The most characters that input line @v takes. */
+static int fd_input_max(const struct fview *v)
+{
+    switch (v->kind) {
+    case EMU_KIND_number:
+        return (v->size == 1) ? 3 : (v->size == 2) ? 5 : 10;
+    case EMU_KIND_string:
+        return v->size - 1;
+    }
+    return sizeof(v->text) - 1;
+}
+
+static void fd_open_help(void);
+
 static void fd_key(int key)
 {
     struct fview *v = &fviews[fd_focus];
-    int n = (v->type == FV_radio) || (v->type == FV_check) ? fd_rows(v) : 0;
+    int n = ((v->type == FV_radio) || (v->type == FV_check)) ? fd_rows(v) : 0;
     uint8_t cfg[256];
-    unsigned int i;
+    int i;
 
     fd_note[0] = '\0';
 
@@ -4032,6 +4408,16 @@ static void fd_key(int key)
     if (!fd_fits()) {
         if ((key == 27) || (key == '\n'))
             dialog = DLG_none;
+        return;
+    }
+    if ((key == KEY_PPAGE) || (key == KEY_NPAGE)) {
+        fd_switch_tab((key == KEY_NPAGE) ? 1 : -1);
+        *((key == KEY_NPAGE) ? &fd_down_lit : &fd_up_lit) = lit_end();
+        return;
+    }
+    if (key == KEY_F(1)) {
+        if (v->opt != NULL)
+            fd_open_help();
         return;
     }
 
@@ -4056,6 +4442,10 @@ static void fd_key(int key)
             dialog_button = 0;
             return;
         }
+        if (v->type == FV_load_cfg) {
+            fd_load_cfg();
+            return;
+        }
         if ((v->type == FV_save_all) || (v->type == FV_save_nondefault)
             || (v->type == FV_save_changed) || (v->type == FV_dump_cfg)) {
             fd_ask_write(v->type);
@@ -4076,35 +4466,41 @@ static void fd_key(int key)
             fd_write(cfg, false);
         }
         return;
-    case KEY_UP:
-        if ((n != 0) && (v->cur > 0))
-            v->cur--;
-        else if (n == 0)
-            fd_step(-1);
-        return;
-    case KEY_DOWN:
-        if ((n != 0) && (v->cur < n - 1))
-            v->cur++;
-        else if (n == 0)
-            fd_step(1);
-        return;
-    case KEY_LEFT: case KEY_RIGHT:
+    /* Up and Down choose within radio buttons; move within check boxes,
+     * and on to the check boxes or input line next in the block; and go
+     * round the buttons of the tab. */
+    case KEY_UP: case KEY_DOWN: {
+        int dir = (key == KEY_DOWN) ? 1 : -1;
         if (fd_is_button(fd_focus)) {
-            int first = FD_NR - FD_BUTTONS, k = fd_focus - first;
-            int step = (key == KEY_RIGHT) ? 1 : FD_BUTTONS - 1;
+            i = fd_focus;
             do
-                k = (k + step) % FD_BUTTONS;
-            while (fd_disabled(first + k));
-            fd_focus = first + k;
+                i = (i + fd_nr + dir) % fd_nr;
+            while (!fd_is_button(i) || !fd_shown(i) || fd_disabled(i));
+            fd_focus = i;
+        } else if ((n != 0) && (v->cur + dir >= 0) && (v->cur + dir < n)) {
+            v->cur += dir;
+        } else if ((v->type != FV_radio)
+                   && ((i = fd_block_next(fd_focus, dir)) >= 0)) {
+            fd_focus = i;
+            if (fviews[i].type == FV_check)
+                fviews[i].cur = (dir > 0) ? 0 : fd_rows(&fviews[i]) - 1;
         }
         return;
+    }
     case ' ':
         if (v->type == FV_check) {
-            v->on ^= 1u << fd_item_of_row(v, v->cur);
+            v->on ^= 1u << v->cur;
             v->raw[0] = '\0';
             return;
         }
         break;
+    /* Left and Right go between OK and Cancel, which are side by side. */
+    case KEY_LEFT: case KEY_RIGHT:
+        if ((v->type == FV_ok) || (v->type == FV_cancel))
+            for (i = 0; i < fd_nr; i++)
+                if (fviews[i].type == ((v->type == FV_ok) ? FV_cancel : FV_ok))
+                    fd_focus = i;
+        return;
     case KEY_BACKSPACE: case 127: case 8:
         if ((v->type == FV_input) && v->text[0])
             v->text[strlen(v->text) - 1] = '\0';
@@ -4115,23 +4511,116 @@ static void fd_key(int key)
         return;
     if (v->type == FV_input) {
         size_t len = strlen(v->text);
-        if (fd_numeric(v) && !isdigit(key))
+        if ((v->kind == EMU_KIND_number) && !isdigit(key))
             return;
-        if ((int)len < FD_W(v) - fd_field[v->col] - 2) {
+        if ((int)len < fd_input_max(v)) {
             v->text[len] = key;
             v->text[len + 1] = '\0';
         }
         return;
     }
-    for (i = 0; i < FD_NR; i++) {
-        if ((hotkey_of(fviews[i].label) == tolower(key))
-            || (!fviews[i].label
-                && (hotkey_of(fviews[i].items[0]) == tolower(key)))) {
+    for (i = 0; i < fd_nr; i++) {
+        if (fd_shown(i) && (hotkey_of(fviews[i].label) == tolower(key))) {
             if (!fd_disabled(i))
                 fd_focus = i;
             return;
         }
     }
+}
+
+/* The help of each control that has one of its own, by its label; another
+ * takes its own lines of FF.CFG's comment, as fd_doc_summary() gives them. */
+static const struct {
+    const char *label, *help;
+} fd_label_help[] = {
+    { "display-type", "Type of the display connected" },
+    { "display-type suffix", "Options for OLED displays" },
+    { "oled-font", "Font of the OLED display" },
+    { "show-filename-ext", "Whether to show floppy filename extensions" },
+    { "display-order",
+      "Rows top down: 0=name, 1=status, 2=info, 3=folder, 7=blank, "
+      "d=double-height" },
+    { "display-off-secs",
+      "Seconds without activity before the display goes dark, 0-255: 0 is "
+      "always off, 255 never" },
+    { "display-scroll-rate",
+      "Milliseconds per step of a long name scroll, 100..65535: less is "
+      "faster" },
+    { "display-scroll-pause",
+      "Milliseconds a long name scroll rests at each end, 0..65535: 0 "
+      "scrolls without rest" },
+    { "nav-scroll-rate",
+      "Milliseconds per scroll step while browsing, 0..65535: less is "
+      "faster" },
+    { "nav-scroll-pause",
+      "Milliseconds before a long name starts to scroll while browsing, "
+      "0..65535" },
+    { "nav-mode", "How floppies are found on the USB drive" },
+    { "folder-sort",
+      "A sorted folder must fit in RAM: \"always\" cuts big ones, \"small\" "
+      "leaves big ones in FAT order" },
+    { "sort-priority",
+      "Where the folders go in a sorted folder: before the files, after "
+      "them, or mixed by name" },
+    { "nav-loop",
+      "Whether file/folder navigation loops from the last item to the first "
+      "one and vice versa" },
+    { "autoselect-file-secs",
+      "Seconds a highlighted floppy waits before auto-insert, 0..255: 0 "
+      "waits for a button" },
+    { "autoselect-folder-secs",
+      "Seconds a highlighted folder waits before it is entered, 0..255: 0 "
+      "waits for a button" },
+    { "indexed-prefix",
+      "For \"nav-mode = indexed\", gives the prefix to the floppy numbers, "
+      "up to 7 chars or empty" },
+    { "twobutton-action", "What the two front buttons do" },
+    { "image-on-startup", "Floppy chosen on startup" },
+    { "ejected-on-startup",
+      "Power up with the floppy ejected, until a button inserts it" },
+    { "notify-volume",
+      "Speaker volume of the insert, eject and floppy-number beeps, 0..15: 0 "
+      "is silent" },
+    { "max-cyl",
+      "Maximum cylinder that can be stepped to: 255 for the Direct Access "
+      "mode of image selectors" },
+    { "motor-delay",
+      "Milliseconds from motor-on to drive ready, 0..1000, or ignore: the "
+      "motor signal is ignored" },
+    { "chgrst",
+      "Disk-change reset after insertion: step, pa14 (CHGRST on PA14) or "
+      "delay-N (N*0.5 s, N 0..15)" },
+};
+
+/* The start of FF.CFG's comment on option @opt: its first line, and the
+ * lines after it while a sentence goes on and the row has room. */
+static const char *fd_doc_summary(const char *opt)
+{
+    static char buf[128];
+    const char *lines[48], *p;
+    int len[48], nr = ff_cfg_doc(opt, lines, len, ARRAY_SIZE(lines));
+    int i, l, n = 0;
+    char last;
+
+    buf[0] = '\0';
+    for (i = 0; (i < nr) && (lines[i][0] == '#'); i++) {
+        for (p = lines[i], l = len[i]; (l > 0) && ((*p == '#')
+                                                   || (*p == ' ')); l--)
+            p++;
+        if ((i > 0) && ((lines[i][1] != ' ') || (lines[i][2] == ' ')
+                        || !strncmp(p, "Values:", 7)
+                        || (strcspn(p, ": ") < (size_t)l
+                            && p[strcspn(p, ": ")] == ':')))
+            break;
+        if ((n + 1 + l > 92) && (n > 0))
+            break;
+        n += snprintf(buf + n, sizeof(buf) - n, "%s%.*s", n ? " " : "", l,
+                      p);
+        last = n ? buf[n - 1] : '\0';
+        if ((last == '.') || (last == '?') || (last == ':') || (last == ')'))
+            break;
+    }
+    return buf;
 }
 
 /* The help of each radio button and check box that has one: its option, its
@@ -4220,6 +4709,15 @@ static const struct {
     { "display-type", "slow",
       "Options for OLED displays: run the I2C bus slower, if the display "
       "blanks or garbles" },
+    { "twobutton-action", "reverse", "Swap the left and right buttons" },
+    { "notify-volume", "slotnr",
+      "Beep the floppy number when a floppy is inserted: long beeps count as "
+      "5, short - as 1" },
+    { "rotary", "reverse",
+      "Swap the directions of the rotary encoder, if it works in reverse" },
+    { "rotary", "v2",
+      "The rotary encoder logic of FlashFloppy v2.x, if that of v3 misses "
+      "movements" },
 };
 
 /* The rows that display-order = default gives, as the firmware chooses them
@@ -4244,65 +4742,245 @@ static const char *fd_default_display_order(void)
     return !tall ? "0,1" : oled ? "3,0d,1" : "3,0,1,2";
 }
 
+/* The help of the buttons. */
+static const char *fd_button_help(int type)
+{
+    switch (type) {
+    case FV_save_all:
+        return "Write all options to FF.CFG on the USB drive as shown "
+            "(make .BAK); don't change the flash";
+    case FV_save_nondefault:
+        return "Write options that differ from defaults or flash to FF.CFG "
+            "(make .BAK); don't change the flash";
+    case FV_save_changed:
+        return "Write the options that differ from flash to FF.CFG (make "
+            ".BAK); don't change the flash";
+    case FV_save_dump:
+        return "Put the settings in FLASH.DMP into flash and ffemurc, and "
+            "power-cycle";
+    case FV_dump_cfg:
+        return "Write all options from FLASH.DMP to FF.CFG (make .BAK); "
+            "don't change the flash";
+    case FV_load_cfg:
+        return "Set each option that FF.CFG names as it has it, the others "
+            "to defaults; flash changes on OK";
+    case FV_ok:
+        return "Write the changed options into flash and power-cycle; FF.CFG "
+            "on the drive is checked first";
+    case FV_cancel:
+        return "Close without writing anything; flash and FF.CFG stay as "
+            "they are";
+    }
+    return "";
+}
+
 /* The help of the control in focus: of the item under the cursor, for a
  * cluster whose item has one, else the control's own; for display-order
  * with its default added. */
 static const char *fd_help(void)
 {
     const struct fview *v = &fviews[fd_focus];
-    static char order[128];
-    const char *dflt;
-    char item[32];
+    static char buf[200];
+    const char *item = NULL, *h = NULL, *dflt;
+    char label[40];
     unsigned int i;
-    int k;
 
-    if ((v->type == FV_input) && v->opt && !strcmp(v->opt, "display-order")) {
-        dflt = fd_default_display_order();
-        if (dflt == NULL)
-            return v->help;
-        snprintf(order, sizeof(order), "%s; default: %s", v->help, dflt);
-        return order;
+    switch (v->type) {
+    case FV_radio:
+        if (v->cur < v->nr_items)
+            item = v->items[v->cur];
+        break;
+    case FV_check:
+        if (!v->boolean)
+            item = v->items[v->cur];
+        break;
+    case FV_input:
+        break;
+    default:
+        return fd_button_help(v->type);
     }
-    if ((v->type != FV_radio) && (v->type != FV_check))
-        return v->help;
-    k = (v->type == FV_radio) ? v->cur : fd_item_of_row(v, v->cur);
-    if (k >= fd_nr_items(v))
-        return v->help;
-    unmarked(v->items[k], item, sizeof(item));
-    for (i = 0; i < ARRAY_SIZE(fd_item_help); i++)
+    for (i = 0; item && (i < ARRAY_SIZE(fd_item_help)); i++)
         if (!strcmp(fd_item_help[i].opt, v->opt)
             && !strcmp(fd_item_help[i].item, item))
             return fd_item_help[i].help;
-    return v->help;
+    unmarked(v->label, label, sizeof(label));
+    for (i = 0; i < ARRAY_SIZE(fd_label_help); i++)
+        if (!strcmp(fd_label_help[i].label, label))
+            h = fd_label_help[i].help;
+    if ((h == NULL) && item && ff_cfg_item_doc(v->opt, item, buf,
+                                               sizeof(buf)))
+        return buf;
+    if (h == NULL)
+        h = fd_doc_summary(v->opt);
+    if ((v->type == FV_input) && !strcmp(v->opt, "display-order")
+        && ((dflt = fd_default_display_order()) != NULL)) {
+        snprintf(buf, sizeof(buf), "%s; default: %s", h, dflt);
+        return buf;
+    }
+    return h;
+}
+
+/* The help box, F1's: the lines of FF.CFG that document the option in
+ * focus, as the file has them, below the help of the flag in focus if the
+ * control is the option's check boxes of flags; or else the help of the
+ * control, wrapped; shown from line @fh_top on. */
+static const char *fh_line[96];
+static int fh_len[96], fh_nr, fh_top;
+static char fh_title[40], fh_text[256];
+
+static void fd_open_help(void)
+{
+    const struct fview *v = &fviews[fd_focus];
+    bool flag = (v->type == FV_check) && !v->boolean;
+    int i, n = 0, w = 60;
+
+    snprintf(fh_text, sizeof(fh_text), "%s", fd_help());
+    fh_nr = v->opt ? ff_cfg_doc(v->opt, fh_line, fh_len, ARRAY_SIZE(fh_line))
+        : 0;
+    /* A flag's help above its option's lines, wrapped as wide as they are. */
+    if (flag && (fh_nr != 0)) {
+        for (i = 0; i < fh_nr; i++)
+            if (fh_len[i] > w)
+                w = fh_len[i];
+        n = wrap_text(fh_text, w, fh_line, fh_len, ARRAY_SIZE(fh_line) / 2);
+        fh_line[n] = "";
+        fh_len[n++] = 0;
+        fh_nr = n + ff_cfg_doc(v->opt, fh_line + n, fh_len + n,
+                               ARRAY_SIZE(fh_line) - n);
+    }
+    if (fh_nr != 0) {
+        if (flag)
+            snprintf(fh_title, sizeof(fh_title), "%s: %s", v->opt,
+                     v->items[v->cur]);
+        else
+            snprintf(fh_title, sizeof(fh_title), "%s", v->opt);
+    } else {
+        snprintf(fh_title, sizeof(fh_title), "Help");
+        fh_nr = wrap_text(fh_text, 60, fh_line, fh_len, ARRAY_SIZE(fh_line));
+    }
+    fh_top = 0;
+    dialog = DLG_fdhelp;
+}
+
+/* The lines that the help box shows at once. */
+static int fh_rows(void)
+{
+    int max = (LINES - 8 < 1) ? 1 : LINES - 8;
+
+    return (fh_nr < max) ? fh_nr : max;
+}
+
+static void draw_fdhelp(void)
+{
+    int w = 40, rows = fh_rows(), y, x, i;
+
+    for (i = 0; i < fh_nr; i++)
+        if (fh_len[i] + 6 > w)
+            w = fh_len[i] + 6;
+    if (w > COLS - 4)
+        w = COLS - 4;
+    dialog_box(w, rows + 4, fh_title, &y, &x);
+    for (i = 0; i < rows; i++)
+        put(y + 2 + i, x + 3, w - 6, COLOR_PAIR(CP_dialog), "%.*s",
+            fh_len[fh_top + i], fh_line[fh_top + i]);
+    if (fh_nr > rows) {
+        probe_frame();
+        scroll_bar(y, x, w, rows + 4, false, fh_top, fh_nr);
+    }
+}
+
+/* The help box's keys: Up, Down, PgUp, PgDn, Home and End scroll it; Esc,
+ * Enter, Space and F1 close it. */
+static void fdhelp_key(int key)
+{
+    int rows = fh_rows(), max = (fh_nr > rows) ? fh_nr - rows : 0;
+
+    switch (key) {
+    case 27: case '\n': case ' ':
+        dialog = DLG_flash;
+        return;
+    case KEY_UP: fh_top--; break;
+    case KEY_DOWN: fh_top++; break;
+    case KEY_PPAGE: fh_top -= rows; break;
+    case KEY_NPAGE: fh_top += rows; break;
+    case KEY_HOME: fh_top = 0; break;
+    case KEY_END: fh_top = max; break;
+    default:
+        if (key == KEY_F(1))
+            dialog = DLG_flash;
+        return;
+    }
+    if (fh_top > max)
+        fh_top = max;
+    if (fh_top < 0)
+        fh_top = 0;
 }
 
 static void draw_flash_dialog(void)
 {
-    attr_t label, item;
-    int y0, x0, i, r, y, x;
+    static char caption[ARRAY_SIZE(fd_actions)][48];
+    const char *lines[FD_EXPL_MAX + 1];
+    attr_t label, item, dim = (COLORS >= 16) ? 0 : A_BOLD;
+    int y0, x0, i, r, y, x, n, len[FD_EXPL_MAX + 1];
     /* A letter moves the focus only while the dialog has the keys and the
      * focus is on no text field, which takes letters as text. */
     bool hot = (dialog == DLG_flash) && (fviews[fd_focus].type != FV_input);
+    uint64_t now = emu_time_ns();
+    const char *expl = (fd_tab == FT_actions) ? fd_actions_explanation
+        : fd_explanation;
 
     if (!fd_fits()) {
         message_box("Flash mem", "Window too small for dialog.");
         return;
     }
-    dialog_box(fd_w, fd_h, "Flash mem", &y0, &x0);
-    {
-        const char *lines[FD_EXPL_MAX];
-        int len[FD_EXPL_MAX], n;
-        n = wrap_text(fd_explanation, fd_w - 4, lines, len, FD_EXPL_MAX);
-        probe_part("explanation");
-        for (i = 0; i < n; i++)
-            put(y0 + 2 + i, x0 + 2, len[i], COLOR_PAIR(CP_dialog), "%.*s",
-                len[i], lines[i]);
+    y0 = (LINES - fd_h) / 2;
+    x0 = (COLS - fd_w) / 2;
+    colored_box_at(y0, x0, fd_w, fd_h, "Flash mem", x0 + 2,
+                   COLOR_PAIR(CP_dialog), BRIGHT(CP_dlg_frame));
+
+    /* The tabs' handles after the title, in the frame, each in brackets: the
+     * tab shown as a pressed button, bright white on dark green, the others
+     * in black. */
+    probe_frame();
+    x = x0 + 2 + strlen(" Flash mem ") + 2;
+    for (i = 0; i < FT_nr; i++) {
+        n = strlen(fd_tab_name[i]) + 2;
+        put(y0, x, 1, BRIGHT(CP_dlg_frame), "[");
+        put(y0, x + 1, n, (i == fd_tab) ? BRIGHT(CP_button_on)
+            : COLOR_PAIR(CP_dialog), " %s ", fd_tab_name[i]);
+        put(y0, x + 1 + n, 1, BRIGHT(CP_dlg_frame), "]");
+        x += n + 4;
     }
-    for (i = 0; i < (int)FD_NR; i++) {
+    /* The keys that switch tabs, at the top right, lit a moment when
+     * pressed. */
+    x = x0 + fd_w - 13;
+    put(y0, x, 1, BRIGHT(CP_dlg_frame), " ");
+    put(y0, x + 1, 4, (now < fd_up_lit) ? COLOR_PAIR(CP_ctl_on)
+        : COLOR_PAIR(CP_dlg_hot), "PgUp");
+    put(y0, x + 5, 1, BRIGHT(CP_dlg_frame), "/");
+    put(y0, x + 6, 4, (now < fd_down_lit) ? COLOR_PAIR(CP_ctl_on)
+        : COLOR_PAIR(CP_dlg_hot), "PgDn");
+    put(y0, x + 10, 1, BRIGHT(CP_dlg_frame), " ");
+
+    /* The tab's paragraph: the options', or the Actions tab's own. */
+    probe_part("explanation");
+    n = wrap_text(expl, fd_w - 4, lines, len, FD_EXPL_MAX + 1);
+    if (n > FD_EXPL_MAX) {
+        n = FD_EXPL_MAX;
+        probe_cut(y0 + 1 + n, x0 + 2 + len[n - 1]);
+    }
+    for (i = 0; i < n; i++)
+        put(y0 + 2 + i, x0 + 2, len[i], COLOR_PAIR(CP_dialog), "%.*s",
+            len[i], lines[i]);
+
+    for (i = 0; i < fd_nr; i++) {
         struct fview *v = &fviews[i];
-        bool focused = (i == fd_focus), off = fd_disabled(i);
-        attr_t dim = (COLORS >= 16) ? 0 : A_BOLD;
-        probe_part((v->type == FV_check) ? v->items[0] : v->opt);
+        bool focused = (i == fd_focus), off;
+        if (!fd_shown(i))
+            continue;
+        off = fd_disabled(i);
+        if (!fd_is_button(i))
+            probe_part(v->label[0] ? v->label : v->items[0]);
         y = y0 + v->y;
         x = x0 + v->x;
         label = off ? COLOR_PAIR(CP_dlg_off) | dim
@@ -4312,19 +4990,18 @@ static void draw_flash_dialog(void)
         switch (v->type) {
         case FV_radio:
         case FV_check:
-            if (v->label)
-                put_marked(y++, x, FD_W(v), label,
+            if (v->label[0] && !v->boolean)
+                put_marked(y++, x, v->w, label,
                            (off || !hot) ? label : COLOR_PAIR(CP_dlg_hot),
                            v->label);
             for (r = 0; r < fd_rows(v); r++, y++) {
-                int k = (v->type == FV_radio) ? r : fd_item_of_row(v, r);
+                bool cursor = focused && (r == v->cur);
                 item = off ? COLOR_PAIR(CP_cluster_off) | dim
-                    : (focused && (r == v->cur))
-                    ? BRIGHT(CP_cluster_hi)
+                    : cursor ? BRIGHT(CP_cluster_hi)
                     : COLOR_PAIR(CP_cluster);
-                put(y, x, FD_W(v), off ? item : COLOR_PAIR(CP_cluster),
-                    "%*s", FD_W(v), "");
-                if (((v->dfl >> k) & 1) && !off)
+                put(y, x, v->w, off ? item : COLOR_PAIR(CP_cluster),
+                    "%*s", v->w, "");
+                if (((v->dfl >> r) & 1) && !off)
                     put(y, x, 1, COLOR_PAIR(CP_cluster_dfl), "=");
                 /* Disabled, it shows no value: FF.CFG can hold none. */
                 if (v->type == FV_radio) {
@@ -4334,25 +5011,27 @@ static void draw_flash_dialog(void)
                         put(y, x + 1, 3, item, "( )");
                 } else {
                     put(y, x + 1, 3, item, "[%c]", off ? ' '
-                        : v->raw[0] ? '?' : (v->on >> k) & 1 ? 'X' : ' ');
+                        : v->raw[0] ? '?' : (v->on >> r) & 1 ? 'X' : ' ');
                 }
-                if (k < fd_nr_items(v))
-                    put_marked(y, x + 5, FD_W(v) - 6, item,
+                if (v->boolean)
+                    put_marked(y, x + 5, v->w - 6, item,
                                (off || !hot) ? item
-                               : COLOR_PAIR(CP_cluster_hot), v->items[k]);
+                               : COLOR_PAIR(CP_cluster_hot), v->label);
+                else if (r < v->nr_items)
+                    put(y, x + 5, v->w - 6, item, "%s", v->items[r]);
                 else
-                    put(y, x + 5, FD_W(v) - 6, item, "%s (from flash)",
-                        v->extra);
+                    put(y, x + 5, v->w - 6, cursor ? item
+                        : COLOR_PAIR(CP_cluster_raw), "%s (raw)", v->extra);
             }
             break;
         case FV_input: {
             /* The end of the text, if it is longer than the field, and
              * then the cursor, in the field. */
-            int fx = x + fd_field[v->col], fw = FD_W(v) - fd_field[v->col];
+            int fx = x + v->field, fw = v->w - v->field;
             int room = fw - 1 - (focused ? 1 : 0);
             int len = strlen(v->text);
             const char *t = v->text + ((len > room) ? len - room : 0);
-            put_marked(y, x, fd_field[v->col] - 1, label,
+            put_marked(y, x, v->field - 1, label,
                        hot ? COLOR_PAIR(CP_dlg_hot) : label, v->label);
             put(y, fx, fw, BRIGHT(CP_input), " %-*s", fw - 1, t);
             if (focused)
@@ -4360,20 +5039,23 @@ static void draw_flash_dialog(void)
             break;
         }
         case FV_ok:
-        case FV_cancel:
-        case FV_save_all:
-        case FV_save_nondefault:
-        case FV_save_changed: {
+        case FV_cancel: {
             /* OK is the default while the focus is on no button. */
             bool dflt = (v->type == FV_ok) && !fd_is_button(fd_focus);
             button(y, x, button_face(focused, dflt), fd_button_text(v->type));
             break;
         }
-        case FV_save_dump:
-        case FV_dump_cfg:
+        default: {
+            /* A button of the Actions tab, all as wide as the widest. */
+            int k;
+            for (k = 0; fd_actions[k] != v->type; k++)
+                continue;
+            snprintf(caption[k], sizeof(caption[k]), "%-*s", v->w,
+                     fd_button_text(v->type));
             button(y, x, off ? COLOR_PAIR(CP_cluster_off) | dim
-                   : button_face(focused, false), fd_button_text(v->type));
+                   : button_face(focused, false), caption[k]);
             break;
+        }
         }
     }
 
@@ -4390,6 +5072,7 @@ static void draw_flash_dialog(void)
                         t))
             put(hy, x0 + fd_w - 1, 1, BRIGHT(CP_bar_crop), ">");
     }
+
 }
 
 /* The FDD action of @key, or -1: the keys under the signals in the Controls
@@ -4495,6 +5178,10 @@ static void handle_key(int key)
     if (dialog == DLG_message) {
         if ((key == '\n') || (key == 27) || (key == ' '))
             dialog = msg_return;
+        return;
+    }
+    if (dialog == DLG_fdhelp) {
+        fdhelp_key(key);
         return;
     }
     if (dialog == DLG_flash) {
@@ -4705,6 +5392,7 @@ static void init_colors(void)
         init_pair(CP_cluster, COLOR_BLACK, COLOR_CYAN);
         init_pair(CP_cluster_hi, COLOR_WHITE, COLOR_CYAN);
         init_pair(CP_cluster_hot, COLOR_RED, COLOR_CYAN);
+        init_pair(CP_cluster_raw, COLOR_MAGENTA, COLOR_CYAN);
         /* With 8 colors there is no dark gray paper: dark gray on the
          * dialog's light gray then, black made bright by bold. */
         if (COLORS >= 16)
@@ -4916,14 +5604,37 @@ static void check_dialog_states(int d)
         break;
     case DLG_flash:
         fd_open();
-        for (fd_focus = 0; fd_focus < (int)FD_NR; fd_focus++)
-            if (!fd_disabled(fd_focus))
+        if ((fd_w > FD_MAX_W) && (probe_nr_found < ARRAY_SIZE(probe_found)))
+            snprintf(probe_found[probe_nr_found++], sizeof(probe_found[0]),
+                     "Flash mem: %d columns wide, more than %d", fd_w,
+                     FD_MAX_W);
+        for (fd_tab = 0; fd_tab < FT_nr; fd_tab++) {
+            for (fd_focus = 0; fd_focus < fd_nr; fd_focus++) {
+                if (!fd_shown(fd_focus) || fd_disabled(fd_focus))
+                    continue;
                 check_dialog(d);
+            }
+        }
+        fd_tab = 0;
         fd_focus = 0;
         snprintf(fd_note, sizeof(fd_note), "Wrote %c%s%c", MSG_USER,
                  check_path, MSG_USER);
         check_dialog(d);
         fd_note[0] = '\0';
+        break;
+    case DLG_fdhelp:
+        fd_open();
+        for (fd_tab = 0; fd_tab < FT_nr; fd_tab++) {
+            for (fd_focus = 0; fd_focus < fd_nr; fd_focus++) {
+                if (!fd_shown(fd_focus) || fd_disabled(fd_focus)
+                    || !fviews[fd_focus].opt)
+                    continue;
+                fd_open_help();
+                check_dialog(d);
+            }
+        }
+        fd_tab = 0;
+        fd_focus = 0;
         break;
     case DLG_emul:
         for (emul_display = 0; emul_display < DISP_nr; emul_display++)
