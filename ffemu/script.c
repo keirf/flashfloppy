@@ -449,6 +449,8 @@ static void *script_thread(void *arg_sleep_ms)
             print_log();
         } else if (!strcmp(line, "status")) {
             print_status();
+        } else if (!strcmp(line, "check-dialogs")) {
+            ui_check_dialogs();
         } else if (!strcmp(line, "flash")) {
             static char section[8192];
             rc_flash_section(section, sizeof(section));

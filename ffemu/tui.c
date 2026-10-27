@@ -158,7 +158,8 @@ enum {
  * and the display that the display dialog has selected. */
 static enum {
     DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul,
-    DLG_externals, DLG_message, DLG_fdfile, DLG_unpack, DLG_write
+    DLG_externals, DLG_message, DLG_fdfile, DLG_unpack, DLG_write,
+    DLG_nr
 } dialog;
 /* The message box over a dialog: what it says, and the dialog it returns
  * to when closed. */
@@ -248,6 +249,75 @@ static wchar_t ascii_of(wchar_t c)
     return L'?';
 }
 
+/*
+ * The dialog check: while a script has the dialogs drawn one by one, which
+ * part of a dialog wrote each cell, so that a part drawn over another one,
+ * or over the dialog's frame, is found.
+ */
+#define PROBE_ROWS 128
+#define PROBE_COLS 512
+static bool probing;
+/* The part drawing now, 0 for the dialog's box, and each part's name. */
+static unsigned int probe_now;
+static const char *probe_name[512];
+static unsigned short probe_owner[PROBE_ROWS][PROBE_COLS];
+/* The box of the dialog drawing now, and its title. */
+static int probe_y, probe_x, probe_w, probe_h;
+static const char *probe_title;
+/* What was found, each pair of parts once, and how many dialogs were
+ * drawn. */
+static char probe_key[64][120], probe_found[64][200];
+static unsigned int probe_nr_found, probe_nr_drawn;
+
+static void probe_find(const char *what, int y, int x)
+{
+    char key[120];
+    unsigned int i;
+
+    snprintf(key, sizeof(key), "%s: %s %s", probe_title,
+             probe_name[probe_now], what);
+    for (i = 0; i < probe_nr_found; i++)
+        if (!strcmp(probe_key[i], key))
+            return;
+    if (probe_nr_found == ARRAY_SIZE(probe_found))
+        return;
+    snprintf(probe_key[probe_nr_found], sizeof(probe_key[0]), "%s", key);
+    snprintf(probe_found[probe_nr_found++], sizeof(probe_found[0]),
+             "%s, first at row %d, column %d", key, y - probe_y, x - probe_x);
+}
+
+/* Starts part @name of the dialog drawing: the cells it writes are its. */
+static void probe_part(const char *name)
+{
+    if (probing && (probe_now + 1 < ARRAY_SIZE(probe_name)))
+        probe_name[++probe_now] = name;
+}
+
+/* The @n cells from (@y,@x) on, written by the part drawing now. */
+static void probe_cells(int y, int x, int n)
+{
+    char what[64];
+    int i;
+
+    if (!probing || (y < 0) || (y >= PROBE_ROWS))
+        return;
+    for (i = 0; (i < n) && (x + i < PROBE_COLS); i++) {
+        unsigned short *o = &probe_owner[y][x + i];
+        if (probe_now == 0) {
+            *o = 0;
+            continue;
+        }
+        if ((y <= probe_y) || (y >= probe_y + probe_h - 1)
+            || (x + i <= probe_x) || (x + i >= probe_x + probe_w - 1)) {
+            probe_find("over the frame", y, x + i);
+        } else if ((*o != 0) && (*o != probe_now)) {
+            snprintf(what, sizeof(what), "over %s", probe_name[*o]);
+            probe_find(what, y, x + i);
+        }
+        *o = probe_now;
+    }
+}
+
 static void put_wide(int y, int x, attr_t attr, const wchar_t *ws, int n)
 {
     wchar_t ascii[512];
@@ -266,6 +336,7 @@ static void put_wide(int y, int x, attr_t attr, const wchar_t *ws, int n)
         ws = ascii;
         n = i;
     }
+    probe_cells(y, x, wcsnlen(ws, n));
     attron(attr);
     mvaddnwstr(y, x, ws, n);
     attroff(attr);
@@ -277,6 +348,7 @@ static void put_char(int y, int x, attr_t attr, wchar_t wc)
 {
     if ((y < 0) || (y >= LINES) || (x < 0) || (x >= COLS))
         return;
+    probe_cells(y, x, 1);
     attron(attr);
     mvaddnwstr(y, x, &wc, 1);
     attroff(attr);
@@ -1969,6 +2041,7 @@ static void button(int y, int x, attr_t attr, const char *text)
     wchar_t below[64];
     int i, n = strlen(text);
 
+    probe_part(text);
     if (n > (int)ARRAY_SIZE(below))
         n = ARRAY_SIZE(below);
     put(y, x, n, attr, "%s", text);
@@ -1995,6 +2068,14 @@ static void colored_box(int w, int h, const char *title, attr_t inside,
         w = ARRAY_SIZE(line);
     y = (LINES - h) / 2;
     x = (COLS - w) / 2;
+    if (probing) {
+        probe_y = y;
+        probe_x = x;
+        probe_w = w;
+        probe_h = h;
+        probe_title = title;
+        probe_now = 0;
+    }
     pane_right = -1;
     shadow(y, x, w, h);
     for (i = 0; i < h; i++)
@@ -2013,6 +2094,7 @@ static void colored_box(int w, int h, const char *title, attr_t inside,
         put_wide(y + i, x + w-1, frame_attr, dual + 5, 1);
     }
     put(y, x + (w - strlen(title) - 2) / 2, w, frame_attr, " %s ", title);
+    probe_part("text");
 
     *py = y;
     *px = x;
@@ -2130,6 +2212,7 @@ static void radio_row(int y, int x, int w, bool on, bool current,
 {
     attr_t item = current ? BRIGHT(CP_cluster_hi) : COLOR_PAIR(CP_cluster);
 
+    probe_part(text);
     put(y, x, w, COLOR_PAIR(CP_cluster), "%*s", w, "");
     if (on)
         put_wide(y, x + 1, item, radio_on, 3);
@@ -2145,6 +2228,7 @@ static void check_row(int y, int x, int w, bool on, bool current,
 {
     attr_t item = current ? BRIGHT(CP_cluster_hi) : COLOR_PAIR(CP_cluster);
 
+    probe_part(text);
     put(y, x, w, COLOR_PAIR(CP_cluster), "%*s", w, "");
     put(y, x + 1, 3, item, "[%c]", on ? 'X' : ' ');
     put(y, x + 5, w - 6, item, "%s", text);
@@ -2162,29 +2246,34 @@ static void draw_display_dialog(void)
     int mcu_y = DISP_nr + LCD_ROM_nr + 9;
 
     dialog_box(w, h, "Display type", &y, &x);
+    probe_part(df_label[DF_display]);
     put_marked(y + 2, x + 3, w - 6, COLOR_PAIR(CP_dialog),
                COLOR_PAIR(CP_dlg_hot), df_label[DF_display]);
     for (i = 0; i < DISP_nr; i++)
         radio_row(y + 3 + i, x + 3, w - 6, i == dialog_display,
                   (dialog_focus == DF_display) && (i == dialog_display),
                   display_label[i]);
+    probe_part(df_label[DF_rom]);
     put_marked(y + DISP_nr + 4, x + 3, w - 6, COLOR_PAIR(CP_dialog),
                COLOR_PAIR(CP_dlg_hot), df_label[DF_rom]);
     for (i = 0; i < LCD_ROM_nr; i++)
         radio_row(y + DISP_nr + 5 + i, x + 3, w - 6, i == dialog_lcd_rom,
                   (dialog_focus == DF_rom) && (i == dialog_lcd_rom),
                   lcd_rom_label[i]);
+    probe_part(df_label[DF_synth]);
     put_marked(y + DISP_nr + LCD_ROM_nr + 6, x + 3, w - 6,
                COLOR_PAIR(CP_dialog), COLOR_PAIR(CP_dlg_hot),
                df_label[DF_synth]);
     check_row(y + DISP_nr + LCD_ROM_nr + 7, x + 3, w - 6, dialog_oled_synth,
               dialog_focus == DF_synth, "Made from 6x13, bold");
+    probe_part(df_label[DF_mcu]);
     put_marked(y + mcu_y, x + 3, w - 6, COLOR_PAIR(CP_dialog),
                COLOR_PAIR(CP_dlg_hot), df_label[DF_mcu]);
     for (i = 0; i < MCU_nr; i++)
         radio_row(y + mcu_y + 1 + i, x + 3, w - 6, i == dialog_mcu,
                   (dialog_focus == DF_mcu) && (i == dialog_mcu),
                   mcu_label[i]);
+    probe_part("notes");
     put(y + mcu_y + MCU_nr + 2, x + 3, w - 4, COLOR_PAIR(CP_dialog),
         "%s", "Changing the display or MCU restarts the device.");
     /* OK is the default while the focus is on no button. Both are at the
@@ -2194,6 +2283,7 @@ static void draw_display_dialog(void)
            button_face(dialog_focus == DF_ok, dialog_focus < DF_ok), "  OK  ");
     button(y + h - 4, x + w - 14,
            button_face(dialog_focus == DF_cancel, false), "  Cancel  ");
+    probe_part("help row");
     if (dialog_focus == DF_rom)
         put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
             lcd_rom_help[dialog_lcd_rom]);
@@ -2239,6 +2329,7 @@ static void draw_externals_dialog(void)
     h += 1 + 1 + 1 + 1;
     dialog_box(w, h, "Externals", &y, &x);
     row = y + 2;
+    probe_part(ef_label[EF_fat]);
     put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
                COLOR_PAIR(CP_dlg_hot), ef_label[EF_fat]);
     for (i = 0; i < 2; i++)
@@ -2246,11 +2337,13 @@ static void draw_externals_dialog(void)
                   (dialog_focus == EF_fat) && (i == dialog_usb_fat),
                   fat_label[i]);
     row++;
+    probe_part(ef_label[EF_osd]);
     put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
                COLOR_PAIR(CP_dlg_hot), ef_label[EF_osd]);
     check_row(row++, x + 3, w - 6, dialog_osd, dialog_focus == EF_osd,
               "Fitted, on the I2C bus beside an OLED or an LCD");
     row++;
+    probe_part("notes");
     put(row++, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
         "Changing the file system inserts such a drive again.");
     put(row++, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
@@ -2262,6 +2355,7 @@ static void draw_externals_dialog(void)
            button_face(dialog_focus == EF_ok, dialog_focus < EF_ok), "  OK  ");
     button(y + h - 4, x + w - 14,
            button_face(dialog_focus == EF_cancel, false), "  Cancel  ");
+    probe_part("help row");
     /* The drive button at the left, its hotkey letter as the labels'. */
     c = drive_caption(&enabled);
     caption[0] = caption[1] = ' ';
@@ -2277,6 +2371,7 @@ static void draw_externals_dialog(void)
         put_marked(y + h - 4, x + 5, w - 8,
                    button_face(dialog_focus == EF_drive, false),
                    BRIGHT(CP_button_hot), drive_caption(NULL));
+    probe_part("note row");
     if (ef_note[0] != '\0'
         && put_message(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_bar_crop),
                        ef_note))
@@ -2468,6 +2563,7 @@ static void draw_dialog(void)
 {
     switch (dialog) {
     case DLG_none:
+    case DLG_nr:
         break;
     case DLG_quit:
         draw_quit_dialog();
@@ -4197,6 +4293,7 @@ static void draw_flash_dialog(void)
         const char *lines[FD_EXPL_MAX];
         int len[FD_EXPL_MAX], n;
         n = wrap_text(fd_explanation, fd_w - 4, lines, len, FD_EXPL_MAX);
+        probe_part("explanation");
         for (i = 0; i < n; i++)
             put(y0 + 2 + i, x0 + 2, len[i], COLOR_PAIR(CP_dialog), "%.*s",
                 len[i], lines[i]);
@@ -4205,6 +4302,7 @@ static void draw_flash_dialog(void)
         struct fview *v = &fviews[i];
         bool focused = (i == fd_focus), off = fd_disabled(i);
         attr_t dim = (COLORS >= 16) ? 0 : A_BOLD;
+        probe_part((v->type == FV_check) ? v->items[0] : v->opt);
         y = y0 + v->y;
         x = x0 + v->x;
         label = off ? COLOR_PAIR(CP_dlg_off) | dim
@@ -4279,6 +4377,7 @@ static void draw_flash_dialog(void)
         }
     }
 
+    probe_part("help row");
     /* What the control in focus is, on the dialog's last row; or what the
      * last Save did, in dark green, its path shortened to fit. A text too
      * long for the row all the same is cut at the frame, where a bright
@@ -4350,6 +4449,29 @@ static void check_size(void)
         resizeterm(ws.ws_row, ws.ws_col);
         resized();
     }
+}
+
+/* Opens the Display type dialog with the settings in use. */
+static void open_display_dialog(void)
+{
+    dialog = DLG_display;
+    dialog_button = 0;
+    dialog_display = config.display;
+    dialog_lcd_rom = config.lcd_rom;
+    dialog_oled_synth = config.oled_synth;
+    dialog_mcu = config.mcu;
+    dialog_focus = DF_display;
+}
+
+/* Opens the Externals dialog with the settings in use. */
+static void open_externals_dialog(void)
+{
+    dialog = DLG_externals;
+    dialog_button = 0;
+    dialog_usb_fat = config.usb_fat16;
+    dialog_osd = config.osd;
+    dialog_focus = EF_fat;
+    ef_note[0] = '\0';
 }
 
 static void handle_key(int key)
@@ -4481,23 +4603,12 @@ static void handle_key(int key)
     }
 
     if (key == DISPLAY_KEY) {
-        dialog = DLG_display;
-        dialog_button = 0;
-        dialog_display = config.display;
-        dialog_lcd_rom = config.lcd_rom;
-        dialog_oled_synth = config.oled_synth;
-        dialog_mcu = config.mcu;
-        dialog_focus = DF_display;
+        open_display_dialog();
         return;
     }
 
     if (key == EXTERNALS_KEY) {
-        dialog = DLG_externals;
-        dialog_button = 0;
-        dialog_usb_fat = config.usb_fat16;
-        dialog_osd = config.osd;
-        dialog_focus = EF_fat;
-        ef_note[0] = '\0';
+        open_externals_dialog();
         return;
     }
 
@@ -4553,33 +4664,10 @@ static bool terminal_gone(uint64_t waited_ns)
     return early >= 3;
 }
 
-static void *tui_thread(void *unused)
+/* The color pairs, where the terminal has colors. */
+static void init_colors(void)
 {
-    int key, rc, i;
-    unsigned int step, failed = 0;
-    bool new_step;
-    uint64_t t;
-    wint_t ch;
-
-    crash_name_thread("TUI");
-    fitted_display = config.display;
-    initscr();
-    cbreak();
-    noecho();
-    nonl();
-    keypad(stdscr, TRUE);
-    prepare_fatal_seq();
-    key_ctrl_pgup = ctrl_key("kPRV5", "\033[5;5~", KEY_MAX + 0x101);
-    key_ctrl_pgdn = ctrl_key("kNXT5", "\033[6;5~", KEY_MAX + 0x102);
-    key_ctrl_home = ctrl_key("kHOM5", "\033[1;5H", KEY_MAX + 0x103);
-    curs_set(0);
-    /* A lone Esc is held back this long for the rest of a key's sequence:
-     * htop's 25 ms where the terminal writes it whole, 200 ms in an ssh
-     * session, which delivers it in pieces now and then; ESCDELAY, if the
-     * user set it, wins. */
-    if (getenv("ESCDELAY") == NULL)
-        set_escdelay((getenv("SSH_TTY") != NULL) ? 200 : 25);
-    timeout(FRAME_MS);
+    int i;
 
     if (has_colors()) {
         start_color();
@@ -4639,6 +4727,37 @@ static void *tui_thread(void *unused)
         for (i = 1; i < CP_nr; i++)
             bright_twin(i);
     }
+}
+
+static void *tui_thread(void *unused)
+{
+    int key, rc;
+    unsigned int step, failed = 0;
+    bool new_step;
+    uint64_t t;
+    wint_t ch;
+
+    crash_name_thread("TUI");
+    fitted_display = config.display;
+    initscr();
+    cbreak();
+    noecho();
+    nonl();
+    keypad(stdscr, TRUE);
+    prepare_fatal_seq();
+    key_ctrl_pgup = ctrl_key("kPRV5", "\033[5;5~", KEY_MAX + 0x101);
+    key_ctrl_pgdn = ctrl_key("kNXT5", "\033[6;5~", KEY_MAX + 0x102);
+    key_ctrl_home = ctrl_key("kHOM5", "\033[1;5H", KEY_MAX + 0x103);
+    curs_set(0);
+    /* A lone Esc is held back this long for the rest of a key's sequence:
+     * htop's 25 ms where the terminal writes it whole, 200 ms in an ssh
+     * session, which delivers it in pieces now and then; ESCDELAY, if the
+     * user set it, wins. */
+    if (getenv("ESCDELAY") == NULL)
+        set_escdelay((getenv("SSH_TTY") != NULL) ? 200 : 25);
+    timeout(FRAME_MS);
+
+    init_colors();
 
     for (;;) {
         if (stop_request) {
@@ -4730,6 +4849,174 @@ void tui_stop(void)
         usleep(1000);
     if (!stopped)
         shut_down();
+}
+
+/*
+ * The dialog check, the script command check-dialogs: every dialog drawn in
+ * each focus and state that changes what it shows, on a screen of 120 by 50
+ * that goes nowhere, and each part of one drawn over another part or over
+ * the dialog's frame printed.
+ */
+
+static const char check_path[] = "/home/someone/a folder whose name is "
+    "rather long, as folders of disk images often are/and one more/FF.CFG";
+static const char check_text[] = "A message as long as the longest ones, "
+    "which wraps over several lines of its box: the folder of a drive that "
+    "holds this many characters in its name cannot be written, and so the "
+    "file was not saved where it was asked to go";
+
+/* Draws dialog @d as it is set up, noting which part writes each cell. */
+static void check_dialog(int d)
+{
+    erase();
+    memset(probe_owner, 0, sizeof(probe_owner));
+    probe_now = 0;
+    probe_name[0] = probe_title = "?";
+    probing = true;
+    dialog = d;
+    draw_dialog();
+    probing = false;
+    probe_nr_drawn++;
+}
+
+/* Draws dialog @d with each of its @nr buttons in focus. */
+static void check_buttons(int d, int nr)
+{
+    for (dialog_button = 0; dialog_button < nr; dialog_button++)
+        check_dialog(d);
+}
+
+/* Draws dialog @d in each state that changes what it shows. */
+static void check_dialog_states(int d)
+{
+    static const int write_kinds[] = {
+        FV_dump_cfg, FV_save_all, FV_save_nondefault, FV_save_changed
+    };
+    static const int message_over[] = {
+        DLG_none, DLG_flash, DLG_display, DLG_externals
+    };
+    unsigned int i, j;
+
+    switch (d) {
+    case DLG_quit:
+        check_buttons(d, 2);
+        break;
+    case DLG_display:
+        open_display_dialog();
+        for (dialog_focus = 0; dialog_focus < DF_nr; dialog_focus++)
+            check_dialog(d);
+        break;
+    case DLG_rows:
+        emu_flash_get(rows_cfg);
+        snprintf(rows_file_value, sizeof(rows_file_value), "oled-128x64");
+        for (i = ROWS_FILE_none; i <= ROWS_FILE_image; i++) {
+            rows_file = i;
+            check_buttons(d, 2);
+        }
+        break;
+    case DLG_flash:
+        fd_open();
+        for (fd_focus = 0; fd_focus < (int)FD_NR; fd_focus++)
+            if (!fd_disabled(fd_focus))
+                check_dialog(d);
+        fd_focus = 0;
+        snprintf(fd_note, sizeof(fd_note), "Wrote %c%s%c", MSG_USER,
+                 check_path, MSG_USER);
+        check_dialog(d);
+        fd_note[0] = '\0';
+        break;
+    case DLG_emul:
+        for (emul_display = 0; emul_display < DISP_nr; emul_display++)
+            check_buttons(d, 2);
+        break;
+    case DLG_externals:
+        open_externals_dialog();
+        for (dialog_focus = 0; dialog_focus < EF_nr; dialog_focus++)
+            check_dialog(d);
+        break;
+    case DLG_message:
+        fd_open();
+        open_display_dialog();
+        for (i = 0; i < ARRAY_SIZE(message_over); i++) {
+            show_message(message_over[i], "Message", check_text);
+            check_dialog(d);
+        }
+        break;
+    case DLG_fdfile:
+        for (i = 0; i < 2; i++) {
+            fdf_writable = i;
+            check_buttons(d, 2);
+        }
+        break;
+    case DLG_unpack:
+        fd_open();
+        for (i = 0; i < 2; i++) {
+            unpack_overridden = i;
+            check_buttons(d, 2);
+        }
+        break;
+    case DLG_write:
+        fd_open();
+        snprintf(write_from, sizeof(write_from),
+                 "From: FF/FLASH.DMP on drive ");
+        snprintf(write_from_drive, sizeof(write_from_drive), "%s", check_path);
+        snprintf(write_path, sizeof(write_path), "%s", check_path);
+        for (i = 0; i < ARRAY_SIZE(write_kinds); i++) {
+            for (j = 0; j < 2; j++) {
+                write_kind = write_kinds[i];
+                write_image = j;
+                snprintf(write_to, sizeof(write_to), "%s",
+                         j ? "To: " : "To: FF/FF.CFG on drive ");
+                check_buttons(d, 2);
+            }
+        }
+        break;
+    default:
+        if (probe_nr_found < ARRAY_SIZE(probe_found))
+            snprintf(probe_found[probe_nr_found++], sizeof(probe_found[0]),
+                     "dialog %d: no states to check it in", d);
+        break;
+    }
+}
+
+int ui_check_dialogs(void)
+{
+    static const int sigs[] = { SIGINT, SIGQUIT, SIGTERM, SIGTSTP, SIGWINCH };
+    struct sigaction old[ARRAY_SIZE(sigs)];
+    FILE *out = fopen("/dev/null", "w"), *in = fopen("/dev/null", "r");
+    SCREEN *screen = NULL;
+    unsigned int i;
+    int d;
+
+    /* Curses takes these signals for a screen of its own. */
+    for (i = 0; i < ARRAY_SIZE(sigs); i++)
+        sigaction(sigs[i], NULL, &old[i]);
+    if ((out != NULL) && (in != NULL))
+        screen = newterm("xterm-256color", out, in);
+    if (screen == NULL) {
+        printf("check-dialogs: no curses screen of xterm-256color\n");
+    } else {
+        resize_term(50, 120);
+        init_colors();
+        probe_nr_found = probe_nr_drawn = 0;
+        for (d = DLG_none + 1; d < DLG_nr; d++)
+            check_dialog_states(d);
+        dialog = DLG_none;
+        endwin();
+        delscreen(screen);
+    }
+    if (out != NULL)
+        fclose(out);
+    if (in != NULL)
+        fclose(in);
+    for (i = 0; i < ARRAY_SIZE(sigs); i++)
+        sigaction(sigs[i], &old[i], NULL);
+    if (screen == NULL)
+        return -1;
+    for (i = 0; i < probe_nr_found; i++)
+        printf("%s\n", probe_found[i]);
+    printf("dialogs: %u drawn, %u overlaps\n", probe_nr_drawn, probe_nr_found);
+    return probe_nr_found;
 }
 
 /*
