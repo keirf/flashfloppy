@@ -275,11 +275,11 @@ of the cable, `Step/Dir` or `Apple2`, and the signals that it sends to the
 drive, each lit in dark yellow while it is active as on the schematics,
 whatever its voltage, with the key that changes it below:
 
-- Shugart: `[` toggles D_S (drive select), `]` M_O (motor on), `;` WRG (write
+- Shugart: `[` toggles DS (drive select), `]` MO (motor on), `;` WRG (write
   gate), `-` DIR (step direction: active, as at the start, steps inward to
   higher tracks), `+` sends a STP (step) pulse, which stays lit for a moment,
   and `\` toggles SID (side select).
-- Apple2: `[` toggles D_E (drive enable), `;` WRQ (write request), and `+` and
+- Apple2: `[` toggles DE (drive enable), `;` WRQ (write request), and `+` and
   `-` move the stepper phases PH0 to PH3 to their next or previous state in the
   cycle a computer goes through: phase 0 alone, phases 0 and 1, phase 1 alone,
   and so on. The firmware steps the head when one phase alone is on next to the
