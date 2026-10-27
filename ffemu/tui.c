@@ -1796,11 +1796,14 @@ static int hotkey(int x, const char *key, const char *what)
 {
     int i;
 
-    /* Slashes and dots between the keys are not keys themselves. */
-    for (i = 0; key[i] != '\0'; i++)
-        put(LINES - 1, x + 1 + i, 1, COLOR_PAIR(strchr("/.", key[i])
-                                                ? CP_bar : CP_hotkey),
+    /* Slashes and dots between the keys, and a + that joins two of them,
+     * are not keys themselves. */
+    for (i = 0; key[i] != '\0'; i++) {
+        bool sep = strchr("/.", key[i])
+            || ((key[i] == '+') && (i > 0) && (key[i + 1] != '\0'));
+        put(LINES - 1, x + 1 + i, 1, COLOR_PAIR(sep ? CP_bar : CP_hotkey),
             "%c", key[i]);
+    }
     x += strlen(key) + 2;
     put(LINES - 1, x, COLS, COLOR_PAIR(CP_bar), "%s", what);
     return x + strlen(what) + 1;
