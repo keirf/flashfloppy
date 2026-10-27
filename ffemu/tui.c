@@ -1512,7 +1512,7 @@ static void fdd_panel(int y, int x, int w)
 
     if (FFEMU_APPLE2) {
         static const char * const name[6] = {
-            "D_E", "WRQ", "PH0", "PH1", "PH2", "PH3" };
+            " DE", "WRQ", "PH0", "PH1", "PH2", "PH3" };
         static const unsigned int bit[6] = {
             EMU_FDD_SEL, EMU_FDD_WRITE, EMU_FDD_PH0, EMU_FDD_PH0 << 1,
             EMU_FDD_PH0 << 2, EMU_FDD_PH0 << 3 };
@@ -1534,7 +1534,7 @@ static void fdd_panel(int y, int x, int w)
         put(y + 1, x + 33, w - 33, 0, "Release");
     } else {
         static const char * const name[6] = {
-            "D_S", "M_O", "WRG", "DIR", "STP", "SID" };
+            " DS", " MO", "WRG", "DIR", "STP", "SID" };
         static const char * const keys[6] = {
             "[", "]", ";", "-", "+", "\\" };
         static const int acts[6] = {
