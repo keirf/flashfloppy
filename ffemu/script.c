@@ -312,6 +312,34 @@ static void dump_osd(void)
     }
 }
 
+/* The section of IMG.CFG that the firmware applies to the image mounted,
+ * its lines between bars. */
+static void dump_imgcfg(void)
+{
+    struct imgcfg_view v;
+    const char *p;
+    size_t n;
+
+    imgcfg_get_view(&v);
+    if (v.state == IMGCFG_none) {
+        printf("imgcfg: none\n");
+        return;
+    }
+    if (v.state == IMGCFG_no_section) {
+        printf("imgcfg: no section applies\n");
+        return;
+    }
+    if (v.header[0] == '\0')
+        printf("imgcfg: default section, %u lines\n", v.nr_lines);
+    else
+        printf("imgcfg: section %s, %u lines\n", v.header, v.nr_lines);
+    for (p = v.text; *p != '\0'; p += n, p += (*p == '\n')) {
+        n = strcspn(p, "\n");
+        printf("|%.*s|\n", (int)(((n != 0) && (p[n-1] == '\r')) ? n - 1 : n),
+               p);
+    }
+}
+
 static void print_status(void)
 {
     static uint8_t px[OLED_W * OLED_MAX_H];
@@ -473,6 +501,8 @@ static void *script_thread(void *arg_sleep_ms)
             dump_display();
         } else if (!strcmp(line, "osd")) {
             dump_osd();
+        } else if (!strcmp(line, "imgcfg")) {
+            dump_imgcfg();
         } else if (!strcmp(line, "log")) {
             print_log();
         } else if (!strcmp(line, "status")) {

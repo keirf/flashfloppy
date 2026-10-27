@@ -215,6 +215,19 @@ columns, 162 for 40. In a window too narrow for them the pane stays text, and
 its frame says that the window is too small; in the ASCII rendering it stays
 text, as plain ASCII. The choice is kept as `osd-style = text | braille`.
 
+While a raw sector image is mounted, `.img`, `.ima`, `.out`, or `.dsk` when
+the DSK format does not take it, and the drive has `IMG.CFG` where the
+firmware reads it, the IMG.CFG pane shows the section of it that the firmware
+applies to that image, chosen as the firmware chooses it, or that no section
+applies: to the right of FF OSD's pane, or in its place when FF OSD is not
+fitted; Alt+PgUp and Alt+PgDn page it. The pane's title gives the section's
+header as parsed, with the size after `::` if it has one, the tag being the
+part of the image's name after its last dot (`GAME.AKAI.IMG` is tagged
+`akai`); among the sections that fit, by tag, by size or by being the empty
+default, the first with the best score wins, a tag worth more than a size,
+which is worth more than the default, and a mismatch on either ruling the
+section out.
+
 The app presents a TUI similar in look to Turbo Vision, mostly self-documented.
 The keys that act like Gotek controls or its state changers are shown in the
 Controls pane, each lit for a moment when pressed, other keys are shown in the
@@ -471,7 +484,9 @@ three rows, a lit point as `.`), `log` (the firmware's console output so far),
 `number`, `string`, `yes-no`, `named` or `text`, and its names and flags, the
 flags after `+`), `check-dialogs` (every dialog drawn on a screen of 120 by 50
 that goes nowhere, each part drawn over another or cut at its width named),
-`osd` (FF OSD's text, its rows between bars), `save <file>`, which writes the
+`osd` (FF OSD's text, its rows between bars), `imgcfg` (the section of
+`IMG.CFG` that the firmware applies to the image mounted, as the IMG.CFG pane
+shows it, its lines between bars), `save <file>`, which writes the
 USB drive as the firmware sees it, its writes included, to an image file,
 `unpack <folder>`, which writes its files and folders under a folder, and
 `crash`, a write through a null pointer, which tests the crash report.
@@ -530,6 +545,8 @@ with `FFEMU_CLOCK=host` set on the host's.
   registers on two GPIO lines, and its digits as pixels.
 - `osd.c`: FF OSD as an I2C slave, and its text as pixels in its font,
   `osd_font.h`, a copy of FF OSD's own.
+- `imgcfg.c`: the section of `IMG.CFG` that the firmware applies to the image
+  mounted, chosen as the firmware's `img.c` chooses it.
 - `fatimg.c`: the USB drive: the FAT32 or FAT16 volume built from a directory,
   or an image or a disk read as it is, with the firmware's writes kept aside.
 - `crash.c`: the report of a crash, on Linux by glibc's `backtrace()`, on
