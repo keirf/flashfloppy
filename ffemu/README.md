@@ -447,9 +447,13 @@ from a directory and inserts such a drive again as the Externals dialog does,
 `sleep <ms>`, `dump` (the display as text: an LCD as its rows of characters
 between bars, a 7-segment display as its digits drawn with `_` and `|` in
 three rows, a lit point as `.`), `log` (the firmware's console output so far),
-`status`, `flash` (the `[Flash mem]` section as the flash memory is now), `osd`
-(FF OSD's text, its rows between bars), `save <file>`, which writes the USB
-drive as the firmware sees it, its writes included, to an image file,
+`status`, `flash` (the `[Flash mem]` section as the flash memory is now),
+`options` (what each option of the Flash mem dialog takes: its name, its kind,
+`number`, `string`, `yes-no`, `named` or `text`, and its names and flags, the
+flags after `+`), `check-dialogs` (every dialog drawn on a screen of 120 by 50
+that goes nowhere, each part drawn over another named),
+`osd` (FF OSD's text, its rows between bars), `save <file>`, which writes the
+USB drive as the firmware sees it, its writes included, to an image file,
 `unpack <folder>`, which writes its files and folders under a folder, and
 `crash`, a write through a null pointer, which tests the crash report.
 When the commands end with `key quit`, or the input ends, ffemu prints `quit`

@@ -173,6 +173,27 @@ const char *emu_flash_option(unsigned int i, const void *cfg, char *value,
 #define EMU_OPT_changed  1 /* it differs from the default */
 #define EMU_OPT_raw      2 /* a number, which FF.CFG would not give */
 #define EMU_OPT_hex_only 4 /* FF.CFG cannot express it: @value is empty */
+/* What option @i takes, for an editor of it, into @o. */
+struct emu_named {
+    const char *name;
+    unsigned int value;
+};
+struct emu_option_info {
+    int kind;
+    /* Its names, in FF.CFG's order, an alias after the name it stands for;
+     * and its flags, which commas add, by their bits. */
+    const struct emu_named *values, *flags;
+    unsigned int nr_values, nr_flags;
+    /* The bits that a name or number sets, 0 for all; the value that a list
+     * of flags alone starts from; and the size in bytes. */
+    unsigned int mask, start, size;
+};
+#define EMU_KIND_text   0 /* parsed by code of its own, such as display-type */
+#define EMU_KIND_number 1
+#define EMU_KIND_string 2 /* in quotes */
+#define EMU_KIND_yes_no 3
+#define EMU_KIND_named  4
+void emu_flash_option_info(unsigned int i, struct emu_option_info *o);
 /* Sets option @name in @cfg from @value, as FF.CFG has it or as a number
  * after "0x". */
 int emu_flash_set_option(void *cfg, const char *name, const char *value);
