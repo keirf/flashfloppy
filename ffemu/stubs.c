@@ -243,88 +243,146 @@ static const struct {
 #undef x
 };
 
-/* The value names of the options that have them, as src/main.c parses them:
- * the index is the value. */
-static const char * const yes_no[] = { "no", "yes" };
-static const char * const interface_name[] = {
-    [FINTF_SHUGART] = "shugart", [FINTF_IBMPC] = "ibmpc",
-    [FINTF_IBMPC_HDOUT] = "ibmpc-hdout", [FINTF_JPPC_HDOUT] = "jppc-hdout",
-    [FINTF_AMIGA] = "amiga", [FINTF_JPPC] = "jppc", [FINTF_JC] = "jc"
+/* The values of the options that FF.CFG names, as src/main.c parses them,
+ * in FF.CFG's order: a name after another of the same value is an alias,
+ * which is read but never written. */
+static const struct emu_named yes_no[] = { { "yes", 1 }, { "no", 0 } };
+static const struct emu_named interface_names[] = {
+    { "jc", FINTF_JC }, { "shugart", FINTF_SHUGART },
+    { "ibmpc", FINTF_IBMPC }, { "ibmpc-hdout", FINTF_IBMPC_HDOUT },
+    { "jppc", FINTF_JPPC }, { "jppc-hdout", FINTF_JPPC_HDOUT },
+    { "akai-s950", FINTF_JPPC_HDOUT }, { "amiga", FINTF_AMIGA }
 };
-static const char * const host_name[] = {
-    [HOST_unspecified] = "unspecified", [HOST_akai] = "akai",
-    [HOST_gem] = "gem", [HOST_ensoniq] = "ensoniq", [HOST_acorn] = "acorn",
-    [HOST_ti99] = "ti99", [HOST_memotech] = "memotech", [HOST_uknc] = "uknc",
-    [HOST_pc98] = "pc98", [HOST_pc_dos] = "pc-dos", [HOST_msx] = "msx",
-    [HOST_dec] = "dec", [HOST_tandy_coco] = "tandy-coco",
-    [HOST_fluke] = "fluke", [HOST_nascom] = "nascom", [HOST_casio] = "casio",
-    [HOST_ibm_3174] = "ibm-3174"
+static const struct emu_named host_names[] = {
+    { "acorn", HOST_acorn }, { "akai", HOST_akai }, { "casio", HOST_casio },
+    { "dec", HOST_dec }, { "ensoniq", HOST_ensoniq },
+    { "fluke", HOST_fluke }, { "gem", HOST_gem },
+    { "ibm-3174", HOST_ibm_3174 }, { "memotech", HOST_memotech },
+    { "msx", HOST_msx }, { "nascom", HOST_nascom }, { "pc98", HOST_pc98 },
+    { "pc-dos", HOST_pc_dos }, { "tandy-coco", HOST_tandy_coco },
+    { "ti99", HOST_ti99 }, { "uknc", HOST_uknc },
+    { "unspecified", HOST_unspecified }
 };
-static const char * const pin_name[] = {
-    [PIN_auto] = "auto", [PIN_high] = "high", [PIN_low] = "low",
-    [PIN_rdy] = "rdy", [PIN_nrdy] = "nrdy", [PIN_dens] = "dens",
-    [PIN_ndens] = "ndens", [PIN_chg] = "chg", [PIN_nchg] = "nchg"
+/* An output not connected is one held high, so nc reads back as high. */
+static const struct emu_named pin_names[] = {
+    { "auto", PIN_auto }, { "low", PIN_low }, { "high", PIN_high },
+    { "nc", PIN_nc }, { "rdy", PIN_rdy }, { "nrdy", PIN_nrdy },
+    { "dens", PIN_dens }, { "ndens", PIN_ndens }, { "chg", PIN_chg },
+    { "nchg", PIN_nchg }
 };
-static const char * const track_change_name[] = {
-    [TRKCHG_instant] = "instant", [TRKCHG_realtime] = "realtime"
+static const struct emu_named track_change_names[] = {
+    { "instant", TRKCHG_instant }, { "realtime", TRKCHG_realtime }
 };
-static const char * const write_drain_name[] = {
-    [WDRAIN_instant] = "instant", [WDRAIN_realtime] = "realtime",
-    [WDRAIN_eot] = "eot"
+static const struct emu_named write_drain_names[] = {
+    { "instant", WDRAIN_instant }, { "realtime", WDRAIN_realtime },
+    { "eot", WDRAIN_eot }
 };
-static const char * const image_on_startup_name[] = {
-    [IMGS_last] = "last", [IMGS_static] = "static", [IMGS_init] = "init"
+static const struct emu_named image_on_startup_names[] = {
+    { "last", IMGS_last }, { "static", IMGS_static }, { "init", IMGS_init }
 };
-static const char * const folder_sort_name[] = {
-    [SORT_never] = "never", [SORT_always] = "always", [SORT_small] = "small"
+static const struct emu_named folder_sort_names[] = {
+    { "always", SORT_always }, { "never", SORT_never },
+    { "small", SORT_small }
 };
-static const char * const sort_priority_name[] = {
-    [SORTPRI_folders] = "folders", [SORTPRI_files] = "files",
-    [SORTPRI_none] = "none"
+static const struct emu_named sort_priority_names[] = {
+    { "folders", SORTPRI_folders }, { "files", SORTPRI_files },
+    { "none", SORTPRI_none }
 };
-static const char * const nav_mode_name[] = {
-    [NAVMODE_default] = "default", [NAVMODE_indexed] = "indexed",
-    [NAVMODE_native] = "native"
+static const struct emu_named nav_mode_names[] = {
+    { "native", NAVMODE_native }, { "indexed", NAVMODE_indexed },
+    { "default", NAVMODE_default }
 };
-static const char * const twobutton_name[] = {
-    [TWOBUTTON_zero] = "zero", [TWOBUTTON_eject] = "eject",
-    [TWOBUTTON_rotary] = "rotary", [TWOBUTTON_rotary_fast] = "rotary-fast",
-    [TWOBUTTON_htu] = "htu"
+static const struct emu_named twobutton_names[] = {
+    { "zero", TWOBUTTON_zero }, { "eject", TWOBUTTON_eject },
+    { "htu", TWOBUTTON_htu }, { "rotary", TWOBUTTON_rotary },
+    { "rotary-fast", TWOBUTTON_rotary_fast }
 };
-static const char * const rotary_name[] = {
-    [ROT_none] = "none", [ROT_full] = "full", [ROT_quarter] = "quarter",
-    [ROT_half] = "half", [ROT_trackball] = "trackball",
-    [ROT_buttons] = "buttons"
+static const struct emu_named twobutton_flags[] = {
+    { "reverse", TWOBUTTON_reverse }
 };
-static const char * const display_on_name[] = {
-    [DISPON_no] = "no", [DISPON_yes] = "yes", [DISPON_sel] = "sel"
+static const struct emu_named rotary_names[] = {
+    { "none", ROT_none }, { "quarter", ROT_quarter }, { "half", ROT_half },
+    { "full", ROT_full }, { "trackball", ROT_trackball },
+    { "buttons", ROT_buttons }
 };
-static const char * const show_filename_ext_name[] = {
-    [SHOWEXT_no] = "no", [SHOWEXT_yes] = "yes", [SHOWEXT_auto] = "auto"
+static const struct emu_named rotary_flags[] = {
+    { "v2", ROT_v2 }, { "reverse", ROT_reverse }
 };
-static const char * const font_name[] = {
-    [FONT_6x13] = "6x13", [FONT_8x16] = "8x16"
+static const struct emu_named display_on_names[] = {
+    { "yes", DISPON_yes }, { "sel", DISPON_sel }, { "no", DISPON_no }
+};
+static const struct emu_named show_filename_ext_names[] = {
+    { "no", SHOWEXT_no }, { "yes", SHOWEXT_yes }, { "auto", SHOWEXT_auto }
+};
+static const struct emu_named font_names[] = {
+    { "6x13", FONT_6x13 }, { "8x16", FONT_8x16 }
+};
+static const struct emu_named notify_flags[] = {
+    { "slotnr", NOTIFY_slotnr }
 };
 
-/* The name of value @v in @names of @nr, or NULL if it has none. */
-static const char *named(unsigned int v, const char * const *names,
-                         unsigned int nr)
-{
-    return (v < nr) ? names[v] : NULL;
-}
-#define NAMED(v, names) named(v, names, ARRAY_SIZE(names))
-
-/* The value that @s names in @names of @nr, or -1. */
-static int lookup(const char *s, const char * const *names, unsigned int nr)
-{
-    unsigned int i;
-
-    for (i = 0; i < nr; i++)
-        if ((names[i] != NULL) && !strcmp(s, names[i]))
-            return i;
-    return -1;
-}
-#define LOOKUP(s, names) lookup(s, names, ARRAY_SIZE(names))
+/* What each option takes. One not here takes text that code of its own
+ * parses, as display-type does, or else a number. */
+#define VALUES(a) .values = a, .nr_values = ARRAY_SIZE(a)
+#define FLAGS(a) .flags = a, .nr_flags = ARRAY_SIZE(a)
+#define YES_NO { .kind = EMU_KIND_yes_no, VALUES(yes_no) }
+#define NAMED(a) { .kind = EMU_KIND_named, VALUES(a) }
+#define NUMBER { .kind = EMU_KIND_number }
+#define STRING { .kind = EMU_KIND_string }
+static const struct emu_option_info info[OPT_nr] = {
+    [OPT_interface] = NAMED(interface_names),
+    [OPT_host] = NAMED(host_names),
+    [OPT_pin02] = NAMED(pin_names),
+    [OPT_pin34] = NAMED(pin_names),
+    [OPT_write_protect] = YES_NO,
+    [OPT_max_cyl] = NUMBER,
+    [OPT_side_select_glitch_filter] = NUMBER,
+    [OPT_track_change] = NAMED(track_change_names),
+    [OPT_write_drain] = NAMED(write_drain_names),
+    [OPT_index_suppression] = YES_NO,
+    [OPT_head_settle_ms] = NUMBER,
+    [OPT_ejected_on_startup] = YES_NO,
+    [OPT_image_on_startup] = NAMED(image_on_startup_names),
+    [OPT_display_probe_ms] = NUMBER,
+    [OPT_autoselect_file_secs] = NUMBER,
+    [OPT_autoselect_folder_secs] = NUMBER,
+    [OPT_folder_sort] = NAMED(folder_sort_names),
+    [OPT_sort_priority] = NAMED(sort_priority_names),
+    [OPT_nav_mode] = NAMED(nav_mode_names),
+    [OPT_nav_loop] = YES_NO,
+    [OPT_twobutton_action] = {
+        .kind = EMU_KIND_named, VALUES(twobutton_names),
+        FLAGS(twobutton_flags), .mask = TWOBUTTON_mask,
+        .start = TWOBUTTON_zero },
+    [OPT_rotary] = {
+        .kind = EMU_KIND_named, VALUES(rotary_names), FLAGS(rotary_flags),
+        .mask = ROT_typemask, .start = ROT_full },
+    [OPT_indexed_prefix] = STRING,
+    [OPT_oled_font] = NAMED(font_names),
+    [OPT_oled_contrast] = NUMBER,
+    [OPT_osd_columns] = NUMBER,
+    [OPT_display_off_secs] = NUMBER,
+    [OPT_display_on_activity] = NAMED(display_on_names),
+    [OPT_show_filename_ext] = NAMED(show_filename_ext_names),
+    [OPT_display_scroll_rate] = NUMBER,
+    [OPT_display_scroll_pause] = NUMBER,
+    [OPT_nav_scroll_rate] = NUMBER,
+    [OPT_nav_scroll_pause] = NUMBER,
+    [OPT_hfe_step] = NUMBER,
+    [OPT_hfe_rpm] = NUMBER,
+    [OPT_step_volume] = NUMBER,
+    [OPT_notify_volume] = {
+        .kind = EMU_KIND_number, FLAGS(notify_flags),
+        .mask = NOTIFY_volume_mask },
+    [OPT_da_report_version] = STRING,
+    [OPT_extend_image] = YES_NO
+};
+#undef VALUES
+#undef FLAGS
+#undef YES_NO
+#undef NAMED
+#undef NUMBER
+#undef STRING
 
 /* A decimal number, or a hexadecimal one after "0x", into @v. */
 static bool_t parse_number(const char *s, uint32_t *v)
@@ -444,46 +502,62 @@ static bool_t parse_display_order(char *s, uint32_t *v)
     return TRUE;
 }
 
-/* A list of values separated by commas: one of @names, which replaces the
- * part @mask of the value, or flags. */
-static bool_t parse_list(char *s, uint32_t *v, uint32_t mask,
-                         const char * const *names, unsigned int nr,
-                         const char *flag1, uint32_t bit1,
-                         const char *flag2, uint32_t bit2)
+/* Value @s of option @o: one of its names, or for a number option a
+ * number; then its flags after commas, in any order, as src/main.c takes
+ * them, a list of flags alone starting from @o's start. */
+static bool_t parse_named(const struct emu_option_info *o, char *s,
+                         uint32_t *v)
 {
+    uint32_t mask = o->mask ? o->mask : ~0u, n;
+    unsigned int j;
     char *next;
-    int n;
 
+    *v = o->start;
     for (; s != NULL; s = next) {
-        next = next_token(s, ',');
-        if (flag1 && !strcmp(s, flag1))
-            *v |= bit1;
-        else if (flag2 && !strcmp(s, flag2))
-            *v |= bit2;
-        else if ((n = lookup(s, names, nr)) >= 0)
-            *v = (*v & ~mask) | n;
-        else
-            return FALSE;
+        next = o->nr_flags ? next_token(s, ',') : NULL;
+        for (j = 0; j < o->nr_flags; j++)
+            if (!strcmp(s, o->flags[j].name))
+                break;
+        if (j < o->nr_flags) {
+            *v |= o->flags[j].value;
+            continue;
+        }
+        if (o->kind == EMU_KIND_number) {
+            if (!parse_number(s, &n) || (n & ~mask))
+                return FALSE;
+        } else {
+            for (j = 0; j < o->nr_values; j++)
+                if (!strcmp(s, o->values[j].name))
+                    break;
+            if (j == o->nr_values)
+                return FALSE;
+            n = o->values[j].value;
+        }
+        *v = (*v & ~mask) | n;
     }
     return TRUE;
 }
 
-static bool_t parse_notify_volume(char *s, uint32_t *v)
+/* Value @v of option @o as FF.CFG has it, into @buf: its first name, or
+ * its number, then its flags; "?" for a value that has no name. */
+static void format_named(const struct emu_option_info *o, uint32_t v,
+                         char *buf, unsigned int size)
 {
-    uint32_t n;
-    char *next;
+    uint32_t mask = o->mask ? o->mask : ~0u;
+    unsigned int j, n;
 
-    *v = 0;
-    for (; s != NULL; s = next) {
-        next = next_token(s, ',');
-        if (!strcmp(s, "slotnr"))
-            *v |= NOTIFY_slotnr;
-        else if (parse_number(s, &n) && (n <= NOTIFY_volume_mask))
-            *v = (*v & ~NOTIFY_volume_mask) | n;
-        else
-            return FALSE;
+    if (o->kind == EMU_KIND_number) {
+        n = snprintf(buf, size, "%u", (unsigned int)(v & mask));
+    } else {
+        for (j = 0; j < o->nr_values; j++)
+            if (o->values[j].value == (v & mask))
+                break;
+        n = snprintf(buf, size, "%s",
+                     (j < o->nr_values) ? o->values[j].name : "?");
     }
-    return TRUE;
+    for (j = 0; (j < o->nr_flags) && (n < size); j++)
+        if (v & o->flags[j].value)
+            n += snprintf(buf + n, size - n, ",%s", o->flags[j].name);
 }
 
 /* Sets option @i of @f from @text, as FF.CFG has it or as a raw number after
@@ -495,7 +569,6 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
     unsigned int sz = option[i].size, n;
     char s[64];
     uint32_t v = 0;
-    int k = -1;
 
     if (sz > 4) {
         /* A string: quoted, or as FF.CFG takes it unquoted. */
@@ -522,28 +595,14 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
         goto store;
     }
 
+    switch (info[i].kind) {
+    case EMU_KIND_yes_no: case EMU_KIND_named: case EMU_KIND_number:
+        if (!parse_named(&info[i], s, &v))
+            return FALSE;
+        goto store;
+    }
+
     switch (i) {
-    case OPT_interface:
-        k = !strcmp(s, "akai-s950") ? FINTF_JPPC_HDOUT
-            : LOOKUP(s, interface_name);
-        break;
-    case OPT_host: k = LOOKUP(s, host_name); break;
-    case OPT_pin02: case OPT_pin34:
-        k = !strcmp(s, "nc") ? PIN_nc : LOOKUP(s, pin_name);
-        break;
-    case OPT_write_protect: case OPT_index_suppression:
-    case OPT_ejected_on_startup: case OPT_nav_loop: case OPT_extend_image:
-        k = LOOKUP(s, yes_no);
-        break;
-    case OPT_track_change: k = LOOKUP(s, track_change_name); break;
-    case OPT_write_drain: k = LOOKUP(s, write_drain_name); break;
-    case OPT_image_on_startup: k = LOOKUP(s, image_on_startup_name); break;
-    case OPT_folder_sort: k = LOOKUP(s, folder_sort_name); break;
-    case OPT_sort_priority: k = LOOKUP(s, sort_priority_name); break;
-    case OPT_nav_mode: k = LOOKUP(s, nav_mode_name); break;
-    case OPT_display_on_activity: k = LOOKUP(s, display_on_name); break;
-    case OPT_show_filename_ext: k = LOOKUP(s, show_filename_ext_name); break;
-    case OPT_oled_font: k = LOOKUP(s, font_name); break;
     case OPT_motor_delay:
         if (!strcmp(s, "ignore")) {
             v = MOTOR_ignore;
@@ -561,24 +620,6 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
         else if (strncmp(s, "delay-", 6) || !parse_number(s + 6, &v))
             return FALSE;
         goto store;
-    case OPT_twobutton_action:
-        v = TWOBUTTON_zero;
-        if (!parse_list(s, &v, TWOBUTTON_mask, twobutton_name,
-                        ARRAY_SIZE(twobutton_name), "reverse",
-                        TWOBUTTON_reverse, NULL, 0))
-            return FALSE;
-        goto store;
-    case OPT_rotary:
-        v = ROT_full;
-        if (!parse_list(s, &v, ROT_typemask, rotary_name,
-                        ARRAY_SIZE(rotary_name), "reverse", ROT_reverse,
-                        "v2", ROT_v2))
-            return FALSE;
-        goto store;
-    case OPT_notify_volume:
-        if (!parse_notify_volume(s, &v))
-            return FALSE;
-        goto store;
     case OPT_display_type:
         if (!parse_display_type(s, &v))
             return FALSE;
@@ -593,11 +634,6 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
             return FALSE;
         goto store;
     }
-
-    /* A named value. */
-    if (k < 0)
-        return FALSE;
-    v = k;
 
 store:
     if ((sz < 4) && (v >> (8 * sz)))
@@ -671,23 +707,13 @@ static unsigned int format_option(unsigned int i, const struct ff_cfg *f,
     memcpy(&v, p, sz);
     buf[0] = '\0';
 
+    switch (info[i].kind) {
+    case EMU_KIND_yes_no: case EMU_KIND_named: case EMU_KIND_number:
+        format_named(&info[i], v, buf, size);
+        goto check;
+    }
+
     switch (i) {
-    case OPT_interface: name = NAMED(v, interface_name); break;
-    case OPT_host: name = NAMED(v, host_name); break;
-    case OPT_pin02: case OPT_pin34: name = NAMED(v, pin_name); break;
-    case OPT_write_protect: case OPT_index_suppression:
-    case OPT_ejected_on_startup: case OPT_nav_loop: case OPT_extend_image:
-        name = NAMED(v, yes_no);
-        break;
-    case OPT_track_change: name = NAMED(v, track_change_name); break;
-    case OPT_write_drain: name = NAMED(v, write_drain_name); break;
-    case OPT_image_on_startup: name = NAMED(v, image_on_startup_name); break;
-    case OPT_folder_sort: name = NAMED(v, folder_sort_name); break;
-    case OPT_sort_priority: name = NAMED(v, sort_priority_name); break;
-    case OPT_nav_mode: name = NAMED(v, nav_mode_name); break;
-    case OPT_display_on_activity: name = NAMED(v, display_on_name); break;
-    case OPT_show_filename_ext: name = NAMED(v, show_filename_ext_name); break;
-    case OPT_oled_font: name = NAMED(v, font_name); break;
     case OPT_motor_delay:
         if (v == MOTOR_ignore)
             name = "ignore";
@@ -699,21 +725,6 @@ static unsigned int format_option(unsigned int i, const struct ff_cfg *f,
             name = (v == CHGRST_step) ? "step" : "pa14";
         else
             snprintf(buf, size, "delay-%u", (unsigned int)v);
-        break;
-    case OPT_twobutton_action:
-        snprintf(buf, size, "%s%s",
-                 NAMED(v & TWOBUTTON_mask, twobutton_name) ?: "?",
-                 (v & TWOBUTTON_reverse) ? ",reverse" : "");
-        break;
-    case OPT_rotary:
-        snprintf(buf, size, "%s%s%s",
-                 NAMED(v & ROT_typemask, rotary_name) ?: "?",
-                 (v & ROT_v2) ? ",v2" : "",
-                 (v & ROT_reverse) ? ",reverse" : "");
-        break;
-    case OPT_notify_volume:
-        snprintf(buf, size, "%u%s", (unsigned int)v & NOTIFY_volume_mask,
-                 (v & NOTIFY_slotnr) ? ",slotnr" : "");
         break;
     case OPT_display_type:
         format_display_type(buf, size, v);
@@ -757,6 +768,12 @@ void emu_flash_cfg_defaults(void *cfg)
 unsigned int emu_flash_nr_options(void)
 {
     return OPT_nr;
+}
+
+void emu_flash_option_info(unsigned int i, struct emu_option_info *o)
+{
+    *o = info[i];
+    o->size = option[i].size;
 }
 
 const char *emu_flash_option(unsigned int i, const void *cfg, char *value,

@@ -394,6 +394,34 @@ static bool read_line(char *line, size_t size)
     return n != 0;
 }
 
+/* What each option takes, a line each: its name, its kind, and its names
+ * and its flags after `+`, as the Flash mem dialog offers them. */
+static void print_options(void)
+{
+    static const char * const kind[] = {
+        [EMU_KIND_text] = "text", [EMU_KIND_number] = "number",
+        [EMU_KIND_string] = "string", [EMU_KIND_yes_no] = "yes-no",
+        [EMU_KIND_named] = "named"
+    };
+    struct emu_option_info o;
+    char value[64];
+    unsigned int i, j, flags;
+    uint8_t cfg[256];
+
+    emu_flash_cfg_defaults(cfg);
+    for (i = 0; i < emu_flash_nr_options(); i++) {
+        emu_flash_option_info(i, &o);
+        printf("option %s %s",
+               emu_flash_option(i, cfg, value, sizeof(value), &flags),
+               kind[o.kind]);
+        for (j = 0; j < o.nr_values; j++)
+            printf(" %s", o.values[j].name);
+        for (j = 0; j < o.nr_flags; j++)
+            printf(" +%s", o.flags[j].name);
+        printf("\n");
+    }
+}
+
 static void *script_thread(void *arg_sleep_ms)
 {
     char line[512], arg[64];
@@ -451,6 +479,8 @@ static void *script_thread(void *arg_sleep_ms)
             print_status();
         } else if (!strcmp(line, "check-dialogs")) {
             ui_check_dialogs();
+        } else if (!strcmp(line, "options")) {
+            print_options();
         } else if (!strcmp(line, "flash")) {
             static char section[8192];
             rc_flash_section(section, sizeof(section));
