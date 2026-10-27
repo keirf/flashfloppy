@@ -480,6 +480,11 @@ const char *size_text(uint64_t bytes, char *buf, size_t size);
 void ui_action(int act);
 /* Call often: releases the buttons and completes a re-insertion. */
 void ui_poll(void);
+
+/* Draws every dialog in each of its states on a screen of its own, printing
+ * each part of one drawn over another part or over the dialog's frame, and
+ * how many; -1 without curses. */
+int ui_check_dialogs(void);
 /* The encoder directions turned a moment ago, to show: UI_ROTARY_*. */
 #define UI_ROTARY_cw 1
 #define UI_ROTARY_ccw 2
