@@ -377,17 +377,29 @@ writes to flash memory. Also there is a TUI dialog to edit those values right
 in the emulated flash memory; in it, a dark gray `=` at the left of a radio
 button marks the factory default, the value the firmware has when its flash
 memory holds no settings, and at the left of a check box, that it is checked by
-default. The dialog offers only the options that matter to what ffemu
-emulates; the others keep their values. Its last row explains the control or
-the value under the cursor. Note that if the USB drive contains `FF.CFG`,
-settings in it will be read by the firmware on start or restart, and will
-immediately be written to the flash memory over what was there before. So OK,
-which writes the dialog's values to flash and power-cycles the device, first
-checks `FF.CFG` on the drive: if the file sets some of them otherwise, ffemu
-asks whether to change them in `FF.CFG` as well, or, for a drive made from an
-image, which it never writes, whether to write flash anyway.
+default. The dialog offers every option, on two tabs: `Emulated features`, the
+options whose effect ffemu shows, and `Non-ffemu features`, the others, there
+to prepare `FF.CFG` with; PgUp and PgDn, shown at the frame's top right, switch
+tabs. Each option with names for its values is a cluster of radio buttons, in
+which Up and Down choose; Tab and Shift+Tab go from one control to the next,
+Left and Right between OK and Cancel; Up and Down also move within a block of
+check boxes and input lines that belong together, which blank rows set apart,
+and among the buttons; Space switches a check box; a value in flash that
+`FF.CFG` cannot give shows as its number with `(raw)`. The dialog's last row
+explains the control or the value under the cursor, and F1 shows the comment on
+the option in the firmware's example `FF.CFG`, as the file has it, below the
+explanation of the flag under the cursor if that is one of the option's flags,
+such as `slotnr` of `notify-volume`. Note that if
+the USB drive contains `FF.CFG`, settings in it will be read by the firmware on
+start or restart, and will immediately be written to the flash memory over what
+was there before. So OK, which writes the dialog's values to flash and
+power-cycles the device, first checks `FF.CFG` on the drive: if the file sets
+some of them otherwise, ffemu asks whether to change them in `FF.CFG` as well,
+or, for a drive made from an image, which it never writes, whether to write
+flash anyway.
 
-The dialog's buttons `Save all to FF.CFG`, `Save diff-from-defaults to FF.CFG`
+The buttons on its third tab, `Actions`, `Save all to FF.CFG`,
+`Save diff-from-defaults to FF.CFG`
 and `Save diff-from-flash to FF.CFG` write `FF.CFG` on the USB drive, into its
 `FF` folder if it has one, in the directory a drive was made from, or on a real
 drive where the system has it mounted; for a drive made from an image file,
@@ -420,7 +432,11 @@ and the device is power-cycled. The fifth, `Unpack FLASH.DMP to FF.CFG`,
 enabled likewise, writes every option of the dump into `FF.CFG`, where the Save
 buttons write it, the old file kept as `.BAK`, after asking in the same way,
 naming the file it takes and the one it writes; flash stays as it is, and the
-firmware reads the file at the next insertion. The emulated flash memory's
+firmware reads the file at the next insertion. The sixth,
+`Load FF.CFG over defaults`, enabled while the drive holds `FF.CFG`, sets each
+option that the file names as it has it and every other to its default, which
+flash then takes on OK; the firmware itself keeps the flash value of an option
+that `FF.CFG` does not name. The emulated flash memory's
 lines in the settings file are the `[Flash mem]` section at its end: `hex`
 holds the bytes of the flash memory, and the options follow in `FF.CFG` syntax,
 so that lines can be copied between the two; a number after `0x` stands for
@@ -451,7 +467,7 @@ three rows, a lit point as `.`), `log` (the firmware's console output so far),
 `options` (what each option of the Flash mem dialog takes: its name, its kind,
 `number`, `string`, `yes-no`, `named` or `text`, and its names and flags, the
 flags after `+`), `check-dialogs` (every dialog drawn on a screen of 120 by 50
-that goes nowhere, each part drawn over another named),
+that goes nowhere, each part drawn over another or cut at its width named),
 `osd` (FF OSD's text, its rows between bars), `save <file>`, which writes the
 USB drive as the firmware sees it, its writes included, to an image file,
 `unpack <folder>`, which writes its files and folders under a folder, and

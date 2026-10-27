@@ -368,6 +368,20 @@ bool ff_cfg_target(char *dir, size_t dsize, char *place, size_t psize,
  * file now, from the last line for it, into @value; false if there is no
  * drive, file or such line. */
 bool ff_cfg_file_option(const char *name, char *value, size_t size);
+/* Sets each option of @cfg that the drive's FF.CFG names as the file has
+ * it, from its last line for it, counting the lines taken in @nr_set and
+ * those not in @nr_bad; false if there is no drive or file. */
+bool ff_cfg_load(void *cfg, unsigned int *nr_set, unsigned int *nr_bad);
+/* The lines of the firmware's example FF.CFG that document option @name:
+ * the comment above its line, which options on the lines next to it share,
+ * and those option lines, at most @max, their starts in @lines and lengths
+ * in @len. Returns how many, 0 if the example has no such option. */
+unsigned int ff_cfg_doc(const char *name, const char **lines, int *len,
+                        unsigned int max);
+/* The line of that comment on value @item of option @name, as "item: what
+ * it does", into @buf; false if it has none. */
+bool ff_cfg_item_doc(const char *name, const char *item, char *buf,
+                     size_t size);
 /* Sets options @names to @values, @nr of them, in the drive's FF.CFG, where
  * it has lines for them, on a drive made from a directory or a disk the
  * system has mounted: each such line rewritten in place, in one pass, the
