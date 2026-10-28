@@ -1861,6 +1861,13 @@ static void draw_bars(void)
                  museum_w);
 }
 
+/* Whether dialog @d takes Y and N for its Yes and No buttons. */
+static bool takes_yes_no(int d)
+{
+    return (d == DLG_quit) || (d == DLG_rows) || (d == DLG_emul)
+        || (d == DLG_fdfile);
+}
+
 /* The bottom line: the keys of the dialog open, or else of ffemu. */
 static void draw_key_bar(void)
 {
@@ -1870,22 +1877,29 @@ static void draw_key_bar(void)
 
     pane_right = -1;
     put(LINES - 1, 0, COLS, COLOR_PAIR(CP_bar), "%*s", COLS, "");
-    /* In a dialog, the dialog's keys, in the order of its buttons. */
-    if (dialog == DLG_fdhelp) {
-        x = hotkey(x, "Esc", "Close");
-        x = hotkey(x, "^/v/PgUp/PgDn", "Scroll");
+    /* In a dialog, the keys that it takes: a box of text only closes. */
+    if ((dialog == DLG_message) || (dialog == DLG_fdhelp)) {
+        x = hotkey(x, "Enter/Esc", "Close");
+        if (dialog == DLG_fdhelp)
+            x = hotkey(x, "^/v/PgUp/PgDn", "Scroll");
         return;
     }
     if (dialog != DLG_none) {
+        /* Up and Down choose in the clusters, and Space switches the check
+         * boxes, of the dialogs that have them; the others are a row of
+         * buttons. */
+        bool clusters = (dialog == DLG_flash) || (dialog == DLG_display)
+            || (dialog == DLG_externals);
         x = hotkey(x, "Enter", "OK");
         x = hotkey(x, "Esc", "Cancel");
-        if (dialog == DLG_flash) {
-            x = hotkey(x, "Tab/Shift+Tab/^/v/</>", "Navigate");
+        x = hotkey(x, clusters ? "Tab/Shift+Tab/^/v/</>" : "Tab/Shift+Tab/</>",
+                   "Navigate");
+        if (clusters)
             x = hotkey(x, "Space", "Switch");
+        if (takes_yes_no(dialog))
+            x = hotkey(x, "Y/N", "Yes/No");
+        if (dialog == DLG_flash)
             x = hotkey(x, "F1", "Help");
-        } else {
-            x = hotkey(x, "Tab/Shift+Tab/</>/^/v", "Navigate");
-        }
         if (x - 1 > COLS)
             put(LINES - 1, COLS - 1, 1, BRIGHT(CP_bar_crop), ">");
         return;
@@ -2931,8 +2945,7 @@ static int dialog_key(int key)
         return DK_taken;
     }
 
-    if ((dialog == DLG_quit) || (dialog == DLG_rows) || (dialog == DLG_emul)
-        || (dialog == DLG_fdfile)) {
+    if (takes_yes_no(dialog)) {
         if ((key == 'y') || (key == 'Y')) {
             dialog_button = 0;
             key = '\n';
