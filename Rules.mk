@@ -7,7 +7,7 @@ ifneq ($(VERBOSE),1)
 TOOL_PREFIX := @$(TOOL_PREFIX)
 endif
 
-FLAGS  = -g -Os -nostdlib -std=gnu99 -iquote $(ROOT)/inc
+FLAGS := -g -Os -nostdlib -std=gnu99 -iquote $(ROOT)/inc
 FLAGS += -Wall -Werror -Wno-format -Wdeclaration-after-statement
 FLAGS += -Wstrict-prototypes -Wredundant-decls -Wnested-externs
 FLAGS += -fno-common -fno-exceptions -fno-strict-aliasing
@@ -56,9 +56,9 @@ DEPS = .*.d
 
 FLAGS += $(FLAGS-y)
 
-CFLAGS += $(CFLAGS-y) $(FLAGS) -include decls.h
-AFLAGS += $(AFLAGS-y) $(FLAGS) -include build_enums.h -D__ASSEMBLY__
-LDFLAGS += $(LDFLAGS-y) $(FLAGS) -Wl,--gc-sections
+CFLAGS := $(CFLAGS-y) $(FLAGS) $(EXTRA_CFLAGS) -include decls.h
+AFLAGS := $(AFLAGS-y) $(FLAGS) -include build_enums.h -D__ASSEMBLY__
+LDFLAGS := $(LDFLAGS-y) $(FLAGS) -Wl,--gc-sections
 
 # Reduce space wasted on alignment padding between sections.
 LDFLAGS += -Wl,--sort-section=alignment
