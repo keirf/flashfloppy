@@ -1279,8 +1279,6 @@ static int ctrl_key(const char *cap, const char *seq, int code)
 
 /* The first line that the Flash mem window shows: PgUp and PgDn move it. */
 static int flash_top;
-/* The rows of options that Flash mem shows. */
-static int flash_rows = PANE_ROWS;
 
 /* The keys that page a window at (@x) of @w, at the right end of its bottom
  * frame @y: PgUp/PgDn, after modifier @mod and a '+' unless it is NULL.
@@ -1330,11 +1328,11 @@ static void draw_flash(int y, int x, int w)
     if (w < 12)
         return;
     if (len == 0) {
-        frame(y, x, w, flash_rows + 2, "Flash mem - empty", COLOR_PAIR(CP_off),
+        frame(y, x, w, PANE_ROWS + 2, "Flash mem - empty", COLOR_PAIR(CP_off),
               COLOR_PAIR(CP_off));
         return;
     }
-    frame(y, x, w, flash_rows + 2, "Flash mem", COLOR_PAIR(CP_text),
+    frame(y, x, w, PANE_ROWS + 2, "Flash mem", COLOR_PAIR(CP_text),
           COLOR_PAIR(CP_text));
     if (len != emu_flash_cfg_size()) {
         put(y + 1, x + 1, w - 2, BRIGHT(CP_raw),
@@ -1342,15 +1340,15 @@ static void draw_flash(int y, int x, int w)
         return;
     }
 
-    if (flash_top > nr_lines - flash_rows)
-        flash_top = nr_lines - flash_rows;
+    if (flash_top > nr_lines - PANE_ROWS)
+        flash_top = nr_lines - PANE_ROWS;
     if (flash_top < 0)
         flash_top = 0;
 
     /* The scroll bar first: the '>' of a line cut short goes over it. */
-    if (nr_lines > flash_rows)
-        scroll_bar(y, x, w, flash_rows + 2, false, flash_top, nr_lines);
-    for (row = 0; (row < flash_rows) && (flash_top + row < nr_lines); row++) {
+    if (nr_lines > PANE_ROWS)
+        scroll_bar(y, x, w, PANE_ROWS + 2, false, flash_top, nr_lines);
+    for (row = 0; (row < PANE_ROWS) && (flash_top + row < nr_lines); row++) {
         name = emu_flash_option(flash_top + row, cfg, value, sizeof(value),
                                 &flags);
         if (flags & EMU_OPT_hex_only)
@@ -1367,14 +1365,14 @@ static void draw_flash(int y, int x, int w)
         c = piece(y + 1 + row, c, x + w - 1, COLOR_PAIR(CP_path), " = ");
         piece(y + 1 + row, c, x + w - 1, attr, "%s", value);
     }
-    if (nr_lines <= flash_rows)
+    if (nr_lines <= PANE_ROWS)
         return;
 
-    scroll_marks(y, x, flash_rows + 2, false, flash_top > 0,
-                 flash_top + flash_rows < nr_lines);
+    scroll_marks(y, x, PANE_ROWS + 2, false, flash_top > 0,
+                 flash_top + PANE_ROWS < nr_lines);
 
     /* The keys that page, in the bottom right corner. */
-    page_keys(y + flash_rows + 1, x, w, false, flash_up_lit, flash_down_lit,
+    page_keys(y + PANE_ROWS + 1, x, w, false, flash_up_lit, flash_down_lit,
               NULL);
 }
 
@@ -2137,9 +2135,9 @@ static void redraw(void)
     draw_bars();
 
     /* Controls as wide as they need, then Status and Flash mem sharing the
-     * rest, below the display; FF OSD's text below Controls, Flash mem as
-     * tall as both, or its pixels below the three; the log below them at
-     * full width, showing its newest lines. */
+     * rest, below the display; FF OSD's text below Controls, or its pixels
+     * below the three; the log below them at full width, showing its newest
+     * lines. */
     y = 1 + dh;
     osd_get_view(&ov);
     osd_px = ov.present && osd_braille(&ov);
@@ -2153,14 +2151,12 @@ static void redraw(void)
     if (sw < STATUS_MIN_W)
         sw = (COLS - kw < STATUS_MIN_W) ? COLS - kw : STATUS_MIN_W;
     /* IMG.CFG's section in FF OSD's band, to its right, or in its place
-     * when there is no FF OSD: the band is FF OSD's text rows, below
-     * which Flash mem reaches, or its braille rows, below which it does
-     * not. */
+     * when there is no FF OSD: the band is FF OSD's text rows or its
+     * braille rows. */
     imgcfg_get_view(&iv);
     imgcfg = (iv.state != IMGCFG_none);
     band = osd_px ? osd_braille_rows(&ov) + 2
         : (osd_text || imgcfg) ? OSD_TEXT_H : 0;
-    flash_rows = PANE_ROWS + (osd_px ? 0 : band);
     draw_keys(y, 0, kw);
     draw_status(y, kw, sw);
     draw_flash(y, kw + sw, COLS - kw - sw);
@@ -2169,14 +2165,14 @@ static void redraw(void)
         draw_osd(y, 0, OSD_TEXT_H, false, &ov);
         ix = osd_columns(&ov) + 2;
         if (imgcfg)
-            draw_imgcfg(y, ix, kw + sw - ix, band, &iv);
+            draw_imgcfg(y, ix, COLS - ix, band, &iv);
     } else if (osd_px) {
         draw_osd(y, 0, band, true, &ov);
         ix = 4 * osd_columns(&ov) + 2;
         if (imgcfg)
             draw_imgcfg(y, ix, COLS - ix, band, &iv);
     } else if (imgcfg) {
-        draw_imgcfg(y, 0, kw + sw, band, &iv);
+        draw_imgcfg(y, 0, COLS, band, &iv);
     }
     y += band;
     draw_log(y, 0, COLS, bottom - y);
@@ -5443,7 +5439,7 @@ static void handle_key(int key)
 
     if ((key == KEY_PPAGE) || (key == KEY_NPAGE)) {
         /* A page less a line, which stays in view. */
-        flash_top += (key == KEY_NPAGE) ? flash_rows - 1 : 1 - flash_rows;
+        flash_top += (key == KEY_NPAGE) ? PANE_ROWS - 1 : 1 - PANE_ROWS;
         *((key == KEY_NPAGE) ? &flash_down_lit : &flash_up_lit) = lit_end();
         return;
     }
