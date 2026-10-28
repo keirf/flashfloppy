@@ -1,3 +1,8 @@
+# Below are instructions for AT32F4xx. For STM32F10x:
+# 1. You can use upstream OpenOCD
+# 2. The target script is target/stm32f1x.cfg
+# 3. Mass erase: stm32f1x mass_erase 0
+
 # STEP 0: Download, build and install github:keirf/openocd
 #         Below assumes it's installed at ~/install/
 # git clone https://github.com/keirf/openocd
@@ -7,7 +12,10 @@
 # make -j16
 # make install
 
-# Run OpenCD:
+# STEP 1: Build a SWD-aware firmware
+# make EXTRA_CFLAGS=-DCONFIG_SWD=1 -j16
+
+# Run OpenOCD:
 ~/install/bin/openocd -s ~/install/share/openocd/scripts/ \
 -f interface/cmsis-dap.cfg -c "transport select swd" -f target/at32f4xx.cfg
 
@@ -43,5 +51,5 @@ reset init                # Makes Flash and USD readable again
 at32f4xx usd_write 8 0xfa # Sets EOPB0 to 384kB SRAM mode
 
 # Some more general stuff:
-flash write_image [erase] out/at32f435/debug/floppy/target.hex
+flash write_image [erase] out/at32f435/debug/shugart/target.hex
 reset run|halt|init
