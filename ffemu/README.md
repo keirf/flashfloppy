@@ -205,8 +205,8 @@ text rows with each refresh, as many columns as the display has, in the order
 of `osd-display-order`; ffemu takes them as FF OSD's own firmware does, which
 shows three rows at most, and answers the firmware's reads as FF OSD 1.9 with
 no button pressed. The OSD pane below Controls shows the text in light green on
-black, its three rows and as many columns as the firmware sends, with Flash mem
-as tall as both: FF OSD draws a code outside 0x20 to 0x7F as a blank, and 0x7F
+black, its three rows and as many columns as the firmware sends: FF OSD draws a
+code outside 0x20 to 0x7F as a blank, and 0x7F
 as a checkerboard, which the pane shows as a medium shade, or as `?` in the
 ASCII rendering. `` ` ``, the same key on a Russian layout, switches the pane
 to braille: FF OSD's pixels, in its own 8x8 font, double-height rows included,
