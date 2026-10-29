@@ -152,7 +152,7 @@ static void dma_start(unsigned int sz)
 /* Snapshot text buffer into the command buffer. */
 static unsigned int osd_prep_buffer(void)
 {
-    uint16_t order = menu_mode ? 0x7903 : 0x7183;
+    uint16_t order = glyphs_mode ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
     uint8_t *q = buffer;
     unsigned int row, rows, heights;
     int i;
@@ -166,6 +166,8 @@ static unsigned int osd_prep_buffer(void)
     if ((ff_cfg.osd_display_order != DORD_default)
         && (display_mode == DM_normal))
         order = ff_cfg.osd_display_order;
+    else if (error_mode)
+        order = error_order();
 
     heights = rows = 0;
     /* FF OSD takes three rows at most: its row count is two bits. */
@@ -195,6 +197,16 @@ static unsigned int osd_prep_buffer(void)
             memcpy(q, text[i], lcd_columns);
         else
             memset(q, ' ', lcd_columns);
+#if TARGET == TARGET_apple2
+        if (!glyphs_mode) {
+            /* The OLED's phase spinner goes as a blank: FF OSD has no
+             * glyph for it. The font test sends its code as it is. */
+            uint8_t *p;
+            for (p = q; p < q + lcd_columns; p++)
+                if ((*p & ~0xf) == OLED_SPINNER)
+                    *p = ' ';
+        }
+#endif
         q += lcd_columns;
     }
 
@@ -233,9 +245,11 @@ static unsigned int lcd_prep_buffer(void)
         i2c->cr1 |= I2C_CR1_START;
     }
 
-    order = (lcd_rows == 2) ? 0x7710 : 0x2103;
+    order = glyphs_mode ? 0x3210 : (lcd_rows == 2) ? 0x7710 : 0x2103;
     if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
         order = ff_cfg.display_order;
+    else if (error_mode)
+        order = error_order();
 
     row = (order >> (i2c_row * DORD_shift)) & DORD_row;
     p = (_bl && row < ARRAY_SIZE(text)) ? text[row] : NULL;
@@ -595,35 +609,30 @@ fail:
 #define OLED_FONT_8x16_SYNTH 0
 #endif
 extern const uint8_t oled_font_8x16[];
-static void oled_convert_text_row_8x16(char *pc)
+static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
+                            unsigned int to)
 {
-    unsigned int i, j, c;
+    unsigned int j;
     const uint8_t *p;
-    uint8_t *q = buffer;
     const unsigned int w = 8;
 
-    for (i = 0; i < lcd_columns; i++) {
-        if ((c = *pc++ - 0x20) > 0x5e)
-            c = '.' - 0x20;
-        /* Testing a macro at runtime allows the build system to supply a
-         * runtime condition.
-         */
-        if (OLED_FONT_8x16_SYNTH) {
-            /* The 6x13 glyph made bold by a second copy a column to the
-             * right, 7 columns by 13 rows: centered in the cell and rounded
-             * up and left, it is at the left, a row down, where the 6x13
-             * font already has it in its 16 rows. */
-            p = &oled_font_6x13[c * 6 * 2];
-            for (j = 0; j < w; j++) {
-                q[j] = ((j < 6) ? p[j] : 0) | ((j-1 < 6) ? p[j-1] : 0);
-                q[128+j] = ((j < 6) ? p[6+j] : 0) | ((j-1 < 6) ? p[5+j] : 0);
-            }
-        } else {
-            p = &oled_font_8x16[c * w * 2];
-            memcpy(q, p, w);
-            memcpy(q+128, p+w, w);
+    /* Testing a macro at runtime allows the build system to supply a
+     * runtime condition.
+     */
+    if (OLED_FONT_8x16_SYNTH) {
+        /* The 6x13 glyph made bold by a second copy a column to the
+         * right, 7 columns by 13 rows: centered in the cell and rounded
+         * up and left, it is at the left, a row down, where the 6x13
+         * font already has it in its 16 rows. */
+        p = &oled_font_6x13[g * 6 * 2];
+        for (j = from; j < to; j++, q++) {
+            q[0] = ((j < 6) ? p[j] : 0) | ((j-1 < 6) ? p[j-1] : 0);
+            q[128] = ((j < 6) ? p[6+j] : 0) | ((j-1 < 6) ? p[5+j] : 0);
         }
-        q += w;
+    } else {
+        p = &oled_font_8x16[g * w * 2];
+        memcpy(q, p+from, to-from);
+        memcpy(q+128, p+w+from, to-from);
     }
 }
 #endif
@@ -677,8 +686,6 @@ static unsigned int oled_start_i2c(uint8_t *buf)
 
 static unsigned int ssd1306_prep_buffer(void)
 {
-    int size;
-
     /* If we have completed a complete fill of the OLED display, start a new 
      * I2C transaction. The OLED display seems to occasionally silently lose 
      * a byte and then we lose sync with the display address. */
@@ -698,9 +705,7 @@ static unsigned int ssd1306_prep_buffer(void)
     }
 
     /* Convert one row of text[] into buffer[] writes. */
-    size = oled_to_lcd_row(i2c_row);
-    if (size != 0)
-        oled_double_height(buffer, &buffer[(size == 1) ? 128 : 0], 0x3);
+    oled_to_lcd_row(i2c_row);
 
     i2c_row++;
 
@@ -709,7 +714,6 @@ static unsigned int ssd1306_prep_buffer(void)
 
 static unsigned int sh1106_prep_buffer(void)
 {
-    int size;
     uint8_t *p = buffer;
 
     if (i2c_row == (oled_height / 8)) {
@@ -726,14 +730,9 @@ static unsigned int sh1106_prep_buffer(void)
     }
 
     /* Convert one row of text[] into buffer[] writes. */
-    size = oled_to_lcd_row(i2c_row/2);
-    if (size != 0) {
-        oled_double_height(&buffer[128], &buffer[(size == 1) ? 128 : 0],
-                           (i2c_row & 1) + 1);
-    } else {
-        if (!(i2c_row & 1))
-            memcpy(&buffer[128], &buffer[0], 128);
-    }
+    oled_to_lcd_row(i2c_row/2);
+    if (!(i2c_row & 1))
+        memcpy(&buffer[128], &buffer[0], 128);
 
     /* Every 8 rows needs a new page address and hence new I2C transaction. */
     i2c_stop();

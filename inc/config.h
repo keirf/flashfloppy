@@ -175,6 +175,13 @@ struct packed ff_cfg {
 #define SHOWEXT_yes  1
 #define SHOWEXT_auto 2
     uint8_t show_filename_ext;
+    bool_t show_tracks_short;
+    /* Bit n: content row n, double height in display_order, is double
+     * width as well. */
+    uint8_t display_order_wide;
+    bool_t show_dir_slash;
+    bool_t display_scroll_by_pixel;
+    bool_t display_error_wide;
 };
 
 extern struct ff_cfg ff_cfg;

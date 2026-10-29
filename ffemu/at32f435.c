@@ -16,11 +16,17 @@
 #define lcd_init at435_lcd_init
 #define lcd_clear at435_lcd_clear
 #define lcd_write at435_lcd_write
+#define lcd_write_shifted at435_lcd_write_shifted
+#define lcd_column_pixels at435_lcd_column_pixels
 #define lcd_backlight at435_lcd_backlight
 #define lcd_sync at435_lcd_sync
+#define lcd_row_columns at435_lcd_row_columns
+#define lcd_write_glyphs at435_lcd_write_glyphs
+#define lcd_shown_rows at435_lcd_shown_rows
 #define lcd_columns at435_lcd_columns
 #define lcd_rows at435_lcd_rows
 #define display_mode at435_display_mode
+#define is_oled_display at435_is_oled_display
 #define has_osd at435_has_osd
 #define osd_buttons_tx at435_osd_buttons_tx
 #define osd_buttons_rx at435_osd_buttons_rx
@@ -40,11 +46,17 @@ void lcd_clear(void);
 #undef lcd_init
 #undef lcd_clear
 #undef lcd_write
+#undef lcd_write_shifted
+#undef lcd_column_pixels
 #undef lcd_backlight
 #undef lcd_sync
+#undef lcd_row_columns
+#undef lcd_write_glyphs
+#undef lcd_shown_rows
 #undef lcd_columns
 #undef lcd_rows
 #undef display_mode
+#undef is_oled_display
 #undef has_osd
 #undef osd_buttons_tx
 #undef osd_buttons_rx
@@ -197,6 +209,7 @@ static void follow(void)
     at435_osd_buttons_tx = osd_buttons_tx;
     lcd_columns = at435_lcd_columns;
     lcd_rows = at435_lcd_rows;
+    is_oled_display = at435_is_oled_display;
     has_osd = at435_has_osd;
     osd_buttons_rx = at435_osd_buttons_rx;
 }
@@ -256,8 +269,14 @@ void at435_bus_sync(uint64_t now)
 bool_t f105_lcd_init(void);
 void f105_lcd_clear(void);
 void f105_lcd_write(int col, int row, int min, const char *str);
+void f105_lcd_write_shifted(int col, int row, int nr, unsigned int px,
+                            const char *str);
+unsigned int f105_lcd_column_pixels(void);
 void f105_lcd_backlight(bool_t on);
 void f105_lcd_sync(void);
+unsigned int f105_lcd_row_columns(unsigned int row);
+void f105_lcd_write_glyphs(int row, unsigned int base);
+unsigned int f105_lcd_shown_rows(void);
 
 #define at435 (emu_mcu == EMU_MCU_at32f435)
 
@@ -289,6 +308,20 @@ void lcd_write(int col, int row, int min, const char *str)
         f105_lcd_write(col, row, min, str);
 }
 
+void lcd_write_shifted(int col, int row, int nr, unsigned int px,
+                       const char *str)
+{
+    if (at435)
+        at435_lcd_write_shifted(col, row, nr, px, str);
+    else
+        f105_lcd_write_shifted(col, row, nr, px, str);
+}
+
+unsigned int lcd_column_pixels(void)
+{
+    return at435 ? at435_lcd_column_pixels() : f105_lcd_column_pixels();
+}
+
 void lcd_backlight(bool_t on)
 {
     if (at435)
@@ -303,6 +336,27 @@ void lcd_sync(void)
         at435_lcd_sync();
     else
         f105_lcd_sync();
+}
+
+unsigned int lcd_row_columns(unsigned int row)
+{
+    if (!at435)
+        return f105_lcd_row_columns(row);
+    follow();
+    return at435_lcd_row_columns(row);
+}
+
+void lcd_write_glyphs(int row, unsigned int base)
+{
+    if (at435)
+        at435_lcd_write_glyphs(row, base);
+    else
+        f105_lcd_write_glyphs(row, base);
+}
+
+unsigned int lcd_shown_rows(void)
+{
+    return at435 ? at435_lcd_shown_rows() : f105_lcd_shown_rows();
 }
 
 /*

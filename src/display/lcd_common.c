@@ -57,7 +57,7 @@ static uint8_t _bl;
 static uint8_t i2c_addr;
 static uint8_t i2c_dead;
 static uint8_t i2c_row;
-static bool_t is_oled_display;
+bool_t is_oled_display;
 static uint8_t oled_height;
 /* The font that lcd_columns is sized for. FF.CFG may change
  * ff_cfg.oled_font before it resets the system. */
@@ -75,8 +75,22 @@ static volatile uint8_t refresh_count;
 /* I2C data buffer. Data is DMAed to the I2C peripheral. */
 static uint8_t buffer[256] aligned(4);
 
-/* Text buffer, rendered into I2C data and placed into buffer[]. */
-static char text[4][40];
+/* Text buffer, rendered into I2C data and placed into buffer[]: rows 0 to 3
+ * and 4, the image's name and track, as display-order names them. */
+static char text[5][40];
+
+/* The rows' layouts of half width, for a row that display-order draws double
+ * width on an OLED, whose columns are 21 at most. */
+static char text_wide[ARRAY_SIZE(text)][21];
+
+/* Of each text row, in its layouts of normal and of half width, the columns
+ * that an OLED shows px pixels to the left in the normal display mode, from
+ * col to col + nr - 1, the pixels so freed at their right from next's glyph:
+ * see lcd_write_shifted(). */
+static struct oled_shift {
+    uint8_t col, nr, px;
+    char next;
+} oled_shift[2][ARRAY_SIZE(text)];
 
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
@@ -84,6 +98,20 @@ uint8_t lcd_columns, lcd_rows;
 /* Current display mode: Affects row ordering and sizing. */
 uint8_t display_mode = DM_banner;
 #define menu_mode (display_mode == DM_menu)
+#define glyphs_mode (display_mode == DM_glyphs)
+#define error_mode (display_mode >= DM_error)
+
+/* An error screen's rows, the message in the status row: below the image's
+ * name, or alone below a blank row, double height where the display has
+ * room, and alone double height on any OLED. */
+static uint16_t error_order(void)
+{
+    bool_t oled64 = is_oled_display && (oled_height == 64);
+
+    if (display_mode == DM_error_name)
+        return oled64 ? 0x7798 : 0x7710;
+    return oled64 ? 0x779f : is_oled_display ? 0x7779 : 0x7717;
+}
 
 /* Occasionally the I2C/DMA engine seems to get stuck. Detect this with 
  * a timeout timer and unwedge it by calling the I2C error handler. */
@@ -98,7 +126,8 @@ static void timeout_fn(void *unused)
 static bool_t i2c_probe(uint8_t a);
 static bool_t i2c_sync_write(uint8_t b);
 #ifdef font_extra
-static void oled_convert_text_row_8x16(char *pc);
+static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
+                            unsigned int to);
 #endif
 
 /* Emit a 4-bit command to the HD44780 via the DMA buffer. */
@@ -138,29 +167,74 @@ static uint8_t i2c_probe_range(uint8_t s, uint8_t e)
 void lcd_clear(void)
 {
     memset(text, ' ', sizeof(text));
+    memset(text_wide, ' ', sizeof(text_wide));
+    memset(oled_shift, 0, sizeof(oled_shift));
 }
 
 void lcd_write(int col, int row, int min, const char *str)
 {
     char c, *p;
     uint32_t oldpri;
+    int columns = lcd_columns;
+
+    if (row & LCD_WIDE) {
+        columns /= 2;
+        p = &text_wide[row & ~LCD_WIDE][col];
+    } else {
+        p = &text[row][col];
+    }
 
     if (min < 0)
-        min = lcd_columns;
-
-    p = &text[row][col];
+        min = columns;
 
     /* Prevent the text[] getting rendered while we're updating it. */
     oldpri = IRQ_save(I2C_IRQ_PRI);
 
-    while ((c = *str++) && (col++ < lcd_columns)) {
+    while ((c = *str++) && (col++ < columns)) {
         *p++ = c;
         min--;
     }
-    while ((min-- > 0) && (col++ < lcd_columns))
+    while ((min-- > 0) && (col++ < columns))
         *p++ = ' ';
 
     IRQ_restore(oldpri);
+}
+
+void lcd_write_glyphs(int row, unsigned int base)
+{
+    unsigned int i;
+    uint32_t oldpri = IRQ_save(I2C_IRQ_PRI);
+
+    memset(text[row], ' ', lcd_columns);
+    for (i = 0; i < 16; i++)
+        text[row][i] = base + i;
+
+    IRQ_restore(oldpri);
+}
+
+unsigned int lcd_shown_rows(void)
+{
+    /* FF OSD alone shows two: the font test gives it no more. */
+    return is_oled_display ? oled_height / 16 : i2c_addr ? lcd_rows : 2;
+}
+
+void lcd_write_shifted(int col, int row, int nr, unsigned int px,
+                       const char *str)
+{
+    struct oled_shift *s = &oled_shift[!!(row & LCD_WIDE)][row & ~LCD_WIDE];
+    uint32_t oldpri = IRQ_save(I2C_IRQ_PRI);
+
+    s->col = col;
+    s->nr = nr;
+    s->px = px;
+    s->next = px ? str[nr] : ' ';
+    lcd_write(col, row, -1, str);
+    IRQ_restore(oldpri);
+}
+
+unsigned int lcd_column_pixels(void)
+{
+    return (oled_font == FONT_8x16) ? 8 : 6;
 }
 
 void lcd_backlight(bool_t on)
@@ -176,39 +250,74 @@ void lcd_sync(void)
         cpu_relax();
 }
 
-extern const uint8_t oled_font_6x13[];
-static void oled_convert_text_row_6x13(char *pc)
+#if TARGET == TARGET_apple2
+#include "oled_spinner.c"
+
+/* Draws the phase spinners of text row @pc over its rendering in buffer[],
+ * which holds @half of a double-height row, or 0 for a row of normal
+ * height, stretched to double width if @wide. */
+static void oled_draw_spinners(const char *pc, unsigned int half,
+                               bool_t wide)
 {
-    unsigned int i, c;
+    unsigned int i, w = (oled_font == FONT_8x16) ? 8 : 6, x = (w == 6);
+
+    for (i = 0; i < (wide ? lcd_columns/2 : lcd_columns); i++, x += w)
+        if (((uint8_t)pc[i] & ~0xf) == OLED_SPINNER)
+            oled_spinner(&buffer[wide ? 2*x : x], w, pc[i] & 0xf, half);
+}
+#endif
+
+extern const uint8_t oled_font_6x13[];
+
+/* Writes pixel columns @from to @to - 1 of the glyph of @c to buffer[] at @q,
+ * its top and bottom pages. */
+static void oled_glyph(uint8_t *q, char c, unsigned int from,
+                       unsigned int to)
+{
+    unsigned int g = (uint8_t)c - 0x20;
     const uint8_t *p;
+
+    if (g > 0x5e)
+        g = '.' - 0x20;
+#ifdef font_extra
+    if (oled_font == FONT_8x16) {
+        oled_glyph_8x16(q, g, from, to);
+        return;
+    }
+#endif
+    p = &oled_font_6x13[g * 6 * 2];
+    memcpy(q, p+from, to-from);
+    memcpy(q+128, p+6+from, to-from);
+}
+
+/* Renders text row @pc into buffer[], its columns shifted as @s says in the
+ * normal display mode. */
+static void oled_convert_text_row(const char *pc, const struct oled_shift *s)
+{
+    unsigned int i, from, w = lcd_column_pixels();
+    unsigned int px = ((display_mode == DM_normal) || error_mode) ? s->px : 0;
     uint8_t *q = buffer;
-    const unsigned int w = 6;
 
-    q[0] = q[128] = 0;
-    q++;
+    if (w == 6) {
+        q[0] = q[128] = 0;
+        q++;
+    }
 
-    for (i = 0; i < lcd_columns; i++) {
-        if ((c = *pc++ - 0x20) > 0x5e)
-            c = '.' - 0x20;
-        p = &oled_font_6x13[c * w * 2];
-        memcpy(q, p, w);
-        memcpy(q+128, p+w, w);
-        q += w;
+    for (i = 0; i <= lcd_columns; i++) {
+        if (i == s->col + s->nr) {
+            oled_glyph(q, s->next, 0, px);
+            q += px;
+        }
+        if (i == lcd_columns)
+            break;
+        from = (i == s->col) ? px : 0;
+        oled_glyph(q, pc[i], from, w);
+        q += w - from;
     }
 
     /* Fill remainder of buffer[] with zeroes. */
-    memset(q, 0, 127-lcd_columns*w);
-    memset(q+128, 0, 127-lcd_columns*w);
-}
-
-static void oled_convert_text_row(char *pc)
-{
-#ifdef font_extra
-    if (oled_font == FONT_8x16)
-        oled_convert_text_row_8x16(pc);
-    else
-#endif
-        oled_convert_text_row_6x13(pc);
+    memset(q, 0, buffer+128-q);
+    memset(q+128, 0, buffer+128-q);
 }
 
 static unsigned int oled_queue_cmds(
@@ -263,15 +372,46 @@ static void oled_double_height(uint8_t *dst, uint8_t *src, uint8_t mask)
     }
 }
 
-static int oled_to_lcd_row(int in_row)
+/* Stretches the left half of the text row in buffer[] to its full width. */
+static void oled_double_width(void)
+{
+    int x;
+
+    /* Each page from its right, so that no column is written before it is
+     * read. */
+    for (x = 255; x >= 0; x--)
+        buffer[x] = buffer[(x & 128) | ((x & 127) >> 1)];
+}
+
+unsigned int lcd_row_columns(unsigned int row)
+{
+    /* As oled_to_lcd_row() takes display_order on the normal screen, and on
+     * an error screen its double rows by display-error-wide. */
+    if (!is_oled_display)
+        return lcd_columns;
+    if ((display_mode == DM_normal)
+        ? (ff_cfg.display_order_wide & (1 << row))
+        : (error_mode && ff_cfg.display_error_wide
+           && ((oled_height == 64) || (display_mode == DM_error))))
+        return lcd_columns / 2;
+    return lcd_columns;
+}
+
+/* Renders the 16 pixel rows @in_row of the display into buffer[], its top and
+ * bottom pages: a text row, or half of a double-height one. */
+static void oled_to_lcd_row(int in_row)
 {
     uint16_t order;
-    int i = 0, row;
-    bool_t large = FALSE;
+    int i = 0, row, half;
+    bool_t large = FALSE, wide;
+    char *pc;
 
-    order = (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
+    order = glyphs_mode ? 0x3210 : (oled_height == 32) ? 0x7710
+        : menu_mode ? 0x7903 : 0x7183;
     if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
         order = ff_cfg.display_order;
+    else if (error_mode)
+        order = error_order();
 
     for (;;) {
         large = !!(order & DORD_double);
@@ -283,13 +423,24 @@ static int oled_to_lcd_row(int in_row)
 
     /* Remap the row */
     row = order & DORD_row;
-    if (row < lcd_rows) {
-        oled_convert_text_row(text[row]);
+    wide = large && (lcd_row_columns(row) < lcd_columns);
+    pc = (row >= ARRAY_SIZE(text)) ? NULL : wide ? text_wide[row] : text[row];
+    if (pc != NULL) {
+        oled_convert_text_row(pc, &oled_shift[!!wide][row]);
+        if (wide)
+            oled_double_width();
     } else {
         memset(buffer, 0, 256);
     }
 
-    return large ? i - in_row : 0;
+    half = large ? i - in_row : 0;
+    if (large)
+        oled_double_height(buffer, &buffer[(half == 1) ? 128 : 0], 0x3);
+
+#if TARGET == TARGET_apple2
+    if ((pc != NULL) && !glyphs_mode)
+        oled_draw_spinners(pc, half, wide);
+#endif
 }
 
 /*

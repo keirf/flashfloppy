@@ -353,9 +353,13 @@ int get_next_opt(struct opts *opts)
 
 unsigned int sysclk_mhz = 144;
 const char fw_ver[] = "test";
-uint8_t display_type;
+uint8_t display_type, lcd_columns;
 
 void lcd_write(int col, int row, int min, const char *str)
+{
+}
+
+void display_write_name(const char *name)
 {
 }
 

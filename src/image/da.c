@@ -62,7 +62,7 @@ static void da_seek_track(struct image *im, uint16_t track)
         led_7seg_write_string((led_7seg_nr_digits() == 3) ? "D-A" : "DA");
         break;
     case DT_LCD_OLED:
-        lcd_write(0, 0, -1, "*Direct Access*");
+        display_write_name("*Direct Access*");
         break;
     }
 

@@ -123,7 +123,7 @@ static void dma_start(unsigned int sz)
 /* Snapshot text buffer into the command buffer. */
 static unsigned int osd_prep_buffer(void)
 {
-    uint16_t order = menu_mode ? 0x7903 : 0x7183;
+    uint16_t order = glyphs_mode ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
     uint8_t *q = buffer;
     unsigned int row, rows, heights;
     int i;
@@ -136,6 +136,8 @@ static unsigned int osd_prep_buffer(void)
     if ((ff_cfg.osd_display_order != DORD_default)
         && (display_mode == DM_normal))
         order = ff_cfg.osd_display_order;
+    else if (error_mode)
+        order = error_order();
 
     heights = rows = 0;
     /* FF OSD takes three rows at most: its row count is two bits. */
@@ -164,6 +166,16 @@ static unsigned int osd_prep_buffer(void)
             memcpy(q, text[i], lcd_columns);
         else
             memset(q, ' ', lcd_columns);
+#if TARGET == TARGET_apple2
+        if (!glyphs_mode) {
+            /* The OLED's phase spinner goes as a blank: FF OSD has no
+             * glyph for it. The font test sends its code as it is. */
+            uint8_t *p;
+            for (p = q; p < q + lcd_columns; p++)
+                if ((*p & ~0xf) == OLED_SPINNER)
+                    *p = ' ';
+        }
+#endif
         q += lcd_columns;
     }
 
@@ -195,9 +207,11 @@ static unsigned int lcd_prep_buffer(void)
         refresh_count++;
     }
 
-    order = (lcd_rows == 2) ? 0x7710 : 0x2103;
+    order = glyphs_mode ? 0x3210 : (lcd_rows == 2) ? 0x7710 : 0x2103;
     if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
         order = ff_cfg.display_order;
+    else if (error_mode)
+        order = error_order();
 
     row = (order >> (i2c_row * DORD_shift)) & DORD_row;
     p = (_bl && row < ARRAY_SIZE(text)) ? text[row] : NULL;
@@ -521,21 +535,15 @@ fail:
 
 #ifdef font_extra
 extern const uint8_t oled_font_8x16[];
-static void oled_convert_text_row_8x16(char *pc)
+static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
+                            unsigned int to)
 {
-    unsigned int i, c;
     const uint8_t *p;
-    uint8_t *q = buffer;
     const unsigned int w = 8;
 
-    for (i = 0; i < lcd_columns; i++) {
-        if ((c = *pc++ - 0x20) > 0x5e)
-            c = '.' - 0x20;
-        p = &oled_font_8x16[c * w * 2];
-        memcpy(q, p, w);
-        memcpy(q+128, p+w, w);
-        q += w;
-    }
+    p = &oled_font_8x16[g * w * 2];
+    memcpy(q, p+from, to-from);
+    memcpy(q+128, p+w+from, to-from);
 }
 #endif
 
@@ -588,7 +596,6 @@ static unsigned int oled_start_i2c(uint8_t *buf)
 /* Snapshot text buffer into the bitmap buffer. */
 static unsigned int oled_prep_buffer(void)
 {
-    int size;
     uint8_t *p = buffer;
 
     if (i2c_row == (oled_height / 8)) {
@@ -603,14 +610,9 @@ static unsigned int oled_prep_buffer(void)
     }
 
     /* Convert one row of text[] into buffer[] writes. */
-    size = oled_to_lcd_row(i2c_row/2);
-    if (size != 0) {
-        oled_double_height(&buffer[128], &buffer[(size == 1) ? 128 : 0],
-                           (i2c_row & 1) + 1);
-    } else {
-        if (!(i2c_row & 1))
-            memcpy(&buffer[128], &buffer[0], 128);
-    }
+    oled_to_lcd_row(i2c_row/2);
+    if (!(i2c_row & 1))
+        memcpy(&buffer[128], &buffer[0], 128);
 
     /* New I2C transaction. */
     p += oled_start_i2c(p);

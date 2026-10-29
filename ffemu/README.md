@@ -155,11 +155,18 @@ changes it in `FF.CFG` on the drive as well when the file sets it, for a drive
 made from a directory or a mounted disk (an image's `FF.CFG` cannot be changed,
 and the dialog warns that it will override the flash on the next boot), and
 when `display-type` is changed in the Flash mem dialog, it offers to fit the
-display that suits it. When the firmware drives another display than the one
-fitted, for instance because `FF.CFG` on the drive says so, the display's frame
-shows "display type mismatch". The firmware finds an LED display only when
-`display-type` is `auto`, so fitting one offers to set that; the display is
-drawn with its unlit segments faint, in the same three renderings as the OLED.
+display that suits it. Before the power cycle that brings in a display or flash
+changed in those dialogs, ffemu checks that `display-order` fills the display
+exactly, as the firmware lays it out by `display-type`: on an OLED its rows of
+16 pixels, of which a double one, `d` or `w`, takes two, and on an LCD its
+rows, which show the first entries alone; if it gives more or fewer, ffemu
+offers to reset it to `default`, in `FF.CFG` on the drive as well when the file
+sets it, warning as above for an image. When the firmware drives another
+display than the one fitted, for instance because `FF.CFG` on the drive says
+so, the display's frame shows "display type mismatch". The firmware finds an
+LED display only when `display-type` is `auto`, so fitting one offers to set
+that; the display is drawn with its unlit segments faint, in the same three
+renderings as the OLED.
 The firmware sizes an LCD by `display-type`, e.g. `display-type = lcd-20x04`,
 and drives one that it finds with `auto` as a 16x2; the LCD is drawn dark on
 its lit panel, in the color of the settings (white on blue, dark or bright),
@@ -195,6 +202,15 @@ device stays the AT32F415 board, and Status names the board with "AT32F435
 display". A change restarts the device. Reading from that I2C leaves no trace
 that the model could see, so every byte of a read is its last: the driver's one
 read of more than a byte, its probe of an SH1106, takes the last.
+
+The dialog's button `Save recommended FF.CFG` writes `FF.CFG` as the Flash mem
+dialog's Save buttons do, asking first for a drive made from an image, with the
+options recommended for the display chosen that differ from the defaults:
+`display-type` where the default does not suit the display, `show-filename-ext
+= auto`, `show-tracks-short = yes` and `show-dir-slash = yes`, and on an OLED
+`display-scroll-by-pixel = yes`, a `display-order` with the name double width,
+`Cw` on a 128x32 panel and `D,Nw,S` on a 128x64, and `display-error-wide = yes`
+for the error screen's rows; none of them applies to a 7-segment display.
 
 FF OSD, the on-screen display that shares the I2C bus at 0x10 and shows the
 display's text over the host computer's video, is fitted beside an OLED or an

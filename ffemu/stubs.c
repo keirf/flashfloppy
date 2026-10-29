@@ -375,7 +375,11 @@ static const struct emu_option_info info[OPT_nr] = {
         .kind = EMU_KIND_number, FLAGS(notify_flags),
         .mask = NOTIFY_volume_mask },
     [OPT_da_report_version] = STRING,
-    [OPT_extend_image] = YES_NO
+    [OPT_extend_image] = YES_NO,
+    [OPT_show_tracks_short] = YES_NO,
+    [OPT_show_dir_slash] = YES_NO,
+    [OPT_display_scroll_by_pixel] = YES_NO,
+    [OPT_display_error_wide] = YES_NO
 };
 #undef VALUES
 #undef FLAGS
@@ -478,11 +482,31 @@ static bool_t parse_display_type(char *s, uint32_t *v)
     return TRUE;
 }
 
-static bool_t parse_display_order(char *s, uint32_t *v)
+/* display-order's content rows by their initials, as FF.CFG documents
+ * them: N, S, I, D, C, and B for the blank row 7. */
+static const char dord_initials[] = "NSIDC  B";
+
+/* The content row of display-order's item @c, its digit or its initial in
+ * either case, or -1 if it names none. */
+static int dord_row(char c)
+{
+    unsigned int i;
+
+    if ((c >= '0') && (c <= '7'))
+        return c - '0';
+    for (i = 0; i < sizeof(dord_initials) - 1; i++)
+        if ((dord_initials[i] != ' ') && (dord_initials[i] == (c & ~0x20)))
+            return i;
+    return -1;
+}
+
+static bool_t parse_display_order(char *s, uint32_t *v, uint8_t *wide)
 {
     unsigned int sh = 0;
+    int row;
     char *next;
 
+    *wide = 0;
     if (!strcmp(s, "default")) {
         *v = DORD_default;
         return TRUE;
@@ -490,10 +514,13 @@ static bool_t parse_display_order(char *s, uint32_t *v)
     *v = 0;
     for (; s != NULL; s = next) {
         next = next_token(s, ',');
-        if ((sh >= 16) || (s[0] < '0') || (s[0] > '7')
-            || ((s[1] != '\0') && ((s[1] != 'd') || (s[2] != '\0'))))
+        if ((sh >= 16) || ((row = dord_row(s[0])) < 0)
+            || ((s[1] != '\0')
+                && (((s[1] != 'd') && (s[1] != 'w')) || (s[2] != '\0'))))
             return FALSE;
-        *v |= ((s[0] - '0') | ((s[1] == 'd') ? DORD_double : 0)) << sh;
+        *v |= (row | ((s[1] != '\0') ? DORD_double : 0)) << sh;
+        if (s[1] == 'w')
+            *wide |= 1 << row;
         sh += DORD_shift;
     }
     /* Blank rows for the rest, within the 16 bits that the option has. */
@@ -569,6 +596,7 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
     unsigned int sz = option[i].size, n;
     char s[64];
     uint32_t v = 0;
+    uint8_t wide;
 
     if (sz > 4) {
         /* A string: quoted, or as FF.CFG takes it unquoted. */
@@ -625,8 +653,11 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
             return FALSE;
         goto store;
     case OPT_display_order: case OPT_osd_display_order:
-        if (!parse_display_order(s, &v))
+        if (!parse_display_order(s, &v, &wide))
             return FALSE;
+        /* As the firmware, which draws no OSD row wide. */
+        if (i == OPT_display_order)
+            f->display_order_wide = wide;
         goto store;
     default:
         /* A plain number. */
@@ -642,8 +673,11 @@ store:
     return TRUE;
 }
 
-/* A display order: its rows, less the blank ones that the parser adds. */
-static void format_display_order(char *buf, unsigned int size, uint16_t v)
+/* A display order: its rows by their initials, less the blank ones that the
+ * parser adds; @wide has a bit for each content row drawn double width.
+ * Rows 5 and 6, which no initial names, keep their digits. */
+static void format_display_order(char *buf, unsigned int size, uint16_t v,
+                                 uint8_t wide)
 {
     unsigned int nr = 4, i, n = 0;
 
@@ -656,8 +690,12 @@ static void format_display_order(char *buf, unsigned int size, uint16_t v)
     buf[0] = '\0';
     for (i = 0; i < nr; i++) {
         unsigned int row = (v >> (i * DORD_shift)) & 15;
-        n += snprintf(buf + n, size - n, "%s%u%s", i ? "," : "",
-                      row & DORD_row, (row & DORD_double) ? "d" : "");
+        char c = dord_initials[row & DORD_row];
+
+        n += snprintf(buf + n, size - n, "%s%c%s", i ? "," : "",
+                      (c != ' ') ? c : '0' + (row & DORD_row),
+                      !(row & DORD_double) ? ""
+                      : (wide & (1 << (row & DORD_row))) ? "w" : "d");
     }
 }
 
@@ -730,7 +768,8 @@ static unsigned int format_option(unsigned int i, const struct ff_cfg *f,
         format_display_type(buf, size, v);
         break;
     case OPT_display_order: case OPT_osd_display_order:
-        format_display_order(buf, size, v);
+        format_display_order(buf, size, v, (i == OPT_display_order)
+                             ? f->display_order_wide : 0);
         break;
     default:
         snprintf(buf, size, "%u", (unsigned int)v);
@@ -914,6 +953,31 @@ int emu_flash_display_auto(const void *cfg)
 void emu_flash_set_display_auto(void *cfg)
 {
     ((struct ff_cfg *)cfg)->display_type = DISPLAY_auto;
+}
+
+int emu_flash_order_fits(const void *cfg, int oled, unsigned int *taken,
+                         unsigned int *room)
+{
+    const struct ff_cfg *f = cfg;
+    uint16_t t = f->display_type, order = f->display_order;
+    unsigned int i, n = 0;
+
+    if (t != DISPLAY_auto)
+        oled = !!(t & DISPLAY_oled);
+    *room = oled ? ((t & DISPLAY_oled_64) ? 4 : 2)
+        : (t == DISPLAY_auto) ? 2
+        : range_t(unsigned int, (t >> _DISPLAY_lcd_rows) & 7, 2, 4);
+    if (order == DORD_default) {
+        *taken = *room;
+        return 1;
+    }
+    /* The rows that the parser fills in after those given are blank. */
+    for (i = *taken = 0; i < 4; i++, order >>= DORD_shift) {
+        n += (oled && (order & DORD_double)) ? 2 : 1;
+        if ((order & 0xf) != 7)
+            *taken = n;
+    }
+    return *taken == *room;
 }
 
 /*

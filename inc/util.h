@@ -140,9 +140,35 @@ int led_7seg_nr_digits(void);
 bool_t lcd_init(void);
 void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
+/* The columns of text row @row that show. */
+unsigned int lcd_row_columns(unsigned int row);
+/* With lcd_write()'s row, the row's layout of half width, which an OLED shows
+ * where display-order draws the row double width. */
+#define LCD_WIDE 8
+/* lcd_write() of @str from column @col to the row's end, of which an OLED
+ * shows the @nr columns from @col @px pixels to the left, fewer than
+ * lcd_column_pixels(), the pixels so freed at their right from @str[@nr],
+ * which must be a character of @str unless @px is 0. */
+void lcd_write_shifted(int col, int row, int nr, unsigned int px,
+                       const char *str);
+/* The pixel columns of an OLED's text column. */
+unsigned int lcd_column_pixels(void);
+/* Writes @name, the image's name as shown, to its row and to that of the name
+ * and the track. */
+void display_write_name(const char *name);
+/* Writes the 16 codes from @base on, as they are, to text row @row, and
+ * blanks after them. */
+void lcd_write_glyphs(int row, unsigned int base);
+/* The text rows that the display shows. */
+unsigned int lcd_shown_rows(void);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
 extern uint8_t lcd_columns, lcd_rows;
+extern bool_t is_oled_display;
+/* A text cell of OLED_SPINNER plus the stepper phases on, as bits 0 to 3,
+ * is the OLED's Apple2 phase spinner, over it and the next cell: a control
+ * code, so that no text shown, an image's name included, can hold it. */
+#define OLED_SPINNER 0x10
 
 /* FF OSD (On Screen Display) */
 extern bool_t has_osd;
@@ -162,7 +188,10 @@ void set_slot_name(const char *name);
 bool_t get_img_cfg(struct slot *slot);
 void IRQ_rotary(void);
 
-enum { DM_normal=0, DM_banner, DM_menu };
+/* DM_glyphs: the font test's pages, every row single height. DM_error: an
+ * error's message alone; DM_error_name: below the image's name. The two
+ * stay last, as the display tests them by order. */
+enum { DM_normal=0, DM_banner, DM_menu, DM_glyphs, DM_error, DM_error_name };
 extern uint8_t display_mode;
 extern uint8_t board_id;
 extern uint8_t has_kc30_header;
