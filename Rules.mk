@@ -17,6 +17,12 @@ FLAGS += -Wundef
 
 ## STM32F105
 ifeq ($(mcu),stm32f105)
+# Its images are nearly full: flags that make GCC emit less code than
+# -Os alone, each measured, at a little speed in loops.
+FLAGS += -fno-schedule-insns2 -fno-move-loop-invariants
+FLAGS += -fmerge-all-constants -fno-ipa-sra -fno-caller-saves
+FLAGS += -fno-if-conversion -fno-if-conversion2
+FLAGS += -fno-partial-inlining -fno-inline-small-functions
 
 FLAGS += -mcpu=cortex-m3
 
