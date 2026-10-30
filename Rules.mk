@@ -51,8 +51,8 @@ $(level) := y
 
 FLAGS += $(MCU_FLAG) $(TARGET_FLAG) $(LEVEL_FLAG)
 
-FLAGS += -MMD -MF .$(@F).d
-DEPS = .*.d
+FLAGS += -MMD -MP
+DEPS = *.d
 
 FLAGS += $(FLAGS-y)
 
