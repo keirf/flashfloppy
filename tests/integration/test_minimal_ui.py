@@ -16,6 +16,15 @@ def pixels(r):
 
 class MinimalUI(display.Case, unittest.TestCase):
 
+    def test_hex_phase_on_oled(self):
+        """The Apple2 phase digit is hexadecimal, with no spinner glyph."""
+        rows, r = self.rows(
+            PROGRAM, display.half_tracks(2), "ssd1306-128x32", files=display.DSK)
+        self.assertEqual(rows[2], "000/000   T:01.4     ", r.report())
+        self.assertEqual(
+            display.oled_text(pixels(r), 16, "6x13", False), rows[2],
+            r.report())
+
     def test_no_scrolling(self):
         """A long name stays at its start after the usual scrolling pause."""
         r = fr.run(

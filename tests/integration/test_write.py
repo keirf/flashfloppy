@@ -36,15 +36,16 @@ class WriteMarks(fr.Case, unittest.TestCase):
         self.check("ffemu", "tm1651-3digit", PC, fr.led_segments(" 0v"), fr.led_segments(" 0k"))
 
     def test_apple2_lcd(self):
-        """W before the track, as with a Step/Dir host."""
+        """`W` before the track in long."""
         self.check(
             "ffemu-apple2", "hd44780-16x2", DSK, "W T:00.0", "  T:00.0")
 
     def test_apple2_led(self):
-        """The side's letter after the track becomes v, as with a Step/Dir
-        host."""
+        """The top segment of the phase digit lights."""
         self.check(
-            "ffemu-apple2", "tm1651-3digit", DSK, fr.led_segments(" 0v"), fr.led_segments(" 0k"))
+            "ffemu-apple2", "tm1651-3digit", DSK,
+            fr.segments([fr.SEG_T] + fr.led_cells("00")),
+            fr.segments([0] + fr.led_cells("00")))
 
 
 if __name__ == "__main__":

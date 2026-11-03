@@ -192,7 +192,7 @@ static unsigned int osd_prep_buffer(void)
         i = (order >> (row * DORD_shift)) & DORD_row;
         /* A blank row, 7, has no text[] of its own. */
         if (i < ARRAY_SIZE(text))
-            memcpy(q, text[i], lcd_columns);
+            osd_copy_text_row(q, i);
         else
             memset(q, ' ', lcd_columns);
         q += lcd_columns;

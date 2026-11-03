@@ -276,6 +276,9 @@ void led_7seg_write_string(const char *p)
             d[i] = led_7seg_letters[c - 'A'];
         } else if (c == '-') {
             d[i] = SEG_M;
+        } else if ((TARGET == TARGET_apple2) && (c & 0x80)) {
+            /* The low seven bits are the Apple2 phase digit's segment mask. */
+            d[i] = c & 0x7f;
         } else {
             d[i] = 0;
         }
