@@ -143,6 +143,12 @@ void lcd_write(int col, int row, int min, const char *str);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
 extern uint8_t lcd_columns, lcd_rows;
+extern bool_t is_oled_display;
+/* Place an Apple2 phase spinner of @width cells at @col of text @row, with
+ * LCD_WIDE selecting its half-width layout. @phases has phases 0 to 3 as bits
+ * 0 to 3. A width of zero removes it. The text cells hold ordinary spaces. */
+void lcd_write_spinner(int row, unsigned int col, unsigned int width,
+                       unsigned int phases);
 
 /* FF OSD (On Screen Display) */
 extern bool_t has_osd;

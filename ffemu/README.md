@@ -299,8 +299,8 @@ whatever its voltage, with the key that changes it below:
   cycle a computer goes through: phase 0 alone, phases 0 and 1, phase 1 alone,
   and so on. The firmware steps the head when one phase alone is on next to the
   present one, so two presses make one step. `\` releases all phases, as a
-  computer does between seeks; the state they were in is kept, shown in bright
-  green to the right of the phases, and the next press goes on from it.
+  computer does between seeks; the state they were in is kept, and the next
+  press goes on from it.
 
 The write signal comes with no data, which ffemu does not emulate: the firmware
 shows a write in progress on its display as the device does, and the write

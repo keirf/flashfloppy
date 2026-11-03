@@ -16,11 +16,13 @@
 #define lcd_init at435_lcd_init
 #define lcd_clear at435_lcd_clear
 #define lcd_write at435_lcd_write
+#define lcd_write_spinner at435_lcd_write_spinner
 #define lcd_backlight at435_lcd_backlight
 #define lcd_sync at435_lcd_sync
 #define lcd_columns at435_lcd_columns
 #define lcd_rows at435_lcd_rows
 #define display_mode at435_display_mode
+#define is_oled_display at435_is_oled_display
 #define has_osd at435_has_osd
 #define osd_buttons_tx at435_osd_buttons_tx
 #define osd_buttons_rx at435_osd_buttons_rx
@@ -40,11 +42,13 @@ void lcd_clear(void);
 #undef lcd_init
 #undef lcd_clear
 #undef lcd_write
+#undef lcd_write_spinner
 #undef lcd_backlight
 #undef lcd_sync
 #undef lcd_columns
 #undef lcd_rows
 #undef display_mode
+#undef is_oled_display
 #undef has_osd
 #undef osd_buttons_tx
 #undef osd_buttons_rx
@@ -197,6 +201,7 @@ static void follow(void)
     at435_osd_buttons_tx = osd_buttons_tx;
     lcd_columns = at435_lcd_columns;
     lcd_rows = at435_lcd_rows;
+    is_oled_display = at435_is_oled_display;
     has_osd = at435_has_osd;
     osd_buttons_rx = at435_osd_buttons_rx;
 }
@@ -256,6 +261,8 @@ void at435_bus_sync(uint64_t now)
 bool_t f105_lcd_init(void);
 void f105_lcd_clear(void);
 void f105_lcd_write(int col, int row, int min, const char *str);
+void f105_lcd_write_spinner(int row, unsigned int col, unsigned int width,
+                            unsigned int phases);
 void f105_lcd_backlight(bool_t on);
 void f105_lcd_sync(void);
 
@@ -287,6 +294,15 @@ void lcd_write(int col, int row, int min, const char *str)
         at435_lcd_write(col, row, min, str);
     else
         f105_lcd_write(col, row, min, str);
+}
+
+void lcd_write_spinner(int row, unsigned int col, unsigned int width,
+                       unsigned int phases)
+{
+    if (at435)
+        at435_lcd_write_spinner(row, col, width, phases);
+    else
+        f105_lcd_write_spinner(row, col, width, phases);
 }
 
 void lcd_backlight(bool_t on)

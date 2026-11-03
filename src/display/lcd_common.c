@@ -57,7 +57,7 @@ static uint8_t _bl;
 static uint8_t i2c_addr;
 static uint8_t i2c_dead;
 static uint8_t i2c_row;
-static bool_t is_oled_display;
+bool_t is_oled_display;
 static uint8_t oled_height;
 /* The font that lcd_columns is sized for. FF.CFG may change
  * ff_cfg.oled_font before it resets the system. */
@@ -77,6 +77,11 @@ static uint8_t buffer[256] aligned(4);
 
 /* Text buffer, rendered into I2C data and placed into buffer[]. */
 static char text[4][40];
+
+/* Each row's Apple2 phase spinner, outside the character encoding. */
+static struct oled_spinner {
+    uint8_t row, col, width, phases;
+} oled_spinners[2][ARRAY_SIZE(text)];
 
 /* Columns and rows of text. */
 uint8_t lcd_columns, lcd_rows;
@@ -138,6 +143,20 @@ static uint8_t i2c_probe_range(uint8_t s, uint8_t e)
 void lcd_clear(void)
 {
     memset(text, ' ', sizeof(text));
+    memset(oled_spinners, 0, sizeof(oled_spinners));
+}
+
+void lcd_write_spinner(int row, unsigned int col, unsigned int width,
+                       unsigned int phases)
+{
+    struct oled_spinner *s = &oled_spinners[!!(row & LCD_WIDE)][row & ~LCD_WIDE];
+    uint32_t oldpri = IRQ_save(I2C_IRQ_PRI);
+
+    s->row = row & ~LCD_WIDE;
+    s->col = col;
+    s->width = width;
+    s->phases = phases;
+    IRQ_restore(oldpri);
 }
 
 void lcd_write(int col, int row, int min, const char *str)
@@ -175,6 +194,28 @@ void lcd_sync(void)
     while ((uint8_t)(refresh_count - c) < 2)
         cpu_relax();
 }
+
+#if TARGET == TARGET_apple2
+#include "oled_spinner.c"
+
+/* Draw content @row's phase spinner over its rendering in buffer[], which
+ * holds @half of a double-height row, or 0 for normal height. In a @wide row,
+ * @stretched selects a two-cell spinner before stretching; otherwise only a
+ * one-cell spinner is drawn over the stretched row. */
+static void oled_draw_spinner(unsigned int row, unsigned int half,
+                              bool_t wide, bool_t stretched)
+{
+    const struct oled_spinner *s = &oled_spinners[!!wide][row];
+    unsigned int w = (oled_font == FONT_8x16) ? 8 : 6;
+    unsigned int x = s->col * w + (w == 6);
+
+    if (!s->width || (s->row != row) || (display_mode != DM_normal)
+        || (wide && ((s->width == 2) != stretched)))
+        return;
+    oled_spinner(&buffer[(wide && !stretched) ? 2*x : x],
+                 w, s->phases, half);
+}
+#endif
 
 extern const uint8_t oled_font_6x13[];
 static void oled_convert_text_row_6x13(char *pc)
@@ -268,7 +309,7 @@ static void oled_double_height(uint8_t *dst, uint8_t *src, uint8_t mask)
 static void oled_to_lcd_row(int in_row)
 {
     uint16_t order;
-    int i = 0, row;
+    int i = 0, row, half;
     bool_t large = FALSE;
 
     order = (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
@@ -291,8 +332,14 @@ static void oled_to_lcd_row(int in_row)
         memset(buffer, 0, 256);
     }
 
+    half = large ? i - in_row : 0;
     if (large)
-        oled_double_height(buffer, &buffer[(i - in_row == 1) ? 128 : 0], 0x3);
+        oled_double_height(buffer, &buffer[(half == 1) ? 128 : 0], 0x3);
+
+#if TARGET == TARGET_apple2
+    if (row < lcd_rows)
+        oled_draw_spinner(row, half, FALSE, FALSE);
+#endif
 }
 
 /*

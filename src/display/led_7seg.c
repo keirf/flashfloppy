@@ -243,6 +243,9 @@ void led_7seg_write_string(const char *p)
             d[i] = letters[c - 'A'];
         } else if (c == '-') {
             d[i] = 0x40;
+        } else if ((TARGET == TARGET_apple2) && (c & 0x80)) {
+            /* Segments `a` to `g` as bits 0 to 6: the Apple2 phase digit. */
+            d[i] = c & 0x7f;
         } else {
             d[i] = 0;
         }
