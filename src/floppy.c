@@ -559,7 +559,9 @@ void floppy_set_cyl(uint8_t unit, uint8_t cyl)
 void floppy_get_track(struct track_info *ti)
 {
     bool_t active = dma_wr != NULL;
-    ti->cyl = drive.cyl;
+    /* An Apple2 host steps in half tracks: show the track of the image. */
+    ti->cyl = (TARGET != TARGET_apple2) ? drive.cyl
+        : drive.cyl / (active ? (drive.image->step ?: 1) : 2);
     ti->side = active ? drive.head & (drive.image->nr_sides - 1) : 0;
     ti->sel = drive.sel;
     ti->writing = (active && dma_wr->state != DMA_inactive);
