@@ -16,12 +16,12 @@
 #define PB 1
 #define STEP_IRQ 28 /* TIM2, capturing STEP */
 
-/* The head's track: the apple2 target gives the cylinder in half tracks. */
+/* The head's track as displayed. */
 static unsigned int track(void)
 {
     struct track_info ti;
     floppy_get_track(&ti);
-    return (TARGET == TARGET_apple2) ? ti.cyl / 2 : ti.cyl;
+    return ti.cyl;
 }
 
 #if TARGET == TARGET_apple2
