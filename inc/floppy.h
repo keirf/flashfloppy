@@ -291,8 +291,7 @@ bool_t image_write_track(struct image *im);
 uint32_t image_ticks_since_index(struct image *im);
 
 /* MFM conversion. */
-extern const uint16_t mfmtab[];
-static inline uint16_t bintomfm(uint8_t x) { return mfmtab[x]; }
+uint16_t bintomfm(uint8_t x);
 uint8_t mfmtobin(uint16_t x);
 void mfm_to_bin(const void *in, void *out, unsigned int nr);
 void mfm_ring_to_bin(const uint16_t *ring, unsigned int mask,
