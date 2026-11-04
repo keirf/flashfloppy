@@ -111,17 +111,36 @@ class ThreeDigits(Case, unittest.TestCase):
 
     def test_lcd_16_columns(self):
         rows, r = self.rows("ffemu", steps(100), "hd44780-16x2")
-        self.assertEqual(rows[1], "000/000  T:100.0", r.report())
+        self.assertEqual(rows[1], "000/001  T:100.0", r.report())
 
     def test_oled_8x16(self):
         rows, r = self.rows(
             "ffemu", steps(100), "ssd1306-128x64",
             flash=["oled-font = 8x16"])
-        self.assertEqual(rows[2], "000/000  T:100.0", r.report())
+        self.assertEqual(rows[2], "000/001  T:100.0", r.report())
 
 
 class SlotNumbers(Case, unittest.TestCase):
-    """Slot numbers too wide for their three display cells show `???`."""
+    """The denominator is the potential-slot count; fields too wide for their
+    three display cells show `???`."""
+
+    def test_count(self):
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2", files=slot_files(13, 12))
+        self.assertEqual(rows[1], "012/013  T:00.0 ", r.report())
+
+    def test_count_1000(self):
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2", files=slot_files(1000))
+        self.assertEqual(rows[1], "000/???  T:00.0 ", r.report())
+
+    def test_indexed_count(self):
+        image = bytes(737280)
+        files = {"DSKA0000.IMG": image, "DSKA0012.IMG": image}
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2", files=files,
+            flash=["nav-mode = indexed"])
+        self.assertEqual(rows[1], "000/013  T:00.0 ", r.report())
 
     def test_lcd_overflow(self):
         rows, r = self.rows(
@@ -158,33 +177,33 @@ class TracksShort(Case, unittest.TestCase):
     def test_lcd_16_columns(self):
         rows, r = self.rows(
             "ffemu", steps(3), "hd44780-16x2", flash=self.SHORT)
-        self.assertEqual(rows[1], "000/000     0T03", r.report())
+        self.assertEqual(rows[1], "000/001     0T03", r.report())
 
     def test_lcd_20_columns(self):
         rows, r = self.rows(
             "ffemu", steps(3) + ["key side"], "hd44780-20x4",
             flash=self.SHORT + ["display-type = lcd-20x04"])
-        self.assertEqual(rows[2], "000/000         1T03", r.report())
+        self.assertEqual(rows[2], "000/001         1T03", r.report())
 
     def test_oled(self):
         rows, r = self.rows(
             "ffemu", steps(100), "ssd1306-128x32", flash=self.SHORT)
-        self.assertEqual(rows[2], "000/000         0T100", r.report())
+        self.assertEqual(rows[2], "000/001         0T100", r.report())
 
     def test_writing(self):
         rows, r = self.rows(
             "ffemu", ["key write"], "hd44780-16x2", flash=self.SHORT)
-        self.assertEqual(rows[1], "000/000     0W00", r.report())
+        self.assertEqual(rows[1], "000/001     0W00", r.report())
 
     def test_write_protected(self):
         rows, r = self.rows(
             "ffemu", [], "hd44780-16x2",
             flash=self.SHORT + ["write-protect = yes"])
-        self.assertEqual(rows[1], "000/000     0*00", r.report())
+        self.assertEqual(rows[1], "000/001     0*00", r.report())
 
     def test_long_by_default(self):
         rows, r = self.rows("ffemu", steps(3), "hd44780-16x2")
-        self.assertEqual(rows[1], "000/000  T:03.0 ", r.report())
+        self.assertEqual(rows[1], "000/001  T:03.0 ", r.report())
 
 
 class Apple2(Case, unittest.TestCase):
@@ -196,41 +215,41 @@ class Apple2(Case, unittest.TestCase):
     def test_lcd_16_columns(self):
         rows, r = self.rows(
             "ffemu-apple2", half_tracks(2), "hd44780-16x2", files=DSK)
-        self.assertEqual(rows[1], "000/000  T:01.4 ", r.report())
+        self.assertEqual(rows[1], "000/001  T:01.4 ", r.report())
 
     def test_lcd_20_columns(self):
         rows, r = self.rows(
             "ffemu-apple2", half_tracks(2), "hd44780-20x4",
             flash=["display-type = lcd-20x04"], files=DSK)
-        self.assertEqual(rows[2], "000/000   T:01.4    ", r.report())
+        self.assertEqual(rows[2], "000/001   T:01.4    ", r.report())
 
     def test_oled(self):
         rows, r = self.rows(
             "ffemu-apple2", half_tracks(2), "ssd1306-128x32", files=DSK)
-        self.assertEqual(rows[2], "000/000   T:01       ", r.report())
+        self.assertEqual(rows[2], "000/001   T:01       ", r.report())
 
     def test_oled_8x16(self):
         rows, r = self.rows(
             "ffemu-apple2", half_tracks(2), "ssd1306-128x64",
             flash=["oled-font = 8x16"], files=DSK)
-        self.assertEqual(rows[2], "000/000  T:01   ", r.report())
+        self.assertEqual(rows[2], "000/001  T:01   ", r.report())
 
     def test_short(self):
         rows, r = self.rows(
             "ffemu-apple2", half_tracks(2), "hd44780-16x2", files=DSK,
             flash=["show-tracks-short = yes"])
-        self.assertEqual(rows[1], "000/000     4T01", r.report())
+        self.assertEqual(rows[1], "000/001     4T01", r.report())
 
     def test_three_digits(self):
         rows, r = self.rows(
             "ffemu-apple2", half_tracks(200), "ssd1306-128x32", files=DSK)
-        self.assertEqual(rows[2], "000/000   T:100      ", r.report())
+        self.assertEqual(rows[2], "000/001   T:100      ", r.report())
 
     def test_three_digits_8x16(self):
         rows, r = self.rows(
             "ffemu-apple2", half_tracks(200), "ssd1306-128x64",
             flash=["oled-font = 8x16"], files=DSK)
-        self.assertEqual(rows[2], "000/000  T:100  ", r.report())
+        self.assertEqual(rows[2], "000/001  T:100  ", r.report())
 
     def status_pixels(self, order, font, tracks=1):
         """The OLED's pixels, as rows of `.` and `#`, with display-order
@@ -316,13 +335,13 @@ class NameStatus(Case, unittest.TestCase):
     def test_oled(self):
         rows, r = self.rows(
             "ffemu", steps(3), "ssd1306-128x32", flash=self.ORDER)
-        self.assertEqual(rows[0], "000/000 A        0T03", r.report())
+        self.assertEqual(rows[0], "000/001 A        0T03", r.report())
 
     def test_lcd_40_columns(self):
         rows, r = self.rows(
             "ffemu", steps(3), "hd44780-40x2",
             flash=self.ORDER + ["display-type = lcd-40x02"])
-        self.assertEqual(rows[0], "000/000 A" + 27 * " " + "0T03", r.report())
+        self.assertEqual(rows[0], "000/001 A" + 27 * " " + "0T03", r.report())
 
     def test_long_name_scrolls(self):
         """Within the columns that the track leaves it."""
@@ -393,14 +412,14 @@ class NameStatus(Case, unittest.TestCase):
         rows, r = self.rows(
             "ffemu-apple2", half_tracks(2), "ssd1306-128x32",
             flash=self.ORDER, files=DSK)
-        self.assertEqual(rows[0], "000/000 TEST      T01", r.report())
+        self.assertEqual(rows[0], "000/001 TEST      T01", r.report())
 
     def test_apple2_lcd_40_columns(self):
         rows, r = self.rows(
             "ffemu-apple2", half_tracks(2), "hd44780-40x2",
             flash=self.ORDER + ["display-type = lcd-40x02"], files=DSK)
         self.assertEqual(
-            rows[0], "000/000 TEST" + 24 * " " + "4T01", r.report())
+            rows[0], "000/001 TEST" + 24 * " " + "4T01", r.report())
 
 
 class DoubleWidth(Case, unittest.TestCase):
@@ -536,7 +555,7 @@ class DoubleWidth(Case, unittest.TestCase):
             "ffemu", steps(3), "ssd1306-128x64",
             flash=["display-type = oled-128x64", "display-order = 4w,1",
                    "osd-display-order = 4,1"])
-        self.assertEqual(rows[0], "000/000 A        0T03", r.report())
+        self.assertEqual(rows[0], "000/001 A        0T03", r.report())
 
     def test_name_scrolls_apart(self):
         """The name scrolls in the double-width row, whose columns cannot
@@ -589,14 +608,14 @@ class DoubleWidth(Case, unittest.TestCase):
         rows, r = self.rows(
             "ffemu", steps(3), "ssd1306-128x64",
             flash=["display-type = oled-128x64", "display-order = 1w,0"])
-        self.assertEqual(rows[2], "000/000   T:03.0     ", r.report())
+        self.assertEqual(rows[2], "000/001   T:03.0     ", r.report())
 
     def test_lcd(self):
         """An LCD takes `w` as `d`: as a row of normal height."""
         rows, r = self.rows(
             "ffemu", steps(3), "hd44780-16x2",
             flash=["display-order = 1w,0"])
-        self.assertEqual(rows, ["000/000  T:03.0 ", "A" + 15 * " "])
+        self.assertEqual(rows, ["000/001  T:03.0 ", "A" + 15 * " "])
 
     def test_ff_cfg(self):
         """From FF.CFG, which the firmware puts in flash and resets: a reset

@@ -29,7 +29,7 @@ class WriteMarks(fr.Case, unittest.TestCase):
     def test_step_dir_lcd(self):
         """W before the track."""
         self.check(
-            "ffemu", "hd44780-16x2", PC, "000/000W T:", "000/000  T:")
+            "ffemu", "hd44780-16x2", PC, "000/001W T:", "000/001  T:")
 
     def test_step_dir_led(self):
         """The side's letter after the track, k for side 0, becomes v."""

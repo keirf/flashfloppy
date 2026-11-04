@@ -486,7 +486,7 @@ static void display_write_slot(bool_t nav_mode)
     }
 
     slot_nr_text(slot, cfg.slot_nr);
-    slot_nr_text(max, cfg.max_slot_nr);
+    slot_nr_text(max, cfg.max_slot_nr + 1);
     snprintf(msg, sizeof(msg), "%s/%s%*s%3s D:%u", slot, max,
              (lcd_columns > 16) ? 3 : 1, "",
              typename, cfg.depth);
@@ -617,7 +617,7 @@ static void lcd_write_track(const struct track_info *ti, char mode)
             if ((cells == 0) && (name4_column(w) != 0)) {
                 char slot[4], max[4];
                 slot_nr_text(slot, cfg.slot_nr);
-                slot_nr_text(max, cfg.max_slot_nr);
+                slot_nr_text(max, cfg.max_slot_nr + 1);
                 snprintf(nr, sizeof(nr), "%s/%s", slot, max);
                 lcd_write(0, 4 | (w ? LCD_WIDE : 0), name4_column(w), nr);
             }
