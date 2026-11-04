@@ -543,11 +543,20 @@ static void lcd_scroll_name(int32_t ticks)
 #endif
 }
 
+static void slot_nr_text(char s[4], unsigned int nr)
+{
+    if (nr > 999)
+        strcpy(s, "???");
+    else
+        snprintf(s, 4, "%03u", nr);
+}
+
+
 /* Write slot info to display. */
 static void display_write_slot(bool_t nav_mode)
 {
     const struct image_type *type;
-    char msg[lcd_columns+1], typename[4] = "";
+    char msg[lcd_columns+1], typename[4] = "", slot[4], max[4];
     unsigned int i;
 
     update_disp_name();
@@ -583,8 +592,9 @@ static void display_write_slot(bool_t nav_mode)
         }
     }
 
-    snprintf(msg, sizeof(msg), "%03u/%03u%*s%3s D:%u",
-             cfg.slot_nr, cfg.max_slot_nr,
+    slot_nr_text(slot, cfg.slot_nr);
+    slot_nr_text(max, cfg.max_slot_nr);
+    snprintf(msg, sizeof(msg), "%s/%s%*s%3s D:%u", slot, max,
              (lcd_columns > 16) ? 3 : 1, "",
              typename, cfg.depth);
 
@@ -648,12 +658,12 @@ static void track_long(char *s, const struct track_info *ti,
 /* Writes track info @ti to the status row, in its layout of half width if
  * @wide, the track alone; @mode for the drive's state: `T`, `W` while
  * writing, `*` for a write-protected image, `-` for a button press. In short,
- * the track at the row's right; else @mode, a blank for `T`, after the image's
- * number, then the track in long, at the row's right if @wide. */
+ * the track at the row's right, after the image's number if @wide; else @mode,
+ * a blank for `T`, after the image's number, then the track in long. */
 static void write_status_track(unsigned int wide, const struct track_info *ti,
                                char mode)
 {
-    char msg[lcd_columns+1], s[12];
+    char msg[lcd_columns+1], s[12], slot[4];
     bool_t in_short = ff_cfg.show_tracks_short;
     unsigned int col = wide ? 0 : in_short ? 7 : wp_column;
     unsigned int n = layout_columns(wide) - col;
@@ -661,11 +671,13 @@ static void write_status_track(unsigned int wide, const struct track_info *ti,
 
     if (in_short) {
         track_short(s, ti, mode, /*spinner_width=*/wide ? 1 : 2, &width);
-        if (wide)
-            snprintf(msg, sizeof(msg), "%03u%*s%s", cfg.slot_nr,
+        if (wide) {
+            slot_nr_text(slot, cfg.slot_nr);
+            snprintf(msg, sizeof(msg), "%s%*s%s", slot,
                      n - 3 - strlen(s), "", s);
-        else
+        } else {
             snprintf(msg, sizeof(msg), "%*s%s", n - strlen(s), "", s);
+        }
     } else {
         track_long(s, ti, &width);
         snprintf(msg, sizeof(msg), "%c%*s%s", (mode == 'T') ? ' ' : mode,
@@ -705,8 +717,10 @@ static void lcd_write_track(const struct track_info *ti, char mode)
             if (track_combined_width(w) != cells) {
                 /* The image's number comes with the track. */
                 if ((row == 4) && (cells == 0) && (name4_column(w) != 0)) {
-                    snprintf(nr, sizeof(nr), "%03u/%03u",
-                             cfg.slot_nr, cfg.max_slot_nr);
+                    char slot[4], max[4];
+                    slot_nr_text(slot, cfg.slot_nr);
+                    slot_nr_text(max, cfg.max_slot_nr);
+                    snprintf(nr, sizeof(nr), "%s/%s", slot, max);
                     lcd_write(/*col=*/0, /*row=*/4 | (w ? LCD_WIDE : 0),
                               /*min=*/name4_column(w), nr);
                 }

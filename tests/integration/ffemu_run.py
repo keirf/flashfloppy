@@ -243,7 +243,7 @@ _font = {}
 
 def led_cells(text):
     """The 7-segment cells of @text, a byte per character, from the shared
-    digit and letter tables; `-` is the middle segment, anything else blank."""
+    digit and letter tables, with `-` and `?`."""
     if not _font:
         bits = {name: globals()[name] for name in SEGMENT_NAMES}
         with open(LED_7SEG_C) as f:
@@ -256,6 +256,7 @@ def led_cells(text):
             for i, cell in enumerate(cells):
                 _font[chr(ord(first) + i)] = cell
         _font["-"] = SEG_M
+        _font["?"] = SEG_T | SEG_TR | SEG_BL | SEG_M
     return [_font.get(c, 0) for c in text.lower()]
 
 

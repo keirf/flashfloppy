@@ -276,6 +276,8 @@ void led_7seg_write_string(const char *p)
             d[i] = led_7seg_letters[c - 'A'];
         } else if (c == '-') {
             d[i] = SEG_M;
+        } else if (c == '?') {
+            d[i] = SEG_T | SEG_TR | SEG_BL | SEG_M;
         } else if ((TARGET == TARGET_apple2) && (c & 0x80)) {
             /* The low seven bits are the Apple2 phase digit's segment mask. */
             d[i] = c & 0x7f;
@@ -290,9 +292,12 @@ void led_7seg_write_string(const char *p)
 void led_7seg_write_decimal(unsigned int val)
 {
     char msg[4];
-    snprintf(msg, sizeof(msg),
-             (nr_digits == 3) ? "%03u" : "%02u",
-             val % ((nr_digits == 3) ? 1000 : 100));
+
+    if (val >= ((nr_digits == 3) ? 1000 : 100)) {
+        led_7seg_write_string((nr_digits == 3) ? "???" : "??");
+        return;
+    }
+    snprintf(msg, sizeof(msg), (nr_digits == 3) ? "%03u" : "%02u", val);
     led_7seg_write_string(msg);
 }
 

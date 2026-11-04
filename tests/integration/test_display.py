@@ -29,6 +29,27 @@ def half_tracks(nr):
     return ["key phase-in", "sleep 20"] * (2 * nr)
 
 
+# The image selector on an image, as it waits there, with
+# autoselect-file-secs = 0: it starts on a folder, which it sorts first, and
+# waits there too, autoselect-folder-secs = 0.
+SELECTOR = ["sleep 3000", "key right"]
+SELECTOR_FLASH = ["autoselect-folder-secs = 0", "autoselect-file-secs = 0"]
+SELECTOR_FILES = {"GAMES/A.IMG": bytes(737280), "B.IMG": bytes(737280)}
+
+
+def slot_files(count, slot=0):
+    """A native directory of @count slots, with a valid image at @slot."""
+    image = bytes(737280)
+    files = {"A.IMG": image}
+    files.update(("B%04u.IMG" % i, b"x") for i in range(count - 1))
+    if slot:
+        name = "B%04u.IMG" % (slot - 1)
+        files[name] = image
+        files["IMAGE_A.CFG"] = name
+    return files
+
+
+
 FONT_W = {"6x13": 6, "8x16": 8}
 FONT_H = {"6x13": 13, "8x16": 16}
 
@@ -104,6 +125,36 @@ class ThreeDigits(Case, unittest.TestCase):
             "ffemu", steps(100), "ssd1306-128x64",
             flash=["oled-font = 8x16"])
         self.assertEqual(rows[2], "000/000  T:100.0", r.report())
+
+
+class SlotNumbers(Case, unittest.TestCase):
+    """Slot numbers too wide for their three display cells show `???`."""
+
+    def test_lcd_overflow(self):
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2", files=slot_files(1001, 1000))
+        self.assertEqual(rows[1], "???/???  T:00.0 ", r.report())
+
+    def test_name_status_overflow(self):
+        rows, r = self.rows(
+            "ffemu", steps(3), "ssd1306-128x64", files=slot_files(1001, 1000),
+            flash=["display-order = 4,1", "osd-display-order = 4,1"])
+        self.assertEqual(rows[0], "???/??? B0999    0T03", r.report())
+
+    def check_led_overflow(self, display, count, slot, expected):
+        r = fr.run(
+            "ffemu", ["wait 10000 log Name:", "key select",
+                      "wait 3000 segments " + expected],
+            settings=["display = " + display], files=slot_files(count, slot))
+        self.assertWaits(r, 2)
+
+    def test_led_overflow(self):
+        self.check_led_overflow(
+            "tm1651-3digit", 1001, 1000, fr.led_segments("???"))
+
+    def test_led_overflow_2_digits(self):
+        self.check_led_overflow(
+            "74hc164-2digit", 101, 100, fr.led_segments("??"))
 
 
 class TracksShort(Case, unittest.TestCase):
@@ -472,6 +523,12 @@ class DoubleWidth(Case, unittest.TestCase):
             "ffemu", steps(100), "1w,0",
             {"6x13": "000  0T100", "8x16": "0000T100"},
             flash=["show-tracks-short = yes"])
+
+    def test_status_slot_overflow(self):
+        self.check(
+            "ffemu", [], "1w,0",
+            {"6x13": "???   0T00", "8x16": "??? 0T00"},
+            flash=["show-tracks-short = yes"], files=slot_files(1001, 1000))
 
     def test_status_unmounted(self):
         """The image's type, and the depth at the row's right."""
