@@ -45,5 +45,35 @@ class Version(fr.Case, unittest.TestCase):
         self.assertWaits(r, 3)
 
 
+class Banner(fr.Case, unittest.TestCase):
+    """The LCD's two-row banner: mode mark and RAM size right-aligned."""
+
+    def check(self, name, display, files, mark, mem, flash=()):
+        width = int(display.split("-")[1].split("x")[0])
+        version = fr.version(name)
+        r = fr.run(
+            name, ["key remove", "wait 3000 display " + version[:8], "dump"],
+            settings=["display = " + display], files=files, flash=flash)
+        self.assertWaits(r, 1)
+        rows = [line[1:-1] for line in r.lines
+                if line.startswith("|") and line.endswith("|")]
+        room = width - len(mem)
+        expected = ["FlashFloppy" + " " * (width - 11 - len(mark)) + mark,
+                    f"{version[:room]:{room}}{mem}"]
+        self.assertEqual(rows[1:3] if width == 20 else rows, expected, r.report())
+
+    def test_shugart(self):
+        self.check("ffemu", "hd44780-16x2", {"A.IMG": bytes(737280)},
+                   "", " 32K")
+
+    def test_apple2(self):
+        self.check("ffemu-apple2", "hd44780-16x2",
+                   {"TEST.DSK": bytes(35 * 4096)}, "A2", " 32K")
+
+    def test_20_columns(self):
+        self.check("ffemu", "hd44780-20x4", {"A.IMG": bytes(737280)},
+                   "", " 32K", ["display-type = lcd-20x04"])
+
+
 if __name__ == "__main__":
     unittest.main()
