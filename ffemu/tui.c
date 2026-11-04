@@ -1534,7 +1534,7 @@ static void fdd_panel(int y, int x, int w)
     put(y, x, w, 0, "FDD:");
     /* The kind of controller on the other side of the cable. */
     put(y + 1, x, w, BRIGHT(CP_good), "%s",
-        FFEMU_APPLE2 ? "Apple2" : "Step/Dir");
+        FFEMU_APPLE2 ? "Apple2" : "Shugart");
 
     if (FFEMU_APPLE2) {
         static const char * const name[6] = {

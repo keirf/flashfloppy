@@ -286,7 +286,7 @@ it included, stays.
 ## The floppy interface
 
 The FDD rows of the Controls pane show the kind of controller on the other side
-of the cable, `Step/Dir` or `Apple2`, and the signals that it sends to the
+of the cable, `Shugart` or `Apple2`, and the signals that it sends to the
 drive, each lit in dark yellow while it is active as on the schematics,
 whatever its voltage, with the key that changes it below:
 
