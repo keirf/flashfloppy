@@ -1,6 +1,6 @@
 """The LCD's and the OLED's rows as the firmware lays them out: the status
-row's track, in the long form or in short with show-tracks-short, as the apple2
-firmware always gives it, with the phases; display-order's row 4, the image's
+row's track, in the long form or in short with show-tracks-short, with Apple2
+phases; display-order's row 4, the image's
 name and its track in short; rows of double width; and the folders' names,
 which row 3 scrolls and the image selector shows in brackets or after a slash;
 a long name's scrolling by pixel; the Main Menu's font test; and the error
@@ -37,6 +37,19 @@ def half_tracks(nr):
 SELECTOR = ["sleep 3000", "key right"]
 SELECTOR_FLASH = ["autoselect-folder-secs = 0", "autoselect-file-secs = 0"]
 SELECTOR_FILES = {"GAMES/A.IMG": bytes(737280), "B.IMG": bytes(737280)}
+
+
+def slot_files(count, slot=0):
+    """A native directory of @count slots, with a valid image at @slot."""
+    image = bytes(737280)
+    files = {"A.IMG": image}
+    files.update(("B%04u.IMG" % i, b"x") for i in range(count - 1))
+    if slot:
+        name = "B%04u.IMG" % (slot - 1)
+        files[name] = image
+        files["IMAGE_A.CFG"] = name
+    return files
+
 
 FONT_W = {"6x13": 6, "8x16": 8}
 
@@ -105,6 +118,34 @@ class ThreeDigits(Case, unittest.TestCase):
             "ffemu", steps(100), "ssd1306-128x64",
             flash=["oled-font = 8x16"])
         self.assertEqual(rows[2], "000/000  T:100.0", r.report())
+
+
+class SlotNumbers(Case, unittest.TestCase):
+    """Slot numbers too wide for their three display cells show `???`."""
+
+    def test_lcd_overflow(self):
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2", files=slot_files(1001, 1000))
+        self.assertEqual(rows[1], "???/???  T:00.0 ", r.report())
+
+    def test_name_status_overflow(self):
+        rows, r = self.rows(
+            "ffemu", steps(3), "ssd1306-128x64", files=slot_files(1001, 1000),
+            flash=["display-order = 4,1", "osd-display-order = 4,1"])
+        self.assertEqual(rows[0], "???/??? B0999    0T03", r.report())
+
+    def check_led_overflow(self, display, count, slot, expected):
+        r = fr.run(
+            "ffemu", ["wait 10000 log Name:", "key select",
+                      "wait 3000 segments " + expected],
+            settings=["display = " + display], files=slot_files(count, slot))
+        self.assertWaits(r, 2)
+
+    def test_led_overflow(self):
+        self.check_led_overflow("tm1651-3digit", 1001, 1000, "53 53 53")
+
+    def test_led_overflow_2_digits(self):
+        self.check_led_overflow("74hc164-2digit", 101, 100, "53 53")
 
 
 class TracksShort(Case, unittest.TestCase):
@@ -252,8 +293,8 @@ class Apple2(Case, unittest.TestCase):
 class NameStatus(Case, unittest.TestCase):
     """Row 4 of display-order: the image's name, then its track in short at
     the row's right, a blank apart from the name, or the phase spinner on an
-    OLED in Apple2 mode; on a row of 21 columns or more, 24 for an Apple2
-    LCD, the image's number before the name."""
+    OLED in Apple2 mode; on a row of 21 columns or more, the image's number
+    before the name."""
 
     ORDER = ["display-order = 4,1", "osd-display-order = 4,1"]
 
@@ -412,8 +453,14 @@ class DoubleWidth(Case, unittest.TestCase):
     def test_status_short(self):
         self.check(
             "ffemu", steps(100), "1w,0",
-            {"6x13": "     0T100", "8x16": "   0T100"},
+            {"6x13": "000  0T100", "8x16": "0000T100"},
             flash=["show-tracks-short = yes"])
+
+    def test_status_slot_overflow(self):
+        self.check(
+            "ffemu", [], "1w,0",
+            {"6x13": "???   0T00", "8x16": "??? 0T00"},
+            flash=["show-tracks-short = yes"], files=slot_files(1001, 1000))
 
     def test_status_unmounted(self):
         """The image's type, and the depth at the row's right."""
@@ -469,7 +516,7 @@ class DoubleWidth(Case, unittest.TestCase):
     def test_apple2_status_short(self):
         self.check(
             "ffemu-apple2", ["key phase-in"], "1w,0",
-            {"6x13": "      @T00", "8x16": "    @T00"}, files=DSK,
+            {"6x13": "000   @T00", "8x16": "000 @T00"}, files=DSK,
             flash=["show-tracks-short = yes"])
 
     def test_apple2_status_three_digits(self):

@@ -233,8 +233,7 @@ _font = {}
 
 def led_cells(text):
     """The 7-segment cells of @text, a byte per character, from the tables of
-    letters and digits in the firmware's display driver; `-` is the middle
-    segment, anything else blank."""
+    letters and digits in the firmware's display driver, with `-` and `?`."""
     if not _font:
         with open(LED_7SEG_C) as f:
             src = f.read()
@@ -244,6 +243,7 @@ def led_cells(text):
             for i, cell in enumerate(cells):
                 _font[chr(ord(first) + i)] = int(cell, 16)
         _font["-"] = 0x40
+        _font["?"] = 0x53
     return [_font.get(c, 0) for c in text.lower()]
 
 
