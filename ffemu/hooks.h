@@ -29,7 +29,7 @@
 
 #define in_exception() emu_in_exception()
 
-/* The display driver's 8x16 font made from the 6x13 one, switched at run
+/* The display driver's 8x16 font made from the 6x16 one, switched at run
  * time. */
 #define OLED_FONT_8x16_SYNTH emu_oled_synth_8x16
 

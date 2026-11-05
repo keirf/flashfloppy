@@ -51,7 +51,7 @@ def slot_files(count, slot=0):
     return files
 
 
-FONT_W = {"6x13": 6, "8x16": 8}
+FONT_W = {"6x16": 6, "8x16": 8}
 
 
 def oled_glyphs(font):
@@ -264,18 +264,18 @@ class Apple2(Case, unittest.TestCase):
         self.assertWaits(r, 1)
         return [line for line in r.lines if line and set(line) <= set(".#")]
 
-    def test_spinner_6x13_geometry(self):
-        """Each phase is a rectangle, together 9x9 at (2, 2) in 12x13."""
-        frames = [self.status_pixels("0,1", "6x13", n) for n in range(1, 5)]
+    def test_spinner_6x16_geometry(self):
+        """Each phase is a rectangle, together 9x9 at (2, 3) in 12x16."""
+        frames = [self.status_pixels("0,1", "6x16", n) for n in range(1, 5)]
         left = 1 + 14*6
         bars = {
-            0: (range(4, 9), range(9, 11)),
-            1: (range(2, 4), range(4, 9)),
-            2: (range(4, 9), range(2, 4)),
-            3: (range(9, 11), range(4, 9)),
+            0: (range(4, 9), range(10, 12)),
+            1: (range(2, 4), range(5, 10)),
+            2: (range(4, 9), range(3, 5)),
+            3: (range(9, 11), range(5, 10)),
         }
         for frame, side in zip(frames, (1, 2, 3, 0)):
-            actual = {(x-left, y-16) for y in range(16, 29)
+            actual = {(x-left, y-16) for y in range(16, 32)
                       for x in range(left, left + 12) if frame[y][x] == "#"}
             xs, ys = bars[side]
             self.assertEqual(actual, {(x, y) for x in xs for y in ys},
@@ -293,7 +293,7 @@ class Apple2(Case, unittest.TestCase):
             [row[x:x+w] for row in tall[16:48]], blank + spinner + blank)
 
     def test_spinner_double_height(self):
-        self.check_spinner("6x13", 1 + 14*6, 12)
+        self.check_spinner("6x16", 1 + 14*6, 12)
 
     def test_spinner_double_height_8x16(self):
         self.check_spinner("8x16", 13*8, 16)
@@ -456,36 +456,36 @@ class DoubleWidth(Case, unittest.TestCase):
 
     def test_name(self):
         self.check(
-            "ffemu", [], "0w,1", {"6x13": "ABCDEFGHIJ", "8x16": "ABCDEFGH"},
+            "ffemu", [], "0w,1", {"6x16": "ABCDEFGHIJ", "8x16": "ABCDEFGH"},
             files={"ABCDEFGHIJKL.IMG": bytes(737280)})
 
     def test_status(self):
         self.check(
             "ffemu", steps(3), "1w,0",
-            {"6x13": "    T:03.0", "8x16": "  T:03.0"})
+            {"6x16": "    T:03.0", "8x16": "  T:03.0"})
 
     def test_status_three_digits(self):
         self.check(
             "ffemu", steps(100), "1w,0",
-            {"6x13": "   T:100.0", "8x16": " T:100.0"})
+            {"6x16": "   T:100.0", "8x16": " T:100.0"})
 
     def test_status_short(self):
         self.check(
             "ffemu", steps(100), "1w,0",
-            {"6x13": "000  0T100", "8x16": "0000T100"},
+            {"6x16": "000  0T100", "8x16": "0000T100"},
             flash=["show-tracks-short = yes"])
 
     def test_status_slot_overflow(self):
         self.check(
             "ffemu", [], "1w,0",
-            {"6x13": "???   0T00", "8x16": "??? 0T00"},
+            {"6x16": "???   0T00", "8x16": "??? 0T00"},
             flash=["show-tracks-short = yes"], files=slot_files(1001, 1000))
 
     def test_status_unmounted(self):
         """The image's type, and the depth at the row's right."""
         self.check(
             "ffemu", SELECTOR, "1w,0",
-            {"6x13": "IMG    D:0", "8x16": "IMG  D:0"},
+            {"6x16": "IMG    D:0", "8x16": "IMG  D:0"},
             flash=SELECTOR_FLASH, files=SELECTOR_FILES,
             mounted=False)
 
@@ -493,7 +493,7 @@ class DoubleWidth(Case, unittest.TestCase):
         """The drive's free and total space at the row's right."""
         self.check(
             "ffemu", SELECTOR, "2w,0",
-            {"6x13": "  0.3/0.3G", "8x16": "0.3/0.3G"},
+            {"6x16": "  0.3/0.3G", "8x16": "0.3/0.3G"},
             flash=SELECTOR_FLASH, files=SELECTOR_FILES,
             mounted=False)
 
@@ -501,7 +501,7 @@ class DoubleWidth(Case, unittest.TestCase):
         """Row 4 is the name's alone while no image is in."""
         self.check(
             "ffemu", SELECTOR, "4w,0",
-            {"6x13": "ABCDEFGH  ", "8x16": "ABCDEFGH"},
+            {"6x16": "ABCDEFGH  ", "8x16": "ABCDEFGH"},
             flash=SELECTOR_FLASH,
             files={"GAMES/A.IMG": bytes(737280),
                    "ABCDEFGH.IMG": bytes(737280)},
@@ -511,42 +511,42 @@ class DoubleWidth(Case, unittest.TestCase):
         """The image's encoding, then its sides, density and cylinders at the
         row's right."""
         self.check(
-            "ffemu", [], "2w,0", {"6x13": "MFM   DD80", "8x16": "MFM DD80"})
+            "ffemu", [], "2w,0", {"6x16": "MFM   DD80", "8x16": "MFM DD80"})
 
     def test_name_status(self):
         self.check(
             "ffemu", steps(3), "4w,1",
-            {"6x13": "A     0T03", "8x16": "A   0T03"})
+            {"6x16": "A     0T03", "8x16": "A   0T03"})
 
     def test_name_status_long(self):
         """A name that the row cannot hold, at the start of its scrolling:
         no blank before the track."""
         self.check(
             "ffemu", steps(3), "4w,1",
-            {"6x13": "ABCDEF0T03", "8x16": "ABCD0T03"},
+            {"6x16": "ABCDEF0T03", "8x16": "ABCD0T03"},
             files={"ABCDEFGHIJKL.IMG": bytes(737280)})
 
     def test_apple2_status(self):
         """The default long track, with the spinner enlarged with the row."""
         self.check(
             "ffemu-apple2", ["key phase-in"], "1w,0",
-            {"6x13": "    T:00@@", "8x16": "  T:00@@"}, files=DSK)
+            {"6x16": "    T:00@@", "8x16": "  T:00@@"}, files=DSK)
 
     def test_apple2_status_short(self):
         self.check(
             "ffemu-apple2", ["key phase-in"], "1w,0",
-            {"6x13": "000   @T00", "8x16": "000 @T00"}, files=DSK,
+            {"6x16": "000   @T00", "8x16": "000 @T00"}, files=DSK,
             flash=["show-tracks-short = yes"])
 
     def test_apple2_status_three_digits(self):
         self.check(
             "ffemu-apple2", half_tracks(200), "1w,0",
-            {"6x13": "   T:100@@", "8x16": " T:100@@"}, files=DSK)
+            {"6x16": "   T:100@@", "8x16": " T:100@@"}, files=DSK)
 
     def test_apple2_name_status(self):
         self.check(
             "ffemu-apple2", half_tracks(200), "4w,1",
-            {"6x13": "ABC  @T100", "8x16": "ABC@T100"},
+            {"6x16": "ABC  @T100", "8x16": "ABC@T100"},
             files={"ABC.DSK": DSK["TEST.DSK"]})
 
     def test_name_status_osd(self):
@@ -570,7 +570,7 @@ class DoubleWidth(Case, unittest.TestCase):
         self.assertWaits(r, 1)
         pixels = [line for line in r.lines if line and set(line) <= set(".#")]
         self.assertEqual(
-            oled_text(pixels, 0, "6x13", True), "BCDEFGHIJK", r.report())
+            oled_text(pixels, 0, "6x16", True), "BCDEFGHIJK", r.report())
         osd = [line[1:-1] for line in r.stdout.split("\nosd: ")[1].splitlines()
                if line.startswith("|") and line.endswith("|")]
         self.assertEqual(osd[0], "ABCDEFGHIJKLMNOP     ", r.report())
@@ -578,7 +578,7 @@ class DoubleWidth(Case, unittest.TestCase):
     def test_apple2_spinner(self):
         """The default wide row stretches the spinner in both dimensions."""
         for font, x, w, wide_x in (
-                ("6x13", 85, 12, 98), ("8x16", 104, 16, 96)):
+                ("6x16", 85, 12, 98), ("8x16", 104, 16, 96)):
             with self.subTest(font=font):
                 normal = self.pixels(
                     "ffemu-apple2", ["key phase-in"], "0,1", font, files=DSK)
@@ -593,9 +593,9 @@ class DoubleWidth(Case, unittest.TestCase):
     def test_apple2_compact_spinner(self):
         """The compact wide row keeps the normal-sized spinner, centered."""
         normal = self.pixels(
-            "ffemu-apple2", ["key phase-in"], "0,1", "6x13", files=DSK)
+            "ffemu-apple2", ["key phase-in"], "0,1", "6x16", files=DSK)
         wide = self.pixels(
-            "ffemu-apple2", ["key phase-in"], "1w,0", "6x13", files=DSK,
+            "ffemu-apple2", ["key phase-in"], "1w,0", "6x16", files=DSK,
             flash=["show-tracks-short = yes"])
         spinner = [row[85:97] for row in normal[16:32]]
         self.assertIn("#", "".join(spinner))
@@ -629,7 +629,7 @@ class DoubleWidth(Case, unittest.TestCase):
         self.assertWaits(r, 1)
         self.assertEqual(r.flash().get("display-order"), "Sw,N", r.report())
         pixels = [line for line in r.lines if line and set(line) <= set(".#")]
-        self.assertEqual(oled_text(pixels, 0, "6x13", True), "    T:00.0")
+        self.assertEqual(oled_text(pixels, 0, "6x16", True), "    T:00.0")
 
 
 class Letters(Case, unittest.TestCase):
@@ -722,7 +722,7 @@ class FolderScroll(fr.Case, unittest.TestCase):
             files={"ABCDEFGHIJKL/A.IMG": bytes(737280)})
         self.assertWaits(r, 1)
         pixels = [line for line in r.lines if line and set(line) <= set(".#")]
-        wide = {oled_text(pixels[i:i+64], 0, "6x13", True)
+        wide = {oled_text(pixels[i:i+64], 0, "6x16", True)
                 for i in range(0, len(pixels), 64)}
         self.assertIn("ABCDEFGHIJ", wide, r.report())
         self.assertIn("CDEFGHIJKL", wide, r.report())
@@ -792,7 +792,7 @@ class PixelScroll(fr.Case, unittest.TestCase):
     gives: in a double-width row a column of the font, two of the display;
     in row 4 only the name, beside its track. An LCD goes on by character.
     The OLED is seen every 25 ms from 1.8 s after the image is in, at
-    display-scroll-rate = 300: 50 ms per pixel column of the 6x13 font after
+    display-scroll-rate = 300: 50 ms per pixel column of the 6x16 font after
     the pause of 2 s; the names are two characters too long."""
 
     def frames(self, order, font, name,
@@ -838,10 +838,10 @@ class PixelScroll(fr.Case, unittest.TestCase):
         self.assertAlmostEqual(
             (shifts.index(2 * w) - shifts.index(w)) * 25, 300, delta=25)
 
-    def test_6x13(self):
+    def test_6x16(self):
         name = "ABCDEFGHIJKLMNOPQRSTUVW"
-        frames, r = self.frames("0,1", "6x13", name)
-        shifts = self.shifts(frames, glyph_columns("6x13", name), 1, 126)
+        frames, r = self.frames("0,1", "6x16", name)
+        shifts = self.shifts(frames, glyph_columns("6x16", name), 1, 126)
         self.check_by_pixel(shifts, 12, r)
         self.check_speed(shifts, 6)
 
@@ -855,8 +855,8 @@ class PixelScroll(fr.Case, unittest.TestCase):
     def test_by_character(self):
         """By default, a character at a time, at the same speed."""
         name = "ABCDEFGHIJKLMNOPQRSTUVW"
-        frames, r = self.frames("0,1", "6x13", name, flash=())
-        shifts = self.shifts(frames, glyph_columns("6x13", name), 1, 126)
+        frames, r = self.frames("0,1", "6x16", name, flash=())
+        shifts = self.shifts(frames, glyph_columns("6x16", name), 1, 126)
         self.assertNotIn(None, shifts, r.report())
         self.assertEqual(sorted(set(shifts)), [0, 6, 12], shifts)
         self.check_speed(shifts, 6)
@@ -864,32 +864,32 @@ class PixelScroll(fr.Case, unittest.TestCase):
     def test_double_width(self):
         """A column of the font at a time, in the 10 columns that show."""
         name = "ABCDEFGHIJKL"
-        frames, r = self.frames("0w,1", "6x13", name)
+        frames, r = self.frames("0w,1", "6x16", name)
         shifts = self.shifts(
-            frames, glyph_columns("6x13", name), 1, 60, True, True)
+            frames, glyph_columns("6x16", name), 1, 60, True, True)
         self.check_by_pixel(shifts, 12, r)
 
     def test_name_status(self):
         """In row 4 the name scrolls within its 8 columns, after the image's
         number; the track stays."""
         name = "ABCDEFGHIJ"
-        frames, r = self.frames("4,1", "6x13", name)
-        shifts = self.shifts(frames, glyph_columns("6x13", name), 49, 48)
+        frames, r = self.frames("4,1", "6x16", name)
+        shifts = self.shifts(frames, glyph_columns("6x16", name), 49, 48)
         self.check_by_pixel(shifts, 12, r)
         tracks = {tuple(row_columns(f, 0, 97, 127)) for f in frames}
         self.assertEqual(
-            tracks, {tuple(glyph_columns("6x13", " 0T00"))}, r.report())
+            tracks, {tuple(glyph_columns("6x16", " 0T00"))}, r.report())
 
     def test_endless(self):
         """With display-scroll-pause = 0, on through the gap after the name
         and round to its start."""
         name = "ABCDEFGHIJKLMNOPQRSTUVW"
         frames, r = self.frames(
-            "0,1", "6x13", name, nr=100,
+            "0,1", "6x16", name, nr=100,
             flash=("display-scroll-by-pixel = yes",
                    "display-scroll-pause = 0"))
         shifts = self.shifts(
-            frames, glyph_columns("6x13", name + "    " + name), 1, 126)
+            frames, glyph_columns("6x16", name + "    " + name), 1, 126)
         self.assertNotIn(None, shifts, r.report())
         period = 6 * (len(name) + 4)
         steps = {(b - a) % period for a, b in zip(shifts, shifts[1:])}
@@ -986,7 +986,7 @@ class FontTest(Case, unittest.TestCase):
     def test_oled_128x64(self):
         """Four rows of single height, read by the firmware's glyphs, in each
         font: ASCII's at 0x40, only their codes on the label rows."""
-        for font in ("6x13", "8x16"):
+        for font in ("6x16", "8x16"):
             with self.subTest(font=font):
                 pixels = self.oled("ffemu", ["key right", "sleep 200",
                                              "key right"],
@@ -1014,7 +1014,7 @@ class FontTest(Case, unittest.TestCase):
                  for page in pages for i in range(16)]
         self.assertEqual(set(cells), {cells[0]}, r.report())
         self.assertTrue(any("#" in row for row in cells[0]), r.report())
-        self.assertEqual(oled_text(pages[1], 16, "6x13", False, False),
+        self.assertEqual(oled_text(pages[1], 16, "6x16", False, False),
                          "10-1F" + " " * 16)
 
 
@@ -1074,9 +1074,9 @@ class Errors(fr.Case, unittest.TestCase):
     def test_mount_error_oled64(self):
         """Both rows double height."""
         pixels, r = self.oled(self.BAD, 64, wait="log Name:")
-        self.assertEqual(oled_text(pixels, 0, "6x13", False),
+        self.assertEqual(oled_text(pixels, 0, "6x16", False),
                          "BAD".ljust(21), r.report())
-        self.assertTrue(oled_text(pixels, 32, "6x13", False).startswith("E31"),
+        self.assertTrue(oled_text(pixels, 32, "6x16", False).startswith("E31"),
                         r.report())
 
     def frames(self, files, flash, wide, wait="log Name:"):
@@ -1089,13 +1089,13 @@ class Errors(fr.Case, unittest.TestCase):
             flash=["display-type = oled-128x32"] + list(flash), files=files)
         self.assertWaits(r, 1)
         pixels = [line for line in r.lines if line and set(line) <= set(".#")]
-        return [oled_text(pixels[i:i+32], 0, "6x13", wide)
+        return [oled_text(pixels[i:i+32], 0, "6x16", wide)
                 for i in range(0, len(pixels), 32)], r
 
     def test_mount_error_oled32(self):
         """The message and the name after it in one double row."""
         pixels, r = self.oled(self.BAD, 32, wait="log Name:")
-        text = oled_text(pixels, 0, "6x13", False)
+        text = oled_text(pixels, 0, "6x16", False)
         self.assertTrue(text.startswith("E31"), r.report())
         self.assertTrue(text.rstrip().endswith(": BAD"), r.report())
 
@@ -1134,15 +1134,15 @@ class Errors(fr.Case, unittest.TestCase):
     def test_session_end_oled32(self):
         """Double height over the whole panel."""
         pixels, r = self.oled(self.NONE, 32)
-        self.assertTrue(oled_text(pixels, 0, "6x13", False).startswith("E34"),
+        self.assertTrue(oled_text(pixels, 0, "6x16", False).startswith("E34"),
                         r.report())
 
     def test_session_end_oled64(self):
         """Double height where the mount error has it, below a blank row."""
         pixels, r = self.oled(self.NONE, 64)
-        self.assertEqual(oled_text(pixels, 0, "6x13", False), " " * 21,
+        self.assertEqual(oled_text(pixels, 0, "6x16", False), " " * 21,
                          r.report())
-        self.assertTrue(oled_text(pixels, 32, "6x13", False).startswith("E34"),
+        self.assertTrue(oled_text(pixels, 32, "6x16", False).startswith("E34"),
                         r.report())
 
     def test_display_order_ignored(self):
@@ -1163,7 +1163,7 @@ class Errors(fr.Case, unittest.TestCase):
         """A `w` row of display-order, here the only one, neither."""
         pixels, r = self.oled(self.BAD, 64, ["display-order = 4w"],
                               wait="log Name:")
-        self.assertTrue(oled_text(pixels, 32, "6x13", False).startswith("E31"),
+        self.assertTrue(oled_text(pixels, 32, "6x16", False).startswith("E31"),
                         r.report())
 
     def test_wide(self):
@@ -1177,7 +1177,7 @@ class Errors(fr.Case, unittest.TestCase):
             files=self.NONE)
         self.assertWaits(r, 1)
         pixels = [line for line in r.lines if line and set(line) <= set(".#")]
-        wide = {oled_text(pixels[i:i+32], 0, "6x13", True)
+        wide = {oled_text(pixels[i:i+32], 0, "6x16", True)
                 for i in range(0, len(pixels), 32)}
         self.assertTrue(any(t.startswith("E34") for t in wide), r.report())
         osd = {line for part in r.stdout.split("\nosd: ")[1:]
@@ -1189,9 +1189,9 @@ class Errors(fr.Case, unittest.TestCase):
         """Both rows double width on a 128x64."""
         pixels, r = self.oled(self.BAD, 64, ["display-error-wide = yes"],
                               wait="log Name:")
-        self.assertEqual(oled_text(pixels, 0, "6x13", True), "BAD".ljust(10),
+        self.assertEqual(oled_text(pixels, 0, "6x16", True), "BAD".ljust(10),
                          r.report())
-        self.assertTrue(oled_text(pixels, 32, "6x13", True).startswith("E31"),
+        self.assertTrue(oled_text(pixels, 32, "6x16", True).startswith("E31"),
                         r.report())
 
 

@@ -594,7 +594,7 @@ fail:
 
 #ifdef font_extra
 /* Instead of storing the 8x16 font in the flash memory, build its glyphs at
- * runtime as a bold (shifted-by-1) version of 6x13.
+ * runtime as a bold (shifted-by-1) version of the 6-pixel font.
  */
 #ifndef OLED_FONT_8x16_SYNTH
 #define OLED_FONT_8x16_SYNTH 0
@@ -611,11 +611,10 @@ static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
      * runtime condition.
      */
     if (OLED_FONT_8x16_SYNTH) {
-        /* The 6x13 glyph made bold by a second copy a column to the
-         * right, 7 columns by 13 rows: centered in the cell and rounded
-         * up and left, it is at the left, a row down, where the 6x13
-         * font already has it in its 16 rows. */
-        p = &oled_font_6x13[g * 6 * 2];
+        /* The 6-pixel glyph made bold by a second copy a column to the right,
+         * 7 columns by 13 rows: at the left of the 8x16 cell, with the source
+         * font's vertical placement. */
+        p = &oled_font_6x16[g * 6 * 2];
         for (j = from; j < to; j++, q++) {
             q[0] = ((j < 6) ? p[j] : 0) | ((j-1 < 6) ? p[j-1] : 0);
             q[128] = ((j < 6) ? p[6+j] : 0) | ((j-1 < 6) ? p[5+j] : 0);

@@ -35,15 +35,15 @@ static const uint8_t oled_spinner_14[] = {
 #endif
 
 /* Draws the spinner for @phases into the two cells of @w columns at @q: four
- * rectangles forming 9x9 at (2, 2) for 6x13, or 14x14 centered for 8x16. For
- * @half 2 or 1, as large in the middle of a double-height row, of which
- * buffer[] holds the top or bottom half. A pixel belongs to the side whose
- * triangle, cut by the diagonals, holds it. */
+ * rectangles forming 9x9 at (2, 3) for the 6-pixel font, or 14x14 centered
+ * for 8x16. For @half 2 or 1, as large in the middle of a double-height row,
+ * of which buffer[] holds the top or bottom half. A pixel belongs to the side
+ * whose triangle, cut by the diagonals, holds it. */
 static void oled_spinner(uint8_t *q, unsigned int w, unsigned int phases,
                          unsigned int half)
 {
     const uint8_t *glyph = oled_spinner_9;
-    unsigned int i, x, y, side, n = 9, left = 2, top = 2;
+    unsigned int i, x, y, side, n = 9, left = 2, top = 3;
     uint32_t out;
 
 #ifdef font_extra

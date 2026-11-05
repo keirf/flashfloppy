@@ -75,7 +75,7 @@ static const struct setting {
     [SET_oled_8x16] = {
         "oled-8x16",
         "The OLED's 8x16 font: font (the firmware's own) or synth (made from "
-        "the 6x13 one, bold, as the firmware built with "
+        "the 6x16 one, bold, as the firmware built with "
         "oled_font_8x16_synth=y draws it). Key 0." },
     [SET_mcu] = {
         "mcu",

@@ -453,7 +453,7 @@ struct config {
     int style;              /* STYLE_* */
     int display;            /* DISP_*: the display fitted */
     int lcd_rom;            /* LCD_ROM_*: the LCD's character ROM */
-    bool oled_synth;        /* the OLED's 8x16 font made from the 6x13 one */
+    bool oled_synth;        /* the OLED's 8x16 font made from the 6x16 one */
     int mcu;                /* EMU_MCU_*: whose display driver runs */
     bool osd;               /* FF OSD on the bus beside an OLED or LCD */
     bool osd_braille;       /* the OSD pane draws FF OSD's pixels */

@@ -187,9 +187,9 @@ ASCII throughout: CYR has a cent sign, small numbers, a return arrow and a
 pencil at 0x5c and 0x7b to 0x7f, where `\ { | } ~` are, and A00 a yen sign at
 0x5c and arrows at 0x7e and 0x7f, where `\` and `~` are. The user-defined
 characters, which the firmware never sets, are not emulated. For an OLED, the
-dialog's check box "Made from 6x13, bold" draws the 8x16 font as the firmware
+dialog's check box "Made from 6x16, bold" draws the 8x16 font as the firmware
 built with `oled_font_8x16_synth=y` does, which saves flash by leaving the 8x16
-font out and making each glyph from the 6x13 one, bold with a second copy a
+font out and making each glyph from the 6x16 one, bold with a second copy a
 column to the right; it takes effect at once and is kept as
 `oled-8x16 = font | synth`.
 

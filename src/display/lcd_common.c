@@ -291,7 +291,7 @@ static void oled_draw_spinner(unsigned int row, unsigned int half,
 }
 #endif
 
-extern const uint8_t oled_font_6x13[];
+extern const uint8_t oled_font_6x16[];
 
 /* Writes pixel columns @from to @to - 1 of the glyph of @c to buffer[] at @q,
  * its top and bottom pages. */
@@ -309,7 +309,7 @@ static void oled_glyph(uint8_t *q, char c, unsigned int from,
         return;
     }
 #endif
-    p = &oled_font_6x13[g * 6 * 2];
+    p = &oled_font_6x16[g * 6 * 2];
     memcpy(q, p+from, to-from);
     memcpy(q+128, p+6+from, to-from);
 }

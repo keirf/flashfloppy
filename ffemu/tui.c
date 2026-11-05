@@ -2462,7 +2462,7 @@ static void draw_display_dialog(void)
                COLOR_PAIR(CP_dialog), COLOR_PAIR(CP_dlg_hot),
                df_label[DF_synth]);
     check_row(y + DISP_nr + LCD_ROM_nr + 7, x + 3, w - 6, dialog_oled_synth,
-              dialog_focus == DF_synth, "Made from 6x13, bold");
+              dialog_focus == DF_synth, "Made from 6x16, bold");
     probe_part(df_label[DF_mcu]);
     put_marked(y + mcu_y, x + 3, w - 6, COLOR_PAIR(CP_dialog),
                COLOR_PAIR(CP_dlg_hot), df_label[DF_mcu]);
@@ -4989,15 +4989,15 @@ static const struct {
       "Options for OLED displays: mirror horizontally, for displays of "
       "such pixel layout" },
     { "display-type", "narrow",
-      "Options for OLED displays: for 6x13 font, show only 18 text "
+      "Options for OLED displays: for 6x16 font, show only 18 text "
       "columns, for small case cutouts" },
     { "display-type", "narrower",
-      "Options for OLED displays: for 6x13 font, show only 16 text "
+      "Options for OLED displays: for 6x16 font, show only 16 text "
       "columns, for small case cutouts" },
     { "display-type", "inverse",
       "Options for OLED displays: invert the image, printing "
       "black-on-bright" },
-    { "oled-font", "6x13",
+    { "oled-font", "6x16",
       "Makes 21 columns; with \"narrower\" suffix to \"display-type\" it "
       "fits the smallest case cutout" },
     { "oled-font", "8x16",
