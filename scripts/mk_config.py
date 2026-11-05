@@ -33,6 +33,10 @@ def main(argv):
                 val = "FONT_" + val
             elif opt == "show-filename-ext":
                 val = "SHOWEXT_" + val
+            elif opt == "short-name-codepage":
+                val = "CODEPAGE_" + val
+            elif opt == "lcd-charset":
+                val = "LCDCS_" + val
             elif opt == "display-type":
                 opts = []
                 for x in val.split("-"):

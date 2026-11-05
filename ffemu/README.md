@@ -103,31 +103,47 @@ firmware sees it, its writes included: "Save drive to image file" writes a
 drive made from a directory or read from a disk as an image file,
 `saved/drive-YYYYMMDD-HHMMSS.img` beside the console log; "Unpack drive image
 to folder" writes the files and folders of a drive read from an image file
-to the folder `saved/drive-YYYYMMDD-HHMMSS/`, long names in UTF-8, as the
-folder `drive/` has them; a second one within a second gets a count after
-the time, so that nothing is overwritten. The dialog's last row names what
-was written; the button is dimmed while the drive is out.
+to the folder `saved/drive-YYYYMMDD-HHMMSS/`, long names in UTF-8 and a short
+name without one read in the code page of `usb-drive-sfn`, as the folder
+`drive/` has them; a second one within a second gets a count after the time,
+so that nothing is overwritten. The dialog's last row names what was written;
+the button is dimmed while the drive is out.
 Status names the `FF.CFG` that the firmware reads: the one in folder `FF` if
 the drive has that folder, even when that one is missing, else the one in the
 root; names match in any letter case.
 
 A drive made from a directory is meant to be what the firmware would find on a
-real drive with those files copied to it, so the FAT structures follow the
-system that ffemu runs on: Windows when built for Cygwin/MSYS2, Linux
-otherwise.
+real drive with those files copied to it, so the FAT structures follow a system
+that copies them: Windows or Linux, as `usb-drive-sfn-writing` in the settings
+or the Externals dialog says, by default the system that ffemu runs on (Windows
+when built for Cygwin/MSYS2).
 
-- Short (8.3) names: Windows writes them in the OEM code page of the system
-  (`GetOEMCP()`, e.g. 866 on a Russian Windows, or UTF-8 where "Use Unicode
-  UTF-8 for worldwide language support" is on), with the tails `~1` to `~4` and
-  then a hash of the long name, as its FAT driver does. Linux writes them in
-  code page 437, the default of vfat, with the tails `~1` to `~9` and then a
-  random number, which ffemu replaces with a hash of the long name so that the
-  volume is the same on every start.
+- Short (8.3) names: in the code page that `usb-drive-sfn` names, 866 by
+  default, 437, 850, 852, MIK (the Bulgarian DOS code page) or UTF-8, each
+  character as the system writes it, which was measured by having each write a
+  file for every character of the Basic Multilingual Plane. CP850's and CP852's
+  tables use the same conversion rules, the Windows model checked by
+  reproducing the measured 437 and 866 tables. Windows (10, at OEM code pages 437, 866 and 65001) writes a
+  stand-in for many characters the code page
+  lacks, such as `A` for an umlauted a at 866, `_` where the stand-in may not
+  be in a short name, and drops the rest, with the tails `~1` to `~4` and then
+  a hash of the long name, as its FAT driver does. Linux (vfat, mounted with
+  `codepage=437` or `866`) writes `_` for a character the code page lacks, with
+  the tails `~1` to `~9` and then a random number, which ffemu replaces with a
+  hash of the long name so that the volume is the same on every start. UTF-8
+  short names, which only Windows writes, follow Windows' rules whatever the
+  setting; MIK, which neither system has, keeps its alphabet and writes `_` for
+  anything else. On insertion, the console lists each name whose short name
+  loses a character, with the first such character's code point, up to a
+  hundred names.
 - Long names: Windows writes none for a name that is a valid short name in one
   letter case per part, such as `readme.txt` or `README.txt`, and keeps the
   case in the entry instead; Linux writes one for any such name that is not all
   in capitals. A firmware that cannot convert a long name to its code page
   falls back to the short name, so the short names matter for non-ASCII names.
+  With `usb-drive-lfn = no` the drive has none, as MS-DOS leaves a drive: short
+  names alone, in capitals, but for the numeric tails of names that 8.3 cannot
+  hold, which no DOS wrote.
 - Attributes: read-only from the host file (on Windows its R attribute, on
   Linux no write permission for anyone, which `cp -p` and copying file managers
   carry over to vfat, plain `cp` not), and on Windows also hidden and system.
@@ -171,26 +187,34 @@ The firmware sizes an LCD by `display-type`, e.g. `display-type = lcd-20x04`,
 and drives one that it finds with `auto` as a 16x2; the LCD is drawn dark on
 its lit panel, in the color of the settings (white on blue, dark or bright),
 the panel dark gray while the backlight is off. Its character ROM is chosen in
-the same dialog, and kept as `lcd-rom`: CYR, the default, Latin and upper- and
-lower-case Cyrillic, page 0 of MELT's modules, whose codes the other Cyrillic
-modules share, or A00, Latin and Japanese, which most other modules have. Each
-is a header, `lcd_font_cyr.h` or `lcd_font_a00.h`, holding the glyph of every
-code it defines, each labeled, and the Unicode character it stands for. The
-braille and half block renderings draw the glyphs, the half blocks on a
-terminal of 16 colors or more with the unlit dots of each character faint, in
-the panel's color of the other brightness, as a real panel shows them; the
-ASCII rendering prints the characters, as `dump` does in UTF-8, a blank glyph
-as a space, and a magenta white square for a code that stands for none (a glyph
-no single character matches) or for a character wider than a cell; a
-user-defined code is a checkerboard in the other renderings. Neither ROM is
-ASCII throughout: CYR has a cent sign, small numbers, a return arrow and a
-pencil at 0x5c and 0x7b to 0x7f, where `\ { | } ~` are, and A00 a yen sign at
-0x5c and arrows at 0x7e and 0x7f, where `\` and `~` are. The user-defined
-characters, which the firmware never sets, are not emulated. For an OLED, the
-dialog's check box "Made from 6x16, bold" draws the 8x16 font as the firmware
-built with `oled_font_8x16_synth=y` does, which saves flash by leaving the 8x16
-font out and making each glyph from the 6x16 one, bold with a second copy a
-column to the right; it takes effect at once and is kept as
+the same dialog, and kept as `lcd-rom`, by the values of the firmware's
+`lcd-charset`: `lcd-rom` is the ROM that the emulated module has, `lcd-charset`
+the one that the firmware is told of. They are `jap`, the default, Latin +
+Japanese: A00, most common for generic modules; `eur`, Latin with Western
+European accented letters: A02; `cyr-melt`, Cyrillic (Russian/Bulgarian): MELT;
+or `cyr-sitronix`, Cyrillic (Russian, Bulgarian): Sitronix 0T, Winstar CT. The
+firmware's `lcd-charset = cyr` serves both. The old names `a00` and `a02` remain
+accepted as aliases of `jap` and `eur`, and `cyr` as an alias of `cyr-melt`.
+Each is a header, `lcd_font_a00.h`, `lcd_font_a02.h`, `lcd_font_cyr.h` or
+`lcd_font_cyr_sitronix.h`, holding the glyph of every code it defines, each
+labeled, and the Unicode character it stands for. The braille and half block
+renderings draw the glyphs, the half blocks on a terminal of 16 colors or more
+with the unlit dots of each character faint, in the panel's color of the other
+brightness, as a real panel shows them; the ASCII rendering prints the
+characters, as `dump` does in UTF-8, a blank glyph as a space, and a magenta
+white square for a code that stands for none (a glyph no single character
+matches) or for a character wider than a cell; a code without a glyph is a
+checkerboard in the other renderings. The user-defined characters of CGRAM are
+drawn as the firmware sets them, which it does for `eur`, giving it the full
+block that the ROM lacks; the text renderings show one of all dots set as a
+full block. No ROM is ASCII throughout: the Cyrillic ROMs have a cent sign,
+small numbers, a return arrow and a pencil at 0x5c and 0x7b to 0x7f, where
+`\ { | } ~` are, `jap` a yen sign at 0x5c and arrows at 0x7e and 0x7f, where
+`\` and `~` are, and `eur` a house at 0x7f. For
+an OLED, the dialog's check box "Made from 6x16, bold" draws the 8x16 font as
+the firmware built with `oled_font_8x16_synth=y` does, which saves flash by
+leaving the 8x16 font out and making each glyph from the 6x16 one, bold with a
+second copy a column to the right; it takes effect at once and is kept as
 `oled-8x16 = font | synth`.
 
 The firmware of an AT32F435 board has a display driver of its own, for that
@@ -492,6 +516,8 @@ or `latch`, or on the floppy interface `sel`, `write`, `motor`, `dir`, `step`
 or `side` for Shugart, and `sel`, `write`, `phase-in`, `phase-out` or `release`
 for Apple2, `usb-fat <fat32|fat16>`, which sets the file system of a drive made
 from a directory and inserts such a drive again as the Externals dialog does,
+likewise `usb-drive-sfn <866|437|850|852|mik|utf8>`, `usb-drive-lfn <yes|no>` and
+`usb-drive-sfn-writing <windows|linux>` for its names,
 `sleep <ms>`, `dump` (the display as text: an LCD as its rows of characters
 between bars, a 7-segment display as its digits drawn with `_` and `|` in
 three rows, a lit point as `.`), `log` (the firmware's console output so far),
@@ -556,7 +582,8 @@ with `FFEMU_CLOCK=host` set on the host's.
 - `ssd1306.c`: the OLED's controller, an SSD1306 or an SH1106, as an I2C slave.
 - `hd44780.c`: the LCD, an HD44780 controller behind a PCF8574 port expander as
   an I2C slave, and its characters as pixels from the font of the character ROM
-  chosen, `lcd_font_cyr.h` or `lcd_font_a00.h`.
+  chosen, `lcd_font_a00.h`, `lcd_font_a02.h`, `lcd_font_cyr.h` or
+  `lcd_font_cyr_sitronix.h`.
 - `led_7seg.c`: the 7-segment LED display, a TM1651 or a pair of 74HC164 shift
   registers on two GPIO lines, and its digits as pixels.
 - `osd.c`: FF OSD as an I2C slave, and its text as pixels in its font,
@@ -580,9 +607,8 @@ with the host C library. Only `emu.h` is shared between the two.
   data; the drive's outputs to the computer (INDEX, TRK0, WRPROT, RDY, DSKCHG)
   are set by the firmware but not shown.
 - AT32F435 boards but for their display driver.
-- The LCD's user-defined characters, its cursor, and a PCF8574A backpack, at
-  0x3f, which the firmware would find just as well.
+- The LCD's cursor, and a PCF8574A backpack, at 0x3f, which the firmware would
+  find just as well.
 - The firmware's writes reaching the host files, the image or the disk:
   `IMAGE_A.CFG`, `FLASH.DMP` and the like are kept aside until the drive is
   removed.
-- A setting for the code page of short names, in place of the system's.

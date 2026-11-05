@@ -1914,9 +1914,14 @@ static int cmp_lfn (		/* 1:matched, 0:not matched */
 	for (wc = 1, s = 0; s < 13; s++) {		/* Process all characters in the entry */
 		uc = ld_word(dir + LfnOfs[s]);		/* Pick an LFN character */
 		if (wc != 0) {
-			if (i >= FF_MAX_LFN + 1 || ff_wtoupper(uc) != ff_wtoupper(lfnbuf[i++])) {	/* Compare it */
+			if (i >= FF_MAX_LFN + 1) return 0;	/* Not matched */
+			/* FlashFloppy: '?' stands for a character that our code page
+			 * lacks, two for one outside the Basic Multilingual Plane, and
+			 * matches any unit but the name's end, a surrogate too. */
+			if (lfnbuf[i] == '?' ? uc == 0 : !charset_uni_match(uc, lfnbuf[i])) {	/* Compare it */
 				return 0;					/* Not matched */
 			}
+			i++;
 			wc = uc;
 		} else {
 			if (uc != 0xFFFF) return 0;		/* Check filler */
@@ -2498,7 +2503,14 @@ static FRESULT dir_find (	/* FR_OK(0):succeeded, !=0:error */
 				}
 			} else {					/* An SFN entry is found */
 				if (ord == 0 && sum == sum_sfn(dp->dir)) break;	/* LFN matched? */
-				if (!(dp->fn[NSFLAG] & NS_LOSS) && !mem_cmp(dp->dir, dp->fn, 11)) break;	/* SFN matched? */
+				/* FlashFloppy: A short name with bytes over 0x7F, in
+				 * whatever code page wrote it, matches the name that it
+				 * reads as, never by its bytes. */
+				if (charset_sfn_extended(dp->dir)) {
+					if (charset_sfn_match(dp->dir, fs->lfnbuf)) break;
+				} else {
+					if (!(dp->fn[NSFLAG] & NS_LOSS) && !mem_cmp(dp->dir, dp->fn, 11)) break;	/* SFN matched? */
+				}
 				ord = 0xFF; dp->blk_ofs = 0xFFFFFFFF;	/* Reset LFN sequence */
 			}
 		}
@@ -2759,6 +2771,8 @@ static void get_fileinfo (
 		if (di == 0) {	/* If LFN and SFN both are invalid, this object is inaccesible */
 			fno->fname[di++] = '?';
 		} else {
+			/* FlashFloppy: The short name as it reads in our code page. */
+			charset_sfn_decode(fno->altname);
 			for (si = di = 0, lcf = NS_BODY; fno->altname[si]; si++, di++) {	/* Copy altname[] to fname[] with case information */
 				wc = (WCHAR)fno->altname[si];
 				if (wc == '.') lcf = NS_EXT;
@@ -2896,7 +2910,9 @@ static FRESULT create_name (	/* FR_OK: successful, FR_INVALID_NAME: could not cr
 		if (uc >= 0x10000) lfn[di++] = (WCHAR)(uc >> 16);	/* Store high surrogate if needed */
 		wc = (WCHAR)uc;
 		if (wc < ' ' || wc == '/' || wc == '\\') break;	/* Break if end of the path or a separator is found */
-		if (wc < 0x80 && chk_chr("\"*:<>\?|\x7F", wc)) return FR_INVALID_NAME;	/* Reject illegal characters for LFN */
+		/* FlashFloppy: '?' is allowed, standing for a character that our
+		 * code page lacks. */
+		if (wc < 0x80 && chk_chr("\"*:<>|\x7F", wc)) return FR_INVALID_NAME;	/* Reject illegal characters for LFN */
 		if (di >= FF_MAX_LFN) return FR_INVALID_NAME;	/* Reject too long name */
 		lfn[di++] = wc;					/* Store the Unicode character */
 	}
@@ -2955,16 +2971,19 @@ static FRESULT create_name (	/* FR_OK: successful, FR_INVALID_NAME: could not cr
 
 		if (wc >= 0x80) {	/* Is this a non-ASCII character? */
 			cf |= NS_LFN;	/* LFN entry needs to be created */
+			/* FlashFloppy: Our code page's character is kept as it is, not
+			 * upper-cased by 437's table: an extended short name matches by
+			 * the name that it reads as. An 8.3 entry that FatFS wrote for
+			 * such a name would hold our bytes, which another system reads
+			 * in its own code page; the firmware creates ASCII names only. */
 #if FF_CODE_PAGE == 0
 			if (ExCvt) {	/* At SBCS */
 				wc = ff_uni2oem(wc, CODEPAGE);			/* Unicode ==> ANSI/OEM code */
-				if (wc & 0x80) wc = ExCvt[wc & 0x7F];	/* Convert extended character to upper (SBCS) */
 			} else {		/* At DBCS */
 				wc = ff_uni2oem(ff_wtoupper(wc), CODEPAGE);	/* Unicode ==> Upper convert ==> ANSI/OEM code */
 			}
 #elif FF_CODE_PAGE < 900	/* SBCS cfg */
 			wc = ff_uni2oem(wc, CODEPAGE);			/* Unicode ==> ANSI/OEM code */
-			if (wc & 0x80) wc = ExCvt[wc & 0x7F];	/* Convert extended character to upper (SBCS) */
 #else						/* DBCS cfg */
 			wc = ff_uni2oem(ff_wtoupper(wc), CODEPAGE);	/* Unicode ==> Upper convert ==> ANSI/OEM code */
 #endif
@@ -2977,7 +2996,7 @@ static FRESULT create_name (	/* FR_OK: successful, FR_INVALID_NAME: could not cr
 			}
 			dp->fn[i++] = (BYTE)(wc >> 8);	/* Put 1st byte */
 		} else {						/* SBC */
-			if (wc == 0 || chk_chr("+,;=[]", wc)) {	/* Replace illegal characters for SFN if needed */
+			if (wc == 0 || chk_chr("+,;=[]?", wc)) {	/* Replace illegal characters for SFN if needed (FlashFloppy: and '?') */
 				wc = '_'; cf |= NS_LOSS | NS_LFN;/* Lossy conversion */
 			} else {
 				if (IsUpper(wc)) {		/* ASCII upper case? */
@@ -3112,7 +3131,7 @@ static FRESULT follow_path (	/* FR_OK(0): successful, !=0: error code */
 #endif
 #endif
 
-	if ((UINT)*path < ' ') {				/* Null path name is the origin directory itself */
+	if (*path == 0) {					/* Null path name is the origin directory itself */
 		dp->fn[NSFLAG] = NS_NONAME;
 		res = dir_sdi(dp, 0);
 

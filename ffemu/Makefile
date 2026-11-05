@@ -38,7 +38,7 @@ endif
 # code, and the build level is "debug" for its assertions and console output.
 FW_SRCS := main.c config.c fs.c fs_hint.c volume.c cache.c crc.c string.c util.c
 FW_SRCS += time.c timer.c build_info.c spi.c sd_spi.c
-FW_SRCS += fatfs/ff.c fatfs/ffunicode.c
+FW_SRCS += fatfs/ff.c charset.c
 FW_SRCS += display/display.c display/lcd_stm32f105.c display/led_7seg.c
 FW_SRCS += gotek/board.c gotek/speaker.c floppy.c
 FW_SRCS += image/image.c image/adf.c image/dsk.c image/hfe.c image/img.c
@@ -49,7 +49,7 @@ FONTS := 6x16 8x16
 
 # The host half: everything that touches the host operating system.
 HOST_SRCS := ffemu.c cpu.c ssd1306.c fatimg.c rc.c tui.c script.c usbdisk.c
-HOST_SRCS += cfgfile.c led_7seg.c hd44780.c wincon.c osd.c crash.c
+HOST_SRCS += cfgfile.c led_7seg.c hd44780.c wincon.c osd.c sfn_cp.c crash.c
 HOST_SRCS += imgcfg.c
 
 FW_OBJS := $(patsubst %.c,$(OUT)/fw/%.o,$(FW_SRCS))

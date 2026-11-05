@@ -3,6 +3,12 @@ OBJS += lcd_$(mcu).o
 OBJS += oled_font_6x16.o
 OBJS += led_7seg.o
 
+# The bootloader shows only its own messages: its font holds ASCII alone.
+ifeq ($(target),bootloader)
+lcd_$(mcu).o: CFLAGS += -DOLED_FONT_ASCII_ONLY=1
+oled_font_6x16.c: font_extent := ascii
+endif
+
 ifneq ($(target),bootloader)
 lcd_$(mcu).o: CFLAGS += -Dfont_extra=1
 # To save the flash size for the logfile and debug builds for
@@ -18,4 +24,4 @@ endif
 endif
 
 oled_font_%.c: $(ROOT)/fonts/%.png $(ROOT)/scripts/mk_font.py
-	$(PYTHON) $(ROOT)/scripts/mk_font.py $< oled_font_$*
+	$(PYTHON) $(ROOT)/scripts/mk_font.py $< oled_font_$* $(font_extent)

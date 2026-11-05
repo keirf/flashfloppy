@@ -185,15 +185,18 @@ static const char * const df_label[DF_nr] = {
     [DF_synth] = "OLED 8x16 ~f~ont",
     [DF_mcu] = "Display driver of ~M~CU",
 };
-/* The Externals dialog's file system, 1 for FAT16, and whether FF OSD is
- * fitted, and the places of its focus. */
-static int dialog_usb_fat;
-static bool dialog_osd;
-enum { EF_fat, EF_osd, EF_drive, EF_ok, EF_cancel, EF_nr };
+/* The Externals dialog's file system, 1 for FAT16, its short names' code
+ * page and filename-writing rules, whether FF OSD is fitted, and the places
+ * of its focus. */
+static int dialog_usb_fat, dialog_usb_sfn, dialog_usb_by;
+static bool dialog_usb_lfn, dialog_osd;
+enum { EF_fat, EF_sfn, EF_names, EF_osd, EF_drive, EF_ok, EF_cancel, EF_nr };
 /* The Externals dialog's labels, by the control each names, `~` around the
  * letter that moves the focus to it. */
 static const char * const ef_label[EF_nr] = {
     [EF_fat] = "File ~s~ystem of a USB drive made from a directory",
+    [EF_sfn] = "Code page of USB drive short ~n~ames",
+    [EF_names] = "~R~ules for the short/long filenames on a USB drive",
     [EF_osd] = "FF ~O~SD: the display's text over the host's video",
 };
 /* What the drive button wrote, its path between MSG_USER marks, on the
@@ -776,10 +779,10 @@ static bool lcd_title(const struct lcd_view *v, char *title, size_t size)
 
     emu_flash_get(cfg);
     mismatch = !emu_flash_lcd_fits(cfg, v->cols, v->rows);
-    const char *rom = lcd_rom_label[v->rom];
+    const char *rom = lcd_rom_name[v->rom];
 
-    snprintf(title, size, "LCD %ux%u on HD44780, ROM %.*s%s%s%s", v->cols,
-             v->rows, (int)strcspn(rom, ":"), rom, v->on ? "" : " - off",
+    snprintf(title, size, "LCD %ux%u on HD44780, ROM %s%s%s%s", v->cols,
+             v->rows, rom, v->on ? "" : " - off",
              v->backlight ? "" : " - backlight off",
              mismatch ? mismatch_note : "");
     return mismatch;
@@ -876,7 +879,7 @@ static void draw_lcd(int y0, int x0, int fw, int style, bool too_small,
         for (r = 0; r < ch; r++) {
             put(y0 + 1 + r, x, cw, panel, "%*s", cw, "");
             for (c = 0; v->on && (c < (int)v->cols); c++) {
-                wchar_t wc = hd44780_unicode(v->rom, v->text[r][c]);
+                wchar_t wc = hd44780_char(v, v->text[r][c]);
                 if ((wc != 0) && (wcwidth(wc) == 1))
                     put_char(y0 + 1 + r, x + 1 + c, panel, wc);
                 else
@@ -2439,7 +2442,7 @@ static void check_row(int y, int x, int w, bool on, bool current,
  * MCU in focus. */
 static void draw_display_dialog(void)
 {
-    int w = 56, h = DISP_nr + LCD_ROM_nr + MCU_nr + 17, y, x, i;
+    int w = 80, h = DISP_nr + LCD_ROM_nr + MCU_nr + 17, y, x, i;
     int mcu_y = DISP_nr + LCD_ROM_nr + 9;
 
     dialog_box(w, h, "Display type", &y, &x);
@@ -2519,14 +2522,26 @@ static const char *drive_caption(bool *enabled)
         : "Save drive to ~i~mage file";
 }
 
-/* What the device is connected to, each as radio buttons: the file system of
- * a USB drive made from a directory; and FF OSD, as a check box. Below them
- * the drive button, which saves the drive as an image or unpacks an image
- * drive, into ffemu's state folder. */
+/* What the device is connected to: the file system of a USB drive made from
+ * a directory, its short names' code page and its filename-writing rules;
+ * and FF OSD, as a check box. Below them the drive button, which saves the
+ * drive as an image or unpacks an image drive, into ffemu's state folder. */
 static void draw_externals_dialog(void)
 {
     static const char * const fat_label[2] = {
         "FAT32", "FAT16: up to 2 GB, a root folder of 512 entries"
+    };
+    static const char * const sfn_label[USB_SFN_nr] = {
+        [USB_SFN_866] = "866: Russian, as DOS and Windows have it",
+        [USB_SFN_437] = "437: US and Western European",
+        [USB_SFN_850] = "850: Western European",
+        [USB_SFN_852] = "852: Central European",
+        [USB_SFN_mik] = "MIK: Bulgarian DOS",
+        [USB_SFN_utf8] =
+            "UTF-8: as Windows at OEM code page 65001 (UTF-8) writes"
+    };
+    static const char * const by_label[USB_BY_nr] = {
+        [USB_BY_windows] = "Windows", [USB_BY_linux] = "Linux (vfat)"
     };
     int w = 68, h = 7, y, x, i, row;
     char caption[40];
@@ -2535,8 +2550,10 @@ static void draw_externals_dialog(void)
 
     /* The frame, its empty first row, the buttons and the row of what the
      * drive button wrote, then each cluster's label, options and empty row,
-     * and its note below them all. */
+     * and the notes below them all. */
     h += 1 + 2 + 1 + 1;
+    h += 1 + USB_SFN_nr + 1;
+    h += 1 + USB_BY_nr + 1 + 1;
     h += 1 + 1 + 1 + 1;
     dialog_box(w, h, "Externals", &y, &x);
     row = y + 2;
@@ -2548,6 +2565,25 @@ static void draw_externals_dialog(void)
                   (dialog_focus == EF_fat) && (i == dialog_usb_fat),
                   fat_label[i]);
     row++;
+    probe_part(ef_label[EF_sfn]);
+    put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
+               COLOR_PAIR(CP_dlg_hot), ef_label[EF_sfn]);
+    for (i = 0; i < USB_SFN_nr; i++)
+        radio_row(row++, x + 3, w - 6, i == dialog_usb_sfn,
+                  (dialog_focus == EF_sfn) && (i == dialog_usb_sfn),
+                  sfn_label[i]);
+    row++;
+    probe_part(ef_label[EF_names]);
+    put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
+               COLOR_PAIR(CP_dlg_hot), ef_label[EF_names]);
+    for (i = 0; i < USB_BY_nr; i++)
+        radio_row(row++, x + 3, w - 6, i == dialog_usb_by,
+                  (dialog_focus == EF_names) && (i == dialog_usb_by),
+                  by_label[i]);
+    check_row(row++, x + 3, w - 6, !dialog_usb_lfn,
+              dialog_focus == EF_names,
+              "Do not write long filenames (as MS-DOS)");
+    row++;
     probe_part(ef_label[EF_osd]);
     put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
                COLOR_PAIR(CP_dlg_hot), ef_label[EF_osd]);
@@ -2556,7 +2592,7 @@ static void draw_externals_dialog(void)
     row++;
     probe_part("notes");
     put(row++, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
-        "Changing the file system inserts such a drive again.");
+        "Changing the drive's settings inserts such a drive again.");
     put(row++, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
         "Fitting or removing FF OSD restarts the device.");
     /* OK is the default while the focus is on no button. Both are at the
@@ -2981,11 +3017,19 @@ static int externals_dialog_key(int key)
     case ' ':
         if (dialog_focus == EF_osd)
             dialog_osd = !dialog_osd;
+        else if (dialog_focus == EF_names)
+            dialog_usb_lfn = !dialog_usb_lfn;
         break;
     case KEY_UP: case KEY_DOWN:
         if ((dialog_focus == EF_fat) && (dialog_usb_fat + d >= 0)
             && (dialog_usb_fat + d < 2))
             dialog_usb_fat += d;
+        else if ((dialog_focus == EF_sfn) && (dialog_usb_sfn + d >= 0)
+                 && (dialog_usb_sfn + d < USB_SFN_nr))
+            dialog_usb_sfn += d;
+        else if ((dialog_focus == EF_names) && (dialog_usb_by + d >= 0)
+                 && (dialog_usb_by + d < USB_BY_nr))
+            dialog_usb_by += d;
         break;
     case 27:
         dialog = DLG_none;
@@ -3320,6 +3364,7 @@ static const char * const fd_tab_name[FT_nr] = {
 static const char * const fd_places[] = {
     "display-type", "",
     "oled-font", "",
+    "lcd-charset", "",
     "display-order", "display-error-wide", "",
     "show-filename-ext", "",
     "show-tracks-short", "show-dir-slash", "|",
@@ -3327,7 +3372,9 @@ static const char * const fd_places[] = {
     "twobutton-action", "",
     "rotary", "",
     "folder-sort", "",
-    "sort-priority", "|",
+    "sort-priority", "",
+    "short-name-codepage", "",
+    "detect-utf8-in-short-names", "|",
     "display-scroll-rate", "display-scroll-pause", "nav-scroll-rate",
         "nav-scroll-pause", "display-scroll-by-pixel", "",
     "display-off-secs", "",
@@ -4859,6 +4906,8 @@ static const struct {
     { "display-type", "Type of the display connected" },
     { "display-type suffix", "Options for OLED displays" },
     { "oled-font", "Font of the OLED display" },
+    { "lcd-charset",
+      "Character ROM of the LCD, which names' letters are shown by" },
     { "show-filename-ext", "Whether to show floppy filename extensions" },
     { "show-tracks-short",
       "Whether the status row shows the side and track in short, at its "
@@ -4897,6 +4946,12 @@ static const struct {
     { "sort-priority",
       "Where the folders go in a sorted folder: before the files, after "
       "them, or mixed by name" },
+    { "short-name-codepage",
+      "Code page of the short names that have no long name, as MS-DOS "
+      "writes them" },
+    { "detect-utf8-in-short-names",
+      "Read a short name whose bytes above 0x7f form UTF-8 as UTF-8, as "
+      "Windows with UTF-8 writes it" },
     { "nav-loop",
       "Whether file/folder navigation loops from the last item to the first "
       "one and vice versa" },
@@ -5044,6 +5099,25 @@ static const struct {
     { "display-type", "slow",
       "Options for OLED displays: run the I2C bus slower, if the display "
       "blanks or garbles" },
+    { "short-name-codepage", "866",
+      "Short names in Cyrillic, as a Russian MS-DOS or Windows writes them" },
+    { "short-name-codepage", "mik",
+      "Short names in Cyrillic, as a Bulgarian MS-DOS writes them" },
+    { "short-name-codepage", "437",
+      "Short names in Western European letters, as a US or German MS-DOS "
+      "writes them" },
+    { "short-name-codepage", "850",
+      "Short names in Western European letters, as a Western European "
+      "MS-DOS writes them" },
+    { "short-name-codepage", "852",
+      "Short names in Central European letters, as a Central European "
+      "MS-DOS writes them" },
+    { "lcd-charset", "jap",
+      "Latin + Japanese: A00; most common for generic modules" },
+    { "lcd-charset", "eur",
+      "Latin with Western European accented letters: A02" },
+    { "lcd-charset", "cyr",
+      "Cyrillic (Russian/Bulgarian): MELT, Sitronix 0T, Winstar CT" },
     { "twobutton-action", "reverse", "Swap the left and right buttons" },
     { "notify-volume", "slotnr",
       "Beep the floppy number when a floppy is inserted: long beeps count as "
@@ -5488,6 +5562,9 @@ static void open_externals_dialog(void)
     dialog = DLG_externals;
     dialog_button = 0;
     dialog_usb_fat = config.usb_fat16;
+    dialog_usb_sfn = config.usb_sfn;
+    dialog_usb_lfn = config.usb_lfn;
+    dialog_usb_by = config.usb_by;
     dialog_osd = config.osd;
     dialog_focus = EF_fat;
     ef_note[0] = '\0';
@@ -5581,7 +5658,8 @@ static void handle_key(int key)
     case DK_order_no:
         leave(KEY_ACT_reset);
     case DK_externals:
-        ui_usb_set_fat16(dialog_usb_fat == 1);
+        ui_usb_set_drive(dialog_usb_fat == 1, dialog_usb_sfn,
+                         dialog_usb_lfn, dialog_usb_by);
         /* The firmware finds FF OSD as it starts: a change restarts the
          * device. */
         if (dialog_osd != config.osd) {

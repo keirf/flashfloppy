@@ -197,7 +197,7 @@ static unsigned int osd_prep_buffer(void)
             memcpy(q, text[i], lcd_columns);
         else
             memset(q, ' ', lcd_columns);
-
+        osd_map_row(q);
         q += lcd_columns;
     }
 
@@ -247,7 +247,7 @@ static unsigned int lcd_prep_buffer(void)
 
     emit8(&q, CMD_SETDDRADDR | row_offs[i2c_row], 0);
     for (i = 0; i < lcd_columns; i++)
-        emit8(&q, p ? *p++ : ' ', _RS);
+        emit8(&q, p ? lcd_char(*p++) : ' ', _RS);
 
     i2c_row++;
 
@@ -570,6 +570,7 @@ bool_t lcd_init(void)
     emit8(&p, CMD_DISPLAYCTL, 0);
     emit8(&p, CMD_ENTRYMODE | 2, 0);
     emit8(&p, CMD_DISPLAYCTL | 4, 0); /* display on */
+    lcd_cgram_block(&p);
     i2c->cr2 |= I2C_CR2_DMAEN;
     dma_start(p - buffer);
     
@@ -599,12 +600,12 @@ fail:
 #ifndef OLED_FONT_8x16_SYNTH
 #define OLED_FONT_8x16_SYNTH 0
 #endif
-extern const uint8_t oled_font_8x16[];
+extern const struct oled_font oled_font_8x16;
 static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
                             unsigned int to)
 {
     unsigned int j;
-    const uint8_t *p;
+    uint8_t glyph[16], *p = glyph;
     const unsigned int w = 8;
 
     /* Testing a macro at runtime allows the build system to supply a
@@ -614,13 +615,13 @@ static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
         /* The 6-pixel glyph made bold by a second copy a column to the right,
          * 7 columns by 13 rows: at the left of the 8x16 cell, with the source
          * font's vertical placement. */
-        p = &oled_font_6x16[g * 6 * 2];
+        oled_font_glyph(&oled_font_6x16, g, glyph);
         for (j = from; j < to; j++, q++) {
             q[0] = ((j < 6) ? p[j] : 0) | ((j-1 < 6) ? p[j-1] : 0);
             q[128] = ((j < 6) ? p[6+j] : 0) | ((j-1 < 6) ? p[5+j] : 0);
         }
     } else {
-        p = &oled_font_8x16[g * w * 2];
+        oled_font_glyph(&oled_font_8x16, g, glyph);
         memcpy(q, p+from, to-from);
         memcpy(q+128, p+w+from, to-from);
     }

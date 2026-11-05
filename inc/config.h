@@ -182,6 +182,17 @@ struct packed ff_cfg {
     bool_t show_dir_slash;
     bool_t display_scroll_by_pixel;
     bool_t display_error_wide;
+#define CODEPAGE_866 0
+#define CODEPAGE_mik 1
+#define CODEPAGE_437 2
+#define CODEPAGE_850 3
+#define CODEPAGE_852 4
+    uint8_t short_name_codepage;
+    bool_t detect_utf8_in_short_names;
+#define LCDCS_jap 0
+#define LCDCS_eur 1
+#define LCDCS_cyr 2
+    uint8_t lcd_charset;
 };
 
 extern struct ff_cfg ff_cfg;

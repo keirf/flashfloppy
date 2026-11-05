@@ -41,12 +41,13 @@ endif
 # The firmware half: the sources under test, as they are, with ffemu's
 # host-build headers.
 FW_SRCS := fs.c fs_hint.c volume.c cache.c crc.c string.c util.c
-FW_SRCS += fatfs/ff.c fatfs/ffunicode.c
+FW_SRCS += fatfs/ff.c charset.c
 FW_SRCS += image/image.c image/adf.c image/dsk.c image/hfe.c image/img.c
 FW_SRCS += image/da.c image/dummy.c image/mfm.c image/apple2.c
 FW_SRCS += floppy.c
 TEST_SRCS := harness.c floppy_env.c test_floppy.c test_flux.c
 TEST_SRCS += test_logfile.c
+TEST_SRCS += test_names.c
 ifeq ($(TARGET),shugart)
 TEST_SRCS += test_img.c test_util.c test_fatimg.c
 else
@@ -60,7 +61,7 @@ HOST_SRCS := ft_main.c dir_drive.c
 FW_OBJS := $(patsubst %.c,$(OUT)/fw/%.o,$(FW_SRCS))
 FW_OBJS += $(patsubst %.c,$(OUT)/test/%.o,$(TEST_SRCS))
 HOST_OBJS := $(patsubst %.c,$(OUT)/host/%.o,$(HOST_SRCS))
-HOST_OBJS += $(OUT)/host/fatimg.o
+HOST_OBJS += $(OUT)/host/fatimg.o $(OUT)/host/sfn_cp.o
 
 # As in ffemu/Makefile.
 FW_CFLAGS := -std=gnu99 -O1 -g -funsigned-char -fno-builtin
@@ -120,11 +121,11 @@ $(OUT)/host/%.o: $(TESTS)/%.c
 	$(Q)$(CC) $(HOST_CFLAGS) -c $< -o $@
 
 # As ffemu/Makefile compiles its host half.
-$(OUT)/host/dir_drive.o $(OUT)/host/fatimg.o: \
+$(OUT)/host/dir_drive.o $(OUT)/host/fatimg.o $(OUT)/host/sfn_cp.o: \
     HOST_CFLAGS += -O2 -D_GNU_SOURCE -iquote $(EMU)
 
-$(OUT)/host/fatimg.o: $(EMU)/fatimg.c
-	@echo CC ffemu/fatimg.c
+$(OUT)/host/fatimg.o $(OUT)/host/sfn_cp.o: $(OUT)/host/%.o: $(EMU)/%.c
+	@echo CC ffemu/$*.c
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(HOST_CFLAGS) -c $< -o $@
 

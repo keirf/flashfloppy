@@ -55,16 +55,14 @@ FONT_W = {"6x16": 6, "8x16": 8}
 
 
 def oled_glyphs(font):
-    """The firmware's glyphs of @font for ASCII, with which the fonts that the
-    build generated from fonts/ begin, by their columns' bytes, the top
-    page's and then the bottom page's, bit 0 a column's top pixel."""
-    path = os.path.join(
-        fr.OUT, "ffemu", "shugart", "gen", "oled_font_%s.c" % font)
-    with open(path) as f:
-        data = bytes(
-            int(x, 16) for x in re.findall(r"0x([0-9a-f]{2})", f.read()))
-    n = 2 * FONT_W[font]
-    return {data[i*n:(i+1)*n]: chr(0x20 + i) for i in range(0x7f - 0x20)}
+    """The firmware's glyphs of @font for ASCII by their columns' bytes, the
+    top page's and then the bottom page's, bit 0 a column's top pixel, from
+    the generated font as the harness decodes it."""
+    w = FONT_W[font]
+    glyphs = fr.font_glyphs(font)
+    return {bytes([c & 0xff for c in glyphs[code]]
+                  + [c >> 8 for c in glyphs[code]]): chr(code)
+            for code in range(0x20, 0x7f)}
 
 
 def oled_text(pixels, top, font, wide, tall=True):
@@ -96,7 +94,9 @@ class Case(fr.Case):
         r = fr.run(
             name, ["wait 10000 log Name:"] + list(commands)
             + ["sleep 500", "dump", "osd"],
-            settings=["display = " + display], flash=flash, files=files)
+            settings=["display = " + display]
+            + ["lcd-rom = cyr"] * display.startswith("hd44780"),
+            flash=flash, files=files)
         self.assertWaits(r, 1)
         lcd = display.startswith("hd44780")
         out = r.stdout.split("\nosd: ")
@@ -999,11 +999,9 @@ class FontTest(Case, unittest.TestCase):
                         "@ABCDEFGHIJKLMNO", "40-4F",
                         "PQRSTUVWXYZ[\\]^_", "50-5F")])
 
-    def test_oled_codes_without_glyph(self):
-        """The control codes draw alike, as the font's mark of a code without
-        a glyph, 0x10 and on too, the phase spinner's in the apple2
-        firmware, which the font test draws as a glyph, on a 128x32 OLED of
-        one pair a page."""
+    def test_oled_low_codes(self):
+        """The low character cells show currency and Central European letters,
+        not the former spinner's control codes; only NUL is unassigned there."""
         r = fr.run("ffemu-apple2", ["wait 10000 log Name:"] + FONT_TEST
                    + ["dump", "key right", "sleep 300", "dump"],
                    settings=["display = ssd1306-128x32"], files=DSK)
@@ -1012,8 +1010,9 @@ class FontTest(Case, unittest.TestCase):
         pages = (lines[:32], lines[32:64])
         cells = [tuple(row[1 + 6*i:7 + 6*i] for row in page[:16])
                  for page in pages for i in range(16)]
-        self.assertEqual(set(cells), {cells[0]}, r.report())
         self.assertTrue(any("#" in row for row in cells[0]), r.report())
+        for cell in cells[1:]:
+            self.assertNotEqual(cell, cells[0], r.report())
         self.assertEqual(oled_text(pages[1], 16, "6x16", False, False),
                          "10-1F" + " " * 16)
 

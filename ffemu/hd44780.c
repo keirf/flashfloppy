@@ -5,10 +5,11 @@
  * PCF8574 port expander, the usual backpack, whose pins carry RS, R/W, E and
  * the backlight in the low nibble and D4 to D7 in the high one. It decodes
  * the 4-bit protocol that the firmware clocks through the expander, keeps
- * the display RAM for the user interface, and draws the characters from the
- * font of the character ROM chosen, lcd_font_cyr.h or lcd_font_a00.h, which
- * also give the Unicode character of each code. The user-defined characters
- * of CGRAM, which the firmware never sets, are not kept.
+ * the display RAM and the user-defined characters of CGRAM for the user
+ * interface, and draws the characters from the font of the character ROM
+ * chosen, lcd_font_a00.h, lcd_font_a02.h, lcd_font_cyr.h or
+ * lcd_font_cyr_sitronix.h, which also give the Unicode character of each
+ * code.
  *
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
@@ -19,7 +20,9 @@
 
 #include "host.h"
 #include "lcd_font_a00.h"
+#include "lcd_font_a02.h"
 #include "lcd_font_cyr.h"
+#include "lcd_font_cyr_sitronix.h"
 
 /* A PCF8574 with its address pins left high, as backpacks come; the
  * firmware would find a PCF8574A, at 0x3f, as well. */
@@ -52,18 +55,27 @@
 #define PANEL_H(nr_rows) ((INK_H(nr_rows) + 4 + 3) & ~3u)
 
 const char * const lcd_rom_name[LCD_ROM_nr] = {
-    [LCD_ROM_cyr] = "cyr",
-    [LCD_ROM_a00] = "a00"
+    [LCD_ROM_a00] = "jap",
+    [LCD_ROM_a02] = "eur",
+    [LCD_ROM_cyr_melt] = "cyr-melt",
+    [LCD_ROM_cyr_sitronix] = "cyr-sitronix"
 };
 
 const char * const lcd_rom_label[LCD_ROM_nr] = {
-    [LCD_ROM_cyr] = "CYR: Latin and Cyrillic",
-    [LCD_ROM_a00] = "A00: Latin and Japanese"
+    [LCD_ROM_a00] = "Latin + Japanese: A00; most common for generic modules",
+    [LCD_ROM_a02] = "Latin with Western European accented letters: A02",
+    [LCD_ROM_cyr_melt] = "Cyrillic (Russian/Bulgarian): MELT",
+    [LCD_ROM_cyr_sitronix] =
+        "Cyrillic (Russian, Bulgarian): Sitronix 0T, Winstar CT"
 };
 
 const char * const lcd_rom_help[LCD_ROM_nr] = {
-    [LCD_ROM_cyr] = "Upper- and lower-case Cyrillic: ffemu/lcd_font_cyr.h",
-    [LCD_ROM_a00] = "Latin and Japanese katakana: ffemu/lcd_font_a00.h"
+    [LCD_ROM_a00] = "Latin and Japanese katakana: ffemu/lcd_font_a00.h",
+    [LCD_ROM_a02] = "Accented Latin and some Greek: ffemu/lcd_font_a02.h",
+    [LCD_ROM_cyr_melt] = "Upper- and lower-case Cyrillic, MELT's modules: "
+        "ffemu/lcd_font_cyr.h",
+    [LCD_ROM_cyr_sitronix] = "Cyrillic, Sitronix's 0T, Winstar's CT, generic "
+        "modules: ffemu/lcd_font_cyr_sitronix.h"
 };
 
 static const struct {
@@ -72,12 +84,21 @@ static const struct {
     unsigned int first, nr;      /* the codes that it has */
     unsigned int nr_rows;
 } fonts[LCD_ROM_nr] = {
-    [LCD_ROM_cyr] = { lcd_font_cyr, lcd_font_cyr_unicode, LCD_FONT_CYR_FIRST,
-                      ARRAY_SIZE(lcd_font_cyr_unicode),
-                      ARRAY_SIZE(lcd_font_cyr) },
     [LCD_ROM_a00] = { lcd_font_a00, lcd_font_a00_unicode, LCD_FONT_A00_FIRST,
                       ARRAY_SIZE(lcd_font_a00_unicode),
-                      ARRAY_SIZE(lcd_font_a00) }
+                      ARRAY_SIZE(lcd_font_a00) },
+    [LCD_ROM_a02] = { lcd_font_a02, lcd_font_a02_unicode, LCD_FONT_A02_FIRST,
+                      ARRAY_SIZE(lcd_font_a02_unicode),
+                      ARRAY_SIZE(lcd_font_a02) },
+    [LCD_ROM_cyr_melt] = { lcd_font_cyr, lcd_font_cyr_unicode,
+                           LCD_FONT_CYR_FIRST,
+                           ARRAY_SIZE(lcd_font_cyr_unicode),
+                           ARRAY_SIZE(lcd_font_cyr) },
+    [LCD_ROM_cyr_sitronix] = { lcd_font_cyr_sitronix,
+                               lcd_font_cyr_sitronix_unicode,
+                               LCD_FONT_CYR_SITRONIX_FIRST,
+                               ARRAY_SIZE(lcd_font_cyr_sitronix_unicode),
+                               ARRAY_SIZE(lcd_font_cyr_sitronix) }
 };
 
 /* The character ROM, set by the user interface. */
@@ -88,6 +109,7 @@ static int rom;
 static struct {
     volatile unsigned int seq;
     uint8_t ddram[128];
+    uint8_t cgram[64];
     bool on, backlight, two_lines, cursor, blink;
     unsigned int shift; /* display shift: the address shown first, 0-39 */
     unsigned int nr_updates;
@@ -140,10 +162,11 @@ static void shift_display(bool left)
 static void execute(bool rs, uint8_t b)
 {
     if (rs) {
-        if (!in_cgram) {
+        if (in_cgram)
+            d.cgram[ac] = b & 0x1f;
+        else
             d.ddram[ac] = b;
-            wrote = true;
-        }
+        wrote = true;
         ac_step(increment);
         if (shift_on_write && !in_cgram)
             shift_display(increment);
@@ -285,6 +308,7 @@ void hd44780_get_view(struct lcd_view *view)
     view->rows = rows;
     view->rom = rom;
     view->nr_updates = snap.nr_updates;
+    memcpy(view->cgram, snap.cgram, sizeof(view->cgram));
 
     /* A 4-row module is a two-line one inside, its third and fourth rows the
      * second halves of the lines; in one-line mode only the first line is
@@ -307,11 +331,25 @@ void hd44780_set_rom(int r)
     rom = r;
 }
 
-unsigned int hd44780_unicode(int r, uint8_t c)
+/* Whether code @c is a user-defined character on LCD @v: 0x00 to 0x07 and
+ * their mirrors 0x08 to 0x0f, where its ROM has no glyphs of its own. */
+static bool user_defined(const struct lcd_view *v, uint8_t c)
 {
-    unsigned int i = c - fonts[r].first;
+    return (c < 0x10) && (c < fonts[v->rom].first);
+}
 
-    return (i < fonts[r].nr) ? fonts[r].unicode[i] : 0;
+unsigned int hd44780_char(const struct lcd_view *v, uint8_t c)
+{
+    unsigned int i = c - fonts[v->rom].first;
+    const uint8_t *g = &v->cgram[(c & 7) * FONT_H];
+
+    if (user_defined(v, c)) {
+        for (i = 0; i < FONT_H; i++)
+            if (g[i] != 0x1f)
+                return 0;
+        return 0x2588;
+    }
+    return (i < fonts[v->rom].nr) ? fonts[v->rom].unicode[i] : 0;
 }
 
 void hd44780_size(unsigned int nr_cols, unsigned int nr_rows,
@@ -349,12 +387,20 @@ void hd44780_pixels(const struct lcd_view *v, const uint8_t **px,
         return;
     for (r = 0; r < v->rows; r++) {
         for (c = 0; c < v->cols; c++) {
-            unsigned int i = v->text[r][c] - fonts[v->rom].first;
+            uint8_t ch = v->text[r][c];
+            unsigned int i = ch - fonts[v->rom].first;
             for (y = 0; y < FONT_H; y++) {
+                char user[FONT_W];
                 const char *row = (i < fonts[v->rom].nr)
                     ? fonts[v->rom].rows[(i / FONT_BAND) * FONT_H + y]
                     + (i % FONT_BAND) * FONT_STRIDE
                     : stub[y];
+                if (user_defined(v, ch)) {
+                    for (x = 0; x < FONT_W; x++)
+                        user[x] = (v->cgram[(ch & 7) * FONT_H + y]
+                                   & (0x10 >> x)) ? FONT_INK : '.';
+                    row = user;
+                }
                 for (x = 0; x < FONT_W; x++)
                     if (row[x] == FONT_INK)
                         buf[(top + r * PITCH_Y + y) * *w
