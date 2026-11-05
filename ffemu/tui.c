@@ -168,21 +168,18 @@ static char msg_title[32], msg_text[256];
 static int msg_return;
 static int dialog_button;
 static int dialog_display;
-/* The Display type dialog's character ROM and 8x16 font, and its focus: the
- * displays, the ROMs, which only an LCD uses, the font's check box, which
- * only an OLED uses, the MCUs, the button that saves FF.CFG, OK and
+/* The Display type dialog's character ROM and its focus: the displays, the
+ * ROMs, which only an LCD uses, the MCUs, the button that saves FF.CFG, OK and
  * Cancel. */
 static int dialog_lcd_rom, dialog_mcu, dialog_focus;
-static bool dialog_oled_synth;
 enum {
-    DF_display, DF_rom, DF_synth, DF_mcu, DF_save, DF_ok, DF_cancel, DF_nr
+    DF_display, DF_rom, DF_mcu, DF_save, DF_ok, DF_cancel, DF_nr
 };
 /* The Display type dialog's labels, by the control each names, `~` around
  * the letter that moves the focus to it. */
 static const char * const df_label[DF_nr] = {
     [DF_display] = "~D~isplay",
     [DF_rom] = "LCD character ~R~OM",
-    [DF_synth] = "OLED 8x16 ~f~ont",
     [DF_mcu] = "Display driver of ~M~CU",
 };
 /* The Externals dialog's file system, 1 for FAT16, and whether FF OSD is
@@ -2432,15 +2429,14 @@ static void check_row(int y, int x, int w, bool on, bool current,
 }
 
 /* The displays to choose from, as radio buttons, the character ROM of an
- * LCD and the 8x16 font of an OLED, which only change how it is drawn and
- * can be set whatever display is chosen, and the MCU whose display driver
- * the firmware runs, each under its label; what choosing does; and on the
- * last row, as in the Flash mem dialog, the help of a ROM, the font or an
- * MCU in focus. */
+ * LCD, which only changes how it is drawn and can be set whatever display is
+ * chosen, and the MCU whose display driver the firmware runs, each under its
+ * label; what choosing does; and on the last row, the help of the control in
+ * focus. */
 static void draw_display_dialog(void)
 {
-    int w = 56, h = DISP_nr + LCD_ROM_nr + MCU_nr + 17, y, x, i;
-    int mcu_y = DISP_nr + LCD_ROM_nr + 9;
+    int w = 56, h = DISP_nr + LCD_ROM_nr + MCU_nr + 15, y, x, i;
+    int mcu_y = DISP_nr + LCD_ROM_nr + 7;
 
     dialog_box(w, h, "Display type", &y, &x);
     probe_part(df_label[DF_display]);
@@ -2457,12 +2453,6 @@ static void draw_display_dialog(void)
         radio_row(y + DISP_nr + 5 + i, x + 3, w - 6, i == dialog_lcd_rom,
                   (dialog_focus == DF_rom) && (i == dialog_lcd_rom),
                   lcd_rom_label[i]);
-    probe_part(df_label[DF_synth]);
-    put_marked(y + DISP_nr + LCD_ROM_nr + 6, x + 3, w - 6,
-               COLOR_PAIR(CP_dialog), COLOR_PAIR(CP_dlg_hot),
-               df_label[DF_synth]);
-    check_row(y + DISP_nr + LCD_ROM_nr + 7, x + 3, w - 6, dialog_oled_synth,
-              dialog_focus == DF_synth, "Made from 6x13, bold");
     probe_part(df_label[DF_mcu]);
     put_marked(y + mcu_y, x + 3, w - 6, COLOR_PAIR(CP_dialog),
                COLOR_PAIR(CP_dlg_hot), df_label[DF_mcu]);
@@ -2498,9 +2488,6 @@ static void draw_display_dialog(void)
     else if (dialog_focus == DF_rom)
         put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
             lcd_rom_help[dialog_lcd_rom]);
-    else if (dialog_focus == DF_synth)
-        put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
-            "As firmware built with oled_font_8x16_synth draws it");
     else if (dialog_focus == DF_mcu)
         put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
             mcu_help[dialog_mcu]);
@@ -2915,10 +2902,6 @@ static int display_dialog_key(int key)
         if (dialog_focus >= DF_save)
             dialog_focus = DF_save + (dialog_focus - DF_save
                                       + ((key == KEY_RIGHT) ? 1 : 2)) % 3;
-        break;
-    case ' ':
-        if (dialog_focus == DF_synth)
-            dialog_oled_synth = !dialog_oled_synth;
         break;
     case KEY_UP: case KEY_DOWN:
         if ((dialog_focus == DF_display) && (dialog_display + d >= 0)
@@ -4997,15 +4980,15 @@ static const struct {
       "Options for OLED displays: mirror horizontally, for displays of "
       "such pixel layout" },
     { "display-type", "narrow",
-      "Options for OLED displays: for 6x13 font, show only 18 text "
+      "Options for OLED displays: for 6x16 font, show only 18 text "
       "columns, for small case cutouts" },
     { "display-type", "narrower",
-      "Options for OLED displays: for 6x13 font, show only 16 text "
+      "Options for OLED displays: for 6x16 font, show only 16 text "
       "columns, for small case cutouts" },
     { "display-type", "inverse",
       "Options for OLED displays: invert the image, printing "
       "black-on-bright" },
-    { "oled-font", "6x13",
+    { "oled-font", "6x16",
       "Makes 21 columns; with \"narrower\" suffix to \"display-type\" it "
       "fits the smallest case cutout" },
     { "oled-font", "8x16",
@@ -5484,7 +5467,6 @@ static void open_display_dialog(void)
     dialog_button = 0;
     dialog_display = config.display;
     dialog_lcd_rom = config.lcd_rom;
-    dialog_oled_synth = config.oled_synth;
     dialog_mcu = config.mcu;
     dialog_focus = DF_display;
     fd_note[0] = '\0';
@@ -5542,11 +5524,6 @@ static void handle_key(int key)
         if (dialog_lcd_rom != config.lcd_rom) {
             config.lcd_rom = dialog_lcd_rom;
             hd44780_set_rom(config.lcd_rom);
-            rc_save();
-        }
-        if (dialog_oled_synth != config.oled_synth) {
-            config.oled_synth = dialog_oled_synth;
-            emu_oled_synth_8x16 = config.oled_synth;
             rc_save();
         }
         set_display(dialog_display, dialog_mcu);

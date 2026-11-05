@@ -43,7 +43,6 @@ volatile unsigned int emu_in_fdd = EMU_FDD_SEL
     | (FFEMU_APPLE2 ? 0 : EMU_FDD_DIR);
 volatile unsigned int emu_in_step;
 volatile int emu_mcu;
-volatile int emu_oled_synth_8x16;
 
 char log_ring[LOG_SIZE];
 volatile unsigned int log_head;

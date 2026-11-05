@@ -661,7 +661,6 @@ int main(int argc, char **argv)
      * 7-segment display being another. */
     osd_init(config.osd && !DISP_IS_LED(config.display));
     hd44780_set_rom(config.lcd_rom);
-    emu_oled_synth_8x16 = config.oled_synth;
     emu_mcu = config.mcu;
     if (usb)
         insert(state != NULL);

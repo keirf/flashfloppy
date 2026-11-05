@@ -45,7 +45,7 @@ struct packed ff_cfg {
 #define DISPON_sel 2
     uint8_t display_on_activity;
     uint16_t display_scroll_rate;
-#define FONT_6x13 7
+#define FONT_6x16 7
 #define FONT_8x16 8
     uint8_t oled_font; /* FONT_* oled font specifier */
     uint8_t step_volume;

@@ -391,10 +391,10 @@ static void oled_draw_spinner(unsigned int row, unsigned int half,
 }
 #endif
 
-extern const uint8_t oled_font_6x13[];
+extern const uint8_t oled_font_6x16[];
 
 #ifdef MINIMAL_UI
-static void oled_convert_text_row_6x13(char *pc)
+static void oled_convert_text_row_6x16(char *pc)
 {
     unsigned int i, c;
     const uint8_t *p;
@@ -407,7 +407,7 @@ static void oled_convert_text_row_6x13(char *pc)
     for (i = 0; i < lcd_columns; i++) {
         if ((c = *pc++ - 0x20) > 0x5e)
             c = '.' - 0x20;
-        p = &oled_font_6x13[c * w * 2];
+        p = &oled_font_6x16[c * w * 2];
         memcpy(q, p, w);
         memcpy(q+128, p+w, w);
         q += w;
@@ -425,7 +425,7 @@ static void oled_convert_text_row(char *pc)
         oled_convert_text_row_8x16(pc);
     else
 #endif
-        oled_convert_text_row_6x13(pc);
+        oled_convert_text_row_6x16(pc);
 }
 #else
 /* Writes pixel columns @from to @to - 1 of the glyph of @c to buffer[] at @q,
@@ -444,7 +444,7 @@ static void oled_glyph(uint8_t *q, char c, unsigned int from,
         return;
     }
 #endif
-    p = &oled_font_6x13[g * 6 * 2];
+    p = &oled_font_6x16[g * 6 * 2];
     memcpy(q, p+from, to-from);
     memcpy(q+128, p+6+from, to-from);
 }

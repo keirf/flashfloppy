@@ -112,10 +112,6 @@ extern volatile unsigned int emu_in_step;
 #define EMU_MCU_at32f435 1
 extern volatile int emu_mcu;
 
-/* The OLED's 8x16 font made from the 6x13 one, as the firmware built with
- * oled_font_8x16_synth=y draws it: the display driver's
- * OLED_FONT_8x16_SYNTH. */
-extern volatile int emu_oled_synth_8x16;
 
 /* Front-panel outputs, read by the user interface. */
 /* Counts the pulses sent to the speaker. */

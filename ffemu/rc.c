@@ -44,7 +44,7 @@ static const char * const color_name[8] = {
 #define BRIGHT "bright-"
 
 enum { SET_style, SET_display_color, SET_hold_ms, SET_display, SET_lcd_rom,
-       SET_oled_8x16, SET_mcu, SET_osd, SET_osd_style, SET_usb_fat, SET_nr };
+       SET_mcu, SET_osd, SET_osd_style, SET_usb_fat, SET_nr };
 
 static const struct setting {
     const char *name, *comment;
@@ -72,11 +72,6 @@ static const struct setting {
         "Cyrillic, MELT's and other Cyrillic modules; ffemu/lcd_font_cyr.h) "
         "or a00 (Latin and Japanese, most other modules; "
         "ffemu/lcd_font_a00.h). Key 0." },
-    [SET_oled_8x16] = {
-        "oled-8x16",
-        "The OLED's 8x16 font: font (the firmware's own) or synth (made from "
-        "the 6x13 one, bold, as the firmware built with "
-        "oled_font_8x16_synth=y draws it). Key 0." },
     [SET_mcu] = {
         "mcu",
         "The MCU whose display driver the firmware runs: 415 (the board's "
@@ -118,9 +113,6 @@ static const char *value_of(int set, char *buf, size_t size)
         break;
     case SET_lcd_rom:
         snprintf(buf, size, "%s", lcd_rom_name[config.lcd_rom]);
-        break;
-    case SET_oled_8x16:
-        snprintf(buf, size, "%s", config.oled_synth ? "synth" : "font");
         break;
     case SET_mcu:
         snprintf(buf, size, "%s", mcu_name[config.mcu]);
@@ -296,11 +288,6 @@ static bool parse_line(char *line)
             }
         }
         return false;
-    case SET_oled_8x16:
-        if (strcmp(value, "font") && strcmp(value, "synth"))
-            return false;
-        config.oled_synth = !strcmp(value, "synth");
-        return true;
     case SET_mcu:
         for (i = 0; i < MCU_nr; i++) {
             if (!strcmp(value, mcu_name[i])) {
@@ -636,7 +623,6 @@ void rc_load(void)
     config.style = STYLE_braille;
     config.display = DISP_ssd1306_32;
     config.lcd_rom = LCD_ROM_cyr;
-    config.oled_synth = false;
     config.mcu = EMU_MCU_at32f415;
     config.osd = true;
     config.osd_braille = false;

@@ -37,7 +37,7 @@ class MinimalUI(display.Case, unittest.TestCase):
             PROGRAM, display.half_tracks(2), "ssd1306-128x32", files=display.DSK)
         self.assertEqual(rows[2], "000/000   T:01.4     ", r.report())
         self.assertEqual(
-            display.oled_text(pixels(r), 16, "6x13", False), rows[2],
+            display.oled_text(pixels(r), 16, "6x16", False), rows[2],
             r.report())
 
     def test_no_scrolling(self):
@@ -69,7 +69,7 @@ class MinimalUI(display.Case, unittest.TestCase):
             files=display.DSK)
         self.assertEqual(rows[0], "TEST".ljust(21), r.report())
         self.assertEqual(
-            display.oled_text(pixels(r), 0, "6x13", False), rows[0],
+            display.oled_text(pixels(r), 0, "6x16", False), rows[0],
             r.report())
 
     def test_directory_track_row_uses_directory_row(self):

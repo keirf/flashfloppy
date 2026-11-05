@@ -321,7 +321,7 @@ static const struct emu_named show_dir_with_names[] = {
     { "postfix-slash", DIRWITH_postfix_slash }
 };
 static const struct emu_named font_names[] = {
-    { "6x13", FONT_6x13 }, { "8x16", FONT_8x16 }
+    { "6x16", FONT_6x16 }, { "8x16", FONT_8x16 }
 };
 static const struct emu_named notify_flags[] = {
     { "slotnr", NOTIFY_slotnr }
