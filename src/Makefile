@@ -52,6 +52,12 @@ SUBDIRS += usb
 
 endif
 
+# A minimal_ui build shows error codes without their meanings; the bootloader
+# keeps them.
+ifeq ($(minimal_ui)$(filter bootloader,$(target)),y)
+OBJS := $(filter-out fs_hint.o,$(OBJS))
+endif
+
 .PHONY: $(SRCDIR)/build_info.c
 build_info.o: CFLAGS += -DFW_VER="\"$(FW_VER)\""
 

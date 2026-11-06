@@ -29,6 +29,13 @@ class MinimalUI(display.Case, unittest.TestCase):
         self.assertEqual(len(frames), 64, r.report())
         self.assertEqual(frames[:32], frames[32:], r.report())
 
+    def test_error_code_only(self):
+        """An error screen shows its code without the meaning from fs_hint."""
+        bad = {"BAD.HFE": b"HXCPICFE" + bytes(600)}
+        rows, r = self.rows(
+            PROGRAM, ["sleep 1000"], "hd44780-16x2", files=bad)
+        self.assertEqual(rows, ["BAD".ljust(16), "E31".ljust(16)], r.report())
+
 
 if __name__ == "__main__":
     unittest.main()

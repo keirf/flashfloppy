@@ -2350,10 +2350,15 @@ static uint8_t menu_wait_button(bool_t twobutton_eject, const char *led_msg)
  * means. */
 static void error_text(char *msg, size_t size, FRESULT fres)
 {
+#ifdef MINIMAL_UI
+    /* Save the flash on meanings: show only the code, as the LED does. */
+    snprintf(msg, size, "%c%02u", (fres >= FR_DISK_FULL) ? 'E' : 'F', fres);
+#else
     snprintf(msg, size, "%c%02u %s", (fres >= FR_DISK_FULL) ? 'E' : 'F',
              fres, fresult_hint(fres));
     if (display_type == DT_LED_7SEG)
         msg[3] = '\0';
+#endif
 }
 
 static uint8_t noinline display_error(FRESULT fres, uint8_t b)
@@ -3274,7 +3279,11 @@ static void handle_errors(FRESULT fres)
         printk("USB Power Fault detected!\n");
         snprintf(msg, sizeof(msg), "USB Power Fault");
     } else if (volume_connected() && (fres != FR_OK)) {
+#ifdef MINIMAL_UI
+        printk("**Error %u\n", fres);
+#else
         printk("**Error %u %s\n", fres, fresult_hint(fres));
+#endif
         error_text(msg, sizeof(msg), fres);
     } else {
         /* No error. Do nothing. */
