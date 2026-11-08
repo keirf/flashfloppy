@@ -539,6 +539,71 @@ TEST(apple2_write_flux)
     CHECK_MEM(got, disk, 35*DSK_TRK);
 }
 
+#define PA 0
+#define PB 1
+
+static void write_step_phases(unsigned int pha)
+{
+    pin_set(PA, 10, pha & 1);
+    pin_set(PA, 9, pha & 2);
+    pin_set(PB, 0, pha & 4);
+    pin_set(PA, 1, pha & 8);
+}
+
+static int write_step_handle(void *arg)
+{
+    return floppy_handle();
+}
+
+/* From cylinder 34, track 17, two half-track steps to track 18. The write
+ * must still be active while WRQ stays asserted. */
+static void write_step_to_18(void)
+{
+    struct track_info ti;
+    unsigned int i;
+
+    write_step_phases(8);
+    clock_run_ms(5);
+    write_step_phases(1);
+    clock_run_ms(5);
+    for (i = 0; i < 20; i++) {
+        REQUIRE(F_call_cancellable(write_step_handle, NULL) == 0);
+        clock_run_ms(1);
+    }
+    floppy_get_track(&ti);
+    CHECK_EQ(ti.cyl, 36);
+    CHECK(ti.writing);
+}
+
+/* A record reaches the image intact as the head steps before WRQ ends. */
+TEST(apple2_write_step)
+{
+    static uint8_t rec[REC_LEN], stream[REC_LEN];
+    uint8_t *d;
+
+    make_nib62();
+    drive_reset();
+    make_disk(disk, 35);
+    drive_add("DOS.DSK", disk, 35*DSK_TRK);
+    floppy_boot();
+    floppy_insert_image("DOS.DSK");
+    floppy_head(2*17, 0);
+
+    d = &disk[17*DSK_TRK + dos_order[3]*256];
+    memset(d, 0xa5, 256);
+    make_record(rec, 17, 3, d, 0);
+    memcpy(stream, rec + 48, REC_LEN - 48);
+    memset(stream + REC_LEN - 48, 0xff, 48);
+    host_write_at((3*REC_LEN + 48) * 8 * A2_CELL, stream,
+                  sizeof(stream) * 8, A2_CELL + 2, A2_CELL / 10,
+                  (REC_LEN - 48) * 8, write_step_to_18);
+
+    floppy_cancel();
+    CHECK(!log_has("Bad CRC"));
+    CHECK_EQ(drive_get("DOS.DSK", got, sizeof(got)), 35*DSK_TRK);
+    CHECK_MEM(got, disk, 35*DSK_TRK);
+}
+
 /* Which files a folder lists, by size alone. */
 TEST(apple2_listed_sizes)
 {

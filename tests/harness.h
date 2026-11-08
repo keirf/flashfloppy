@@ -114,6 +114,11 @@ void floppy_head(unsigned int cyl, unsigned int head);
  * that no read stream moves the index. */
 void host_write(uint32_t start, const uint8_t *cells, uint32_t nr_cells,
                 unsigned int ticks, unsigned int jitter);
+/* As host_write(), but with the previous cells processed, calls @fn before
+ * cell @at_cell, WGATE still asserted. */
+void host_write_at(uint32_t start, const uint8_t *cells, uint32_t nr_cells,
+                   unsigned int ticks, unsigned int jitter,
+                   unsigned int at_cell, void (*fn)(void));
 
 /*
  * Local variables:
