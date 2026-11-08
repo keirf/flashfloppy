@@ -405,8 +405,9 @@ static uint16_t *wdata_ring(void)
     return (uint16_t *)p;
 }
 
-void host_write(uint32_t start, const uint8_t *cells, uint32_t nr_cells,
-                unsigned int ticks, unsigned int jitter)
+void host_write_at(uint32_t start, const uint8_t *cells, uint32_t nr_cells,
+                   unsigned int ticks, unsigned int jitter,
+                   unsigned int at_cell, void (*fn)(void))
 {
     volatile uint32_t *cndtr = &emu_dma[0].ch[2-1].cndtr;
     uint16_t *ring = wdata_ring();
@@ -427,6 +428,10 @@ void host_write(uint32_t start, const uint8_t *cells, uint32_t nr_cells,
     pin_set(PB, WGATE_PIN, FALSE);
     exti_raise(WGATE_PIN, WGATE_IRQ);
     for (i = 0; i < nr_cells; i++) {
+        if ((i == at_cell) && (fn != NULL)) {
+            run_until(t0 + TIMER_TO_CLOCK(i * ticks));
+            fn();
+        }
         if (!bit_get(cells, i))
             continue;
         seed = seed * 1103515245 + 12345;
@@ -450,6 +455,12 @@ void host_write(uint32_t start, const uint8_t *cells, uint32_t nr_cells,
             ft_abort(__FILE__, __LINE__, "write never ended");
         main_loop_pass();
     }
+}
+
+void host_write(uint32_t start, const uint8_t *cells, uint32_t nr_cells,
+                unsigned int ticks, unsigned int jitter)
+{
+    host_write_at(start, cells, nr_cells, ticks, jitter, nr_cells, NULL);
 }
 
 /*
