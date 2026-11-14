@@ -61,7 +61,8 @@ def main(argv):
                     else:
                         opts.append('NOTIFY_' + x)
                 val = '|'.join(opts)
-            elif opt == "display-order" or opt == "osd-display-order":
+            elif opt in ("display-order", "osd-display-order",
+                         "selector-display-order"):
                 if val == "default":
                     val = "DORD_" + val
                 else:

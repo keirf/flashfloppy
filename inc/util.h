@@ -149,6 +149,9 @@ struct oled_font {
 };
 void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
+/* The order in use on the normal or selector screen, and its wide rows. */
+uint16_t lcd_display_order(void);
+uint8_t lcd_display_order_wide(void);
 /* The columns of text row @row that show. */
 unsigned int lcd_row_columns(unsigned int row);
 /* With lcd_write()'s row, the row's layout of half width, which an OLED shows
@@ -201,7 +204,10 @@ void IRQ_rotary(void);
 /* DM_glyphs: the font test's pages, every row single height. DM_error: an
  * error's message alone; DM_error_name: below the image's name. The two
  * stay last, as the display tests them by order. */
-enum { DM_normal=0, DM_banner, DM_menu, DM_glyphs, DM_error, DM_error_name };
+enum {
+    DM_normal=0, DM_selector, DM_banner, DM_menu, DM_glyphs,
+    DM_error, DM_error_name
+};
 extern uint8_t display_mode;
 extern uint8_t board_id;
 extern uint8_t has_kc30_header;

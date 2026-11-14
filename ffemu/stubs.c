@@ -704,12 +704,15 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
         if (!parse_display_type(s, &v))
             return FALSE;
         goto store;
-    case OPT_display_order: case OPT_osd_display_order:
+    case OPT_display_order: case OPT_selector_display_order:
+    case OPT_osd_display_order:
         if (!parse_display_order(s, &v, &wide))
             return FALSE;
         /* As the firmware, which draws no OSD row wide. */
         if (i == OPT_display_order)
             f->display_order_wide = wide;
+        else if (i == OPT_selector_display_order)
+            f->selector_display_order_wide = wide;
         goto store;
     default:
         /* A plain number. */
@@ -819,9 +822,12 @@ static unsigned int format_option(unsigned int i, const struct ff_cfg *f,
     case OPT_display_type:
         format_display_type(buf, size, v);
         break;
-    case OPT_display_order: case OPT_osd_display_order:
-        format_display_order(buf, size, v, (i == OPT_display_order)
-                             ? f->display_order_wide : 0);
+    case OPT_display_order: case OPT_selector_display_order:
+    case OPT_osd_display_order:
+        format_display_order(
+            buf, size, v, (i == OPT_display_order) ? f->display_order_wide
+            : (i == OPT_selector_display_order)
+            ? f->selector_display_order_wide : 0);
         break;
     default:
         snprintf(buf, size, "%u", (unsigned int)v);

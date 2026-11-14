@@ -164,7 +164,7 @@ static unsigned int osd_prep_buffer(void)
     }
 
     if ((ff_cfg.osd_display_order != DORD_default)
-        && (display_mode == DM_normal))
+        && (normal_mode))
         order = ff_cfg.osd_display_order;
     else if (error_mode)
         order = error_order();
@@ -215,7 +215,7 @@ static unsigned int osd_prep_buffer(void)
 static unsigned int lcd_prep_buffer(void)
 {
     const static uint8_t row_offs[] = { 0x00, 0x40, 0x14, 0x54 };
-    uint16_t order;
+    uint16_t order, configured = lcd_display_order();
     char *p;
     uint8_t *q = buffer;
     unsigned int i, row;
@@ -237,8 +237,8 @@ static unsigned int lcd_prep_buffer(void)
     }
 
     order = glyphs_mode ? 0x3210 : (lcd_rows == 2) ? 0x7710 : 0x2103;
-    if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
-        order = ff_cfg.display_order;
+    if ((configured != DORD_default) && normal_mode)
+        order = configured;
     else if (error_mode)
         order = error_order();
 

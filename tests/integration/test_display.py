@@ -422,6 +422,54 @@ class NameStatus(Case, unittest.TestCase):
             rows[0], "000/001 TEST" + 24 * " " + "4T01", r.report())
 
 
+class SelectorOrder(Case, unittest.TestCase):
+    """selector-display-order overrides display-order only while browsing;
+    its default inherits display-order, including its wide rows."""
+
+    def orders(self, display, flash):
+        """The selector's rows, then the mounted image's rows."""
+        r = fr.run(
+            "ffemu", SELECTOR + ["sleep 500", "dump", "key select",
+                                 "wait 10000 log Name:", "sleep 500", "dump"],
+            settings=["display = " + display],
+            flash=SELECTOR_FLASH + list(flash),
+            files={"GAMES/A.IMG": bytes(737280), "B.IMG": bytes(737280)})
+        self.assertWaits(r, 1)
+        rows = [line[1:-1] for line in r.lines
+                if line.startswith("|") and line.endswith("|")]
+        self.assertEqual(len(rows), 4, r.report())
+        return rows[:2], rows[2:], r
+
+    def test_override(self):
+        selector, mounted, r = self.orders(
+            "hd44780-16x2",
+            ["display-order = S,N", "selector-display-order = D,N"])
+        self.assertEqual(selector, ["/" + 15 * " ", "B" + 15 * " "],
+                         r.report())
+        self.assertEqual(mounted, ["001/002  T:00.0 ", "B" + 15 * " "],
+                         r.report())
+
+    def test_inherits_display_order(self):
+        selector, mounted, r = self.orders(
+            "hd44780-16x2", ["display-order = D,N"])
+        expected = ["/" + 15 * " ", "B" + 15 * " "]
+        self.assertEqual(selector, expected, r.report())
+        self.assertEqual(mounted, expected, r.report())
+
+    def test_wide(self):
+        """An explicit selector order has its own wide-row mask."""
+        r = fr.run(
+            "ffemu", SELECTOR + ["sleep 500", "dump"],
+            settings=["display = ssd1306-128x32"],
+            flash=SELECTOR_FLASH + ["display-type = oled-128x32",
+                                    "selector-display-order = Nw,S"],
+            files={"GAMES/A.IMG": bytes(737280), "B.IMG": bytes(737280)})
+        self.assertWaits(r, 0)
+        pixels = [line for line in r.lines if line and set(line) <= set(".#")]
+        self.assertEqual(oled_text(pixels, 0, "6x16", True), "B".ljust(10),
+                         r.report())
+
+
 class DoubleWidth(Case, unittest.TestCase):
     """A row given as `w` in display-order, double height and double width on
     an OLED: the left half of the row, magnified. The status row has a layout

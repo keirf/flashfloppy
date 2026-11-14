@@ -102,6 +102,7 @@ uint8_t lcd_columns, lcd_rows;
 
 /* Current display mode: Affects row ordering and sizing. */
 uint8_t display_mode = DM_banner;
+#define normal_mode (display_mode <= DM_selector)
 #define menu_mode (display_mode == DM_menu)
 #define glyphs_mode (display_mode == DM_glyphs)
 #define error_mode (display_mode >= DM_error)
@@ -411,7 +412,7 @@ static void oled_convert_text_row(const char *pc, const struct oled_shift *s)
     unsigned int i, w = lcd_column_pixels();
 #else
     unsigned int i, from, w = lcd_column_pixels();
-    unsigned int px = ((display_mode == DM_normal) || error_mode) ? s->px : 0;
+    unsigned int px = ((normal_mode) || error_mode) ? s->px : 0;
 #endif
     uint8_t *q = buffer;
 
@@ -511,8 +512,8 @@ unsigned int lcd_row_columns(unsigned int row)
      * an error screen its double rows by display-error-wide. */
     if (!is_oled_display)
         return lcd_columns;
-    if ((display_mode == DM_normal)
-        ? (ff_cfg.display_order_wide & (1 << row))
+    if ((normal_mode)
+        ? (lcd_display_order_wide() & (1 << row))
         : (error_mode && ff_cfg.display_error_wide
            && ((oled_height == 64) || (display_mode == DM_error))))
         return lcd_columns / 2;
@@ -523,15 +524,15 @@ unsigned int lcd_row_columns(unsigned int row)
  * bottom pages: a text row, or half of a double-height one. */
 static void oled_to_lcd_row(int in_row)
 {
-    uint16_t order;
+    uint16_t order, configured = lcd_display_order();
     int i = 0, row, half;
     bool_t large = FALSE, wide;
     char *pc;
 
     order = glyphs_mode ? 0x3210 : (oled_height == 32) ? 0x7710
         : menu_mode ? 0x7903 : 0x7183;
-    if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
-        order = ff_cfg.display_order;
+    if ((configured != DORD_default) && normal_mode)
+        order = configured;
     else if (error_mode)
         order = error_order();
 

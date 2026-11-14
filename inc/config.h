@@ -193,6 +193,8 @@ struct packed ff_cfg {
 #define LCDCS_eur 1
 #define LCDCS_cyr 2
     uint8_t lcd_charset;
+    uint16_t selector_display_order;
+    uint8_t selector_display_order_wide;
 };
 
 extern struct ff_cfg ff_cfg;

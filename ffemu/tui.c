@@ -4918,6 +4918,8 @@ static const struct {
     { "display-order",
       "N=name S=status I=info D=dir C=combined B=blank, "
       "d=tall w=tall&wide" },
+    { "selector-display-order",
+      "Rows while browsing; default uses display-order" },
     { "display-error-wide",
       "Whether an error's double-height rows on an OLED are double width "
       "too, scrolling where long" },
