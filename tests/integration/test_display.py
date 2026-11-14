@@ -470,6 +470,56 @@ class SelectorOrder(Case, unittest.TestCase):
                          r.report())
 
 
+class DirectoryTrack(Case, unittest.TestCase):
+    """Row Z combines the current directory with the same short track as C;
+    without an image, the directory has the whole row."""
+
+    def test_lcd(self):
+        rows, r = self.rows(
+            "ffemu", steps(3), "hd44780-16x2", flash=["display-order = Z,N"])
+        self.assertEqual(rows[0], "/" + 11 * " " + "0T03", r.report())
+        self.assertEqual(rows[1], "A" + 15 * " ", r.report())
+
+    def test_apple2(self):
+        rows, r = self.rows(
+            "ffemu-apple2", half_tracks(2), "hd44780-16x2",
+            flash=["display-order = Z,N"], files=DSK)
+        self.assertEqual(rows[0], "/" + 11 * " " + "4T01", r.report())
+
+    def test_wide(self):
+        for font, expected in (("6x16", "/" + 5 * " " + "0T03"),
+                               ("8x16", "/" + 3 * " " + "0T03")):
+            with self.subTest(font=font):
+                r = fr.run(
+                    "ffemu", ["wait 10000 log Name:"] + steps(3)
+                    + ["sleep 500", "dump"],
+                    settings=["display = ssd1306-128x64"],
+                    flash=["display-type = oled-128x64",
+                           "display-order = Zw,N", "oled-font = " + font],
+                    files=PC)
+                self.assertWaits(r, 1)
+                pixels = [line for line in r.lines
+                          if line and set(line) <= set(".#")]
+                self.assertEqual(oled_text(pixels, 0, font, True), expected,
+                                 r.report())
+
+    def test_scrolls_within_remaining_columns(self):
+        r = fr.run(
+            "ffemu", ["wait 15000 log Name:",
+                      "wait 10000 display BCDEFGHIJKL 0T00"],
+            settings=["display = hd44780-16x2"],
+            flash=["display-order = Z,N"],
+            files={"ABCDEFGHIJKLMNOPQR/A.IMG": bytes(737280)})
+        self.assertWaits(r, 2)
+
+    def test_selector_has_no_track(self):
+        selector, mounted, r = SelectorOrder.orders(
+            self, "hd44780-16x2",
+            ["display-order = S,N", "selector-display-order = Z,N"])
+        self.assertEqual(selector[0], "/" + 15 * " ", r.report())
+        self.assertEqual(mounted[0], "001/002  T:00.0 ", r.report())
+
+
 class DoubleWidth(Case, unittest.TestCase):
     """A row given as `w` in display-order, double height and double width on
     an OLED: the left half of the row, magnified. The status row has a layout
@@ -681,8 +731,8 @@ class DoubleWidth(Case, unittest.TestCase):
 
 
 class Letters(Case, unittest.TestCase):
-    """display-order's rows by their initials, N, S, I, D, C, and B for the
-    blank row: the same layouts as the digits, which stay taken, in either
+    """display-order's rows by their initials, N, S, I, D, C, Z, and B for
+    the blank row: the same layouts as the digits, which stay taken, in either
     case, in osd-display-order too; ffemu writes the letters back."""
 
     def oled(self, order):
@@ -733,7 +783,8 @@ class Letters(Case, unittest.TestCase):
     def test_written_back(self):
         """Letters in flash come back as letters, digits as letters too."""
         for order, back in (("D,Nd,S", "D,Nd,S"), ("c,b,s", "C,B,S"),
-                            ("4w,1", "Cw,S")):
+                            ("z,b,s", "Z,B,S"), ("4w,1", "Cw,S"),
+                            ("5w,1", "Zw,S")):
             with self.subTest(order=order):
                 r = fr.run("ffemu", ["flash"],
                            flash=["display-order = " + order])

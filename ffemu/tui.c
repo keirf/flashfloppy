@@ -4916,7 +4916,7 @@ static const struct {
       "Whether to show folders as /NAME rather than [NAME], a column "
       "shorter" },
     { "display-order",
-      "N=name S=status I=info D=dir C=combined B=blank, "
+      "N=name S=status I=info D=dir C=name&track Z=dir&track B=blank, "
       "d=tall w=tall&wide" },
     { "selector-display-order",
       "Rows while browsing; default uses display-order" },

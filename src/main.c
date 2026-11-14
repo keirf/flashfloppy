@@ -175,43 +175,44 @@ static void status_write(const char *msg)
     lcd_write(0, 1 | LCD_WIDE, -1, msg);
 }
 
-/* Row 4 of display-order: the image's number where the row has room for it
- * beside the name, the name, and the track in short at the row's right. */
+/* Combined rows 4 and 5 of display-order: the image's name or current
+ * directory, and the track in short at the row's right. Row 4 also has the
+ * image's number where the row has room for it beside the name. */
 
-/* The cells of row 4's track of two digits, in its layout of half width if
- * @wide: a blank and the side, the mode and the track; in Apple2 mode the
- * phase digit after the blank on an LCD, the phase spinner of two cells on
+/* The cells of a combined row's track of two digits, in its layout of half
+ * width if @wide: a blank and the side, the mode and the track; in Apple2 mode
+ * the phase digit after the blank on an LCD, the phase spinner of two cells on
  * an OLED; in the layout of half width no blank and a spinner of one cell. */
-static unsigned int track4_cells(unsigned int wide)
+static unsigned int track_combined_cells(unsigned int wide)
 {
     return wide ? 4 : 5;
 }
 
-/* Row 4's track as last written, in its layouts of normal and of half width,
+/* The combined rows' track as last written, in normal and half-width layouts,
  * empty while no image is in. */
-static char track4[2][12];
+static char track_combined[2][12];
 
 /* The column of row 4 where the name starts, in its layout of half width if
  * @wide: after the image's number, with an image in, on a row that leaves 8
  * columns or more to the name. */
 static unsigned int name4_column(unsigned int wide)
 {
-    return (track4[wide][0] && (layout_columns(wide) >= 21)) ? 8 : 0;
+    return (track_combined[wide][0] && (layout_columns(wide) >= 21)) ? 8 : 0;
 }
 
-/* The cells that row 4's track takes: none while no image is in, one more
- * for a track of three digits. */
-static unsigned int track4_width(unsigned int wide)
+/* The cells that a combined row's track takes: none while no image is in, one
+ * more for a track of three digits. */
+static unsigned int track_combined_width(unsigned int wide)
 {
-    return track4[wide][0]
-        ? max_t(unsigned int, strlen(track4[wide]), track4_cells(wide)) : 0;
+    return track_combined[wide][0] ? max_t(unsigned int,
+        strlen(track_combined[wide]), track_combined_cells(wide)) : 0;
 }
 
-/* Writes row 4's track at the row's right. */
-static void write_track4(unsigned int wide)
+/* Writes a combined row's track at its right. */
+static void write_track_combined(unsigned int row, unsigned int wide)
 {
-    lcd_write(layout_columns(wide) - track4_width(wide),
-              4 | (wide ? LCD_WIDE : 0), -1, track4[wide]);
+    lcd_write(layout_columns(wide) - track_combined_width(wide),
+              row | (wide ? LCD_WIDE : 0), -1, track_combined[wide]);
 }
 
 /* Whether display-order shows row 4. */
@@ -230,12 +231,14 @@ static bool_t row4_shown(void)
 /* The current folder's name, which row 3 shows. */
 static char disp_dir[sizeof(cfg.slot.name)];
 
-/* Scroll long filename: in row 0, and in row 4 within the columns that it
- * leaves the name, the folder's name in row 3, and an error's message in the
- * status row, each at its own offset, in the row's layouts of normal and of
- * half width: scrolling 2 * i + wide is row scroll_rows[i]'s. */
-#define ERR_PLACE 3
-static const uint8_t scroll_rows[] = { 0, 4, 3, 1 };
+/* The image and folder names scroll within the columns that their combined
+ * rows leave them, each layout at its own offset. */
+#define NAME_PLACE 0
+#define COMBINED_PLACE 1
+#define DIR_PLACE 2
+#define DIR_TRACK_PLACE 3
+#define ERR_PLACE 4
+static const uint8_t scroll_rows[] = { 0, 4, 3, 5, 1 };
 /* The error's message while one is shown, the image's name after it where
  * the error screen has a row for both, else "". */
 static char err_msg[17 + 2 + sizeof(disp_name)];
@@ -251,21 +254,21 @@ static struct {
     struct scroll v[2 * ARRAY_SIZE(scroll_rows)];
 } lcd_scroll;
 
-/* Writes @s where row @row shows the name, in its layout of half width if
- * @wide, shifted @px pixels to the left, and row 4's track after it. */
+/* Writes @s to row @row, shifted @px pixels left, with a combined row's track
+ * after it. */
 static void scroll_write(unsigned int row, unsigned int wide,
                          const char *s, unsigned int px)
 {
     unsigned int r = row | (wide ? LCD_WIDE : 0), col = 0;
     unsigned int nr = layout_columns(wide);
 
-    if (row == 4) {
-        col = name4_column(wide);
-        nr -= col + track4_width(wide);
+    if ((row == 4) || (row == 5)) {
+        col = (row == 4) ? name4_column(wide) : 0;
+        nr -= col + track_combined_width(wide);
     }
     lcd_write_shifted(col, r, nr, px, s);
-    if (row == 4)
-        write_track4(wide);
+    if ((row == 4) || (row == 5))
+        write_track_combined(row, wide);
 }
 
 void display_write_name(const char *name)
@@ -278,17 +281,19 @@ void display_write_name(const char *name)
     }
 }
 
-/* Writes @name, the current folder's, to row 3, its scrolling back at its
- * start, which lcd_scroll_init() sets going. */
+/* Writes the current folder's name to its plain and combined rows. */
 static void display_write_dir(const char *name)
 {
-    unsigned int w;
+    unsigned int place, w, i;
 
     snprintf(disp_dir, sizeof(disp_dir), "%s", name);
-    for (w = 0; w < 2; w++) {
-        lcd_scroll.v[4 + w].off = lcd_scroll.v[4 + w].end = 0;
-        lcd_scroll.v[4 + w].px = 0;
-        scroll_write(3, w, disp_dir, 0);
+    for (place = DIR_PLACE; place <= DIR_TRACK_PLACE; place++) {
+        for (w = 0; w < 2; w++) {
+            i = 2 * place + w;
+            lcd_scroll.v[i].off = lcd_scroll.v[i].end = 0;
+            lcd_scroll.v[i].px = 0;
+            scroll_write(scroll_rows[place], w, disp_dir, 0);
+        }
     }
 }
 
@@ -296,7 +301,7 @@ static void display_write_dir(const char *name)
 static const char *scroll_text(unsigned int p)
 {
     return (p == ERR_PLACE) ? err_msg
-        : (scroll_rows[p] == 3) ? disp_dir : disp_name;
+        : ((p == DIR_PLACE) || (p == DIR_TRACK_PLACE)) ? disp_dir : disp_name;
 }
 
 /* Sets where scrolling @i ends, by the columns that its row's layout has
@@ -308,8 +313,9 @@ static void scroll_init(unsigned int i)
     int diff = sc->off - sc->end;
     unsigned int columns = layout_columns(wide);
 
-    if (row == 4)
-        columns -= name4_column(wide) + track4_width(wide);
+    if ((row == 4) || (row == 5))
+        columns -= ((row == 4) ? name4_column(wide) : 0)
+            + track_combined_width(wide);
     /* One bound for every text, the largest buffer's, as each text ends
      * with a NUL within its own: a bound for each would cost code. */
     sc->end = max_t(
@@ -345,7 +351,7 @@ static void scroll_draw(unsigned int i)
 /* Takes the name's scrolling back to its start: rows 0 and 4's. */
 static void lcd_scroll_reset(void)
 {
-    memset(lcd_scroll.v, 0, 4 * sizeof(lcd_scroll.v[0]));
+    memset(lcd_scroll.v, 0, 2 * DIR_PLACE * sizeof(lcd_scroll.v[0]));
 }
 
 /* Starts the name's scrolling, at @pause and @rate, its first step @ticks
@@ -359,7 +365,7 @@ static void lcd_scroll_init(uint16_t pause, uint16_t rate, int32_t ticks)
     lcd_scroll.rate = rate;
     for (i = 0; i < ARRAY_SIZE(lcd_scroll.v); i++) {
         scroll_init(i);
-        if ((i < 4) || (lcd_scroll.v[i].off == 0))
+        if ((i < 2 * DIR_PLACE) || (lcd_scroll.v[i].off == 0))
             lcd_scroll.v[i].ticks = ticks;
     }
 }
@@ -368,10 +374,11 @@ static void lcd_scroll_init(uint16_t pause, uint16_t rate, int32_t ticks)
  * each in the layout that display-order draws. */
 static unsigned int lcd_scroll_end(void)
 {
-    unsigned int end = lcd_scroll.v[row_wide(0)].end;
+    unsigned int end = lcd_scroll.v[2 * NAME_PLACE + row_wide(0)].end;
 
     if (row4_shown())
-        end = max_t(unsigned int, end, lcd_scroll.v[2 + row_wide(4)].end);
+        end = max_t(unsigned int, end,
+                    lcd_scroll.v[2 * COMBINED_PLACE + row_wide(4)].end);
     return end;
 }
 
@@ -425,15 +432,20 @@ static void lcd_scroll_name(int32_t ticks)
     }
 }
 
-/* No track in row 4 while no image is in: the row is the name's. */
-static void clear_track4(void)
+/* No track in the combined rows while no image is in. */
+static void clear_track_combined(void)
 {
-    unsigned int i;
+    unsigned int i, row, place;
 
-    for (i = 0; i < 2; i++) {
-        track4[i][0] = '\0';
-        lcd_write_spinner(4 | (i ? LCD_WIDE : 0), 0, 0, 0);
-        scroll_init(2 + i);
+    for (i = 0; i < 2; i++)
+        track_combined[i][0] = '\0';
+    for (row = 4; row <= 5; row++) {
+        place = (row == 4) ? COMBINED_PLACE : DIR_TRACK_PLACE;
+        for (i = 0; i < 2; i++) {
+            lcd_write_spinner(row | (i ? LCD_WIDE : 0), 0, 0, 0);
+            scroll_init(2 * place + i);
+            scroll_draw(2 * place + i);
+        }
     }
 }
 
@@ -460,7 +472,7 @@ static void display_write_slot(bool_t nav_mode)
     }
 
     display_mode = DM_selector;
-    clear_track4();
+    clear_track_combined();
 
     if (nav_mode && !cfg_scroll_reset) {
         lcd_scroll_init(0, ff_cfg.nav_scroll_rate, 0);
@@ -590,45 +602,48 @@ static void write_status_track(unsigned int wide, const struct track_info *ti,
 }
 
 /* Writes track info @ti, @mode for the drive's state, to the status row and
- * to row 4. */
+ * the combined rows. */
 static void lcd_write_track(const struct track_info *ti, char mode)
 {
     char *p, nr[8];
-    unsigned int w, cells, width;
+    unsigned int w, row, place, i, cells, width;
 
     write_status_track(FALSE, ti, mode);
     if (row_wide(1))
         write_status_track(TRUE, ti, mode);
 
-    /* Row 4: a blank between the name and the track, but for the spinner;
-     * in the layout of half width neither, and a spinner of one cell. A track
-     * of three digits takes a column of the name, which scrolls within the
-     * columns left, and gives it back. */
+    /* A blank between the content and the track, but for the spinner; in the
+     * layout of half width neither, and a spinner of one cell. A track of
+     * three digits takes a column of the content, and gives it back. */
     for (w = 0; w < 2; w++) {
-        p = track4[w];
-        cells = track4_width(w);
+        p = track_combined[w];
+        cells = track_combined_width(w);
         if (!w && !((TARGET == TARGET_apple2) && is_oled_display))
             *p++ = ' ';
         track_short(p, ti, mode, w ? 1 : 2, &width);
-        lcd_write_spinner(4 | (w ? LCD_WIDE : 0),
-                          layout_columns(w) - track4_width(w) + (p - track4[w]),
-                          width, ti->phases);
-        if (track4_width(w) != cells) {
-            /* The image's number comes with the track. */
-            if ((cells == 0) && (name4_column(w) != 0)) {
-                char slot[4], max[4];
-                slot_nr_text(slot, cfg.slot_nr);
-                slot_nr_text(max, cfg.max_slot_nr + 1);
-                snprintf(nr, sizeof(nr), "%s/%s", slot, max);
-                lcd_write(0, 4 | (w ? LCD_WIDE : 0), name4_column(w), nr);
+        for (row = 4; row <= 5; row++) {
+            place = (row == 4) ? COMBINED_PLACE : DIR_TRACK_PLACE;
+            i = 2 * place + w;
+            lcd_write_spinner(row | (w ? LCD_WIDE : 0),
+                layout_columns(w) - track_combined_width(w)
+                + (p - track_combined[w]), width, ti->phases);
+            if (track_combined_width(w) != cells) {
+                /* The image's number comes with the track. */
+                if ((row == 4) && (cells == 0) && (name4_column(w) != 0)) {
+                    char slot[4], max[4];
+                    slot_nr_text(slot, cfg.slot_nr);
+                    slot_nr_text(max, cfg.max_slot_nr + 1);
+                    snprintf(nr, sizeof(nr), "%s/%s", slot, max);
+                    lcd_write(0, 4 | (w ? LCD_WIDE : 0), name4_column(w), nr);
+                }
+                scroll_init(i);
+                if (!ti->in_da_mode) {
+                    scroll_draw(i);
+                    continue;
+                }
             }
-            scroll_init(2 + w);
-            if (!ti->in_da_mode) {
-                scroll_draw(2 + w);
-                continue;
-            }
+            write_track_combined(row, w);
         }
-        write_track4(w);
     }
 }
 
@@ -1320,7 +1335,7 @@ static uint8_t parse_pin_str(const char *s)
  * initial in either case; B, the blank row 7, and anything else blank. */
 static unsigned int dord_row(char c)
 {
-    static const char initials[] = "NSIDC";
+    static const char initials[] = "NSIDCZ";
     unsigned int i;
 
     if ((unsigned int)(c - '0') < 10)
@@ -2844,7 +2859,7 @@ static uint8_t noinline display_error(FRESULT fres, uint8_t b)
         /* The image is out: row 4 is its name alone, as row 0 is. The error
          * screen shows the name above the message, or on a 128x32 OLED after
          * it in one double row. */
-        clear_track4();
+        clear_track_combined();
         for (w = 0; w < 2; w++)
             scroll_draw(2 + w);
         one_row = is_oled_display
@@ -3831,7 +3846,7 @@ static void handle_errors(FRESULT fres)
         /* The message alone on the error screen. */
         display_mode = DM_error;
         lcd_clear();
-        clear_track4();
+        clear_track_combined();
         memset(lcd_scroll.v, 0, sizeof(lcd_scroll.v));
         show_error(msg, NULL);
         lcd_on();

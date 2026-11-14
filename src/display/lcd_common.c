@@ -75,9 +75,9 @@ static volatile uint8_t refresh_count;
 /* I2C data buffer. Data is DMAed to the I2C peripheral. */
 static uint8_t buffer[256] aligned(4);
 
-/* Text buffer, rendered into I2C data and placed into buffer[]: rows 0 to 3
- * and 4, the image's name and track, as display-order names them. */
-static char text[5][40];
+/* Text buffer, rendered into I2C data and placed into buffer[]: rows 0 to 3,
+ * 4, the image's name and track, and 5, the directory and track. */
+static char text[6][40];
 
 /* The rows' layouts of half width, for a row that display-order draws double
  * width on an OLED, whose columns are 21 at most. */
