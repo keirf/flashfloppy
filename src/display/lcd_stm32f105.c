@@ -163,8 +163,7 @@ static unsigned int osd_prep_buffer(void)
         return sizeof(struct i2c_osd_info);
     }
 
-    if ((ff_cfg.osd_display_order != DORD_default)
-        && (display_mode == DM_normal))
+    if ((ff_cfg.osd_display_order != DORD_default) && normal_mode)
         order = ff_cfg.osd_display_order;
 
     heights = rows = 0;
@@ -212,7 +211,7 @@ static unsigned int osd_prep_buffer(void)
 static unsigned int lcd_prep_buffer(void)
 {
     const static uint8_t row_offs[] = { 0x00, 0x40, 0x14, 0x54 };
-    uint16_t order;
+    uint16_t order, configured = lcd_display_order();
     char *p;
     uint8_t *q = buffer;
     unsigned int i, row;
@@ -234,8 +233,8 @@ static unsigned int lcd_prep_buffer(void)
     }
 
     order = (lcd_rows == 2) ? 0x7710 : 0x2103;
-    if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
-        order = ff_cfg.display_order;
+    if ((configured != DORD_default) && normal_mode)
+        order = configured;
 
     row = map_content_row((order >> (i2c_row * DORD_shift)) & DORD_row);
     p = (_bl && row < ARRAY_SIZE(text)) ? text[row] : NULL;

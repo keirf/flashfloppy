@@ -98,6 +98,7 @@ uint8_t lcd_columns, lcd_rows;
 
 /* Current display mode: Affects row ordering and sizing. */
 uint8_t display_mode = DM_banner;
+#define normal_mode (display_mode <= DM_selector)
 #define menu_mode (display_mode == DM_menu)
 
 /* Occasionally the I2C/DMA engine seems to get stuck. Detect this with 
@@ -396,9 +397,9 @@ unsigned int lcd_row_columns(unsigned int row)
     /* Only double height in minimal builds. */
     return lcd_columns;
 #else
-    /* As oled_to_lcd_row() takes display_order, on the normal screen. */
-    if (is_oled_display && (display_mode == DM_normal)
-        && (ff_cfg.display_order_wide & (1 << row)))
+    /* As oled_to_lcd_row() takes the order, on the normal or selector screen. */
+    if (is_oled_display && normal_mode
+        && (lcd_display_order_wide() & (1 << row)))
         return lcd_columns / 2;
     return lcd_columns;
 #endif
@@ -408,7 +409,7 @@ unsigned int lcd_row_columns(unsigned int row)
  * bottom pages: a text row, or half of a double-height one. */
 static void oled_to_lcd_row(int in_row)
 {
-    uint16_t order;
+    uint16_t order, configured = lcd_display_order();
     int i = 0, row, half;
     bool_t large = FALSE;
 #ifndef MINIMAL_UI
@@ -417,8 +418,8 @@ static void oled_to_lcd_row(int in_row)
     char *pc;
 
     order = (oled_height == 32) ? 0x7710 : menu_mode ? 0x7903 : 0x7183;
-    if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
-        order = ff_cfg.display_order;
+    if ((configured != DORD_default) && normal_mode)
+        order = configured;
 
     for (;;) {
         large = !!(order & DORD_double);

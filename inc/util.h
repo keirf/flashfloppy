@@ -140,6 +140,9 @@ int led_7seg_nr_digits(void);
 bool_t lcd_init(void);
 void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
+/* The order in use on the normal or selector screen, and its wide rows. */
+uint16_t lcd_display_order(void);
+uint8_t lcd_display_order_wide(void);
 /* The columns of text row @row that show. */
 unsigned int lcd_row_columns(unsigned int row);
 /* With lcd_write()'s row, the row's layout of half width, which an OLED shows
@@ -196,7 +199,7 @@ void set_slot_name(const char *name);
 bool_t get_img_cfg(struct slot *slot);
 void IRQ_rotary(void);
 
-enum { DM_normal=0, DM_banner, DM_menu };
+enum { DM_normal=0, DM_selector, DM_banner, DM_menu };
 extern uint8_t display_mode;
 extern uint8_t board_id;
 extern uint8_t has_kc30_header;

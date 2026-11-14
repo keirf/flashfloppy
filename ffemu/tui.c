@@ -3224,7 +3224,6 @@ static const char * const fd_tab_name[FT_nr] = {
 static const char * const fd_places[] = {
     "display-type", "",
     "oled-font", "",
-    "display-order", "",
     "show-filename-ext", "",
     "show-tracks-short", "|",
     "autoselect-file-secs", "autoselect-folder-secs", "nav-loop", "",
@@ -3232,6 +3231,7 @@ static const char * const fd_places[] = {
     "rotary", "",
     "folder-sort", "",
     "sort-priority", "|",
+    "display-order", "selector-display-order", "",
     "display-scroll-rate", "display-scroll-pause", "nav-scroll-rate",
         "nav-scroll-pause", "",
     "display-off-secs", "",
@@ -3940,7 +3940,10 @@ static void fd_layout(void)
     for (tab = FT_emulated; tab <= FT_other; tab++) {
         w = (fd_w - tab_w[tab]) / nr_cols[tab];
         for (c = 0, x = 2; c < nr_cols[tab]; c++) {
-            col_w[tab][c] += w;
+            /* Emulated features' middle column keeps its natural width; the
+             * rightmost column gets its share of the spare room. */
+            if ((tab != FT_emulated) || (c != 1))
+                col_w[tab][c] += w;
             if (c == nr_cols[tab] - 1)
                 col_w[tab][c] = fd_w - 2 - x;
             for (i = 0; i < fd_nr; i++) {
@@ -4764,6 +4767,8 @@ static const struct {
     { "display-order",
       "N=name S=status I=info D=dir C=name+trk Z=dir+trk B=blank "
       "d=dbl-hgt w=2x" },
+    { "selector-display-order",
+      "Rows while browsing; default uses display-order" },
     { "display-off-secs",
       "Seconds without activity before the display goes dark, 0-255: 0 is "
       "always off, 255 never" },

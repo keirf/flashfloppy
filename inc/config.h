@@ -179,6 +179,8 @@ struct packed ff_cfg {
     /* Bit n: content row n, double height in display_order, is double
      * width as well. */
     uint8_t display_order_wide;
+    uint16_t selector_display_order;
+    uint8_t selector_display_order_wide;
 };
 
 extern struct ff_cfg ff_cfg;
