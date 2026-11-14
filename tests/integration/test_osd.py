@@ -32,18 +32,18 @@ class Osd(fr.Case, unittest.TestCase):
         LCD's."""
         header, rows, r = self.osd("hd44780-16x2")
         self.assertTrue(header.startswith("osd: 16x3 on "), r.report())
-        self.assertEqual(rows, ["/", "A", "000/000  T:00.0"], r.report())
+        self.assertEqual(rows, ["/", "A", "000/001  T:00.0"], r.report())
         self.assertIn("I2C: FF OSD found", r.stdout)
 
     def test_oled(self):
         header, rows, r = self.osd("ssd1306-128x32")
         self.assertTrue(header.startswith("osd: 21x3 on "), r.report())
-        self.assertEqual(rows, ["/", "A", "000/000   T:00.0"], r.report())
+        self.assertEqual(rows, ["/", "A", "000/001   T:00.0"], r.report())
 
     def test_display_order(self):
         header, rows, r = self.osd(
             "hd44780-16x2", flash=["osd-display-order = 1,0"])
-        self.assertEqual(rows, ["000/000  T:00.0", "A"], r.report())
+        self.assertEqual(rows, ["000/001  T:00.0", "A"], r.report())
 
     def test_four_rows(self):
         """Of an osd-display-order of four rows, the first three, which is all
@@ -51,7 +51,7 @@ class Osd(fr.Case, unittest.TestCase):
         header, rows, r = self.osd(
             "hd44780-16x2", flash=["osd-display-order = 3,0,1,2"])
         self.assertTrue(header.startswith("osd: 16x3 on "), r.report())
-        self.assertEqual(rows, ["/", "A", "000/000  T:00.0"], r.report())
+        self.assertEqual(rows, ["/", "A", "000/001  T:00.0"], r.report())
 
     def test_unfitted(self):
         header, rows, r = self.osd("hd44780-16x2", settings=["osd = no"])

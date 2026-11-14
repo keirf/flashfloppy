@@ -103,7 +103,7 @@ static void lcd_row(const struct lcd_view *cv, unsigned int y, char *row)
     unsigned int x, n = 0;
 
     for (x = 0; x < cv->cols; x++) {
-        unsigned int cp = hd44780_unicode(cv->rom, cv->text[y][x]);
+        unsigned int cp = hd44780_char(cv, cv->text[y][x]);
         n += utf8(row + n, !cv->on ? ' ' : cp ? cp : LCD_MISSING);
     }
     row[n] = '\0';
@@ -383,12 +383,19 @@ static void print_status(void)
     printf("firmware: %s, %s, on %s\n", emu_fw_version(), emu_fw_target(),
            emu_board_name());
     if (usb.inserted && (usb.kind == USB_dir))
-        printf("usb: inserted, FAT%u, %u files, %u dirs, %u left out, "
+        printf("usb: inserted, FAT%u, short names in %s by %s rules, %s, "
+               "%u files, %u dirs, %u left out, "
                "%u case duplicates left out, %u left out for lack of room, "
+               "%u names losing characters, "
                "%lu reads, %lu writes, ff.cfg: %s\n", usb.fat_bits,
+               usb_sfn_name[config.usb_sfn],
+               usb_by_name[(config.usb_sfn == USB_SFN_utf8)
+                           ? USB_BY_windows : config.usb_by],
+               config.usb_lfn ? "long names" : "no long names",
                usb.nr_files, usb.nr_dirs, usb.nr_skipped, usb.nr_case_dups,
-               usb.nr_root_full + usb.nr_drive_full, usb.nr_reads,
-               usb.nr_writes, usb.ff_cfg[0] ? usb.ff_cfg : "none");
+               usb.nr_root_full + usb.nr_drive_full, usb.nr_lacking,
+               usb.nr_reads, usb.nr_writes,
+               usb.ff_cfg[0] ? usb.ff_cfg : "none");
     else if (usb.inserted)
         printf("usb: inserted, %s of %llu sectors, %lu reads, %lu writes, "
                "ff.cfg: %s\n", (usb.kind == USB_image) ? "image" : "disk",
@@ -497,6 +504,32 @@ static void *script_thread(void *arg_sleep_ms)
                 continue;
             }
             ui_usb_set_fat16(!strcmp(arg, "fat16"));
+        } else if (sscanf(line, "usb-drive-sfn-writing %63s", arg) == 1) {
+            /* Before usb-drive-sfn, whose format would take this too. */
+            for (i = 0; (i < USB_BY_nr) && strcmp(arg, usb_by_name[i]); i++)
+                continue;
+            if (i == USB_BY_nr) {
+                fprintf(stderr, "ffemu: no such system: %s\n", arg);
+                continue;
+            }
+            ui_usb_set_drive(config.usb_fat16, config.usb_sfn,
+                             config.usb_lfn, i);
+        } else if (sscanf(line, "usb-drive-sfn %63s", arg) == 1) {
+            for (i = 0; (i < USB_SFN_nr) && strcmp(arg, usb_sfn_name[i]); i++)
+                continue;
+            if (i == USB_SFN_nr) {
+                fprintf(stderr, "ffemu: no such code page: %s\n", arg);
+                continue;
+            }
+            ui_usb_set_drive(config.usb_fat16, i, config.usb_lfn,
+                             config.usb_by);
+        } else if (sscanf(line, "usb-drive-lfn %63s", arg) == 1) {
+            if (strcmp(arg, "yes") && strcmp(arg, "no")) {
+                fprintf(stderr, "ffemu: no such usb-drive-lfn: %s\n", arg);
+                continue;
+            }
+            ui_usb_set_drive(config.usb_fat16, config.usb_sfn,
+                             !strcmp(arg, "yes"), config.usb_by);
         } else if (!strcmp(line, "dump")) {
             dump_display();
         } else if (!strcmp(line, "osd")) {

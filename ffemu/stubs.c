@@ -91,11 +91,45 @@ void _exti_route(unsigned int px, unsigned int pin)
  * Serial console: src/console.c. Output goes to the log pane.
  */
 
+/* Text @in of the firmware, its names in its character set, of charset.h,
+ * into @out in UTF-8, which has room for three bytes for each of @in's. */
+static void utf8_of_text(const char *in, char *out)
+{
+    const char *p;
+    char *q = out;
+
+    for (p = in; *p != '\0'; p++) {
+        unsigned int u = (uint8_t)*p;
+        /* A trailing control ends the console's text; elsewhere these bytes
+         * are the character set's letters, not formatting. */
+        if ((p[1] == '\0') && ((u == '\n') || (u == '\r') || (u == '\t'))) {
+            *q++ = u;
+            continue;
+        }
+        u = ff_oem2uni(u, 0);
+        if (u == 0)
+            u = '?';
+        if (u < 0x80) {
+            *q++ = u;
+        } else if (u < 0x800) {
+            *q++ = 0xc0 | (u >> 6);
+            *q++ = 0x80 | (u & 0x3f);
+        } else {
+            *q++ = 0xe0 | (u >> 12);
+            *q++ = 0x80 | ((u >> 6) & 0x3f);
+            *q++ = 0x80 | (u & 0x3f);
+        }
+    }
+    *q = '\0';
+}
+
 int vprintk(const char *format, va_list ap)
 {
-    char str[128];
+    char str[128], out[3 * sizeof(str)];
     int n = vsnprintf(str, sizeof(str), format, ap);
-    emu_log(str);
+
+    utf8_of_text(str, out);
+    emu_log(out);
     return n;
 }
 
@@ -315,10 +349,17 @@ static const struct emu_named show_filename_ext_names[] = {
     { "no", SHOWEXT_no }, { "yes", SHOWEXT_yes }, { "auto", SHOWEXT_auto }
 };
 static const struct emu_named font_names[] = {
-    { "6x13", FONT_6x13 }, { "8x16", FONT_8x16 }
+    { "6x16", FONT_6x16 }, { "8x16", FONT_8x16 }
 };
 static const struct emu_named notify_flags[] = {
     { "slotnr", NOTIFY_slotnr }
+};
+static const struct emu_named codepage_names[] = {
+    { "866", CODEPAGE_866 }, { "mik", CODEPAGE_mik }, { "437", CODEPAGE_437 },
+    { "850", CODEPAGE_850 }, { "852", CODEPAGE_852 }
+};
+static const struct emu_named lcd_charset_names[] = {
+    { "jap", LCDCS_jap }, { "eur", LCDCS_eur }, { "cyr", LCDCS_cyr }
 };
 
 /* What each option takes. One not here takes text that code of its own
@@ -375,7 +416,14 @@ static const struct emu_option_info info[OPT_nr] = {
         .kind = EMU_KIND_number, FLAGS(notify_flags),
         .mask = NOTIFY_volume_mask },
     [OPT_da_report_version] = STRING,
-    [OPT_extend_image] = YES_NO
+    [OPT_extend_image] = YES_NO,
+    [OPT_short_name_codepage] = NAMED(codepage_names),
+    [OPT_detect_utf8_in_short_names] = YES_NO,
+    [OPT_lcd_charset] = NAMED(lcd_charset_names),
+    [OPT_show_tracks_short] = YES_NO,
+    [OPT_show_dir_slash] = YES_NO,
+    [OPT_display_scroll_by_pixel] = YES_NO,
+    [OPT_display_error_wide] = YES_NO
 };
 #undef VALUES
 #undef FLAGS
@@ -478,11 +526,31 @@ static bool_t parse_display_type(char *s, uint32_t *v)
     return TRUE;
 }
 
-static bool_t parse_display_order(char *s, uint32_t *v)
+/* display-order's content rows by their initials, as FF.CFG documents
+ * them: N, S, I, D, C, Z, and B for the blank row 7. */
+static const char dord_initials[] = "NSIDCZ B";
+
+/* The content row of display-order's item @c, its digit or its initial in
+ * either case, or -1 if it names none. */
+static int dord_row(char c)
+{
+    unsigned int i;
+
+    if ((c >= '0') && (c <= '7'))
+        return c - '0';
+    for (i = 0; i < sizeof(dord_initials) - 1; i++)
+        if ((dord_initials[i] != ' ') && (dord_initials[i] == (c & ~0x20)))
+            return i;
+    return -1;
+}
+
+static bool_t parse_display_order(char *s, uint32_t *v, uint8_t *wide)
 {
     unsigned int sh = 0;
+    int row;
     char *next;
 
+    *wide = 0;
     if (!strcmp(s, "default")) {
         *v = DORD_default;
         return TRUE;
@@ -490,10 +558,13 @@ static bool_t parse_display_order(char *s, uint32_t *v)
     *v = 0;
     for (; s != NULL; s = next) {
         next = next_token(s, ',');
-        if ((sh >= 16) || (s[0] < '0') || (s[0] > '7')
-            || ((s[1] != '\0') && ((s[1] != 'd') || (s[2] != '\0'))))
+        if ((sh >= 16) || ((row = dord_row(s[0])) < 0)
+            || ((s[1] != '\0')
+                && (((s[1] != 'd') && (s[1] != 'w')) || (s[2] != '\0'))))
             return FALSE;
-        *v |= ((s[0] - '0') | ((s[1] == 'd') ? DORD_double : 0)) << sh;
+        *v |= (row | ((s[1] != '\0') ? DORD_double : 0)) << sh;
+        if (s[1] == 'w')
+            *wide |= 1 << row;
         sh += DORD_shift;
     }
     /* Blank rows for the rest, within the 16 bits that the option has. */
@@ -569,6 +640,7 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
     unsigned int sz = option[i].size, n;
     char s[64];
     uint32_t v = 0;
+    uint8_t wide;
 
     if (sz > 4) {
         /* A string: quoted, or as FF.CFG takes it unquoted. */
@@ -588,6 +660,14 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
     if ((n == 0) || (n >= sizeof(s)))
         return FALSE;
     memcpy(s, text, n + 1);
+
+    /* The ROM codes that lcd-charset used before jap and eur. */
+    if (i == OPT_lcd_charset) {
+        if (!strcmp(s, "a00"))
+            strcpy(s, "jap");
+        else if (!strcmp(s, "a02"))
+            strcpy(s, "eur");
+    }
 
     if ((s[0] == '0') && ((s[1] == 'x') || (s[1] == 'X'))) {
         if (!parse_number(s, &v))
@@ -624,9 +704,15 @@ static bool_t parse_option(unsigned int i, struct ff_cfg *f, const char *text)
         if (!parse_display_type(s, &v))
             return FALSE;
         goto store;
-    case OPT_display_order: case OPT_osd_display_order:
-        if (!parse_display_order(s, &v))
+    case OPT_display_order: case OPT_selector_display_order:
+    case OPT_osd_display_order:
+        if (!parse_display_order(s, &v, &wide))
             return FALSE;
+        /* As the firmware, which draws no OSD row wide. */
+        if (i == OPT_display_order)
+            f->display_order_wide = wide;
+        else if (i == OPT_selector_display_order)
+            f->selector_display_order_wide = wide;
         goto store;
     default:
         /* A plain number. */
@@ -642,8 +728,11 @@ store:
     return TRUE;
 }
 
-/* A display order: its rows, less the blank ones that the parser adds. */
-static void format_display_order(char *buf, unsigned int size, uint16_t v)
+/* A display order: its rows by their initials, less the blank ones that the
+ * parser adds; @wide has a bit for each content row drawn double width.
+ * Row 6, which no initial names, keeps its digit. */
+static void format_display_order(char *buf, unsigned int size, uint16_t v,
+                                 uint8_t wide)
 {
     unsigned int nr = 4, i, n = 0;
 
@@ -656,8 +745,12 @@ static void format_display_order(char *buf, unsigned int size, uint16_t v)
     buf[0] = '\0';
     for (i = 0; i < nr; i++) {
         unsigned int row = (v >> (i * DORD_shift)) & 15;
-        n += snprintf(buf + n, size - n, "%s%u%s", i ? "," : "",
-                      row & DORD_row, (row & DORD_double) ? "d" : "");
+        char c = dord_initials[row & DORD_row];
+
+        n += snprintf(buf + n, size - n, "%s%c%s", i ? "," : "",
+                      (c != ' ') ? c : '0' + (row & DORD_row),
+                      !(row & DORD_double) ? ""
+                      : (wide & (1 << (row & DORD_row))) ? "w" : "d");
     }
 }
 
@@ -729,8 +822,12 @@ static unsigned int format_option(unsigned int i, const struct ff_cfg *f,
     case OPT_display_type:
         format_display_type(buf, size, v);
         break;
-    case OPT_display_order: case OPT_osd_display_order:
-        format_display_order(buf, size, v);
+    case OPT_display_order: case OPT_selector_display_order:
+    case OPT_osd_display_order:
+        format_display_order(
+            buf, size, v, (i == OPT_display_order) ? f->display_order_wide
+            : (i == OPT_selector_display_order)
+            ? f->selector_display_order_wide : 0);
         break;
     default:
         snprintf(buf, size, "%u", (unsigned int)v);
@@ -916,6 +1013,31 @@ void emu_flash_set_display_auto(void *cfg)
     ((struct ff_cfg *)cfg)->display_type = DISPLAY_auto;
 }
 
+int emu_flash_order_fits(const void *cfg, int oled, unsigned int *taken,
+                         unsigned int *room)
+{
+    const struct ff_cfg *f = cfg;
+    uint16_t t = f->display_type, order = f->display_order;
+    unsigned int i, n = 0;
+
+    if (t != DISPLAY_auto)
+        oled = !!(t & DISPLAY_oled);
+    *room = oled ? ((t & DISPLAY_oled_64) ? 4 : 2)
+        : (t == DISPLAY_auto) ? 2
+        : range_t(unsigned int, (t >> _DISPLAY_lcd_rows) & 7, 2, 4);
+    if (order == DORD_default) {
+        *taken = *room;
+        return 1;
+    }
+    /* The rows that the parser fills in after those given are blank. */
+    for (i = *taken = 0; i < 4; i++, order >>= DORD_shift) {
+        n += (oled && (order & DORD_double)) ? 2 : 1;
+        if ((order & 0xf) != 7)
+            *taken = n;
+    }
+    return *taken == *room;
+}
+
 /*
  * Heap: src/arena.c. The real one is what is left of the 32 kB of RAM above
  * the firmware's own data, 26.5 kB. Structures holding pointers are larger
@@ -1068,16 +1190,18 @@ bool_t fw_floppy_handle(void);
 void fw_floppy_insert(unsigned int unit, struct slot *slot);
 void fw_floppy_cancel(void);
 
-/* The image mounted, for the Status window; "" if none. Its name alone,
- * its extension and its size, for the IMG.CFG window. */
-static char image_name[64], image_base[64], image_ext[8];
+/* The image mounted, for the Status window, in UTF-8; "" if none. Its name
+ * alone, its extension and its size, for the IMG.CFG window. */
+static char image_name[3 * 64], image_base[64], image_ext[8];
 static unsigned int image_size;
 
 void floppy_insert(unsigned int unit, struct slot *slot)
 {
+    char name[64];
+
     fw_floppy_insert(unit, slot);
-    snprintf(image_name, sizeof(image_name), "%s.%s", slot->name,
-             slot->type);
+    snprintf(name, sizeof(name), "%s.%s", slot->name, slot->type);
+    utf8_of_text(name, image_name);
     snprintf(image_base, sizeof(image_base), "%s", slot->name);
     snprintf(image_ext, sizeof(image_ext), "%s", slot->type);
     image_size = slot->size;

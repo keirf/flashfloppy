@@ -233,8 +233,7 @@ _font = {}
 
 def led_cells(text):
     """The 7-segment cells of @text, a byte per character, from the tables of
-    letters and digits in the firmware's display driver; `-` is the middle
-    segment, anything else blank."""
+    letters and digits in the firmware's display driver, with `-` and `?`."""
     if not _font:
         with open(LED_7SEG_C) as f:
             src = f.read()
@@ -244,6 +243,7 @@ def led_cells(text):
             for i, cell in enumerate(cells):
                 _font[chr(ord(first) + i)] = int(cell, 16)
         _font["-"] = 0x40
+        _font["?"] = 0x53
     return [_font.get(c, 0) for c in text.lower()]
 
 
@@ -270,3 +270,13 @@ class Case:
         for kind, text, ok, ms in waits:
             self.assertTrue(
                 ok, "wait %s %s timed out\n%s" % (kind, text, r.report()))
+
+
+def font_glyphs(font):
+    """The glyphs of the build's OLED font @font, 6x16 or 8x16, by their code
+    points: each its columns as 16-bit values, bit 0 the top pixel, unpacked
+    from the generated file by scripts/mk_font.py."""
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import mk_font
+    return mk_font.read_font(os.path.join(OUT, "ffemu", "shugart", "gen",
+                                          "oled_font_%s.c" % font))

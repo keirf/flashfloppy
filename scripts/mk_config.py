@@ -33,6 +33,10 @@ def main(argv):
                 val = "FONT_" + val
             elif opt == "show-filename-ext":
                 val = "SHOWEXT_" + val
+            elif opt == "short-name-codepage":
+                val = "CODEPAGE_" + val
+            elif opt == "lcd-charset":
+                val = "LCDCS_" + val
             elif opt == "display-type":
                 opts = []
                 for x in val.split("-"):
@@ -57,7 +61,8 @@ def main(argv):
                     else:
                         opts.append('NOTIFY_' + x)
                 val = '|'.join(opts)
-            elif opt == "display-order" or opt == "osd-display-order":
+            elif opt in ("display-order", "osd-display-order",
+                         "selector-display-order"):
                 if val == "default":
                     val = "DORD_" + val
                 else:

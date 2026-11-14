@@ -29,22 +29,21 @@ class WriteMarks(fr.Case, unittest.TestCase):
     def test_step_dir_lcd(self):
         """W before the track."""
         self.check(
-            "ffemu", "hd44780-16x2", PC, "000/000W T:", "000/000  T:")
+            "ffemu", "hd44780-16x2", PC, "000/001W T:", "000/001  T:")
 
     def test_step_dir_led(self):
         """The side's letter after the track, k for side 0, becomes v."""
         self.check("ffemu", "tm1651-3digit", PC, "00 3f 09", "00 3f 08")
 
     def test_apple2_lcd(self):
-        """W before the track, as with a Step/Dir host."""
+        """`W` before the track in long."""
         self.check(
             "ffemu-apple2", "hd44780-16x2", DSK, "W T:00.0", "  T:00.0")
 
     def test_apple2_led(self):
-        """The side's letter after the track becomes v, as with a Step/Dir
-        host."""
+        """The top segment of the phase digit lights."""
         self.check(
-            "ffemu-apple2", "tm1651-3digit", DSK, "00 3f 09", "00 3f 08")
+            "ffemu-apple2", "tm1651-3digit", DSK, "01 3f 3f", "00 3f 3f")
 
 
 if __name__ == "__main__":

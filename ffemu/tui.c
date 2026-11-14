@@ -159,7 +159,7 @@ enum {
  * and the display that the display dialog has selected. */
 static enum {
     DLG_none, DLG_quit, DLG_display, DLG_rows, DLG_flash, DLG_emul,
-    DLG_externals, DLG_message, DLG_fdfile, DLG_unpack, DLG_write,
+    DLG_order, DLG_externals, DLG_message, DLG_fdfile, DLG_unpack, DLG_write,
     DLG_fdhelp, DLG_nr
 } dialog;
 /* The message box over a dialog: what it says, and the dialog it returns
@@ -170,10 +170,13 @@ static int dialog_button;
 static int dialog_display;
 /* The Display type dialog's character ROM and 8x16 font, and its focus: the
  * displays, the ROMs, which only an LCD uses, the font's check box, which
- * only an OLED uses, OK and Cancel. */
+ * only an OLED uses, the MCUs, the button that saves FF.CFG, OK and
+ * Cancel. */
 static int dialog_lcd_rom, dialog_mcu, dialog_focus;
 static bool dialog_oled_synth;
-enum { DF_display, DF_rom, DF_synth, DF_mcu, DF_ok, DF_cancel, DF_nr };
+enum {
+    DF_display, DF_rom, DF_synth, DF_mcu, DF_save, DF_ok, DF_cancel, DF_nr
+};
 /* The Display type dialog's labels, by the control each names, `~` around
  * the letter that moves the focus to it. */
 static const char * const df_label[DF_nr] = {
@@ -182,21 +185,25 @@ static const char * const df_label[DF_nr] = {
     [DF_synth] = "OLED 8x16 ~f~ont",
     [DF_mcu] = "Display driver of ~M~CU",
 };
-/* The Externals dialog's file system, 1 for FAT16, and whether FF OSD is
- * fitted, and the places of its focus. */
-static int dialog_usb_fat;
-static bool dialog_osd;
-enum { EF_fat, EF_osd, EF_drive, EF_ok, EF_cancel, EF_nr };
+/* The Externals dialog's file system, 1 for FAT16, its short names' code
+ * page and filename-writing rules, whether FF OSD is fitted, and the places
+ * of its focus. */
+static int dialog_usb_fat, dialog_usb_sfn, dialog_usb_by;
+static bool dialog_usb_lfn, dialog_osd;
+enum { EF_fat, EF_sfn, EF_names, EF_osd, EF_drive, EF_ok, EF_cancel, EF_nr };
 /* The Externals dialog's labels, by the control each names, `~` around the
  * letter that moves the focus to it. */
 static const char * const ef_label[EF_nr] = {
     [EF_fat] = "File ~s~ystem of a USB drive made from a directory",
+    [EF_sfn] = "Code page of USB drive short ~n~ames",
+    [EF_names] = "~R~ules for the short/long filenames on a USB drive",
     [EF_osd] = "FF ~O~SD: the display's text over the host's video",
 };
 /* What the drive button wrote, its path between MSG_USER marks, on the
  * dialog's last row. */
 static char ef_note[1200];
 static void draw_dialog(void);
+static void draw_display_dialog(void);
 static void draw_fdfile_dialog(void);
 static void draw_unpack_dialog(void);
 static void draw_write_dialog(void);
@@ -205,6 +212,12 @@ static void draw_fdhelp(void);
 static int hotkey_of(const char *s);
 static void put_marked(int y, int x, int w, attr_t attr, attr_t hot,
                        const char *s);
+/* What the last Save of FF.CFG did, on the bottom line of the dialog it came
+ * from until the next key. */
+static char fd_note[4200];
+/* The dialog that a Save of FF.CFG came from, which the question before it
+ * and a message after it go back to. */
+static int write_return = DLG_flash;
 
 #define FRAME_MS 20
 #define SPEAKER_SHOWN_NS 120000000u
@@ -766,10 +779,10 @@ static bool lcd_title(const struct lcd_view *v, char *title, size_t size)
 
     emu_flash_get(cfg);
     mismatch = !emu_flash_lcd_fits(cfg, v->cols, v->rows);
-    const char *rom = lcd_rom_label[v->rom];
+    const char *rom = lcd_rom_name[v->rom];
 
-    snprintf(title, size, "LCD %ux%u on HD44780, ROM %.*s%s%s%s", v->cols,
-             v->rows, (int)strcspn(rom, ":"), rom, v->on ? "" : " - off",
+    snprintf(title, size, "LCD %ux%u on HD44780, ROM %s%s%s%s", v->cols,
+             v->rows, rom, v->on ? "" : " - off",
              v->backlight ? "" : " - backlight off",
              mismatch ? mismatch_note : "");
     return mismatch;
@@ -866,7 +879,7 @@ static void draw_lcd(int y0, int x0, int fw, int style, bool too_small,
         for (r = 0; r < ch; r++) {
             put(y0 + 1 + r, x, cw, panel, "%*s", cw, "");
             for (c = 0; v->on && (c < (int)v->cols); c++) {
-                wchar_t wc = hd44780_unicode(v->rom, v->text[r][c]);
+                wchar_t wc = hd44780_char(v, v->text[r][c]);
                 if ((wc != 0) && (wcwidth(wc) == 1))
                     put_char(y0 + 1 + r, x + 1 + c, panel, wc);
                 else
@@ -1528,7 +1541,6 @@ static void fdd_panel(int y, int x, int w)
 #define KEY(act) key_attr(now < fdd_lit_until[act])
     unsigned int in = emu_in_fdd;
     uint64_t now = emu_time_ns();
-    char ph[5];
     int i, c;
 
     put(y, x, w, 0, "FDD:");
@@ -1542,14 +1554,10 @@ static void fdd_panel(int y, int x, int w)
         static const unsigned int bit[6] = {
             EMU_FDD_SEL, EMU_FDD_WRITE, EMU_FDD_PH0, EMU_FDD_PH0 << 1,
             EMU_FDD_PH0 << 2, EMU_FDD_PH0 << 3 };
-        /* From a column left of the Shugart ones, for the kept state of the
-         * phases, which a press of `+` or `-` goes on from. */
         for (i = 0; i < 6; i++) {
             c = 8 + 5 * i;
             put(y, x + c, w - c, SIGNAL(in & bit[i]), "%s", name[i]);
         }
-        put(y, x + 37, w - 37, BRIGHT(CP_good), "%s",
-            ui_fdd_phase_text(ui_fdd_phases(), ph));
         put(y + 1, x + 9, w - 9, KEY(FDD_ACT_sel), "[");
         put(y + 1, x + 14, w - 14, KEY(FDD_ACT_write), ";");
         put(y + 1, x + 19, w - 19, KEY(FDD_ACT_phase_out), "-");
@@ -1863,7 +1871,7 @@ static void draw_bars(void)
 static bool takes_yes_no(int d)
 {
     return (d == DLG_quit) || (d == DLG_rows) || (d == DLG_emul)
-        || (d == DLG_fdfile);
+        || (d == DLG_order) || (d == DLG_fdfile);
 }
 
 /* The bottom line: the keys of the dialog open, or else of ffemu. */
@@ -2434,7 +2442,7 @@ static void check_row(int y, int x, int w, bool on, bool current,
  * MCU in focus. */
 static void draw_display_dialog(void)
 {
-    int w = 56, h = DISP_nr + LCD_ROM_nr + MCU_nr + 17, y, x, i;
+    int w = 80, h = DISP_nr + LCD_ROM_nr + MCU_nr + 17, y, x, i;
     int mcu_y = DISP_nr + LCD_ROM_nr + 9;
 
     dialog_box(w, h, "Display type", &y, &x);
@@ -2457,7 +2465,7 @@ static void draw_display_dialog(void)
                COLOR_PAIR(CP_dialog), COLOR_PAIR(CP_dlg_hot),
                df_label[DF_synth]);
     check_row(y + DISP_nr + LCD_ROM_nr + 7, x + 3, w - 6, dialog_oled_synth,
-              dialog_focus == DF_synth, "Made from 6x13, bold");
+              dialog_focus == DF_synth, "Made from 6x16, bold");
     probe_part(df_label[DF_mcu]);
     put_marked(y + mcu_y, x + 3, w - 6, COLOR_PAIR(CP_dialog),
                COLOR_PAIR(CP_dlg_hot), df_label[DF_mcu]);
@@ -2470,13 +2478,27 @@ static void draw_display_dialog(void)
         "%s", "Changing the display or MCU restarts the device.");
     /* OK is the default while the focus is on no button. Both are at the
      * bottom right, as in Turbo Pascal's dialogs, Cancel's shadow at the
-     * clusters' right edge, two columns between OK's shadow and Cancel. */
+     * clusters' right edge, two columns between OK's shadow and Cancel; the
+     * Save button at the left. */
+    button(y + h - 4, x + 3,
+           button_face(dialog_focus == DF_save, false),
+           " Save recommended FF.CFG ");
     button(y + h - 4, x + w - 23,
-           button_face(dialog_focus == DF_ok, dialog_focus < DF_ok), "  OK  ");
+           button_face(dialog_focus == DF_ok, dialog_focus < DF_save),
+           "  OK  ");
     button(y + h - 4, x + w - 14,
            button_face(dialog_focus == DF_cancel, false), "  Cancel  ");
     probe_part("help row");
-    if (dialog_focus == DF_rom)
+    /* What the last Save did, its path shortened to fit, as in the Flash
+     * mem dialog. */
+    if (fd_note[0]) {
+        if (put_message(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_bar_crop),
+                        fd_note))
+            put(y + h - 2, x + w - 1, 1, BRIGHT(CP_bar_crop), ">");
+    } else if (dialog_focus == DF_save)
+        put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
+            "Save options recommended for the display to FF.CFG");
+    else if (dialog_focus == DF_rom)
         put(y + h - 2, x + 2, w - 3, COLOR_PAIR(CP_dlg_help), "%s",
             lcd_rom_help[dialog_lcd_rom]);
     else if (dialog_focus == DF_synth)
@@ -2500,14 +2522,26 @@ static const char *drive_caption(bool *enabled)
         : "Save drive to ~i~mage file";
 }
 
-/* What the device is connected to, each as radio buttons: the file system of
- * a USB drive made from a directory; and FF OSD, as a check box. Below them
- * the drive button, which saves the drive as an image or unpacks an image
- * drive, into ffemu's state folder. */
+/* What the device is connected to: the file system of a USB drive made from
+ * a directory, its short names' code page and its filename-writing rules;
+ * and FF OSD, as a check box. Below them the drive button, which saves the
+ * drive as an image or unpacks an image drive, into ffemu's state folder. */
 static void draw_externals_dialog(void)
 {
     static const char * const fat_label[2] = {
         "FAT32", "FAT16: up to 2 GB, a root folder of 512 entries"
+    };
+    static const char * const sfn_label[USB_SFN_nr] = {
+        [USB_SFN_866] = "866: Russian, as DOS and Windows have it",
+        [USB_SFN_437] = "437: US and Western European",
+        [USB_SFN_850] = "850: Western European",
+        [USB_SFN_852] = "852: Central European",
+        [USB_SFN_mik] = "MIK: Bulgarian DOS",
+        [USB_SFN_utf8] =
+            "UTF-8: as Windows at OEM code page 65001 (UTF-8) writes"
+    };
+    static const char * const by_label[USB_BY_nr] = {
+        [USB_BY_windows] = "Windows", [USB_BY_linux] = "Linux (vfat)"
     };
     int w = 68, h = 7, y, x, i, row;
     char caption[40];
@@ -2516,8 +2550,10 @@ static void draw_externals_dialog(void)
 
     /* The frame, its empty first row, the buttons and the row of what the
      * drive button wrote, then each cluster's label, options and empty row,
-     * and its note below them all. */
+     * and the notes below them all. */
     h += 1 + 2 + 1 + 1;
+    h += 1 + USB_SFN_nr + 1;
+    h += 1 + USB_BY_nr + 1 + 1;
     h += 1 + 1 + 1 + 1;
     dialog_box(w, h, "Externals", &y, &x);
     row = y + 2;
@@ -2529,6 +2565,25 @@ static void draw_externals_dialog(void)
                   (dialog_focus == EF_fat) && (i == dialog_usb_fat),
                   fat_label[i]);
     row++;
+    probe_part(ef_label[EF_sfn]);
+    put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
+               COLOR_PAIR(CP_dlg_hot), ef_label[EF_sfn]);
+    for (i = 0; i < USB_SFN_nr; i++)
+        radio_row(row++, x + 3, w - 6, i == dialog_usb_sfn,
+                  (dialog_focus == EF_sfn) && (i == dialog_usb_sfn),
+                  sfn_label[i]);
+    row++;
+    probe_part(ef_label[EF_names]);
+    put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
+               COLOR_PAIR(CP_dlg_hot), ef_label[EF_names]);
+    for (i = 0; i < USB_BY_nr; i++)
+        radio_row(row++, x + 3, w - 6, i == dialog_usb_by,
+                  (dialog_focus == EF_names) && (i == dialog_usb_by),
+                  by_label[i]);
+    check_row(row++, x + 3, w - 6, !dialog_usb_lfn,
+              dialog_focus == EF_names,
+              "Do not write long filenames (as MS-DOS)");
+    row++;
     probe_part(ef_label[EF_osd]);
     put_marked(row++, x + 3, w - 6, COLOR_PAIR(CP_dialog),
                COLOR_PAIR(CP_dlg_hot), ef_label[EF_osd]);
@@ -2537,7 +2592,7 @@ static void draw_externals_dialog(void)
     row++;
     probe_part("notes");
     put(row++, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
-        "Changing the file system inserts such a drive again.");
+        "Changing the drive's settings inserts such a drive again.");
     put(row++, x + 3, w - 4, COLOR_PAIR(CP_dialog), "%s",
         "Fitting or removing FF OSD restarts the device.");
     /* OK is the default while the focus is on no button. Both are at the
@@ -2751,6 +2806,66 @@ static void draw_emul_dialog(void)
     button(y + 5, x + w / 2 + 4, button_attr(1), "  No  ");
 }
 
+/* The configuration in flash before the power cycle that brings in the
+ * display fitted, whose display-order does not fill that display: the order
+ * dialog offers to reset it to default. As emu_flash_order_fits() gives
+ * them, the rows that it takes and those that the display has, and the
+ * display's kind; and what FF.CFG on the drive says about display-order,
+ * as for the rows dialog. */
+static uint8_t order_cfg[256];
+static unsigned int order_taken, order_room;
+static bool order_oled;
+static int order_file;
+static char order_file_value[64];
+
+/* display-order's default for an OLED if @oled, else for an LCD, of 4 rows
+ * if @tall, else of 2. */
+static const char *default_order(bool oled, bool tall)
+{
+    return !tall ? "N,S" : oled ? "D,Nd,S" : "D,N,S,I";
+}
+
+static void draw_order_dialog(void)
+{
+    char value[64], line[4][160];
+    int w = 32, y, x, h, i, nr = 3;
+
+    option_value(order_cfg, "display-order", value, sizeof(value));
+    snprintf(line[0], sizeof(line[0]), "Flash mem has display-order = %s.",
+             value);
+    if (order_oled)
+        snprintf(line[1], sizeof(line[1]), "An OLED driven as 128x%u has "
+                 "room for %u rows; this gives %u, d and w ones counting 2.",
+                 (order_room == 4) ? 64 : 32, order_room, order_taken);
+    else if (order_taken > order_room)
+        snprintf(line[1], sizeof(line[1]), "A %u-row LCD shows only the "
+                 "first %u of the %u rows this gives.", order_room,
+                 order_room, order_taken);
+    else
+        snprintf(line[1], sizeof(line[1]), "A %u-row LCD leaves %u of its "
+                 "rows blank with this.", order_room,
+                 order_room - order_taken);
+    snprintf(line[2], sizeof(line[2]), "Reset it to default (%s here)?",
+             default_order(order_oled, order_room == 4));
+    if (order_file == ROWS_FILE_writable)
+        snprintf(line[nr++], sizeof(line[0]), "FF.CFG on the drive sets %s "
+                 "too: it is changed as well.", order_file_value);
+    else if (order_file == ROWS_FILE_image)
+        snprintf(line[nr++], sizeof(line[0]), "FF.CFG in the drive's image "
+                 "sets %s and will override this on boot.",
+                 order_file_value);
+    for (i = 0; i < nr; i++)
+        if ((int)strlen(line[i]) + 8 > w)
+            w = strlen(line[i]) + 8;
+    h = nr + 5;
+
+    dialog_box(w, h, "Display order", &y, &x);
+    for (i = 0; i < nr; i++)
+        put(y + 2 + i, x + 4, w - 5, COLOR_PAIR(CP_dialog), "%s", line[i]);
+    button(y + h - 3, x + w / 2 - 12, button_attr(0), "  Yes  ");
+    button(y + h - 3, x + w / 2 + 4, button_attr(1), "  No  ");
+}
+
 static void draw_dialog(void)
 {
     switch (dialog) {
@@ -2772,6 +2887,9 @@ static void draw_dialog(void)
     case DLG_emul:
         draw_emul_dialog();
         break;
+    case DLG_order:
+        draw_order_dialog();
+        break;
     case DLG_externals:
         draw_externals_dialog();
         break;
@@ -2783,7 +2901,10 @@ static void draw_dialog(void)
         draw_unpack_dialog();
         break;
     case DLG_write:
-        draw_flash_dialog();
+        if (write_return == DLG_display)
+            draw_display_dialog();
+        else
+            draw_flash_dialog();
         draw_write_dialog();
         break;
     case DLG_fdhelp:
@@ -2794,6 +2915,8 @@ static void draw_dialog(void)
         /* Over the dialog it came from. */
         if (msg_return == DLG_flash)
             draw_flash_dialog();
+        else if (msg_return == DLG_display)
+            draw_display_dialog();
         draw_message_box();
         break;
     }
@@ -2802,20 +2925,21 @@ static void draw_dialog(void)
 /* What a key did in a dialog. */
 enum {
     DK_none, DK_taken, DK_quit, DK_display, DK_rows_yes, DK_rows_no,
-    DK_emul_yes, DK_emul_no, DK_externals, DK_drive, DK_fdfile_yes,
-    DK_fdfile_no,
-    DK_unpack, DK_write
+    DK_emul_yes, DK_emul_no, DK_order_yes, DK_order_no, DK_externals,
+    DK_drive, DK_fdfile_yes, DK_fdfile_no,
+    DK_unpack, DK_write, DK_recommend
 };
 
 /* The Display type dialog's keys: Tab and Shift+Tab move the focus over
  * every control, and so does the letter a label marks to its control; Up
  * and Down choose in the cluster in focus, Space toggles the check box,
  * Left and Right go between the buttons; Enter takes the choice, unless
- * Cancel is in focus. */
+ * Cancel is in focus, or saves FF.CFG, leaving the dialog open. */
 static int display_dialog_key(int key)
 {
     int step = 0, d = (key == KEY_DOWN) ? 1 : -1, i;
 
+    fd_note[0] = '\0';
     switch (key) {
     case '\t':
         step = 1;
@@ -2824,10 +2948,9 @@ static int display_dialog_key(int key)
         step = -1;
         break;
     case KEY_LEFT: case KEY_RIGHT:
-        if (dialog_focus == DF_ok)
-            dialog_focus = DF_cancel;
-        else if (dialog_focus == DF_cancel)
-            dialog_focus = DF_ok;
+        if (dialog_focus >= DF_save)
+            dialog_focus = DF_save + (dialog_focus - DF_save
+                                      + ((key == KEY_RIGHT) ? 1 : 2)) % 3;
         break;
     case ' ':
         if (dialog_focus == DF_synth)
@@ -2848,6 +2971,8 @@ static int display_dialog_key(int key)
         dialog = DLG_none;
         return DK_taken;
     case '\n':
+        if (dialog_focus == DF_save)
+            return DK_recommend;
         dialog = DLG_none;
         return (dialog_focus == DF_cancel) ? DK_taken : DK_display;
     default:
@@ -2892,11 +3017,19 @@ static int externals_dialog_key(int key)
     case ' ':
         if (dialog_focus == EF_osd)
             dialog_osd = !dialog_osd;
+        else if (dialog_focus == EF_names)
+            dialog_usb_lfn = !dialog_usb_lfn;
         break;
     case KEY_UP: case KEY_DOWN:
         if ((dialog_focus == EF_fat) && (dialog_usb_fat + d >= 0)
             && (dialog_usb_fat + d < 2))
             dialog_usb_fat += d;
+        else if ((dialog_focus == EF_sfn) && (dialog_usb_sfn + d >= 0)
+                 && (dialog_usb_sfn + d < USB_SFN_nr))
+            dialog_usb_sfn += d;
+        else if ((dialog_focus == EF_names) && (dialog_usb_by + d >= 0)
+                 && (dialog_usb_by + d < USB_BY_nr))
+            dialog_usb_by += d;
         break;
     case 27:
         dialog = DLG_none;
@@ -2969,19 +3102,24 @@ static int dialog_key(int key)
         int done = (dialog == DLG_unpack) ? DK_unpack : DK_write;
         if ((key != 27) && (key != '\n'))
             return DK_taken;
-        dialog = DLG_flash;
+        dialog = (dialog == DLG_write) ? write_return : DLG_flash;
         return ((key == '\n') && (dialog_button == 0)) ? done : DK_taken;
     }
 
-    /* The rows and emul dialogs have no way back: the display or the flash
-     * has changed already. */
-    if ((dialog == DLG_rows) || (dialog == DLG_emul)) {
+    /* The rows, emul and order dialogs have no way back: the display or the
+     * flash has changed already. */
+    if ((dialog == DLG_rows) || (dialog == DLG_emul)
+        || (dialog == DLG_order)) {
         bool yes = (key == '\n') && (dialog_button == 0);
         if ((key != 27) && (key != '\n'))
             return DK_taken;
         if (dialog == DLG_emul) {
             dialog = DLG_none;
             return yes ? DK_emul_yes : DK_emul_no;
+        }
+        if (dialog == DLG_order) {
+            dialog = DLG_none;
+            return yes ? DK_order_yes : DK_order_no;
         }
         dialog = DLG_none;
         return yes ? DK_rows_yes : DK_rows_no;
@@ -3145,6 +3283,34 @@ static void drop_sequence(wint_t c)
     }
 }
 
+/* Power-cycles the device, which brings in the display fitted and what flash
+ * holds; first, for an OLED or an LCD, asking to reset display-order in
+ * flash to default if it does not fill the display exactly. */
+static void restart_display(void)
+{
+    uint8_t cfg[256];
+
+    emu_flash_get(order_cfg);
+    order_oled = DISP_IS_OLED(config.display);
+    if (DISP_IS_LED(config.display)
+        || emu_flash_order_fits(order_cfg, order_oled, &order_taken,
+                                &order_room))
+        leave(KEY_ACT_reset);
+    /* FF.CFG on the drive would set it again on the next boot. */
+    order_file = ROWS_FILE_none;
+    memcpy(cfg, order_cfg, sizeof(cfg));
+    emu_flash_set_option(cfg, "display-order", "default");
+    if (ff_cfg_overrides(cfg, "display-order", order_file_value,
+                         sizeof(order_file_value))) {
+        struct usb_info usb;
+        usb_get_info(&usb);
+        order_file = (usb.kind == USB_image)
+            ? ROWS_FILE_image : ROWS_FILE_writable;
+    }
+    dialog = DLG_order;
+    dialog_button = 0;
+}
+
 /* Fits display @display and makes the firmware run the display driver of MCU
  * @mcu, EMU_MCU_*, if either is another than it is, and power-cycles the
  * device; first asking to change display-type in flash if that does not
@@ -3165,7 +3331,7 @@ static void set_display(int display, int mcu)
         return;
     }
     if (rows_restart)
-        leave(KEY_ACT_reset);
+        restart_display();
 }
 
 /*
@@ -3179,6 +3345,9 @@ static void set_display(int display, int mcu)
 enum { FV_radio, FV_check, FV_input, FV_ok, FV_cancel,
        FV_save_all, FV_save_nondefault, FV_save_changed, FV_save_dump,
        FV_dump_cfg, FV_load_cfg };
+/* What the Display type dialog's Save button writes, as the write dialog
+ * names the button it asks for. */
+#define FV_save_recommended (FV_load_cfg + 1)
 
 enum { FT_emulated, FT_other, FT_actions, FT_nr };
 static const char * const fd_tab_name[FT_nr] = {
@@ -3195,15 +3364,19 @@ static const char * const fd_tab_name[FT_nr] = {
 static const char * const fd_places[] = {
     "display-type", "",
     "oled-font", "",
-    "display-order", "",
-    "show-filename-ext", "|",
+    "lcd-charset", "",
+    "display-order", "display-error-wide", "",
+    "show-filename-ext", "",
+    "show-tracks-short", "show-dir-slash", "|",
     "autoselect-file-secs", "autoselect-folder-secs", "nav-loop", "",
     "twobutton-action", "",
     "rotary", "",
     "folder-sort", "",
-    "sort-priority", "|",
+    "sort-priority", "",
+    "short-name-codepage", "",
+    "detect-utf8-in-short-names", "|",
     "display-scroll-rate", "display-scroll-pause", "nav-scroll-rate",
-        "nav-scroll-pause", "",
+        "nav-scroll-pause", "display-scroll-by-pixel", "",
     "display-off-secs", "",
     "display-on-activity", "",
     "image-on-startup", "",
@@ -3289,8 +3462,6 @@ static int fd_focus, fd_tab, fd_w, fd_h, fd_top, fd_top_actions;
 /* When the PgUp and PgDn that switch tabs were pressed, until when they are
  * lit. */
 static uint64_t fd_up_lit, fd_down_lit;
-/* What the last Save did, on the bottom line until the next key. */
-static char fd_note[4200];
 
 /* @s without its '~' marks, into @buf. */
 static const char *unmarked(const char *s, char *buf, size_t size)
@@ -4094,7 +4265,7 @@ static void fd_commit(const uint8_t *cfg)
     emu_flash_save(cfg, fdf_erase ? 0 : emu_flash_cfg_size());
     dialog = DLG_none;
     if (!fd_offer_display(fdf_old_type))
-        leave(KEY_ACT_reset);
+        restart_display();
 }
 
 /* What OK goes on with once @cfg holds what flash is to: the question of
@@ -4297,6 +4468,10 @@ static void draw_write_dialog(void)
     } else if (write_kind == FV_save_all) {
         title = "Save all to FF.CFG";
         ask = "Save all options to a file next to the image?";
+    } else if (write_kind == FV_save_recommended) {
+        title = "Save recommended FF.CFG";
+        ask = "Save the options recommended for the display to a file next to "
+            "the image?";
     } else if (write_kind == FV_save_nondefault) {
         title = "Save diff-from-defaults to FF.CFG";
         ask = "Save the options that differ from the defaults or from flash to "
@@ -4322,19 +4497,61 @@ static void draw_write_dialog(void)
     question_box(title, l, nr);
 }
 
+/* The options recommended for display @d into @cfg, which holds the
+ * defaults: display-type for it where the default does not suit it, the
+ * extension of an image where it tells it from another, the track in short,
+ * folders after a slash, and on an OLED the names scrolling by pixel and
+ * display-order with the name double width as well, and an error screen's
+ * double rows too. None for an LED display, to which none of them
+ * applies. */
+static void recommend(void *cfg, int d)
+{
+    static const char * const opts[] = {
+        "show-filename-ext", "auto", "show-tracks-short", "yes",
+        "show-dir-slash", "yes"
+    };
+    unsigned int i;
+
+    if (DISP_IS_LED(d))
+        return;
+    if (!display_type_fits(cfg, d)) {
+        if (DISP_IS_LCD(d))
+            emu_flash_set_lcd(cfg, DISP_LCD_COLS(d), DISP_LCD_ROWS(d));
+        else
+            emu_flash_set_oled_rows(cfg, DISP_HEIGHT(d));
+    }
+    for (i = 0; i < ARRAY_SIZE(opts); i += 2)
+        emu_flash_set_option(cfg, opts[i], opts[i + 1]);
+    if (DISP_IS_OLED(d)) {
+        emu_flash_set_option(cfg, "display-scroll-by-pixel", "yes");
+        emu_flash_set_option(cfg, "display-error-wide", "yes");
+        emu_flash_set_option(cfg, "display-order",
+                             (DISP_HEIGHT(d) == 64) ? "D,Nw,S" : "Cw");
+    }
+}
+
 /* Writes FF.CFG as button @kind asks. A Save button writes what the dialog
  * shows, edits included, and nothing else moves: flash waits for OK, and
  * the firmware reads the file when the drive is next inserted. The Unpack
  * button writes every option of FLASH.DMP, and a file of another size gets
- * a message box. */
+ * a message box. The Display type dialog's Save button writes the options
+ * recommended for the display it has chosen. */
 static void fd_save(int kind)
 {
     uint8_t cfg[256];
+    char source[64];
     unsigned int slot;
     long len;
     int r;
 
-    if (kind == FV_dump_cfg) {
+    snprintf(source, sizeof(source), "%s",
+             (kind == FV_dump_cfg) ? "FLASH.DMP" : "the flash memory");
+    if (kind == FV_save_recommended) {
+        emu_flash_cfg_defaults(cfg);
+        recommend(cfg, dialog_display);
+        snprintf(source, sizeof(source), "the recommendation for %s",
+                 display_label[dialog_display]);
+    } else if (kind == FV_dump_cfg) {
         r = fd_read_dump(cfg, &slot, &len);
         if (r < 0)
             return;
@@ -4347,10 +4564,10 @@ static void fd_save(int kind)
     }
     if (!ff_cfg_write(cfg, (kind == FV_save_changed) ? FF_CFG_changed
                       : (kind == FV_save_nondefault) ? FF_CFG_nondefault
+                      : (kind == FV_save_recommended) ? FF_CFG_from_defaults
                       : FF_CFG_all,
-                      (kind == FV_dump_cfg) ? "FLASH.DMP" : "the flash memory",
-                      fd_note, sizeof(fd_note))) {
-        show_message(DLG_flash, "FF.CFG", fd_note);
+                      source, fd_note, sizeof(fd_note))) {
+        show_message(write_return, "FF.CFG", fd_note);
         fd_note[0] = '\0';
         return;
     }
@@ -4367,13 +4584,14 @@ static void fd_ask_write(int kind)
 
     usb_get_info(&usb);
     write_image = (usb.kind == USB_image);
+    write_return = (kind == FV_save_recommended) ? DLG_display : DLG_flash;
     if (!write_image && (kind != FV_dump_cfg)) {
         fd_save(kind);
         return;
     }
     if (!ff_cfg_target(dir, sizeof(dir), place, sizeof(place), &write_exists,
                        msg, sizeof(msg))) {
-        show_message(DLG_flash, "FF.CFG", msg);
+        show_message(write_return, "FF.CFG", msg);
         return;
     }
     if (write_image) {
@@ -4688,25 +4906,41 @@ static const struct {
     { "display-type", "Type of the display connected" },
     { "display-type suffix", "Options for OLED displays" },
     { "oled-font", "Font of the OLED display" },
+    { "lcd-charset",
+      "Character ROM of the LCD, which names' letters are shown by" },
     { "show-filename-ext", "Whether to show floppy filename extensions" },
+    { "show-tracks-short",
+      "Whether the status row shows the side and track in short, at its "
+      "right: 0T17" },
+    { "show-dir-slash",
+      "Whether to show folders as /NAME rather than [NAME], a column "
+      "shorter" },
     { "display-order",
-      "Rows top down: 0=name, 1=status, 2=info, 3=folder, 7=blank, "
-      "d=double-height" },
+      "N=name S=status I=info D=dir C=name&track Z=dir&track B=blank, "
+      "d=tall w=tall&wide" },
+    { "selector-display-order",
+      "Rows while browsing; default uses display-order" },
+    { "display-error-wide",
+      "Whether an error's double-height rows on an OLED are double width "
+      "too, scrolling where long" },
     { "display-off-secs",
       "Seconds without activity before the display goes dark, 0-255: 0 is "
       "always off, 255 never" },
     { "display-scroll-rate",
-      "Milliseconds per step of a long name scroll, 100..65535: less is "
-      "faster" },
+      "Milliseconds per character of a long name scroll, 100..65535: less "
+      "is faster" },
     { "display-scroll-pause",
       "Milliseconds a long name scroll rests at each end, 0..65535: 0 "
       "scrolls without rest" },
     { "nav-scroll-rate",
-      "Milliseconds per scroll step while browsing, 0..65535: less is "
-      "faster" },
+      "Milliseconds per character of a scroll while browsing, 0..65535: "
+      "less is faster" },
     { "nav-scroll-pause",
       "Milliseconds before a long name starts to scroll while browsing, "
       "0..65535" },
+    { "display-scroll-by-pixel",
+      "Whether a long name scrolls on an OLED a pixel at a time, not a "
+      "character, at the same speed" },
     { "nav-mode", "How floppies are found on the USB drive" },
     { "folder-sort",
       "A sorted folder must fit in RAM: \"always\" cuts big ones, \"small\" "
@@ -4714,6 +4948,12 @@ static const struct {
     { "sort-priority",
       "Where the folders go in a sorted folder: before the files, after "
       "them, or mixed by name" },
+    { "short-name-codepage",
+      "Code page of the short names that have no long name, as MS-DOS "
+      "writes them" },
+    { "detect-utf8-in-short-names",
+      "Read a short name whose bytes above 0x7f form UTF-8 as UTF-8, as "
+      "Windows with UTF-8 writes it" },
     { "nav-loop",
       "Whether file/folder navigation loops from the last item to the first "
       "one and vice versa" },
@@ -4806,15 +5046,15 @@ static const struct {
       "Options for OLED displays: mirror horizontally, for displays of "
       "such pixel layout" },
     { "display-type", "narrow",
-      "Options for OLED displays: for 6x13 font, show only 18 text "
+      "Options for OLED displays: for 6x16 font, show only 18 text "
       "columns, for small case cutouts" },
     { "display-type", "narrower",
-      "Options for OLED displays: for 6x13 font, show only 16 text "
+      "Options for OLED displays: for 6x16 font, show only 16 text "
       "columns, for small case cutouts" },
     { "display-type", "inverse",
       "Options for OLED displays: invert the image, printing "
       "black-on-bright" },
-    { "oled-font", "6x13",
+    { "oled-font", "6x16",
       "Makes 21 columns; with \"narrower\" suffix to \"display-type\" it "
       "fits the smallest case cutout" },
     { "oled-font", "8x16",
@@ -4861,6 +5101,25 @@ static const struct {
     { "display-type", "slow",
       "Options for OLED displays: run the I2C bus slower, if the display "
       "blanks or garbles" },
+    { "short-name-codepage", "866",
+      "Short names in Cyrillic, as a Russian MS-DOS or Windows writes them" },
+    { "short-name-codepage", "mik",
+      "Short names in Cyrillic, as a Bulgarian MS-DOS writes them" },
+    { "short-name-codepage", "437",
+      "Short names in Western European letters, as a US or German MS-DOS "
+      "writes them" },
+    { "short-name-codepage", "850",
+      "Short names in Western European letters, as a Western European "
+      "MS-DOS writes them" },
+    { "short-name-codepage", "852",
+      "Short names in Central European letters, as a Central European "
+      "MS-DOS writes them" },
+    { "lcd-charset", "jap",
+      "Latin + Japanese: A00; most common for generic modules" },
+    { "lcd-charset", "eur",
+      "Latin with Western European accented letters: A02" },
+    { "lcd-charset", "cyr",
+      "Cyrillic (Russian/Bulgarian): MELT, Sitronix 0T, Winstar CT" },
     { "twobutton-action", "reverse", "Swap the left and right buttons" },
     { "notify-volume", "slotnr",
       "Beep the floppy number when a floppy is inserted: long beeps count as "
@@ -4891,7 +5150,7 @@ static const char *fd_default_display_order(void)
         oled = !strncmp(t, "oled-", 5);
         tall = !strcmp(t, "oled-128x64") || !strcmp(t, "lcd-20x04");
     }
-    return !tall ? "0,1" : oled ? "3,0d,1" : "3,0,1,2";
+    return default_order(oled, tall);
 }
 
 /* The help of the buttons. */
@@ -5296,6 +5555,7 @@ static void open_display_dialog(void)
     dialog_oled_synth = config.oled_synth;
     dialog_mcu = config.mcu;
     dialog_focus = DF_display;
+    fd_note[0] = '\0';
 }
 
 /* Opens the Externals dialog with the settings in use. */
@@ -5304,6 +5564,9 @@ static void open_externals_dialog(void)
     dialog = DLG_externals;
     dialog_button = 0;
     dialog_usb_fat = config.usb_fat16;
+    dialog_usb_sfn = config.usb_sfn;
+    dialog_usb_lfn = config.usb_lfn;
+    dialog_usb_by = config.usb_by;
     dialog_osd = config.osd;
     dialog_focus = EF_fat;
     ef_note[0] = '\0';
@@ -5369,20 +5632,36 @@ static void handle_key(int key)
             ff_cfg_set_option("display-type", then, msg, sizeof(msg));
             host_log("%s", msg);
         }
-        leave(KEY_ACT_reset);
+        restart_display();
+        return;
     }
     case DK_rows_no:
         if (rows_restart)
-            leave(KEY_ACT_reset);
+            restart_display();
         return;
     case DK_emul_yes:
         config.display = emul_display;
         rc_save();
-        leave(KEY_ACT_reset);
+        restart_display();
+        return;
     case DK_emul_no:
+        restart_display();
+        return;
+    case DK_order_yes: {
+        char msg[160];
+        emu_flash_set_option(order_cfg, "display-order", "default");
+        emu_flash_save(order_cfg, emu_flash_cfg_size());
+        if (order_file == ROWS_FILE_writable) {
+            ff_cfg_set_option("display-order", "default", msg, sizeof(msg));
+            host_log("%s", msg);
+        }
+        leave(KEY_ACT_reset);
+    }
+    case DK_order_no:
         leave(KEY_ACT_reset);
     case DK_externals:
-        ui_usb_set_fat16(dialog_usb_fat == 1);
+        ui_usb_set_drive(dialog_usb_fat == 1, dialog_usb_sfn,
+                         dialog_usb_lfn, dialog_usb_by);
         /* The firmware finds FF OSD as it starts: a change restarts the
          * device. */
         if (dialog_osd != config.osd) {
@@ -5418,6 +5697,13 @@ static void handle_key(int key)
         return;
     case DK_write:
         fd_save(write_kind);
+        return;
+    case DK_recommend:
+        if (DISP_IS_LED(dialog_display))
+            snprintf(fd_note, sizeof(fd_note), "Nothing to recommend for %s",
+                     display_label[dialog_display]);
+        else
+            fd_ask_write(FV_save_recommended);
         return;
     }
 
@@ -5740,7 +6026,8 @@ static void check_buttons(int d, int nr)
 static void check_dialog_states(int d)
 {
     static const int write_kinds[] = {
-        FV_dump_cfg, FV_save_all, FV_save_nondefault, FV_save_changed
+        FV_dump_cfg, FV_save_all, FV_save_nondefault, FV_save_changed,
+        FV_save_recommended
     };
     static const int message_over[] = {
         DLG_none, DLG_flash, DLG_display, DLG_externals
@@ -5807,6 +6094,20 @@ static void check_dialog_states(int d)
         for (dialog_focus = 0; dialog_focus < EF_nr; dialog_focus++)
             check_dialog(d);
         break;
+    case DLG_order:
+        emu_flash_get(order_cfg);
+        snprintf(order_file_value, sizeof(order_file_value), "D,Nw,S,I");
+        for (i = 0; i < 8; i++) {
+            /* An OLED or an LCD of 2 or 4 rows, given more or fewer. */
+            order_oled = i & 1;
+            order_room = (i & 2) ? 4 : 2;
+            order_taken = (i & 4) ? order_room + 2 : order_room - 1;
+            for (j = ROWS_FILE_none; j <= ROWS_FILE_image; j++) {
+                order_file = j;
+                check_buttons(d, 2);
+            }
+        }
+        break;
     case DLG_message:
         fd_open();
         open_display_dialog();
@@ -5830,6 +6131,7 @@ static void check_dialog_states(int d)
         break;
     case DLG_write:
         fd_open();
+        open_display_dialog();
         snprintf(write_from, sizeof(write_from),
                  "From: FF/FLASH.DMP on drive ");
         snprintf(write_from_drive, sizeof(write_from_drive), "%s", check_path);
@@ -5837,6 +6139,8 @@ static void check_dialog_states(int d)
         for (i = 0; i < ARRAY_SIZE(write_kinds); i++) {
             for (j = 0; j < 2; j++) {
                 write_kind = write_kinds[i];
+                write_return = (write_kind == FV_save_recommended)
+                    ? DLG_display : DLG_flash;
                 write_image = j;
                 snprintf(write_to, sizeof(write_to), "%s",
                          j ? "To: " : "To: FF/FF.CFG on drive ");

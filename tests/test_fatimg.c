@@ -229,6 +229,123 @@ TEST(fatimg_fat32_default)
     dir_drive_remove();
 }
 
+/* The first file of the root folder of the drive: its short name into @sfn
+ * and its case byte into @nt; 1 if a long name comes before it, 0 if not,
+ * -1 if there is no such file. */
+static int root_sfn(uint8_t *sfn, uint8_t *nt)
+{
+    static uint8_t sec[512];
+    unsigned int rsvd, spc, i;
+    uint32_t fat_secs, root;
+    int lfn = 0;
+
+    if (dir_drive_read(sec, 0, 1) != 0)
+        return -1;
+    spc = sec[13];
+    rsvd = sec[14] | (sec[15] << 8);
+    fat_secs = sec[36] | (sec[37] << 8) | (sec[38] << 16)
+        | ((uint32_t)sec[39] << 24);
+    root = sec[44] | (sec[45] << 8) | (sec[46] << 16)
+        | ((uint32_t)sec[47] << 24);
+    if (dir_drive_read(sec, rsvd + sec[16] * fat_secs + (root - 2) * spc,
+                       1) != 0)
+        return -1;
+    for (i = 0; (i < sizeof(sec)) && (sec[i] != 0); i += 32) {
+        if (sec[i] == 0xe5)
+            continue;
+        if (sec[i + 11] == 0x0f) {
+            lfn = 1;
+            continue;
+        }
+        if (sec[i + 11] & 0x08) /* the volume label */
+            continue;
+        memcpy(sfn, &sec[i], 11);
+        *nt = sec[i + 12];
+        return lfn;
+    }
+    return -1;
+}
+
+/* Short names in each code page as each system writes them, from what
+ * Windows and Linux wrote when measured, and without long names. */
+TEST(fatimg_short_names)
+{
+    static const struct {
+        int sfn, by, lfn;
+        const char *name, *sfn83;
+        int has_lfn, nt;
+    } c[] = {
+        /* Windows at 866 writes an umlauted a as A, Linux '_' with a tail;
+         * 437 has the letter; MIK lacks it; UTF-8 has its capital. */
+        { DD_SFN_866, DD_BY_windows, 1, "K\xc3\xa4se.img", "KASE    IMG",
+          1, 0 },
+        { DD_SFN_866, DD_BY_linux, 1, "K\xc3\xa4se.img", "K_SE~1  IMG",
+          1, 0 },
+        { DD_SFN_437, DD_BY_windows, 1, "K\xc3\xa4se.img", "K\x8eSE    IMG",
+          1, 0 },
+        { DD_SFN_437, DD_BY_linux, 1, "K\xc3\xa4se.img", "K\x8eSE    IMG",
+          1, 0 },
+        /* 850's small letters take their capitals, in either system's rules. */
+        { DD_SFN_850, DD_BY_linux, 1,
+          "\xc3\xb8\xc3\xa3\xc3\x98\xc3\x83\xc3\xb0\xc3\x90\xc3\x8a\xc3\x8b.img",
+          "\x9d\xc7\x9d\xc7\xd1\xd1\xd2\xd3" "IMG", 1, 0 },
+        { DD_SFN_850, DD_BY_windows, 1,
+          "\xc3\xb8\xc3\xa3\xc3\x98\xc3\x83\xc3\xb0\xc3\x90\xc3\x8a\xc3\x8b.img",
+          "\x9d\xc7\x9d\xc7\xd1\xd1\xd2\xd3" "IMG", 1, 0 },
+        /* 852's small letters take their capitals, in either system's rules. */
+        { DD_SFN_852, DD_BY_linux, 1,
+          "\xc4\x82\xc4\x85\xc4\x86\xc4\x99\xc4\xbd\xc5\x81\xc5\x83\xc5\x94.img",
+          "\xc6\xa4\x8f\xa8\x95\x9d\xe3\xe8" "IMG", 1, 0 },
+        { DD_SFN_852, DD_BY_windows, 1,
+          "\xc4\x82\xc4\x85\xc4\x86\xc4\x99\xc4\xbd\xc5\x81\xc5\x83\xc5\x94.img",
+          "\xc6\xa4\x8f\xa8\x95\x9d\xe3\xe8" "IMG", 1, 0 },
+        { DD_SFN_mik, DD_BY_linux, 1, "K\xc3\xa4se.img", "K_SE~1  IMG",
+          1, 0 },
+        { DD_SFN_utf8, DD_BY_linux, 1, "K\xc3\xa4se.img",
+          "K\xc3\x84SE   IMG", 1, 0 },
+        /* Yo and Russian letters, in their capitals; MIK lacks Yo. */
+        { DD_SFN_866, DD_BY_linux, 1, "\xd0\x81\xd0\xbb\xd0\xba\xd0\xb0.dsk",
+          "\xf0\x8b\x8a\x80    DSK", 1, 0 },
+        { DD_SFN_866, DD_BY_windows, 1,
+          "\xd0\x81\xd0\xbb\xd0\xba\xd0\xb0.dsk",
+          "\xf0\x8b\x8a\x80    DSK", 1, 0 },
+        { DD_SFN_mik, DD_BY_windows, 1,
+          "\xd0\x81\xd0\xbb\xd0\xba\xd0\xb0.dsk",
+          "_\x8b\x8a\x80~1  DSK", 1, 0 },
+        { DD_SFN_utf8, DD_BY_windows, 1,
+          "\xd0\x81\xd0\xbb\xd0\xba\xd0\xb0.dsk",
+          "\xd0\x81\xd0\x9b\xd0\x9a\xd0\x90" "DSK", 1, 0 },
+        /* vfat writes one '_' for a character beyond the BMP. */
+        { DD_SFN_437, DD_BY_linux, 1, "a\xf0\x9f\x98\x80.img",
+          "A_~1    IMG", 1, 0 },
+        /* Without long names, as MS-DOS leaves a drive: no case byte. */
+        { DD_SFN_866, DD_BY_windows, 1, "game.img", "GAME    IMG", 0, 0x18 },
+        { DD_SFN_866, DD_BY_windows, 0, "game.img", "GAME    IMG", 0, 0 },
+        { DD_SFN_866, DD_BY_linux, 1, "game.img", "GAME    IMG", 1, 0 },
+        { DD_SFN_866, DD_BY_linux, 0, "game.img", "GAME    IMG", 0, 0 },
+        { DD_SFN_437, DD_BY_linux, 0, "K\xc3\xa4se.img", "K\x8eSE    IMG",
+          0, 0 },
+    };
+    uint8_t sfn[11], nt = 0;
+    unsigned int i;
+    int lfn;
+
+    for (i = 0; i < sizeof(c) / sizeof(c[0]); i++) {
+        dir_drive_new();
+        dir_drive_names(c[i].sfn, c[i].lfn, c[i].by);
+        dir_drive_file(c[i].name, "x", 1);
+        REQUIRE(dir_drive_insert(0) == 0);
+        lfn = root_sfn(sfn, &nt);
+        if ((lfn != c[i].has_lfn) || (nt != c[i].nt)
+            || memcmp(sfn, c[i].sfn83, 11))
+            ft_fail(__FILE__, __LINE__, "case %u, %s: short name %.11s, "
+                    "long name %d, case byte %02x; expected %.11s, %d, %02x",
+                    i, c[i].name, sfn, lfn, nt, c[i].sfn83, c[i].has_lfn,
+                    c[i].nt);
+        dir_drive_remove();
+    }
+}
+
 /*
  * Local variables:
  * mode: C

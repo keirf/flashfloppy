@@ -11,6 +11,22 @@
 
 uint8_t display_type;
 
+uint16_t lcd_display_order(void)
+{
+    if ((display_mode == DM_selector)
+        && (ff_cfg.selector_display_order != DORD_default))
+        return ff_cfg.selector_display_order;
+    return ff_cfg.display_order;
+}
+
+uint8_t lcd_display_order_wide(void)
+{
+    if ((display_mode == DM_selector)
+        && (ff_cfg.selector_display_order != DORD_default))
+        return ff_cfg.selector_display_order_wide;
+    return ff_cfg.display_order_wide;
+}
+
 void display_init(void)
 {
     char name[20];

@@ -31,6 +31,7 @@ SUBDIRS += display gotek
 else ifeq ($(target),bootloader)
 
 OBJS += fw_update.o
+OBJS += charset.o
 OBJS += fs_hint.o
 SUBDIRS += display fatfs gotek usb
 
@@ -38,6 +39,7 @@ else
 
 OBJS += main.o
 OBJS += cache.o
+OBJS += charset.o
 OBJS += fs_hint.o
 
 OBJS-$(shugart) += floppy.o

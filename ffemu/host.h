@@ -134,9 +134,11 @@ void oled_i2c_stop(void);
 #define LCD_MAX_COLS 40
 #define LCD_MAX_ROWS 4
 
-/* The character ROMs that ffemu has for the LCD, by their names in the
- * settings file and on the screen, with a line of help for each. */
-enum { LCD_ROM_cyr, LCD_ROM_a00, LCD_ROM_nr };
+/* The character ROMs that ffemu has for the LCD, named and ordered as the
+ * firmware's lcd-charset values, by their names in the settings file and on
+ * the screen, with a line of help for each. */
+enum { LCD_ROM_a00, LCD_ROM_a02, LCD_ROM_cyr_melt, LCD_ROM_cyr_sitronix,
+       LCD_ROM_nr };
 extern const char * const lcd_rom_name[LCD_ROM_nr];
 extern const char * const lcd_rom_label[LCD_ROM_nr];
 extern const char * const lcd_rom_help[LCD_ROM_nr];
@@ -149,6 +151,7 @@ struct lcd_view {
     int rom;                 /* LCD_ROM_*: its character ROM */
     unsigned int nr_updates; /* counts transactions that wrote characters */
     uint8_t text[LCD_MAX_ROWS][LCD_MAX_COLS]; /* the characters shown */
+    uint8_t cgram[64];       /* the user-defined characters, a row a byte */
 };
 
 /* Fits display @display, one of DISP_lcd_*. */
@@ -160,10 +163,11 @@ uint8_t hd44780_i2c_read(void);
 void hd44780_i2c_stop(void);
 /* Sets the character ROM, LCD_ROM_*. */
 void hd44780_set_rom(int rom);
-/* The Unicode code point that code @c stands for in ROM @rom, a space for
- * a blank glyph: 0 for none, a user-defined character or a glyph that no
- * single character matches. */
-unsigned int hd44780_unicode(int rom, uint8_t c);
+/* The Unicode code point that code @c stands for on LCD @v, a space for a
+ * blank glyph, a full block for a user-defined character whose dots are all
+ * set: 0 for none, another user-defined character or a glyph that no single
+ * character matches. */
+unsigned int hd44780_char(const struct lcd_view *v, uint8_t c);
 /* What text shows for a code without a character: a white square, the
  * usual mark of a missing one. */
 #define LCD_MISSING 0x25a1
@@ -171,9 +175,9 @@ unsigned int hd44780_unicode(int rom, uint8_t c);
 void hd44780_size(unsigned int nr_cols, unsigned int nr_rows,
                   unsigned int *w, unsigned int *h);
 /* The characters of @v as pixels, @w by @h bytes, 1 for a dark dot, in a
- * buffer of this module's that the next call reuses; a character without a
- * glyph, a user-defined one included, as a checkerboard; and @dots, 1 for
- * every dot of the character cells, lit or not. */
+ * buffer of this module's that the next call reuses; a user-defined one from
+ * CGRAM, one without a glyph as a checkerboard; and @dots, 1 for every dot
+ * of the character cells, lit or not. */
 void hd44780_pixels(const struct lcd_view *v, const uint8_t **px,
                     const uint8_t **dots, unsigned int *w, unsigned int *h);
 
@@ -255,11 +259,28 @@ void led_art(const struct led_view *v, char art[3][16]);
 /* What the USB drive is made from. */
 enum { USB_dir, USB_image, USB_disk };
 
+/* The code page of the short names of a drive made from a directory, and
+ * the system whose rules make them, by their names in the settings file. */
+enum {
+    USB_SFN_866, USB_SFN_437, USB_SFN_850, USB_SFN_852, USB_SFN_mik, USB_SFN_utf8,
+    USB_SFN_nr
+};
+extern const char * const usb_sfn_name[USB_SFN_nr];
+enum { USB_BY_windows, USB_BY_linux, USB_BY_nr };
+extern const char * const usb_by_name[USB_BY_nr];
+/* That of the system the program runs on. */
+#ifdef __CYGWIN__
+#define USB_BY_default USB_BY_windows
+#else
+#define USB_BY_default USB_BY_linux
+#endif
+
 struct usb_info {
     bool inserted;
     uint8_t kind; /* USB_* */
     unsigned int nr_files, nr_dirs, nr_skipped;
     unsigned int nr_case_dups; /* left out: as names they equal others */
+    unsigned int nr_lacking;   /* names that lose characters in short names */
     unsigned int fat_bits;     /* of a drive made from a directory */
     /* Left out of FAT16, as copying them would leave them: entries of the
      * full root folder, and files of the full drive. */
@@ -291,6 +312,9 @@ void usb_remove(void);
  * next insertion would give the firmware. */
 void usb_eject_ff_cfg(void);
 void usb_get_info(struct usb_info *info);
+/* Logs the names of the drive just made from a directory whose short names
+ * lose characters, the first such character of each, up to a hundred. */
+void usb_log_lacking(void);
 /* The text of FF.CFG on a drive from an image or a disk, read when it was
  * inserted; NULL for a directory, or if it has none. */
 const char *usb_ff_cfg_text(void);
@@ -364,9 +388,12 @@ void *usb_drive_thread(void *unused);
  */
 
 /* The options that ff_cfg_write() writes: every one; those whose value
- * differs from the defaults or from the flash memory's; or only those that
- * differ from the flash memory's. */
-enum ff_cfg_set { FF_CFG_all, FF_CFG_nondefault, FF_CFG_changed };
+ * differs from the defaults or from the flash memory's; only those that
+ * differ from the flash memory's; or only those that differ from the
+ * defaults. */
+enum ff_cfg_set {
+    FF_CFG_all, FF_CFG_nondefault, FF_CFG_changed, FF_CFG_from_defaults
+};
 
 /* Writes FF.CFG on the USB drive from configuration @cfg, as the flash
  * memory keeps one, which comes from @source, as the file's first line
@@ -450,11 +477,14 @@ struct config {
     int style;              /* STYLE_* */
     int display;            /* DISP_*: the display fitted */
     int lcd_rom;            /* LCD_ROM_*: the LCD's character ROM */
-    bool oled_synth;        /* the OLED's 8x16 font made from the 6x13 one */
+    bool oled_synth;        /* the OLED's 8x16 font made from the 6x16 one */
     int mcu;                /* EMU_MCU_*: whose display driver runs */
     bool osd;               /* FF OSD on the bus beside an OLED or LCD */
     bool osd_braille;       /* the OSD pane draws FF OSD's pixels */
     bool usb_fat16;         /* a USB drive made from a directory is FAT16 */
+    int usb_sfn;            /* USB_SFN_*: the code page of its short names */
+    bool usb_lfn;           /* it has long names besides */
+    int usb_by;             /* USB_BY_*: whose rules make its short names */
     int display_color;      /* a curses color, plus 8 if bright */
     unsigned int hold_ms;   /* how long a key press holds a button down */
     char path[512];         /* where the settings file is, or would be */
@@ -543,8 +573,12 @@ enum {
     FDD_ACT_nr
 };
 extern const char * const fdd_action_name[FDD_ACT_nr];
-/* Makes a USB drive made from a directory FAT16 if @fat16, else FAT32, in
- * the settings, and inserts such a drive again if one is in. */
+/* Makes a USB drive made from a directory FAT16 if @fat16, else FAT32, its
+ * short names' code page @sfn, USB_SFN_*, with long names if @lfn, by the
+ * rules of @by, USB_BY_*, in the settings, and inserts such a drive again
+ * if one is in and anything changed. */
+void ui_usb_set_drive(bool fat16, int sfn, bool lfn, int by);
+/* Changes the file system alone. */
 void ui_usb_set_fat16(bool fat16);
 /* Whether the firmware's target has action @act. */
 bool ui_fdd_has(int act);

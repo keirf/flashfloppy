@@ -16,12 +16,12 @@
 #define PB 1
 #define STEP_IRQ 28 /* TIM2, capturing STEP */
 
-/* The head's track: the apple2 target gives the cylinder in half tracks. */
+/* The head's track as displayed. */
 static unsigned int track(void)
 {
     struct track_info ti;
     floppy_get_track(&ti);
-    return (TARGET == TARGET_apple2) ? ti.cyl / 2 : ti.cyl;
+    return ti.cyl;
 }
 
 #if TARGET == TARGET_apple2
@@ -81,6 +81,21 @@ TEST(floppy_apple2_steps)
     seek(-2);
     CHECK_EQ(track(), 0);
     CHECK_EQ(nr_speaker_pulses, 12);
+}
+
+/* The phases on, debounced, as the floppy code gives them to the display. */
+TEST(floppy_apple2_phases_shown)
+{
+    apple2_boot();
+    set_phases(6);
+    clock_run_ms(3);
+    CHECK_EQ(apple2_phases, 6);
+    /* Deselected: no phases, no steps. */
+    pin_set(PA, 0, TRUE);
+    clock_run_ms(3);
+    CHECK_EQ(apple2_phases, 0);
+    seek(4);
+    CHECK_EQ(track(), 0);
 }
 
 #else

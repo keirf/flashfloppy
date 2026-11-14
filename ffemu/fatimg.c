@@ -36,6 +36,7 @@
 #endif
 
 #include "host.h"
+#include "sfn_cp.h"
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -55,6 +56,7 @@
 #define MAX_DEPTH 12
 #define MAX_LFN 255
 #define MAX_FF_CFG 65536
+#define MAX_LACKING 100 /* names whose lost characters are logged */
 
 #define ATTR_READONLY 0x01
 #define ATTR_HIDDEN 0x02
@@ -76,6 +78,7 @@ struct node {
     unsigned int lfn_len;
     uint8_t sfn[11], attr, nt_case;
     bool is_dir, need_lfn;
+    uint32_t lacking; /* the first character that the short name loses */
     uint32_t size, clus, nr_clus;
     time_t mtime;
     uint8_t *data; /* a directory's contents */
@@ -112,6 +115,8 @@ struct image {
     unsigned int ovl_size, ovl_used, nr_recs;
     uint32_t layout; /* hash of everything that places the files */
     unsigned long nr_reads, nr_writes;
+    char *lacking; /* lines for the log of the names with lost characters */
+    size_t lacking_len;
     struct usb_info info;
 };
 
@@ -188,11 +193,27 @@ static uint32_t hash(uint32_t h, const void *data, size_t size)
  * Names.
  *
  * A short name is made as the system that would have copied the files to a
- * real drive makes it: Windows when built for Cygwin, in the OEM code page
- * of the system, and Linux otherwise, whose vfat uses code page 437 unless
- * told otherwise when mounting. The two differ in the numeric tails, in
- * which names need a long name, and in the characters they keep.
+ * real drive makes it, Windows or Linux as config.usb_by says, in the code
+ * page of config.usb_sfn; only Windows writes UTF-8 short names, so that
+ * its rules make them. The two systems differ in the numeric tails, in
+ * which names need a long name, in the characters they keep, and in the
+ * names they take.
  */
+
+const char * const usb_sfn_name[USB_SFN_nr] = {
+    [USB_SFN_866] = "866", [USB_SFN_437] = "437", [USB_SFN_850] = "850",
+    [USB_SFN_852] = "852", [USB_SFN_mik] = "mik", [USB_SFN_utf8] = "utf8"
+};
+const char * const usb_by_name[USB_BY_nr] = {
+    [USB_BY_windows] = "windows", [USB_BY_linux] = "linux"
+};
+
+/* Whether Windows' rules make the short names. */
+static bool by_windows(void)
+{
+    return (config.usb_by == USB_BY_windows)
+        || (config.usb_sfn == USB_SFN_utf8);
+}
 
 /* Returns the number of UTF-16 units, or -1 if @s is not a usable name. */
 static int name_to_utf16(const char *s, uint16_t *out)
@@ -227,15 +248,15 @@ static int name_to_utf16(const char *s, uint16_t *out)
         }
     }
 
-#ifdef __CYGWIN__
-    /* Windows cannot copy such names. */
-    if ((n != 0) && (out[n-1] == '.'))
-        return -1;
-#else
-    /* vfat drops trailing dots. */
-    while ((n != 0) && (out[n-1] == '.'))
-        n--;
-#endif
+    if (by_windows()) {
+        /* Windows cannot copy such names. */
+        if ((n != 0) && (out[n-1] == '.'))
+            return -1;
+    } else {
+        /* vfat drops trailing dots. */
+        while ((n != 0) && (out[n-1] == '.'))
+            n--;
+    }
     /* Neither copies names with trailing spaces. */
     if ((n == 0) || (out[n-1] == ' '))
         return -1;
@@ -320,25 +341,99 @@ static unsigned int nt_checksum(const struct node *n)
         | ((sum & 0x00f0) << 4) | ((sum & 0x000f) << 12);
 }
 
-#ifdef __CYGWIN__
-
-/* Character @u upcased, in the OEM code page that Windows writes short
- * names in; returns its length in bytes, or 0 if the code page lacks it. */
-static unsigned int sfn_char(uint16_t u, uint8_t *out)
+/* The table of the code page and system that write the short names, or
+ * NULL for UTF-8. */
+static const struct sfn_table *sfn_table(void)
 {
-    WCHAR w = u;
-    BOOL lossy = FALSE;
-    int n;
+    switch (config.usb_sfn) {
+    case USB_SFN_437:
+        return by_windows() ? &sfn_437_windows : &sfn_437_linux;
+    case USB_SFN_850:
+        return by_windows() ? &sfn_850_windows : &sfn_850_linux;
+    case USB_SFN_852:
+        return by_windows() ? &sfn_852_windows : &sfn_852_linux;
+    case USB_SFN_mik:
+        return &sfn_mik;
+    case USB_SFN_utf8:
+        return NULL;
+    default:
+        return by_windows() ? &sfn_866_windows : &sfn_866_linux;
+    }
+}
 
+/* The character that Windows writes in UTF-8 short names for @u. */
+static unsigned int utf8_upper(unsigned int u)
+{
+    unsigned int lo = 0, hi = sfn_utf8_upper_nr, mid;
+
+    while (lo < hi) {
+        mid = (lo + hi) / 2;
+        if (sfn_utf8_upper[mid][0] < u)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return ((lo < sfn_utf8_upper_nr) && (sfn_utf8_upper[lo][0] == u))
+        ? sfn_utf8_upper[lo][1] : u;
+}
+
+/* UTF-16 unit @u of a name in its short name: its bytes into @out, which
+ * has room for three, and their number, 0 if it is dropped; its SFN_*
+ * flags into @flags. */
+static unsigned int sfn_char(unsigned int u, uint8_t *out,
+                             unsigned int *flags)
+{
+    const struct sfn_table *t = sfn_table();
+    unsigned int lo = 0, hi, mid, cap;
+
+    *flags = 0;
     if (u < 0x80) {
         out[0] = ascii_upper(u);
         return 1;
     }
-    if (LCMapStringW(LOCALE_INVARIANT, LCMAP_UPPERCASE, &w, 1, &w, 1) != 1)
-        w = u;
-    n = WideCharToMultiByte(CP_OEMCP, WC_NO_BEST_FIT_CHARS, &w, 1,
-                            (char *)out, 2, NULL, &lossy);
-    return ((n > 0) && !lossy) ? n : 0;
+
+    if (t == NULL) {
+        /* Windows drops a character beyond the Basic Multilingual Plane. */
+        if ((u >= 0xd800) && (u < 0xe000)) {
+            *flags = SFN_INEXACT | SFN_LOSSY;
+            return 0;
+        }
+        /* Windows refuses a name whose capital takes more bytes. (One that
+         * takes fewer it writes with the extension wrong.) */
+        cap = utf8_upper(u);
+        if ((cap >= 0x80) && ((cap >= 0x800) > (u >= 0x800)))
+            *flags = SFN_REFUSED;
+        u = cap;
+        if (u < 0x80) {
+            out[0] = u;
+            return 1;
+        }
+        if (u < 0x800) {
+            out[0] = 0xc0 | (u >> 6);
+            out[1] = 0x80 | (u & 0x3f);
+            return 2;
+        }
+        out[0] = 0xe0 | (u >> 12);
+        out[1] = 0x80 | ((u >> 6) & 0x3f);
+        out[2] = 0x80 | (u & 0x3f);
+        return 3;
+    }
+
+    for (hi = t->nr; lo < hi; ) {
+        mid = (lo + hi) / 2;
+        if (t->map[mid].u < u)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    if ((lo < t->nr) && (t->map[lo].u == u)) {
+        *flags = t->map[lo].flags;
+        out[0] = t->map[lo].b;
+        return (out[0] != 0);
+    }
+    *flags = SFN_INEXACT | SFN_LOSSY;
+    out[0] = '_';
+    return !t->drop;
 }
 
 /* As the FAT driver of Windows: a name that is a valid short name in upper
@@ -347,12 +442,13 @@ static unsigned int sfn_char(uint16_t u, uint8_t *out)
  * than ASCII letters. Else the short name gets a numeric tail, after a hash
  * of the long name from the fifth on, or from the first if the name gives
  * fewer than three characters. */
-static bool make_sfn(struct node *n, struct sfn_set *set)
+static bool make_sfn_windows(struct node *n, struct sfn_set *set)
 {
     const uint16_t *s = n->lfn;
     unsigned int i, dot = find_dot(n), nr_base = 0, nr_ext = 0, nr_short = 0;
     unsigned int starts = 1, sum; /* bit k: a character starts at byte k */
-    uint8_t base[8], ext[3], c[2];
+    unsigned int flags;
+    uint8_t base[8], ext[3], c[3];
     bool exact = true, lfn = false, base_full = false, ext_full = false;
     bool lower[2] = { false, false }, upper[2] = { false, false }, hashed;
 
@@ -369,9 +465,14 @@ static bool make_sfn(struct node *n, struct sfn_set *set)
             c[0] = '_';
             nc = 1;
             exact = false;
-        } else if ((nc = sfn_char(s[i], c)) == 0) {
-            exact = false;
-            continue;
+        } else {
+            nc = sfn_char(s[i], c, &flags);
+            if (flags & SFN_REFUSED)
+                return false;
+            if (flags & SFN_INEXACT)
+                exact = false;
+            if (nc == 0)
+                continue;
         }
         if (s[i] >= 0x80)
             lfn = true;
@@ -440,72 +541,28 @@ static bool make_sfn(struct node *n, struct sfn_set *set)
     }
 }
 
-#else /* !__CYGWIN__ */
-
-/* Code page 437 from 0x80 on, as Unicode. */
-static const uint16_t cp437[128] = {
-    0x00c7, 0x00fc, 0x00e9, 0x00e2, 0x00e4, 0x00e0, 0x00e5, 0x00e7,
-    0x00ea, 0x00eb, 0x00e8, 0x00ef, 0x00ee, 0x00ec, 0x00c4, 0x00c5,
-    0x00c9, 0x00e6, 0x00c6, 0x00f4, 0x00f6, 0x00f2, 0x00fb, 0x00f9,
-    0x00ff, 0x00d6, 0x00dc, 0x00a2, 0x00a3, 0x00a5, 0x20a7, 0x0192,
-    0x00e1, 0x00ed, 0x00f3, 0x00fa, 0x00f1, 0x00d1, 0x00aa, 0x00ba,
-    0x00bf, 0x2310, 0x00ac, 0x00bd, 0x00bc, 0x00a1, 0x00ab, 0x00bb,
-    0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x2561, 0x2562, 0x2556,
-    0x2555, 0x2563, 0x2551, 0x2557, 0x255d, 0x255c, 0x255b, 0x2510,
-    0x2514, 0x2534, 0x252c, 0x251c, 0x2500, 0x253c, 0x255e, 0x255f,
-    0x255a, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256c, 0x2567,
-    0x2568, 0x2564, 0x2565, 0x2559, 0x2558, 0x2552, 0x2553, 0x256b,
-    0x256a, 0x2518, 0x250c, 0x2588, 0x2584, 0x258c, 0x2590, 0x2580,
-    0x03b1, 0x00df, 0x0393, 0x03c0, 0x03a3, 0x03c3, 0x00b5, 0x03c4,
-    0x03a6, 0x0398, 0x03a9, 0x03b4, 0x221e, 0x03c6, 0x03b5, 0x2229,
-    0x2261, 0x00b1, 0x2265, 0x2264, 0x2320, 0x2321, 0x00f7, 0x2248,
-    0x00b0, 0x2219, 0x00b7, 0x221a, 0x207f, 0x00b2, 0x25a0, 0x00a0,
-};
-
-/* The lower case letters of code page 437 that have upper case ones, as
- * the kernel's nls_cp437 upcases them. */
-static const uint8_t cp437_upper[][2] = {
-    { 0x81, 0x9a }, { 0x82, 0x90 }, { 0x84, 0x8e }, { 0x86, 0x8f },
-    { 0x87, 0x80 }, { 0x91, 0x92 }, { 0x94, 0x99 }, { 0xa4, 0xa5 },
-};
-
-/* Character @u in code page 437, upcased; false if the code page lacks
- * it. */
-static bool sfn_char(uint16_t u, uint8_t *out)
-{
-    unsigned int i;
-
-    if (u < 0x80) {
-        *out = ascii_upper(u);
-        return true;
-    }
-    for (i = 0; (i < 128) && (cp437[i] != u); i++)
-        continue;
-    if (i == 128)
-        return false;
-    *out = 0x80 + i;
-    for (i = 0; i < sizeof(cp437_upper) / sizeof(cp437_upper[0]); i++)
-        if (cp437_upper[i][0] == *out)
-            *out = cp437_upper[i][1];
-    return true;
-}
-
 /* As vfat_create_shortname() of Linux, mounted with shortname=mixed, the
  * default: a name that is a valid short name in upper case is one, with a
  * long name besides unless it is all in upper case and ASCII. Else the
  * short name gets a numeric tail, ~1 to ~9, then a random number, which is
  * a hash of the long name here, so that the volume is reproducible. A name
- * whose short name is taken, or that gives none, cannot be created. */
-static bool make_sfn(struct node *n, struct sfn_set *set)
+ * whose short name is taken, or that gives none, cannot be created. Its
+ * code pages have a byte for each character. */
+static bool make_sfn_linux(struct node *n, struct sfn_set *set)
 {
     const uint16_t *s = n->lfn;
     unsigned int i, dot = find_dot(n), nr_base = 0, nr_ext = 0, keep, sum;
-    uint8_t base[8], ext[3], c;
+    unsigned int flags;
+    uint8_t base[8], ext[3], c[3];
     bool exact = true, upper = true;
 
     for (i = 0; i < n->lfn_len; i++) {
         bool in_ext = (i > dot);
         if (i == dot)
+            continue;
+        /* vfat takes a surrogate pair as one character. */
+        if (((s[i] & 0xfc00) == 0xdc00) && (i != 0)
+            && ((s[i-1] & 0xfc00) == 0xd800))
             continue;
         if (!in_ext && (nr_base == sizeof(base))) {
             exact = false;
@@ -519,16 +576,20 @@ static bool make_sfn(struct node *n, struct sfn_set *set)
             exact = false;
             continue;
         }
-        if (sfn_replaced(s[i]) || !sfn_char(s[i], &c)) {
+        if (sfn_replaced(s[i])) {
             exact = false;
-            c = '_';
-        } else if ((s[i] >= 0x7f) || ((s[i] >= 'a') && (s[i] <= 'z'))) {
-            upper = false;
+            c[0] = '_';
+        } else {
+            sfn_char(s[i], c, &flags);
+            if (flags & SFN_INEXACT)
+                exact = false;
+            else if ((s[i] >= 0x7f) || ((s[i] >= 'a') && (s[i] <= 'z')))
+                upper = false;
         }
         if (in_ext)
-            ext[nr_ext++] = c;
+            ext[nr_ext++] = c[0];
         else
-            base[nr_base++] = c;
+            base[nr_base++] = c[0];
     }
 
     if (nr_base == 0)
@@ -567,7 +628,37 @@ static bool make_sfn(struct node *n, struct sfn_set *set)
     }
 }
 
-#endif /* !__CYGWIN__ */
+/* The short name of @n, and whether it needs a long name, by the system and
+ * code page of config; and the first character of @n's name that the short
+ * name loses, for the log. */
+static bool make_sfn(struct node *n, struct sfn_set *set)
+{
+    unsigned int i, flags;
+    uint8_t c[3];
+
+    if (!(by_windows() ? make_sfn_windows(n, set) : make_sfn_linux(n, set)))
+        return false;
+
+    /* As MS-DOS leaves a drive: short names alone, in capitals. */
+    if (!config.usb_lfn) {
+        n->need_lfn = false;
+        n->nt_case = 0;
+    }
+
+    for (i = 0; i < n->lfn_len; i++) {
+        uint32_t u = n->lfn[i];
+        if (u < 0x80)
+            continue;
+        sfn_char(u, c, &flags);
+        if (!(flags & SFN_LOSSY))
+            continue;
+        if (((u & 0xfc00) == 0xd800) && (i + 1 < n->lfn_len))
+            u = 0x10000 + ((u & 0x3ff) << 10) + (n->lfn[i+1] & 0x3ff);
+        n->lacking = u;
+        break;
+    }
+    return true;
+}
 
 /* FAT compares names as Windows does, with the letters upcased. */
 static unsigned int fold(unsigned int u)
@@ -650,6 +741,27 @@ static void free_node(struct node *n)
     free(n->lfn);
     free(n->data);
     free(n);
+}
+
+/* Notes @n, whose short name loses a character, for the log. */
+static void note_lacking(struct image *im, struct node *n)
+{
+    char line[300];
+    int len;
+
+    if (im->info.nr_lacking++ >= MAX_LACKING)
+        return;
+    len = snprintf(line, sizeof(line),
+                   "\"%s\" has U+%04X, which short names in %s lack\n",
+                   n->path + strlen(im->root->path) + 1,
+                   (unsigned int)n->lacking, usb_sfn_name[config.usb_sfn]);
+    if ((len < 0) || (len >= (int)sizeof(line)))
+        return;
+    im->lacking = realloc(im->lacking, im->lacking_len + len + 1);
+    if (im->lacking == NULL)
+        cpu_quit(3, "ffemu: out of memory");
+    memcpy(im->lacking + im->lacking_len, line, len + 1);
+    im->lacking_len += len;
 }
 
 static void scan_dir(struct image *im, struct node *dir, unsigned int depth)
@@ -737,6 +849,8 @@ static void scan_dir(struct image *im, struct node *dir, unsigned int depth)
         } else if (!make_sfn(n, &set)) {
             im->info.nr_skipped++;
         } else {
+            if (n->lacking != 0)
+                note_lacking(im, n);
             *tail = n;
             tail = &n->next;
             if (n->is_dir)
@@ -1009,6 +1123,7 @@ static void free_image(struct image *im)
     if (im->dev_fd >= 0)
         close(im->dev_fd);
     free(im->ff_cfg_text);
+    free(im->lacking);
     free(im->ovl);
     free(im->ext);
     free(im->fat);
@@ -1023,6 +1138,8 @@ static uint32_t hash_layout(uint32_t h, const struct node *dir)
     for (n = dir->children; n != NULL; n = n->next) {
         int64_t mtime = n->mtime;
         h = hash(h, n->sfn, sizeof(n->sfn));
+        h = hash(h, &n->need_lfn, sizeof(n->need_lfn));
+        h = hash(h, &n->nt_case, sizeof(n->nt_case));
         h = hash(h, n->lfn, n->lfn_len * sizeof(uint16_t));
         h = hash(h, &n->size, sizeof(n->size));
         h = hash(h, &n->clus, sizeof(n->clus));
@@ -1905,6 +2022,21 @@ void usb_eject_ff_cfg(void)
     ff_cfg_gen++;
 }
 
+void usb_log_lacking(void)
+{
+    struct image *im = cur;
+    const char *p, *q;
+
+    if ((im == NULL) || (im->lacking == NULL))
+        return;
+    for (p = im->lacking; (q = strchr(p, '\n')) != NULL; p = q + 1)
+        host_log("USB drive: %.*s", (int)(q - p), p);
+    if (im->info.nr_lacking > MAX_LACKING)
+        host_log("USB drive: %u more names that lose characters in short "
+                 "names in %s", im->info.nr_lacking - MAX_LACKING,
+                 usb_sfn_name[config.usb_sfn]);
+}
+
 void usb_get_info(struct usb_info *info)
 {
     struct image *im = cur;
@@ -2205,8 +2337,43 @@ static void lfn_add(struct lfn *l, const uint8_t *e)
     }
 }
 
+/* The character that the short name's bytes from @s[*@i] read as in the
+ * code page of config.usb_sfn, those of a UTF-8 sequence together, which
+ * leaves *@i at its last byte; '_' for bytes that read as none. */
+static unsigned int sfn_read(const uint8_t *s, unsigned int *i)
+{
+    unsigned int c = s[*i], more;
+
+    if (c < 0x80)
+        return c;
+    switch (config.usb_sfn) {
+    case USB_SFN_437:
+        return sfn_437_uni[c - 0x80];
+    case USB_SFN_850:
+        return sfn_850_uni[c - 0x80];
+    case USB_SFN_852:
+        return sfn_852_uni[c - 0x80];
+    case USB_SFN_mik:
+        return sfn_mik_uni[c - 0x80];
+    case USB_SFN_utf8:
+        /* Windows writes sequences of two and three bytes alone. */
+        more = ((c & 0xe0) == 0xc0) ? 1 : ((c & 0xf0) == 0xe0) ? 2 : 0;
+        if (more == 0)
+            return '_';
+        c &= 0x3f >> more;
+        for (; more != 0; more--) {
+            if ((s[*i + 1] & 0xc0) != 0x80)
+                return '_';
+            c = (c << 6) | (s[++*i] & 0x3f);
+        }
+        return c;
+    }
+    return sfn_866_uni[c - 0x80];
+}
+
 /* The name of short entry @e as the host gets it, in UTF-8: its long name
- * if @l holds one for it, else its short name's bytes, taken as Latin-1. */
+ * if @l holds one for it, else its short name read in the code page of
+ * config.usb_sfn. */
 static void host_name(const uint8_t *e, const struct lfn *l, char *buf,
                       size_t size)
 {
@@ -2220,7 +2387,7 @@ static void host_name(const uint8_t *e, const struct lfn *l, char *buf,
     }
     entry_name(e, sfn);
     for (i = n = 0; sfn[i] != '\0'; i++)
-        u[n++] = (uint8_t)sfn[i];
+        u[n++] = sfn_read((const uint8_t *)sfn, &i);
     utf16_to_utf8(u, n, buf, size);
 }
 

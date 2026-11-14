@@ -14,8 +14,8 @@ FF_CFG = os.path.join(
 
 # The options whose values code of their own parses, such as display-type.
 TEXT = {
-    "display-type", "display-order", "osd-display-order", "motor-delay",
-    "chgrst"}
+    "display-type", "display-order", "selector-display-order",
+    "osd-display-order", "motor-delay", "chgrst"}
 
 NAME_RE = re.compile(r"[a-z0-9][a-z0-9-]*$")
 

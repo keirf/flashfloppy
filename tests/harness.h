@@ -17,12 +17,20 @@
 void drive_reset(void);
 /* Adds a file of an 8.3 name to the root folder. */
 void drive_add(const char *name, const void *data, uint32_t len);
+/* The same, with long name @lfn, in UTF-8. */
+void drive_add_long(const char *name, const char *lfn, const void *data,
+                    uint32_t len);
 /* The same, but with no two clusters of the file in a row: returns the
  * number of its fragments. */
 unsigned int drive_add_fragmented(const char *name, const void *data,
                                   uint32_t len);
+/* Adds an empty folder of an 8.3 name, and of long name @lfn in UTF-8
+ * unless NULL, to the root folder. */
+void drive_add_folder(const char *name, const char *lfn);
 /* Adds a file of every cluster left, so that no file can grow. */
 void drive_fill(const char *name);
+/* Mounts the drive in RAM, as the functions that read it do. */
+void drive_mount(void);
 /* Reads a file back into @buf: returns its length. */
 uint32_t drive_get(const char *name, void *buf, uint32_t max);
 /* Mounts, until the next drive_reset(), the drive whose sectors @read
