@@ -71,6 +71,10 @@ FW_CFLAGS += -MMD -MP
 # Extra debug flags just for ffemu
 FW_CFLAGS += -ftrivial-auto-var-init=pattern
 
+ifeq ($(minimal_ui),y)
+FW_CFLAGS += -DMINIMAL_UI=1
+endif
+
 # The firmware's own code calls __sanitizer_cov_trace_pc() at each of its
 # basic blocks, by which the virtual clock tells a spin from its work.
 $(patsubst %.c,$(OUT)/fw/%.o,$(FW_SRCS)): \

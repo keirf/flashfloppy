@@ -162,8 +162,13 @@ static struct {
 } lcd_scroll;
 static void lcd_scroll_init(uint16_t pause, uint16_t rate)
 {
+#ifndef MINIMAL_UI
     int diff = lcd_scroll.off - lcd_scroll.end;
+#endif
     update_disp_name();
+#ifdef MINIMAL_UI
+    lcd_scroll.end = 0;
+#else
     lcd_scroll.pause = pause;
     lcd_scroll.rate = rate;
     lcd_scroll.end = max_t(
@@ -173,9 +178,11 @@ static void lcd_scroll_init(uint16_t pause, uint16_t rate)
     if (lcd_scroll.off > lcd_scroll.end)
         lcd_scroll.off = lcd_scroll.pause || !lcd_scroll.end
             ? 0 : lcd_scroll.end + diff;
+#endif
 }
 static void lcd_scroll_name(void)
 {
+#ifndef MINIMAL_UI
     static struct track_info ti;
     char msg[lcd_columns+1];
 
@@ -212,6 +219,7 @@ static void lcd_scroll_name(void)
         }
     }
     lcd_write(0, 0, -1, msg);
+#endif
 }
 
 /* Write slot info to display. */

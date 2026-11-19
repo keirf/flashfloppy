@@ -19,9 +19,14 @@ Written with the help of Claude.
 
     make -C ffemu [O=<path>] [TARGET=shugart|apple2]
 
-The plain `make` at the top of the tree builds both programs as well, along
-with the firmware and with the same `O=`, so that a firmware change that breaks
-ffemu fails the regular build.
+The plain `make` at the repo root builds all the ffemu flavors including the
+minimal_ui one, along with the firmware and with the same `O=`, so that a
+firmware change that breaks ffemu fails the regular build.
+
+The minimal_ui flavor is `out/ffemu/minimal-ui/ffemu-minimal-ui`: it is the
+apple2 firmware built with `MINIMAL_UI=1`. It is intended for testing the
+features suppressed by minimal_ui, and is not included in release packs. Its
+settings and logs go to `ffemu-minimal-ui/`.
 
 The program is `out/ffemu/shugart/ffemu-shugart` under `<path>`, which defaults
 to the top of the source tree. `TARGET=apple2` builds
