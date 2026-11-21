@@ -38,6 +38,33 @@ class MinimalUI(display.Case, unittest.TestCase):
         self.assertEqual(len(frames), 64, r.report())
         self.assertEqual(frames[:32], frames[32:], r.report())
 
+    def test_combined_row_uses_name_row(self):
+        """Combined row 4 uses the image-name row; status is unchanged."""
+        rows, r = self.rows(
+            PROGRAM, display.half_tracks(2), "hd44780-16x2",
+            flash=["display-order = 4,1"], files=display.DSK)
+        self.assertEqual(
+            rows, ["TEST".ljust(16), "000/000  T:01.4 "], r.report())
+
+    def test_combined_row_uses_name_row_on_oled(self):
+        """Row 4 falls back to row 0 on the OLED and on FF OSD."""
+        rows, r = self.rows(
+            PROGRAM, display.half_tracks(2), "ssd1306-128x32",
+            flash=["display-order = C,S", "osd-display-order = C,S"],
+            files=display.DSK)
+        self.assertEqual(rows[0], "TEST".ljust(21), r.report())
+        self.assertEqual(
+            display.oled_text(pixels(r), 0, "6x13", False), rows[0],
+            r.report())
+
+    def test_directory_track_row_uses_directory_row(self):
+        """Combined row 5 uses the ordinary directory row."""
+        rows, r = self.rows(
+            PROGRAM, display.half_tracks(2), "hd44780-16x2",
+            flash=["display-order = 5,3"], files=display.DSK)
+        self.assertEqual(
+            rows, ["/".ljust(16), "/".ljust(16)], r.report())
+
     def test_error_code_only(self):
         """An error screen shows its code without the meaning from fs_hint."""
         bad = {"BAD.HFE": b"HXCPICFE" + bytes(600)}

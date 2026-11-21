@@ -1,7 +1,8 @@
 """The LCD's and the OLED's rows as the firmware lays them out: the status
 row's track, in the long form or in short with show-tracks-short, as the apple2
-firmware always gives it, with the phases. An OLED's rows are read as FF OSD
-gets them, beside it on the I2C bus: the display's text, as many columns as it
+firmware always gives it, with the phases; and display-order's row 4, the
+image's name and its track in short. An OLED's rows are read as FF OSD gets
+them, beside it on the I2C bus: the display's text, as many columns as it
 has."""
 
 import os
@@ -62,6 +63,13 @@ def oled_text(pixels, top, font, tall=True):
                     for b in range(8)))
         text += glyphs.get(bytes(cols), "@")
     return text
+
+
+# The image selector on an image, as it waits there, with
+# autoselect-file-secs = 0: it starts on a folder, which it sorts first, and
+# waits there too, autoselect-folder-secs = 0.
+SELECTOR = ["sleep 3000", "key right"]
+SELECTOR_FLASH = ["autoselect-folder-secs = 0", "autoselect-file-secs = 0"]
 
 
 class Case(fr.Case):
@@ -249,9 +257,148 @@ class Apple2(Case, unittest.TestCase):
         self.assertIn("#", "".join(row[64:72] for row in tall), r.report())
 
 
+class NameStatus(Case, unittest.TestCase):
+    """Row 4 of display-order: the image's name, then its track in short at
+    the row's right, a blank apart from the name, or the phase spinner on an
+    OLED in Apple2 mode; on a row of 21 columns or more, the image's number
+    before the name."""
+
+    ORDER = ["display-order = 4,1", "osd-display-order = 4,1"]
+
+    def test_lcd_16_columns(self):
+        rows, r = self.rows(
+            "ffemu", steps(3), "hd44780-16x2", flash=self.ORDER)
+        self.assertEqual(rows[0], "A           0T03", r.report())
+
+    def test_writing(self):
+        rows, r = self.rows(
+            "ffemu", ["key write"], "hd44780-16x2", flash=self.ORDER)
+        self.assertEqual(rows[0], "A           0W00", r.report())
+
+    def test_three_digits(self):
+        rows, r = self.rows(
+            "ffemu", steps(100), "hd44780-16x2", flash=self.ORDER)
+        self.assertEqual(rows[0], "A          0T100", r.report())
+
+    def test_oled(self):
+        rows, r = self.rows(
+            "ffemu", steps(3), "ssd1306-128x32", flash=self.ORDER)
+        self.assertEqual(rows[0], "000/000 A        0T03", r.report())
+
+    def test_lcd_40_columns(self):
+        rows, r = self.rows(
+            "ffemu", steps(3), "hd44780-40x2",
+            flash=self.ORDER + ["display-type = lcd-40x02"])
+        self.assertEqual(rows[0], "000/000 A" + 27 * " " + "0T03", r.report())
+
+    def test_long_name_scrolls(self):
+        """Within the columns that the track leaves it."""
+        r = fr.run(
+            "ffemu",
+            ["wait 10000 log Name:",
+             "wait 10000 display BCDEFGHIJKL 0T00"],
+            settings=["display = hd44780-16x2"], flash=self.ORDER,
+            files={"ABCDEFGHIJKLMNOPQRST.IMG": bytes(737280)})
+        self.assertWaits(r, 2)
+
+    def test_rows_scroll_apart(self):
+        """The name scrolls in row 4, within the columns that the track
+        leaves it, and not in row 0, which holds it whole."""
+        r = fr.run(
+            "ffemu", ["wait 10000 log Name:",
+                      "wait 10000 display BCDEFGHIJKL 0T00", "sleep 50",
+                      "dump"],
+            settings=["display = hd44780-16x2"],
+            flash=["display-order = 0,4"],
+            files={"ABCDEFGHIJKLMNOP.IMG": bytes(737280)})
+        self.assertWaits(r, 2)
+        rows = [line[1:-1] for line in r.lines
+                if line.startswith("|") and line.endswith("|")]
+        self.assertEqual(rows[0], "ABCDEFGHIJKLMNOP", r.report())
+
+    def test_three_digits_scroll(self):
+        """A name that fits beside a track of two digits scrolls beside one
+        of three."""
+        r = fr.run(
+            "ffemu", ["wait 10000 log Name:"] + steps(100)
+            + ["wait 10000 display BCDEFGHIJK 0T100"],
+            settings=["display = hd44780-16x2"], flash=self.ORDER,
+            files={"ABCDEFGHIJK.IMG": bytes(737280)})
+        self.assertWaits(r, 2)
+
+    def selector_rows(self, display, flash=(), name="ABCDEFGHIJKLMNOP.IMG"):
+        """The LCD's rows while the image selector waits on image @name."""
+        r = fr.run(
+            "ffemu", SELECTOR + ["sleep 500", "dump"],
+            settings=["display = " + display],
+            flash=self.ORDER + SELECTOR_FLASH + list(flash),
+            files={"GAMES/A.IMG": bytes(737280), name: bytes(737280)})
+        self.assertWaits(r, 0)
+        return [line[1:-1] for line in r.lines
+                if line.startswith("|") and line.endswith("|")], r
+
+    def test_selector(self):
+        """While no image is in, the row is the name's alone."""
+        rows, r = self.selector_rows("hd44780-16x2")
+        self.assertEqual(rows[0], "ABCDEFGHIJKLMNOP", r.report())
+
+    def test_selector_40_columns(self):
+        """Without the image's number either, which comes with the track."""
+        rows, r = self.selector_rows(
+            "hd44780-40x2", ["display-type = lcd-40x02"], "B.IMG")
+        self.assertEqual(rows[0], "B" + 39 * " ", r.report())
+
+    def test_apple2_lcd(self):
+        rows, r = self.rows(
+            "ffemu-apple2", half_tracks(2), "hd44780-16x2", flash=self.ORDER,
+            files=DSK)
+        self.assertEqual(rows[0], "TEST        4T01", r.report())
+
+    def test_apple2_oled(self):
+        """The spinner, which FF OSD gets as a hex digit, and the image's
+        number on 21 columns, leaving eight columns for the name."""
+        rows, r = self.rows(
+            "ffemu-apple2", half_tracks(2), "ssd1306-128x32",
+            flash=self.ORDER, files=DSK)
+        self.assertEqual(rows[0], "000/000 TEST     4T01", r.report())
+
+    def test_apple2_lcd_40_columns(self):
+        rows, r = self.rows(
+            "ffemu-apple2", half_tracks(2), "hd44780-40x2",
+            flash=self.ORDER + ["display-type = lcd-40x02"], files=DSK)
+        self.assertEqual(
+            rows[0], "000/000 TEST" + 24 * " " + "4T01", r.report())
+
+
+class DirectoryTrack(Case, unittest.TestCase):
+    """Row Z combines the current directory with the same short track as C;
+    without an image, the directory has the whole row."""
+
+    def test_lcd(self):
+        rows, r = self.rows(
+            "ffemu", steps(3), "hd44780-16x2", flash=["display-order = Z,N"])
+        self.assertEqual(rows[0], "/" + 11 * " " + "0T03", r.report())
+        self.assertEqual(rows[1], "A" + 15 * " ", r.report())
+
+    def test_apple2(self):
+        rows, r = self.rows(
+            "ffemu-apple2", half_tracks(2), "hd44780-16x2",
+            flash=["display-order = Z,N"], files=DSK)
+        self.assertEqual(rows[0], "/" + 11 * " " + "4T01", r.report())
+
+    def test_scrolls_within_remaining_columns(self):
+        r = fr.run(
+            "ffemu", ["wait 15000 log Name:",
+                      "wait 10000 display BCDEFGHIJKL 0T00"],
+            settings=["display = hd44780-16x2"],
+            flash=["display-order = Z,N"],
+            files={"ABCDEFGHIJKLMNOPQR/A.IMG": bytes(737280)})
+        self.assertWaits(r, 2)
+
+
 class Letters(Case, unittest.TestCase):
-    """display-order's rows by their initials, N, S, I, D, and B for the
-    blank row: the same layouts as the digits, which stay taken, in either
+    """display-order's rows by their initials, N, S, I, D, C, Z, and B for
+    the blank row: the same layouts as the digits, which stay taken, in either
     case, in osd-display-order too; ffemu writes the letters back."""
 
     def oled(self, order):
@@ -273,12 +420,12 @@ class Letters(Case, unittest.TestCase):
         self.assertEqual(self.oled("d,nd,s"), self.oled("3,0d,1"))
 
     def test_lcd(self):
-        """Name, blank, status, info on a 20x4 LCD."""
+        """Combined, blank, status, info on a 20x4 LCD."""
         flash = ["display-type = lcd-20x04"]
         letters, r = self.rows("ffemu", steps(3), "hd44780-20x4",
-                               flash=flash + ["display-order = N,B,S,I"])
+                               flash=flash + ["display-order = C,B,S,I"])
         digits, _ = self.rows("ffemu", steps(3), "hd44780-20x4",
-                              flash=flash + ["display-order = 0,7,1,2"])
+                              flash=flash + ["display-order = 4,7,1,2"])
         self.assertEqual(letters, digits, r.report())
         self.assertEqual(letters[1], " " * 20, r.report())
 
@@ -301,8 +448,8 @@ class Letters(Case, unittest.TestCase):
 
     def test_written_back(self):
         """Letters in flash come back as letters, digits as letters too."""
-        for order, back in (("D,Nd,S", "D,Nd,S"), ("d,b,s", "D,B,S"),
-                            ("3d,1", "Dd,S")):
+        for order, back in (("D,Nd,S", "D,Nd,S"), ("z,b,s", "Z,B,S"),
+                            ("5d,1", "Zd,S")):
             with self.subTest(order=order):
                 r = fr.run("ffemu", ["flash"],
                            flash=["display-order = " + order])

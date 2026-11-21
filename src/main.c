@@ -155,70 +155,268 @@ static void update_disp_name(void)
 
 #define wp_column ((lcd_columns > 16) ? 8 : 7)
 
-/* Scroll long filename. */
-static struct {
-    uint16_t off, end, pause, rate;
+struct scroll {
+    uint16_t off, end;
     int32_t ticks;
+};
+static struct {
+    uint16_t pause, rate;
+    struct scroll row[LCD_TEXT_ROWS];
 } lcd_scroll;
-static void lcd_scroll_init(uint16_t pause, uint16_t rate)
-{
-#ifndef MINIMAL_UI
-    int diff = lcd_scroll.off - lcd_scroll.end;
-#endif
-    update_disp_name();
+
 #ifdef MINIMAL_UI
-    lcd_scroll.end = 0;
+static void scroll_write(unsigned int row, const char *s)
+{
+    lcd_write(/*col=*/0, row, /*min=*/-1, s);
+}
+
+void display_write_name(const char *name)
+{
+    scroll_write(/*row=*/0, name);
+}
+
+static void display_write_dir(const char *name)
+{
+    lcd_write(/*col=*/0, /*row=*/3, /*min=*/-1, name);
+}
+
+/* No scrolling: each name is written once, cut at its row's end. */
+static void scroll_init(unsigned int row)
+{
+    memset(&lcd_scroll.row[row], 0, sizeof(lcd_scroll.row[row]));
+}
+
+static void scroll_draw(unsigned int row)
+{
+    scroll_write(row, disp_name);
+}
+
+static inline void reset_combined_rows(void)
+{
+}
+
+static inline void draw_combined_name(void)
+{
+}
 #else
-    lcd_scroll.pause = pause;
-    lcd_scroll.rate = rate;
-    lcd_scroll.end = max_t(
-        int, strnlen(disp_name, sizeof(disp_name)) - lcd_columns, 0);
-    if (lcd_scroll.end && !lcd_scroll.pause)
-        lcd_scroll.end += lcd_columns;
-    if (lcd_scroll.off > lcd_scroll.end)
-        lcd_scroll.off = lcd_scroll.pause || !lcd_scroll.end
-            ? 0 : lcd_scroll.end + diff;
+/* Combined rows 4 and 5 of display-order: the image's name or current
+ * directory, and the track in short at the row's right. Row 4 also has the
+ * image's number where the row has room for it beside the name. */
+
+/* The cells of a combined row's track of two digits: a blank and the side,
+ * the mode and the track; in Apple2 mode the phase digit after the blank on
+ * an LCD, the phase spinner of two cells on an OLED. */
+static unsigned int track_combined_cells(void)
+{
+    return 5;
+}
+
+/* The combined rows' track as last written, empty while no image is in. */
+static char track_combined[12];
+
+/* The current folder's name, which rows 3 and 5 show. */
+static char disp_dir[sizeof(cfg.slot.name)];
+
+/* Scroll long names in row 0 and the combined rows, each at its own offset. */
+#define SCROLL_ROWS ((1u << 0) | (1u << 4) | (1u << 5))
+static const unsigned int scroll_gap = 4;
+
+/* The column of row 4 where the name starts: after the image's number, with
+ * an image in, on a row that leaves 8 columns or more to the name. */
+static unsigned int name4_column(void)
+{
+    return (track_combined[0] && (lcd_columns >= 21)) ? 8 : 0;
+}
+
+/* The cells that a combined row's track takes: none while no image is in,
+ * one more for a track of three digits. */
+static unsigned int track_combined_width(void)
+{
+    return track_combined[0]
+        ? max_t(unsigned int, strlen(track_combined), track_combined_cells()) : 0;
+}
+
+/* Writes a combined row's track at its right. */
+static void write_track_combined(unsigned int row)
+{
+    lcd_write(/*col=*/lcd_columns - track_combined_width(), row, /*min=*/-1,
+        track_combined);
+}
+
+/* Whether display-order shows row 4. */
+static bool_t row4_shown(void)
+{
+    uint16_t order = ff_cfg.display_order;
+    unsigned int i;
+
+    if (order != DORD_default)
+        for (i = 0; i < 4; i++, order >>= DORD_shift)
+            if ((order & DORD_row) == 4)
+                return TRUE;
+    return FALSE;
+}
+
+/* Writes @s where row @row shows its text, with a combined row's track. */
+static void scroll_write(unsigned int row, const char *s)
+{
+    if ((row == 4) || (row == 5)) {
+        lcd_write(/*col=*/(row == 4) ? name4_column() : 0, row, /*min=*/-1, s);
+        write_track_combined(row);
+    } else {
+        lcd_write(/*col=*/0, row, /*min=*/-1, s);
+    }
+}
+
+void display_write_name(const char *name)
+{
+    scroll_write(/*row=*/0, name);
+    scroll_write(/*row=*/4, name);
+}
+
+/* Writes the current folder's name to its plain and combined rows. */
+static void display_write_dir(const char *name)
+{
+    snprintf(disp_dir, sizeof(disp_dir), "%s", name);
+    lcd_scroll.row[5].off = lcd_scroll.row[5].end = 0;
+    scroll_write(/*row=*/3, disp_dir);
+    scroll_write(/*row=*/5, disp_dir);
+}
+
+/* The text that row @row scrolls. */
+static const char *scroll_text(unsigned int row)
+{
+    return (row == 5) ? disp_dir : disp_name;
+}
+
+/* Sets where the scrolling of row @row ends, by the columns that the row has
+ * for its text. */
+static void scroll_init(unsigned int row)
+{
+    struct scroll *sc = &lcd_scroll.row[row];
+    const char *text = scroll_text(row);
+    int diff = sc->off - sc->end;
+    unsigned int columns = ((row == 4) || (row == 5))
+        ? lcd_columns - ((row == 4) ? name4_column() : 0)
+            - track_combined_width() : lcd_columns;
+
+    sc->end = max_t(int, strnlen(text, sizeof(disp_name)) - columns, 0);
+    if (sc->end && !lcd_scroll.pause)
+        sc->end += columns;
+    if (sc->off > sc->end)
+        sc->off = lcd_scroll.pause || !sc->end ? 0 : sc->end + diff;
+}
+
+/* Writes row @row's text at its scrolling offset. */
+static void scroll_draw(unsigned int row)
+{
+    struct scroll *sc = &lcd_scroll.row[row];
+    const char *text = scroll_text(row);
+    char msg[lcd_columns+1];
+
+    if (lcd_scroll.pause || !sc->end)
+        snprintf(msg, sizeof(msg), "%s", text + sc->off);
+    else if (sc->off <= sc->end)
+        snprintf(msg, sizeof(msg), "%s%*s%s",
+                 text + sc->off, scroll_gap, "", text);
+    else
+        snprintf(msg, sizeof(msg), "%*s%s",
+                 scroll_gap - (sc->off - sc->end), "", text);
+    scroll_write(row, msg);
+}
+
+static void reset_combined_rows(void)
+{
+    unsigned int row;
+
+    /* No track in the combined rows until an image is in. */
+    track_combined[0] = '\0';
+    for (row = 4; row <= 5; row++) {
+        lcd_write_spinner(/*row=*/row, /*col=*/0, /*width=*/0, /*phases=*/0);
+        scroll_init(row);
+    }
+    scroll_draw(/*row=*/5);
+}
+
+static void draw_combined_name(void)
+{
+    scroll_draw(/*row=*/4);
+}
+#endif
+
+/* Takes the name's scrolling back to its start. */
+static void lcd_scroll_reset(void)
+{
+    lcd_scroll.row[0].off = lcd_scroll.row[0].end = 0;
+#ifndef MINIMAL_UI
+    lcd_scroll.row[4].off = lcd_scroll.row[4].end = 0;
 #endif
 }
-static void lcd_scroll_name(void)
+
+/* Starts the name's scrolling, at @pause and @rate, its first step @ticks
+ * away. */
+static void lcd_scroll_init(uint16_t pause, uint16_t rate, int32_t ticks)
+{
+    update_disp_name();
+    lcd_scroll.pause = pause;
+    lcd_scroll.rate = rate;
+    scroll_init(/*row=*/0);
+    lcd_scroll.row[0].ticks = ticks;
+#ifndef MINIMAL_UI
+    scroll_init(/*row=*/4);
+    lcd_scroll.row[4].ticks = ticks;
+    scroll_init(/*row=*/5);
+    lcd_scroll.row[5].ticks = ticks;
+#endif
+}
+
+/* Where the name's scrolling ends in the longest of the rows that show it. */
+static unsigned int lcd_scroll_end(void)
+{
+    unsigned int end = lcd_scroll.row[0].end;
+
+#ifndef MINIMAL_UI
+    if (row4_shown())
+        end = max_t(unsigned int, end, lcd_scroll.row[4].end);
+#endif
+    return end;
+}
+
+/* Scrolls each row whose step is due, @ticks after the last call. */
+static void lcd_scroll_name(int32_t ticks)
 {
 #ifndef MINIMAL_UI
     static struct track_info ti;
-    char msg[lcd_columns+1];
+    struct scroll *sc;
+    bool_t track_read = FALSE;
+    unsigned int row;
 
-    if ((lcd_scroll.ticks > 0) || (lcd_scroll.end == 0))
-        return;
+    for (row = 0; row < LCD_TEXT_ROWS; row++) {
+        sc = &lcd_scroll.row[row];
+        if (!(SCROLL_ROWS & (1u << row)) || ((sc->ticks -= ticks) > 0)
+            || (sc->end == 0))
+            continue;
 
-    floppy_get_track(&ti);
-    if (ti.in_da_mode) {
-        /* Display controlled by src/image/da.c */
-        return;
-    }
-
-    lcd_scroll.ticks = time_ms(lcd_scroll.rate);
-    if (lcd_scroll.pause != 0) {
-        if (++lcd_scroll.off > lcd_scroll.end)
-            lcd_scroll.off = 0;
-        snprintf(msg, sizeof(msg), "%s", disp_name + lcd_scroll.off);
-        if ((lcd_scroll.off == 0)
-            || (lcd_scroll.off == lcd_scroll.end))
-            lcd_scroll.ticks = time_ms(lcd_scroll.pause);
-    } else {
-        const unsigned int scroll_gap = 4;
-        lcd_scroll.off++;
-        if (lcd_scroll.off <= lcd_scroll.end) {
-            snprintf(msg, sizeof(msg), "%s%*s%s",
-                     disp_name + lcd_scroll.off,
-                     scroll_gap, "", disp_name);
-        } else {
-            snprintf(msg, sizeof(msg), "%*s%s",
-                     scroll_gap - (lcd_scroll.off - lcd_scroll.end), "",
-                     disp_name);
-            if ((lcd_scroll.off - lcd_scroll.end) == scroll_gap)
-                lcd_scroll.off = 0;
+        if (!track_read) {
+            floppy_get_track(&ti);
+            track_read = TRUE;
         }
+        if (ti.in_da_mode) {
+            /* Display controlled by src/image/da.c */
+            return;
+        }
+
+        sc->ticks = time_ms(lcd_scroll.rate);
+        sc->off++;
+        if (lcd_scroll.pause != 0) {
+            if (sc->off > sc->end)
+                sc->off = 0;
+            if ((sc->off == 0) || (sc->off == sc->end))
+                sc->ticks = time_ms(lcd_scroll.pause);
+        } else if ((sc->off - sc->end) == scroll_gap) {
+            sc->off = 0;
+        }
+        scroll_draw(row);
     }
-    lcd_write(0, 0, -1, msg);
 #endif
 }
 
@@ -236,19 +434,15 @@ static void display_write_slot(bool_t nav_mode)
         return;
     }
 
+    reset_combined_rows();
+
     if (nav_mode && !cfg_scroll_reset) {
-        lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
-        if (lcd_scroll.end == 0) {
-            snprintf(msg, sizeof(msg), "%s", disp_name);
-            lcd_write(0, 0, -1, msg);
-        } else {
-            lcd_scroll.off--;
-            lcd_scroll.ticks = 0;
-            lcd_scroll_name();
-        }
+        lcd_scroll_init(/*pause=*/0, ff_cfg.nav_scroll_rate, /*ticks=*/0);
+        scroll_draw(/*row=*/0);
+        draw_combined_name();
     } else {
         snprintf(msg, sizeof(msg), "%s", disp_name);
-        lcd_write(0, 0, -1, msg);
+        display_write_name(msg);
     }
 
     if (slot_type("v9t9")) {
@@ -327,6 +521,38 @@ static void track_long(char *s, const struct track_info *ti,
     *s = '\0';
 }
 
+/* Writes the track in short to both combined rows, and the image's number to
+ * row 4 when a track first appears. A three-digit track leaves one column less
+ * for the scrolling text. */
+static void lcd_write_combined_track(const struct track_info *ti, char mode)
+{
+    char *p = track_combined;
+    unsigned int old_width = track_combined_width(), new_width, row;
+    unsigned int spinner_width;
+
+    if (!((TARGET == TARGET_apple2) && is_oled_display))
+        *p++ = ' ';
+    track_short(p, ti, mode, /*spinner_width=*/2, &spinner_width);
+
+    new_width = track_combined_width();
+    if ((new_width != old_width) && (old_width == 0) && name4_column()) {
+        char msg[8];
+
+        snprintf(msg, sizeof(msg), "%03u/%03u", cfg.slot_nr, cfg.max_slot_nr);
+        lcd_write(/*col=*/0, /*row=*/4, /*min=*/name4_column(), msg);
+    }
+    for (row = 4; row <= 5; row++) {
+        lcd_write_spinner(/*row=*/row, lcd_columns - new_width
+            + (p - track_combined), spinner_width, ti->phases);
+        if (new_width != old_width)
+            scroll_init(row);
+        if ((new_width != old_width) && !ti->in_da_mode)
+            scroll_draw(row);
+        else
+            write_track_combined(row);
+    }
+}
+
 /* Writes track info @ti to the status row, @mode for the drive's state: `T`,
  * `W` while writing, `*` for a write-protected image, `-` for a button press.
  * With show-tracks-short, the track at the row's right; else after the image's
@@ -348,6 +574,7 @@ static void lcd_write_track(const struct track_info *ti, char mode)
         lcd_write_spinner(/*row=*/1, wp_column + strlen(msg) - width, width,
             ti->phases);
     }
+    lcd_write_combined_track(ti, mode);
 }
 #else
 /* The track in short into @s: the side or phase indicator, then @mode and the
@@ -359,7 +586,7 @@ static void track_short(char *s, const struct track_info *ti, char mode)
     snprintf(s, 5, "%c%02u", mode, ti->cyl);
 }
 
-/* Compact status-row track writer. */
+/* Compact status-row track writer without combined rows. */
 static void lcd_write_track(const struct track_info *ti, char mode)
 {
     char msg[lcd_columns+1], s[12];
@@ -1076,7 +1303,7 @@ static uint8_t parse_pin_str(const char *s)
  * initial in either case; B, the blank row 7, and anything else blank. */
 static unsigned int display_order_row(char c)
 {
-    static const char initials[] = "NSID";
+    static const char initials[] = "NSIDCZ";
     unsigned int i;
 
     if ((unsigned int)(c - '0') < 10)
@@ -1663,7 +1890,7 @@ native_mode:
     /* Process IMAGE_A.CFG file. */
     sofar = 0; /* bytes consumed so far */
     fatfs.cdir = cfg.cur_cdir;
-    lcd_write(0, 3, -1, "/");
+    display_write_dir("/");
     for (;;) {
         int nr;
         bool_t ok;
@@ -1678,7 +1905,7 @@ native_mode:
         /* Terminate the name section, push curdir onto stack, then chdir. */
         *p++ = '\0';
         printk("%u:D: '%s'\n", cfg.depth, fs->buf);
-        lcd_write(0, 3, -1, fs->buf);
+        display_write_dir(fs->buf);
         if (cfg.depth == ARRAY_SIZE(cfg.stack))
             F_die(FR_PATH_TOO_DEEP);
         /* Find slot nr, and stack it */
@@ -1759,7 +1986,7 @@ clear_image_a:
     /* Error! Clear the IMAGE_A.CFG file. */
     printk("Bad IMAGE_A.CFG: clearing\n");
     F_lseek(&fs->file, 0);
-    lcd_write(0, 3, -1, "/");
+    display_write_dir("/");
     F_truncate(&fs->file);
     F_close(&fs->file);
     cfg.slot_nr = cfg.depth = 0;
@@ -1843,18 +2070,18 @@ static void native_update(uint8_t slot_mode)
                     fs->buf[sz] = '\0';
                     /* q = pointer to '/' preceding the subfolder name. */
                     q = strrchr(fs->buf, '/');
-                    lcd_write(0, 3, -1, q ? q+1 : fs->buf);
+                    display_write_dir(q ? q+1 : fs->buf);
                     F_lseek(&fs->file, pos);
                 } else {
                     F_lseek(&fs->file, 0);
-                    lcd_write(0, 3, -1, "/");
+                    display_write_dir("/");
                 }
             } else {
                 /* Add name plus '/' */
                 F_write(&fs->file, fs->fp.fname,
                         strnlen(fs->fp.fname, sizeof(fs->fp.fname)), NULL);
                 F_write(&fs->file, "/", 1, NULL);
-                lcd_write(0, 3, -1, fs->fp.fname);
+                display_write_dir(fs->fp.fname);
             }
         } else {
             /* Add name */
@@ -2376,10 +2603,8 @@ static int run_floppy(void *_b)
             lcd_write_track_info(FALSE);
             update_ticks = time_ms(20);
         }
-        if (display_type == DT_LCD_OLED) {
-            lcd_scroll.ticks -= t_diff;
-            lcd_scroll_name();
-        }
+        if (display_type == DT_LCD_OLED)
+            lcd_scroll_name(t_diff);
         canary_check();
         assert_volume_connected();
         t_prev = t_now;
@@ -2470,8 +2695,7 @@ static uint8_t menu_wait_button(bool_t twobutton_eject, const char *led_msg)
             break;
         case DT_LCD_OLED:
             /* Continue to scroll long filename. */
-            lcd_scroll.ticks -= time_ms(1);
-            lcd_scroll_name();
+            lcd_scroll_name(time_ms(1));
             break;
         }
     }
@@ -2902,11 +3126,11 @@ static int floppy_main(void *unused)
 
         volume_space();
 
-        lcd_scroll.ticks = time_ms(ff_cfg.display_scroll_pause)
-            ?: time_ms(ff_cfg.display_scroll_rate);
-        lcd_scroll.off = lcd_scroll.end = 0;
+        lcd_scroll_reset();
         lcd_scroll_init(ff_cfg.display_scroll_pause,
-                        ff_cfg.display_scroll_rate);
+                        ff_cfg.display_scroll_rate,
+                        time_ms(ff_cfg.display_scroll_pause)
+                        ?: time_ms(ff_cfg.display_scroll_rate));
 
         /* Make sure slot index is on a valid slot. Find next valid slot if 
          * not (and update config). */
@@ -3019,7 +3243,7 @@ static int floppy_main(void *unused)
         }
 
     select:
-        lcd_scroll.off = lcd_scroll.end = 0;
+        lcd_scroll_reset();
         do {
             unsigned int wait_ms;
 
@@ -3032,9 +3256,9 @@ static int floppy_main(void *unused)
             /* Wait a few seconds for further button presses before acting on 
              * the new image selection. */
             if (cfg_scroll_reset)
-                lcd_scroll.off = lcd_scroll.end = 0;
-            lcd_scroll_init(0, ff_cfg.nav_scroll_rate);
-            lcd_scroll.ticks = time_ms(ff_cfg.nav_scroll_pause);
+                lcd_scroll_reset();
+            lcd_scroll_init(/*pause=*/0, ff_cfg.nav_scroll_rate,
+                            time_ms(ff_cfg.nav_scroll_pause));
             wait_ms = (cfg.slot.attributes & AM_DIR) ?
                 ff_cfg.autoselect_folder_secs : ff_cfg.autoselect_file_secs;
             wait_ms *= 1000;
@@ -3048,7 +3272,7 @@ static int floppy_main(void *unused)
             if (wait_ms && (display_type == DT_LCD_OLED)) {
                 /* Allow time for full name to scroll through. */
                 unsigned int scroll_ms = ff_cfg.nav_scroll_pause;
-                scroll_ms += lcd_scroll.end * ff_cfg.nav_scroll_rate;
+                scroll_ms += lcd_scroll_end() * ff_cfg.nav_scroll_rate;
                 wait_ms = max(wait_ms, scroll_ms);
             }
             for (i = 0; (wait_ms == 0) || (i < wait_ms); i++) {
@@ -3057,8 +3281,7 @@ static int floppy_main(void *unused)
                     break;
                 assert_volume_connected();
                 delay_ms(1);
-                lcd_scroll.ticks -= time_ms(1);
-                lcd_scroll_name();
+                lcd_scroll_name(time_ms(1));
             }
 
             /* Wait for select button to be released. */

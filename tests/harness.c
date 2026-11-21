@@ -359,6 +359,10 @@ void lcd_write(int col, int row, int min, const char *str)
 {
 }
 
+void display_write_name(const char *name)
+{
+}
+
 void led_7seg_write_string(const char *p)
 {
 }

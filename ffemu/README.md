@@ -205,7 +205,8 @@ The dialog's button `Save recommended FF.CFG` writes `FF.CFG` as the Flash mem
 dialog's Save buttons do, asking first for a drive made from an image, with the
 options recommended for the display chosen that differ from the defaults:
 `display-type` where the default does not suit the display, `show-filename-ext
-= auto` and `show-tracks-short = yes`; none of them applies to a 7-segment
+= auto` and `show-tracks-short = yes`, and on a 128x32 OLED `display-order
+= C`, combining the image name and track; none of them applies to a 7-segment
 display.
 
 FF OSD, the on-screen display that shares the I2C bus at 0x10 and shows the

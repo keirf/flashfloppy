@@ -75,8 +75,10 @@ static volatile uint8_t refresh_count;
 /* I2C data buffer. Data is DMAed to the I2C peripheral. */
 static uint8_t buffer[256] aligned(4);
 
-/* Text buffer, rendered into I2C data and placed into buffer[]. */
-static char text[4][40];
+/* Text buffer, rendered into I2C data and placed into buffer[]: rows 0 to 3
+ * and, when supported, 4, the image's name and track, and 5, directory and
+ * track. */
+static char text[LCD_TEXT_ROWS][40];
 
 #if OLED_SPINNER_ENABLED
 /* Each row's Apple2 phase spinner, outside the character encoding. */
@@ -201,6 +203,19 @@ void lcd_sync(void)
         cpu_relax();
 }
 
+/* Maps a combined content row to its plain form when the combined form is
+ * unsupported. */
+static unsigned int map_content_row(unsigned int row)
+{
+#ifdef MINIMAL_UI
+    if (row == 4)
+        row = 0;
+    else if (row == 5)
+        row = 3;
+#endif
+    return row;
+}
+
 /* Copy a text row for OSD, replacing the OLED spinner's cells by the phase
  * digit in the same position as on an LCD. */
 static void osd_copy_text_row(uint8_t *q, unsigned int row)
@@ -215,7 +230,7 @@ static void osd_copy_text_row(uint8_t *q, unsigned int row)
     if (!s->width || (s->row != row) || (display_mode != DM_normal))
         return;
     if (s->width == 2) {
-        if (ff_cfg.show_tracks_short)
+        if (ff_cfg.show_tracks_short || (row == 4) || (row == 5))
             col++;
         else
             q[col++] = '.';
@@ -349,8 +364,8 @@ static void oled_to_lcd_row(int in_row)
     }
 
     /* Remap the row */
-    row = order & DORD_row;
-    if (row < lcd_rows) {
+    row = map_content_row(order & DORD_row);
+    if (row < ARRAY_SIZE(text)) {
         oled_convert_text_row(text[row]);
     } else {
         memset(buffer, 0, 256);
@@ -361,7 +376,7 @@ static void oled_to_lcd_row(int in_row)
         oled_double_height(buffer, &buffer[(half == 1) ? 128 : 0], 0x3);
 
 #if OLED_SPINNER_ENABLED
-    if (row < lcd_rows)
+    if (row < ARRAY_SIZE(text))
         oled_draw_spinner(row, half);
 #endif
 }

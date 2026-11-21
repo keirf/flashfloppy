@@ -480,8 +480,9 @@ static bool_t parse_display_type(char *s, uint32_t *v)
 }
 
 /* display-order's content rows by their initials, as FF.CFG documents
- * them: N, S, I, D, and B for the blank row 7; x marks rows with no initial. */
-static const char display_order_initials[] = "NSIDxxxB";
+ * them: N, S, I, D, C, Z, and B for the blank row 7; x marks row 6, which has
+ * no initial. */
+static const char display_order_initials[] = "NSIDCZxB";
 
 /* The content row of display-order's item @c, its digit or its initial in
  * either case, or -1 if it names none. */
@@ -664,7 +665,7 @@ store:
 }
 
 /* A display order: its rows by their initials, less the blank ones that the
- * parser adds. Rows 4 to 6, which no initial names, keep their digits. */
+ * parser adds. Row 6, which no initial names, keeps its digit. */
 static void format_display_order(char *buf, unsigned int size, uint16_t v)
 {
     unsigned int nr = 4, i, n = 0;

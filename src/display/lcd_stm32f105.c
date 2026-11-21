@@ -189,7 +189,7 @@ static unsigned int osd_prep_buffer(void)
     *q++ = OSD_BUTTONS | osd_buttons_tx;
     *q++ = OSD_DATA;
     for (row = 0; row < rows; row++) {
-        i = (order >> (row * DORD_shift)) & DORD_row;
+        i = map_content_row((order >> (row * DORD_shift)) & DORD_row);
         /* A blank row, 7, has no text[] of its own. */
         if (i < ARRAY_SIZE(text))
             osd_copy_text_row(q, i);
@@ -237,7 +237,7 @@ static unsigned int lcd_prep_buffer(void)
     if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
         order = ff_cfg.display_order;
 
-    row = (order >> (i2c_row * DORD_shift)) & DORD_row;
+    row = map_content_row((order >> (i2c_row * DORD_shift)) & DORD_row);
     p = (_bl && row < ARRAY_SIZE(text)) ? text[row] : NULL;
 
     emit8(&q, CMD_SETDDRADDR | row_offs[i2c_row], 0);

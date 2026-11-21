@@ -140,6 +140,16 @@ int led_7seg_nr_digits(void);
 bool_t lcd_init(void);
 void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
+/* Text rows stored by the display drivers, including combined rows 4 and 5
+ * when supported. */
+#ifdef MINIMAL_UI
+#define LCD_TEXT_ROWS 4
+#else
+#define LCD_TEXT_ROWS 6
+#endif
+/* Writes @name, the image's name as shown, to its row and, when supported,
+ * to the row that combines the name and the track. */
+void display_write_name(const char *name);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
 extern uint8_t lcd_columns, lcd_rows;
