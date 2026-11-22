@@ -23,7 +23,7 @@
 #define lcd_sync at435_lcd_sync
 #define lcd_row_columns at435_lcd_row_columns
 #define lcd_columns at435_lcd_columns
-#define lcd_rows at435_lcd_rows
+#define display_rows at435_display_rows
 #define display_mode at435_display_mode
 #define is_oled_display at435_is_oled_display
 #define has_osd at435_has_osd
@@ -52,7 +52,7 @@ void lcd_clear(void);
 #undef lcd_sync
 #undef lcd_row_columns
 #undef lcd_columns
-#undef lcd_rows
+#undef display_rows
 #undef display_mode
 #undef is_oled_display
 #undef has_osd
@@ -206,7 +206,7 @@ static void follow(void)
     at435_display_mode = display_mode;
     at435_osd_buttons_tx = osd_buttons_tx;
     lcd_columns = at435_lcd_columns;
-    lcd_rows = at435_lcd_rows;
+    display_rows = at435_display_rows;
     is_oled_display = at435_is_oled_display;
     has_osd = at435_has_osd;
     osd_buttons_rx = at435_osd_buttons_rx;

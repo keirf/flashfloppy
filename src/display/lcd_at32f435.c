@@ -183,18 +183,18 @@ static unsigned int lcd_prep_buffer(void)
     uint8_t *q = buffer;
     unsigned int i, row;
 
-    if (i2c_row == lcd_rows) {
+    if (i2c_row == display_rows) {
         i2c_row++;
         if (has_osd)
             return osd_prep_buffer();
     }
 
-    if (i2c_row > lcd_rows) {
+    if (i2c_row > display_rows) {
         i2c_row = 0;
         refresh_count++;
     }
 
-    order = (lcd_rows == 2) ? 0x7710 : 0x2103;
+    order = (display_rows == 2) ? 0x7710 : 0x2103;
     if ((configured != DORD_default) && normal_mode)
         order = configured;
 
@@ -425,10 +425,10 @@ bool_t lcd_init(void)
             lcd_columns = (oled_font == FONT_8x16) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrower) ? 16
                 : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
-            lcd_rows = 4;
+            display_rows = 4;
         } else {
             lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
-            lcd_rows = (ff_cfg.display_type >> _DISPLAY_lcd_rows) & 7;
+            display_rows = (ff_cfg.display_type >> _DISPLAY_lcd_rows) & 7;
         }
 
         if (a != 0) {
@@ -442,8 +442,8 @@ bool_t lcd_init(void)
 
         lcd_columns = max_t(uint8_t, lcd_columns, 16);
         lcd_columns = min_t(uint8_t, lcd_columns, 40);
-        lcd_rows = max_t(uint8_t, lcd_rows, 2);
-        lcd_rows = min_t(uint8_t, lcd_rows, 4);
+        display_rows = max_t(uint8_t, display_rows, 2);
+        display_rows = min_t(uint8_t, display_rows, 4);
 
         lcd_clear();
 

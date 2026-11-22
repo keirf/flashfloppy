@@ -168,7 +168,7 @@ unsigned int lcd_column_pixels(void);
 void display_write_name(const char *name);
 void lcd_backlight(bool_t on);
 void lcd_sync(void);
-extern uint8_t lcd_columns, lcd_rows;
+extern uint8_t lcd_columns, display_rows;
 extern bool_t is_oled_display;
 /* Whether the Apple2 phase indicator uses a spinner rather than a hex digit. */
 #if (TARGET == TARGET_apple2) && !defined(MINIMAL_UI)

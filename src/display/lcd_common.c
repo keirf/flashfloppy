@@ -105,7 +105,7 @@ static struct oled_shift {
 #endif
 
 /* Columns and rows of text. */
-uint8_t lcd_columns, lcd_rows;
+uint8_t lcd_columns, display_rows;
 
 /* Current display mode: Affects row ordering and sizing. */
 uint8_t display_mode = DM_banner;
