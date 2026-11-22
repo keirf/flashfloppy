@@ -15,7 +15,7 @@ class Version(fr.Case, unittest.TestCase):
         cmds = [
             "wait 10000 log ** FlashFloppy",
             "key remove",
-            "wait 5000 segments " + banner,
+            "wait 5000 segments " + fr.led_segments(banner),
             "key right",
             # Four frames of the CPU and the RAM first, a second each.
             "wait 8000 segments " + fr.segments(frames[0])]
@@ -24,10 +24,10 @@ class Version(fr.Case, unittest.TestCase):
         self.assertWaits(r, len(cmds) - 2)
 
     def test_3_digits(self):
-        self.check_frames("tm1651-3digit", 3, "71 40 71")
+        self.check_frames("tm1651-3digit", 3, "fmf")
 
     def test_2_digits(self):
-        self.check_frames("74hc164-2digit", 2, "71 71")
+        self.check_frames("74hc164-2digit", 2, "ff")
 
     def test_after_drive_pulled_while_track_shown(self):
         """A drive pulled while the display shows the track, within seconds of
@@ -37,7 +37,7 @@ class Version(fr.Case, unittest.TestCase):
         r = fr.run("ffemu", [
             "wait 10000 log Name: 'TEST'",
             "key remove",
-            "wait 5000 segments 71 40 71",
+            "wait 5000 segments " + fr.led_segments("fmf"),
             "key right",
             "wait 8000 segments " + fr.segments(frames[0])],
             settings=["display = tm1651-3digit"],

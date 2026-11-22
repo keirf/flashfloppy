@@ -81,6 +81,7 @@ $(patsubst %.c,$(OUT)/fw/%.o,$(FW_SRCS)): \
     FW_CFLAGS += -fsanitize-coverage=trace-pc
 
 HOST_CFLAGS := -std=gnu11 -O2 -g -Wall -Werror -D_GNU_SOURCE
+HOST_CFLAGS += -iquote $(ROOT)/inc
 HOST_CFLAGS += -DNCURSES_WIDECHAR=1 -DFFEMU_NAME='"$(NAME)"'
 ifeq ($(TARGET),apple2)
 HOST_CFLAGS += -DFFEMU_APPLE2=1

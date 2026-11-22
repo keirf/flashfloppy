@@ -19,23 +19,23 @@ class DisplayStatus(fr.Case, unittest.TestCase):
         self.assertEqual(len(lines), 1, r.report())
         return lines[0]
 
-    def banner(self, display, segments):
-        """The display line of "status" with @display fitted, showing the
-        banner @segments."""
+    def banner(self, display, text):
+        """The display line of "status" with @display fitted, showing @text."""
         return self.display_line(display, [
             "wait 10000 log ** FlashFloppy", "key remove",
-            "wait 5000 segments " + segments], 2)
+            "wait 5000 segments " + fr.led_segments(text)], 2)
 
     def test_tm1651(self):
         self.assertRegex(
-            self.banner("tm1651-3digit", "71 40 71"),
+            self.banner("tm1651-3digit", "fmf"),
             r'^display: TM1651 3 digits, on, brightness [0-7], '
-            r'showing "fmf", segments 71 40 71$')
+            rf'showing "fmf", segments {fr.led_segments("fmf")}$')
 
     def test_74hc164(self):
         self.assertEqual(
-            self.banner("74hc164-2digit", "71 71"),
-            'display: 74HC164 2 digits, showing "ff", segments 71 71')
+            self.banner("74hc164-2digit", "ff"),
+            'display: 74HC164 2 digits, showing "ff", segments '
+            + fr.led_segments("ff"))
 
     def test_lcd(self):
         line = self.display_line(

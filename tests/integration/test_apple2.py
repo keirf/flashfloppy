@@ -28,7 +28,8 @@ class Steps(fr.Case, unittest.TestCase):
         """The image's track and the side's letter, k for side 0."""
         self.check_steps(
             "tm1651-3digit",
-            [(0, "00 3f 08"), (2, "00 3f 08"), (2, "00 06 08")])
+            [(0, fr.led_segments(" 0k")), (2, fr.led_segments(" 0k")),
+             (2, fr.led_segments(" 1k"))])
 
     def test_lcd(self):
         self.check_steps(
