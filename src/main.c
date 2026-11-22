@@ -593,7 +593,7 @@ static void display_write_slot(bool_t nav_mode)
     }
 
     slot_nr_text(slot, cfg.slot_nr);
-    slot_nr_text(max, cfg.max_slot_nr);
+    slot_nr_text(max, cfg.max_slot_nr + ff_cfg.show_slot_count_instead_of_max);
     snprintf(msg, sizeof(msg), "%s/%s%*s%3s D:%u", slot, max,
              (lcd_columns > 16) ? 3 : 1, "",
              typename, cfg.depth);
@@ -719,7 +719,7 @@ static void lcd_write_track(const struct track_info *ti, char mode)
                 if ((row == 4) && (cells == 0) && (name4_column(w) != 0)) {
                     char slot[4], max[4];
                     slot_nr_text(slot, cfg.slot_nr);
-                    slot_nr_text(max, cfg.max_slot_nr);
+                    slot_nr_text(max, cfg.max_slot_nr + ff_cfg.show_slot_count_instead_of_max);
                     snprintf(nr, sizeof(nr), "%s/%s", slot, max);
                     lcd_write(/*col=*/0, /*row=*/4 | (w ? LCD_WIDE : 0),
                               /*min=*/name4_column(w), nr);
@@ -1833,6 +1833,10 @@ static void read_ff_cfg(void)
 
         case FFCFG_show_tracks_short:
             ff_cfg.show_tracks_short = yes;
+            break;
+
+        case FFCFG_show_slot_count_instead_of_max:
+            ff_cfg.show_slot_count_instead_of_max = yes;
             break;
 
         case FFCFG_show_filename_ext:

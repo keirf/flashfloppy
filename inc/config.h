@@ -187,6 +187,7 @@ struct packed ff_cfg {
 #define DIRWITH_postfix_slash 2
     uint8_t show_dir_with;
     bool_t display_error_wide;
+    bool_t show_slot_count_instead_of_max;
 };
 
 extern struct ff_cfg ff_cfg;

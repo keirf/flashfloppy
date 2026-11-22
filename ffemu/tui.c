@@ -3328,7 +3328,8 @@ static const char * const fd_places[] = {
     "rotary", "",
     "folder-sort", "",
     "sort-priority", "|",
-    "display-order", "display-error-wide", "selector-display-order", "",
+    "display-order", "display-error-wide", "selector-display-order",
+        "show-slot-count-instead-of-max", "",
     "display-scroll-rate", "display-scroll-pause", "nav-scroll-rate",
         "nav-scroll-pause", "display-scroll-by-pixel", "",
     "display-off-secs", "",
@@ -4457,14 +4458,14 @@ static void draw_write_dialog(void)
 /* The options recommended for display @d into @cfg, which holds the
  * defaults: display-type for it where the default does not suit it, the
  * extension of an image where it tells it from another, the track in short,
- * folders followed by a slash, and on an OLED names scrolling by pixel, a
- * display-order with the name double width, and an error screen's double rows
- * too. None for an LED display. */
+ * the slot count, folders followed by a slash, and on an OLED names scrolling
+ * by pixel, a display-order with the name double width, and an error screen's
+ * double rows too. None for an LED display. */
 static void recommend(void *cfg, int d)
 {
     static const char * const opts[] = {
         "show-filename-ext", "auto", "show-tracks-short", "yes",
-        "show-dir-with", "postfix-slash"
+        "show-slot-count-instead-of-max", "yes", "show-dir-with", "postfix-slash"
     };
     unsigned int i;
 
@@ -4866,6 +4867,9 @@ static const struct {
     { "show-tracks-short",
       "Whether the status row shows the side and track in short, at its "
       "right: 0T17" },
+    { "show-slot-count-instead-of-max",
+      "Whether the number after the slash is the slot count, not the highest "
+      "slot index" },
     { "show-dir-with",
       "How to mark folder names: [NAME], /NAME or NAME/" },
     { "display-order",

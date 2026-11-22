@@ -128,7 +128,42 @@ class ThreeDigits(Case, unittest.TestCase):
 
 
 class SlotNumbers(Case, unittest.TestCase):
-    """Slot numbers too wide for their three display cells show `???`."""
+    """The denominator is the highest slot index by default, or the potential
+    slot count with show-slot-count-instead-of-max. Fields too wide for their
+    three display cells show `???`."""
+
+    COUNT = ["show-slot-count-instead-of-max = yes"]
+
+    def test_max_by_default(self):
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2", files=slot_files(13, 12))
+        self.assertEqual(rows[1], "012/012  T:00.0 ", r.report())
+
+    def test_count(self):
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2", files=slot_files(13, 12),
+            flash=self.COUNT)
+        self.assertEqual(rows[1], "012/013  T:00.0 ", r.report())
+
+    def test_count_1000(self):
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2", files=slot_files(1000),
+            flash=self.COUNT)
+        self.assertEqual(rows[1], "000/???  T:00.0 ", r.report())
+
+    def test_indexed_count(self):
+        image = bytes(737280)
+        files = {"DSKA0000.IMG": image, "DSKA0012.IMG": image}
+        rows, r = self.rows(
+            "ffemu", [], "hd44780-16x2", files=files,
+            flash=self.COUNT + ["nav-mode = indexed"])
+        self.assertEqual(rows[1], "000/013  T:00.0 ", r.report())
+
+    def test_name_status_count(self):
+        rows, r = self.rows(
+            "ffemu", steps(3), "ssd1306-128x32", files=slot_files(13, 12),
+            flash=self.COUNT + ["display-order = C,S", "osd-display-order = C,S"])
+        self.assertEqual(rows[0], "012/013 B0011    0T03", r.report())
 
     def test_lcd_overflow(self):
         rows, r = self.rows(

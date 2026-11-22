@@ -212,11 +212,11 @@ The dialog's button `Save recommended FF.CFG` writes `FF.CFG` as the Flash mem
 dialog's Save buttons do, asking first for a drive made from an image, with the
 options recommended for the display chosen that differ from the defaults:
 `display-type` where the default does not suit the display, `show-filename-ext
-= auto`, `show-tracks-short = yes` and `show-dir-with = postfix-slash`, and on
-an OLED `display-scroll-by-pixel = yes`, a `display-order` with the name double
-width, `Cw` on a 128x32 panel and `D,Nw,S` on a 128x64, and
-`display-error-wide = yes` for the error screen's rows; none of them applies to
-a 7-segment display.
+= auto`, `show-tracks-short = yes`, `show-slot-count-instead-of-max = yes` and
+`show-dir-with = postfix-slash`, and on an OLED `display-scroll-by-pixel = yes`,
+a `display-order` with the name double width, `Cw` on a 128x32 panel and
+`D,Nw,S` on a 128x64, and `display-error-wide = yes` for the error screen's
+rows; none of them applies to a 7-segment display.
 
 FF OSD, the on-screen display that shares the I2C bus at 0x10 and shows the
 display's text over the host computer's video, is fitted beside an OLED or an
