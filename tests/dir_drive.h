@@ -19,6 +19,16 @@ void dir_drive_new(void);
  * zeros, sparse where the system can, if @data is NULL. */
 void dir_drive_file(const char *name, const void *data,
                     unsigned long long len);
+/* The code pages and systems of dir_drive_names(), as ffemu's USB_SFN_*
+ * and USB_BY_*. */
+enum { DD_SFN_866, DD_SFN_437, DD_SFN_850, DD_SFN_852, DD_SFN_mik, DD_SFN_utf8 };
+enum { DD_BY_windows, DD_BY_linux };
+
+/* Makes the short names of the drives inserted from then on in code page
+ * @sfn, DD_SFN_*, with long names if @lfn, by the rules of @by, DD_BY_*; a
+ * new folder starts with 866 by the rules of the system it runs on, with
+ * long names. */
+void dir_drive_names(int sfn, int lfn, int by);
 /* Inserts a drive made from the folder, FAT16 if @fat16: 0, or -1 if it
  * cannot be made. */
 int dir_drive_insert(int fat16);

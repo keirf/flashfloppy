@@ -35,6 +35,10 @@ def main(argv):
                 val = "SHOWEXT_" + val
             elif opt == "show-dir-with":
                 val = "DIRWITH_" + val.replace("-", "_")
+            elif opt == "short-name-codepage":
+                val = "CODEPAGE_" + val
+            elif opt == "lcd-charset":
+                val = "LCDCS_" + val
             elif opt == "display-type":
                 opts = []
                 for x in val.split("-"):

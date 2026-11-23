@@ -23,6 +23,12 @@ static const uint8_t oled_spinner_9[] = {
     0b00011,
 };
 #ifdef font_extra
+static const uint8_t oled_spinner_7[] = {
+    0b1111,
+    0b1111,
+    0b0001,
+    0b0001,
+};
 static const uint8_t oled_spinner_14[] = {
     0b1100000,
     0b1111000,
@@ -34,20 +40,24 @@ static const uint8_t oled_spinner_14[] = {
 };
 #endif
 
-/* Draws the spinner for @phases into the two cells of @w columns at @q: four
- * rectangles forming 9x9 at (2, 3) for the 6-pixel font, or 14x14 centered
- * for 8x16. For @half 2 or 1, as large in the middle of a double-height row,
- * of which buffer[] holds the top or bottom half. A pixel belongs to the side
- * whose triangle, cut by the diagonals, holds it. */
+/* Draws the spinner for @phases into the two cells of @w columns at @q. A
+ * small font has a 7x7 spinner, vertically centered when @centered. Otherwise
+ * it is 9x9 at (2, 3), or 14x14 centered for 8x16; @half selects half of a
+ * double-height row. A pixel belongs to the side whose triangle holds it. */
 static void oled_spinner(uint8_t *q, unsigned int w, unsigned int phases,
-                         unsigned int half)
+                         unsigned int half, bool_t small, bool_t centered)
 {
     const uint8_t *glyph = oled_spinner_9;
     unsigned int i, x, y, side, n = 9, left = 2, top = 3;
     uint32_t out;
 
 #ifdef font_extra
-    if (w == 8) {
+    if (small) {
+        glyph = oled_spinner_7;
+        n = 7;
+        left = (2*w - n) / 2;
+        top = centered ? 4 : 0;
+    } else if (w == 8) {
         glyph = oled_spinner_14;
         n = 14;
         left = top = 1;
@@ -67,9 +77,9 @@ static void oled_spinner(uint8_t *q, unsigned int w, unsigned int phases,
                 out |= 1u<<y;
         }
         out <<= top;
-        if (half == 2)
+        if (!small && (half == 2))
             out <<= 8;
-        else if (half == 1)
+        else if (!small && (half == 1))
             out >>= 8;
         q[i] = out;
         q[128+i] = out >> 8;

@@ -40,7 +40,7 @@ class DisplayStatus(fr.Case, unittest.TestCase):
     def test_lcd(self):
         line = self.display_line(
             "hd44780-20x4", ["wait 10000 log I2C: LCD found at 0x27"], 1)
-        self.assertEqual(line, "display: HD44780 20x4, ROM cyr")
+        self.assertEqual(line, "display: HD44780 20x4, ROM jap")
 
 
 if __name__ == "__main__":

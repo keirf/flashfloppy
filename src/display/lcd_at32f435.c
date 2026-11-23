@@ -169,6 +169,7 @@ static unsigned int osd_prep_buffer(void)
             osd_copy_text_row(q, i);
         else
             memset(q, ' ', lcd_columns);
+        osd_map_row(q);
         q += lcd_columns;
     }
 
@@ -215,7 +216,7 @@ static unsigned int lcd_prep_buffer(void)
 
     emit8(&q, CMD_SETDDRADDR | row_offs[i2c_row], 0);
     for (i = 0; i < lcd_columns; i++)
-        emit8(&q, p ? *p++ : ' ', _RS);
+        emit8(&q, p ? lcd_char(*p++) : ' ', _RS);
 
     i2c_row++;
 
@@ -433,11 +434,16 @@ bool_t lcd_init(void)
 
         if (is_oled_display) {
             oled_height = (ff_cfg.display_type & DISPLAY_oled_64) ? 64 : 32;
+#if defined(font_extra) && !defined(OLED_FONT_ASCII_ONLY)
             oled_font = ff_cfg.oled_font;
-            lcd_columns = (oled_font == FONT_8x16) ? 16
-                : (ff_cfg.display_type & DISPLAY_narrower) ? 16
-                : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
-            display_rows = oled_height / 16;
+#else
+            oled_font = FONT_6x16;
+#endif
+            lcd_columns = (oled_font == FONT_6x16)
+                ? (ff_cfg.display_type & DISPLAY_narrower) ? 16
+                : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21
+                : (oled_font == FONT_7x8) ? 18 : 16;
+            display_rows = ((oled_height == 64) || oled_small_font()) ? 4 : 2;
         } else {
             lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
             display_rows = (ff_cfg.display_type >> _DISPLAY_lcd_rows) & 7;
@@ -511,6 +517,7 @@ bool_t lcd_init(void)
     emit8(&p, CMD_DISPLAYCTL, 0);
     emit8(&p, CMD_ENTRYMODE | 2, 0);
     emit8(&p, CMD_DISPLAYCTL | 4, 0); /* display on */
+    lcd_cgram_block(&p);
     dma_start(p - buffer);
     
     if (!reinit)
@@ -529,39 +536,6 @@ fail:
     rcc->apb1enr &= ~RCC_APB1ENR_I2C2EN;
     return FALSE;
 }
-
-#ifdef font_extra
-extern const uint8_t oled_font_8x16[];
-#ifdef MINIMAL_UI
-static void oled_convert_text_row_8x16(char *pc)
-{
-    unsigned int i, c;
-    const uint8_t *p;
-    uint8_t *q = buffer;
-    const unsigned int w = 8;
-
-    for (i = 0; i < lcd_columns; i++) {
-        if ((c = *pc++ - 0x20) > 0x5e)
-            c = '.' - 0x20;
-        p = &oled_font_8x16[c * w * 2];
-        memcpy(q, p, w);
-        memcpy(q+128, p+w, w);
-        q += w;
-    }
-}
-#else
-static void oled_glyph_8x16(uint8_t *q, unsigned int g, unsigned int from,
-                            unsigned int to)
-{
-    const uint8_t *p;
-    const unsigned int w = 8;
-
-    p = &oled_font_8x16[g * w * 2];
-    memcpy(q, p+from, to-from);
-    memcpy(q+128, p+w+from, to-from);
-}
-#endif
-#endif
 
 static unsigned int oled_start_i2c(uint8_t *buf)
 {
@@ -612,6 +586,7 @@ static unsigned int oled_start_i2c(uint8_t *buf)
 /* Snapshot text buffer into the bitmap buffer. */
 static unsigned int oled_prep_buffer(void)
 {
+    bool_t compact = oled_small_font() && (oled_height == 32);
     uint8_t *p = buffer;
 
     if (i2c_row == (oled_height / 8)) {
@@ -626,8 +601,8 @@ static unsigned int oled_prep_buffer(void)
     }
 
     /* Convert one row of text[] into buffer[] writes. */
-    oled_to_lcd_row(i2c_row/2);
-    if (!(i2c_row & 1))
+    oled_to_lcd_row(compact ? i2c_row : i2c_row/2);
+    if (compact || !(i2c_row & 1))
         memcpy(&buffer[128], &buffer[0], 128);
 
     /* New I2C transaction. */

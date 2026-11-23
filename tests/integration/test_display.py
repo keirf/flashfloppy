@@ -51,21 +51,19 @@ def slot_files(count, slot=0):
 
 
 
-FONT_W = {"6x16": 6, "8x16": 8}
-FONT_H = {"6x16": 16, "8x16": 16}
+FONT_W = {"6x16": 6, "8x16": 8, "7x8": 7, "8x8": 8}
+FONT_H = {"6x16": 16, "8x16": 16, "7x8": 8, "8x8": 8}
 
 
 def oled_glyphs(font):
-    """The firmware's glyphs of @font for ASCII, with which the fonts that the
-    build generated from fonts/ begin, by their columns' bytes, the top
-    page's and then the bottom page's, bit 0 a column's top pixel."""
-    path = os.path.join(
-        fr.OUT, "ffemu", "shugart", "gen", "oled_font_%s.c" % font)
-    with open(path) as f:
-        data = bytes(
-            int(x, 16) for x in re.findall(r"0x([0-9a-f]{2})", f.read()))
-    n = 2 * FONT_W[font]
-    return {data[i*n:(i+1)*n]: chr(0x20 + i) for i in range(0x7f - 0x20)}
+    """The firmware's glyphs of @font for ASCII by their columns' bytes, the
+    top page's and then the bottom page's, bit 0 a column's top pixel, from
+    the generated font as the harness decodes it."""
+    w = FONT_W[font]
+    glyphs = fr.font_glyphs(font)
+    return {bytes([c & 0xff for c in glyphs[code]]
+                  + [c >> 8 for c in glyphs[code]]): chr(code)
+            for code in range(0x20, 0x7f)}
 
 
 def oled_text(pixels, top, font, tall=True, wide=False):
@@ -104,7 +102,9 @@ class Case(fr.Case):
         r = fr.run(
             name, ["wait 10000 log Name:"] + list(commands)
             + ["sleep 500", "dump", "osd"],
-            settings=["display = " + display], flash=flash, files=files)
+            settings=["display = " + display]
+            + ["lcd-rom = cyr"] * display.startswith("hd44780"),
+            flash=flash, files=files)
         self.assertWaits(r, 1)
         lcd = display.startswith("hd44780")
         out = r.stdout.split("\nosd: ")
@@ -867,6 +867,66 @@ class FolderScroll(fr.Case, unittest.TestCase):
         self.assertEqual(osd, {"|ABCDEFGHIJKL         |"}, r.report())
 
 
+class SmallFonts(fr.Case, unittest.TestCase):
+    """The 7x8 and 8x8 fonts: four native rows on 128x32, and four rows of
+    double height on 128x64, where display-order's single rows are doubled."""
+
+    def rows(self, font, size, order, tall_rows=()):
+        """Four text rows of an OLED of @size pixels high with @order."""
+        r = fr.run(
+            "ffemu", ["wait 10000 log Name:"] + steps(3)
+            + ["sleep 100", "dump"],
+            settings=["display = ssd1306-128x%d" % size],
+            flash=["display-type = oled-128x%d" % size,
+                   "display-order = " + order, "oled-font = " + font],
+            files=PC)
+        pixels = [line for line in r.lines if line and set(line) <= set(".#")]
+        return [oled_text(pixels, top, font,
+                          tall=(size == 64) or (index in tall_rows))
+                for index, top in enumerate(range(0, size, size // 4))], r
+
+    def check_contents(self, font, rows, report):
+        """Name, status, info and directory on their respective rows."""
+        self.assertTrue(rows[0].startswith("A"), report)
+        self.assertIn("T:03.0", rows[1], report)
+        self.assertIn("MFM", rows[2], report)
+        self.assertTrue(rows[3].startswith("/"), report)
+
+    def test_native_and_doubled_rows(self):
+        for font in ("7x8", "8x8"):
+            for size in (32, 64):
+                with self.subTest(font=font, size=size):
+                    rows, r = self.rows(font, size, "N,S,I,D")
+                    self.check_contents(font, rows, r.report())
+
+    def test_explicit_double_height_on_32(self):
+        """A `d` row takes two of the four native 8-pixel rows."""
+        for font in ("7x8", "8x8"):
+            with self.subTest(font=font):
+                rows, r = self.rows(font, 32, "N,Sd,I", (1,))
+                self.assertTrue(rows[0].startswith("A"), r.report())
+                self.assertIn("T:03.0", rows[1],
+                              r.report())
+                self.assertIn("MFM", rows[3], r.report())
+
+    def test_double_width_on_64(self):
+        """A `w` row is doubled in both dimensions, as with a 16-row font."""
+        for font in ("7x8", "8x8"):
+            with self.subTest(font=font):
+                r = fr.run(
+                    "ffemu", ["wait 10000 log Name:", "sleep 100", "dump"],
+                    settings=["display = ssd1306-128x64"],
+                    flash=["display-type = oled-128x64",
+                           "display-order = Nw,S", "oled-font = " + font],
+                    files=PC)
+                pixels = [line for line in r.lines
+                          if line and set(line) <= set(".#")]
+                name = oled_text(pixels, 0, font, wide=True)
+                status = oled_text(pixels, 16, font)
+                self.assertTrue(name.startswith("A"), r.report())
+                self.assertIn("T:00.0", status, r.report())
+
+
 def glyph_columns(font, text):
     """The pixel columns of @text in @font, each a tuple of its 16 pixels, top
     down, True where lit."""
@@ -1337,11 +1397,27 @@ class FontTest(Case, unittest.TestCase):
                         "@ABCDEFGHIJKLMNO", "40-4F",
                         "PQRSTUVWXYZ[\\]^_", "50-5F")])
 
-    def test_oled_codes_without_glyph(self):
-        """The control codes draw alike, as the font's mark of a code without
-        a glyph, 0x10 and on too, the phase spinner's in the apple2
-        firmware, which the font test draws as a glyph, on a 128x32 OLED of
-        one pair a page."""
+    def test_oled_small(self):
+        """Small fonts show two glyph/label pairs on either OLED size."""
+        for font in ("7x8", "8x8"):
+            for size in (32, 64):
+                with self.subTest(font=font, size=size):
+                    display = "ssd1306-128x%d" % size
+                    pixels = self.oled(
+                        "ffemu", ["key right", "sleep 200", "key right"],
+                        ["display-type = oled-128x%d" % size,
+                         "oled-font = " + font], display=display)
+                    width = len(oled_text(pixels, 0, font, tall=size == 64))
+                    self.assertEqual(
+                        [oled_text(pixels, top, font, tall=size == 64)
+                         for top in range(0, size, size // 4)],
+                        [row.ljust(width) for row in (
+                            "@ABCDEFGHIJKLMNO", "40-4F",
+                            "PQRSTUVWXYZ[\\]^_", "50-5F")])
+
+    def test_oled_low_codes(self):
+        """The low character cells show currency and Central European letters,
+        not the former spinner's control codes; only NUL is unassigned there."""
         r = fr.run("ffemu-apple2", ["wait 10000 log Name:"] + FONT_TEST
                    + ["dump", "key right", "sleep 300", "dump"],
                    settings=["display = ssd1306-128x32"], files=DSK)
@@ -1350,8 +1426,9 @@ class FontTest(Case, unittest.TestCase):
         pages = (lines[:32], lines[32:64])
         cells = [tuple(row[1 + 6*i:7 + 6*i] for row in page[:16])
                  for page in pages for i in range(16)]
-        self.assertEqual(set(cells), {cells[0]}, r.report())
         self.assertTrue(any("#" in row for row in cells[0]), r.report())
+        for cell in cells[1:]:
+            self.assertNotEqual(cell, cells[0], r.report())
         self.assertEqual(oled_text(pages[1], 16, "6x16", False, False),
                          "10-1F" + " " * 16)
 

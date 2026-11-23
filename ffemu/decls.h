@@ -56,6 +56,7 @@
 
 #include "time.h"
 #include "../src/fatfs/ff.h"
+#include "charset.h"
 #include "util.h"
 #include "list.h"
 #include "cache.h"

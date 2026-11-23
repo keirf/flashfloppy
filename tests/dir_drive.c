@@ -84,6 +84,8 @@ void dir_drive_new(void)
 {
     const char *tmp = getenv("TMPDIR");
 
+    dir_drive_names(USB_SFN_866, 1, USB_BY_default);
+
     if ((tmp == NULL) || (tmp[0] == '\0'))
         tmp = "/tmp";
     snprintf(dir, sizeof(dir), "%s/fftest-XXXXXX", tmp);
@@ -120,6 +122,17 @@ void dir_drive_file(const char *name, const void *data,
         : (ftruncate(fd, len) == 0);
     if (!ok || (close(fd) != 0))
         fail(path);
+}
+
+_Static_assert(((int)DD_SFN_utf8 == (int)USB_SFN_utf8)
+               && ((int)DD_BY_linux == (int)USB_BY_linux),
+               "dir_drive.h's code pages and systems are ffemu's");
+
+void dir_drive_names(int sfn, int lfn, int by)
+{
+    config.usb_sfn = sfn;
+    config.usb_lfn = lfn;
+    config.usb_by = by;
 }
 
 int dir_drive_insert(int fat16)

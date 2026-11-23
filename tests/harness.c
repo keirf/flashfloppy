@@ -159,23 +159,11 @@ void drive_reset(void)
 
 #define CLUS_SZ (CLUS_SECS*SECSZ)
 
-/* Adds a file in clusters from next_clus on: in order, or scattered over
- * every other cluster of twice the span from the last to the first, so
- * that no cluster is followed by its neighbor. */
-static unsigned int add_file(const char *name, const void *data,
-                             uint32_t len, bool_t scatter)
+/* The 8.3 @name into entry @ent, in capitals and padded with blanks. */
+static void put_name(uint8_t *ent, const char *name)
 {
-    uint8_t *ent = &drive[ROOT_START*SECSZ + nr_files*32];
-    const uint8_t *p = data;
-    unsigned int i, j, first = next_clus;
-    unsigned int nr = (len + CLUS_SZ - 1) / CLUS_SZ;
-    unsigned int span = scatter ? 2*nr : nr;
-    unsigned int clus[2];
+    unsigned int i, j;
 
-    if ((nr_files == ROOT_ENTS) || (next_clus + span > NR_CLUS + 2))
-        ft_abort(__FILE__, __LINE__, "drive full adding %s", name);
-
-    /* The 8.3 name, in capitals and padded with blanks. */
     memset(ent, ' ', 11);
     for (i = j = 0; (name[i] != '\0') && (name[i] != '.') && (j < 8); i++)
         ent[j++] = toupper(name[i]);
@@ -183,6 +171,85 @@ static unsigned int add_file(const char *name, const void *data,
         i++;
     for (j = 8; (name[i] != '\0') && (name[i+1] != '\0') && (j < 11); i++)
         ent[j++] = toupper(name[i+1]);
+}
+
+/* The next entry of the root folder. */
+static uint8_t *root_entry(const char *name)
+{
+    if (nr_files == ROOT_ENTS)
+        ft_abort(__FILE__, __LINE__, "root folder full adding %s", name);
+    return &drive[ROOT_START*SECSZ + 32*nr_files++];
+}
+
+/* The entries of long name @lfn, in UTF-8, of 8.3 entry @sfn, which goes
+ * right after them. */
+static void add_lfn(const char *lfn, const uint8_t *sfn)
+{
+    static const uint8_t ofs[13] = {
+        1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30 };
+    const uint8_t *p = (const uint8_t *)lfn;
+    unsigned int n = 0, nr, i, j, k;
+    uint16_t u[260];
+    uint8_t sum = 0, *ent;
+    uint32_t c;
+
+    while (*p != '\0') {
+        c = *p++;
+        if (c >= 0xf0) {
+            c = (c & 7) << 18 | (p[0] & 0x3f) << 12 | (p[1] & 0x3f) << 6
+                | (p[2] & 0x3f);
+            p += 3;
+        } else if (c >= 0xe0) {
+            c = (c & 15) << 12 | (p[0] & 0x3f) << 6 | (p[1] & 0x3f);
+            p += 2;
+        } else if (c >= 0xc0) {
+            c = (c & 31) << 6 | (p[0] & 0x3f);
+            p++;
+        }
+        if (c >= 0x10000) {
+            c -= 0x10000;
+            u[n++] = 0xd800 + (c >> 10);
+            c = 0xdc00 + (c & 0x3ff);
+        }
+        u[n++] = c;
+    }
+
+    for (i = 0; i < 11; i++)
+        sum = ((sum & 1) << 7) + (sum >> 1) + sfn[i];
+    nr = (n + 12) / 13;
+    for (i = nr; i > 0; i--) {
+        ent = root_entry(lfn);
+        ent[0] = i | ((i == nr) ? 0x40 : 0);
+        ent[11] = 0x0f; /* a long name's part */
+        ent[13] = sum;
+        for (j = 0; j < 13; j++) {
+            k = (i-1)*13 + j;
+            put16(ent + ofs[j], (k < n) ? u[k] : (k == n) ? 0 : 0xffff);
+        }
+    }
+}
+
+/* Adds a file in clusters from next_clus on: in order, or scattered over
+ * every other cluster of twice the span from the last to the first, so
+ * that no cluster is followed by its neighbor. */
+static unsigned int add_file(const char *name, const char *lfn,
+                             const void *data, uint32_t len, bool_t scatter)
+{
+    const uint8_t *p = data;
+    unsigned int i, j, first = next_clus;
+    unsigned int nr = (len + CLUS_SZ - 1) / CLUS_SZ;
+    unsigned int span = scatter ? 2*nr : nr;
+    unsigned int clus[2];
+    uint8_t sfn[11], *ent;
+
+    if (next_clus + span > NR_CLUS + 2)
+        ft_abort(__FILE__, __LINE__, "drive full adding %s", name);
+
+    put_name(sfn, name);
+    if (lfn != NULL)
+        add_lfn(lfn, sfn);
+    ent = root_entry(name);
+    memcpy(ent, sfn, 11);
     ent[11] = AM_ARC;
     put16(ent + 26, len ? (scatter ? first + 2*(nr-1) : first) : 0);
     put32(ent + 28, len);
@@ -196,27 +263,59 @@ static unsigned int add_file(const char *name, const void *data,
                    p + i*CLUS_SZ, min_t(uint32_t, CLUS_SZ, len - i*CLUS_SZ));
     }
     next_clus += span;
-    nr_files++;
     return nr;
 }
 
 void drive_add(const char *name, const void *data, uint32_t len)
 {
-    add_file(name, data, len, FALSE);
+    add_file(name, NULL, data, len, FALSE);
+}
+
+void drive_add_long(const char *name, const char *lfn, const void *data,
+                    uint32_t len)
+{
+    add_file(name, lfn, data, len, FALSE);
 }
 
 unsigned int drive_add_fragmented(const char *name, const void *data,
                                   uint32_t len)
 {
-    return add_file(name, data, len, TRUE);
+    return add_file(name, NULL, data, len, TRUE);
+}
+
+void drive_add_folder(const char *name, const char *lfn)
+{
+    uint8_t *dir = &drive[(DATA_START + (next_clus-2)*CLUS_SECS) * SECSZ];
+    uint8_t sfn[11], *ent;
+
+    if (next_clus + 1 > NR_CLUS + 2)
+        ft_abort(__FILE__, __LINE__, "drive full adding %s", name);
+
+    put_name(sfn, name);
+    if (lfn != NULL)
+        add_lfn(lfn, sfn);
+    ent = root_entry(name);
+    memcpy(ent, sfn, 11);
+    ent[11] = AM_DIR;
+    put16(ent + 26, next_clus);
+
+    /* Its entries `.` and `..`, the latter giving the root as cluster 0. */
+    memset(dir, 0, CLUS_SZ);
+    memcpy(dir, ".          ", 11);
+    dir[11] = AM_DIR;
+    put16(dir + 26, next_clus);
+    memcpy(dir + 32, "..         ", 11);
+    dir[32 + 11] = AM_DIR;
+
+    put_fat(next_clus++, 0xffff);
 }
 
 void drive_fill(const char *name)
 {
-    add_file(name, NULL, (NR_CLUS + 2 - next_clus) * CLUS_SZ, FALSE);
+    add_file(name, NULL, NULL, (NR_CLUS + 2 - next_clus) * CLUS_SZ, FALSE);
 }
 
-static void drive_mount(void)
+void drive_mount(void)
 {
     FRESULT fr;
 

@@ -138,6 +138,15 @@ int led_7seg_nr_digits(void);
 
 /* Display: I2C 16x2 LCD */
 bool_t lcd_init(void);
+/* An OLED font as scripts/mk_font.py writes it: each glyph's used rows,
+ * packed end to end after its first-row/row-count byte, then compressed
+ * with literals and back-references of up to 512 bytes. Two 12-bit
+ * compressed offsets take three bytes in @off[]. */
+struct oled_font {
+    uint8_t w, h;
+    const uint8_t *off;
+    const uint8_t *data;
+};
 void lcd_clear(void);
 void lcd_write(int col, int row, int min, const char *str);
 /* The order in use on the normal or selector screen, and its wide rows. */

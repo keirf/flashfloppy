@@ -4,6 +4,7 @@ import unittest
 
 import ffemu_run as fr
 import test_display as display
+import test_names as names
 
 
 PROGRAM = "ffemu-minimal-ui"
@@ -39,6 +40,23 @@ class MinimalUI(display.Case, unittest.TestCase):
         self.assertEqual(
             display.oled_text(pixels(r), 16, "6x16", False), rows[2],
             r.report())
+
+    def test_ascii_fonts(self):
+        """Every font setting uses ASCII 6x16, while the name still opens."""
+        for font in ("6x16", "8x16", "7x8", "8x8"):
+            with self.subTest(font=font):
+                r = fr.run(
+                    PROGRAM, names.MOUNT + ["log"],
+                    settings=["display = ssd1306-128x32"],
+                    flash=["display-type = oled-128x32",
+                           "oled-font = " + font],
+                    files={"\u0418\u0433\u0440\u0430.dsk": bytes(35 * 4096)})
+                self.assertWaits(r, 1)
+                self.assertIn("Name: '\u0418\u0433\u0440\u0430'", r.stdout,
+                              r.report())
+                fallback = fr.font_glyphs("6x16")[0x25a1]
+                self.assertEqual(names.name_cells(r, "6x16", 4), [fallback] * 4,
+                                 r.report())
 
     def test_no_scrolling(self):
         """A long name stays at its start after the usual scrolling pause."""
