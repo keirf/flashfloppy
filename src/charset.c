@@ -11,6 +11,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#ifndef CHARSET_CYR_ONLY
 /* The generic currency sign at 0x01, then Central European capitals at
  * 0x02-0x10 and their small letters 15 cells below. */
 static const uint16_t uni_low[30] = {
@@ -92,6 +93,7 @@ static const uint8_t base_latin[64] = {
     0x69, 0x6e, 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x6f,
     0x70, 0x75, 0x75, 0x75, 0x75, 0x79, 0x79, 0x73
 };
+#endif
 
 /* The place in KOI8-R's order of each letter of the alphabet, A to Ya, and
  * the letter at each place. */
@@ -120,6 +122,26 @@ static uint8_t letter(unsigned int i)
     return ((i < 32) ? 0xe0 : 0xc0) + koi_of_alpha[i & 31];
 }
 
+#ifdef CHARSET_CYR_ONLY
+WCHAR ff_uni2oem(DWORD uni, WORD cp)
+{
+    if (uni < 0x80)
+        return uni;
+    /* A character outside the Basic Multilingual Plane, a surrogate pair,
+     * reads as two replacement characters, which FatFS's put_utf() stores as
+     * a double-byte character, so that the long name is kept. */
+    if (uni >= 0x10000)
+        return 0x0101;
+    /* Russian commonly writes Yo as Ye; share the latter's cells. */
+    if (uni == 0x401)
+        uni = 0x415;
+    else if (uni == 0x451)
+        uni = 0x435;
+    if ((uni >= 0x410) && (uni < 0x450))
+        return letter(uni - 0x410);
+    return 0x01;
+}
+#else
 WCHAR ff_uni2oem(DWORD uni, WORD cp)
 {
     unsigned int i;
@@ -153,17 +175,28 @@ WCHAR ff_uni2oem(DWORD uni, WORD cp)
             return 0x80 + i;
     return '?';
 }
+#endif
 
 WCHAR ff_oem2uni(WCHAR oem, WORD cp)
 {
+#ifdef CHARSET_CYR_ONLY
+    if ((oem >= 0x01) && (oem <= 0x1f))
+        return 0x25a1;
+#else
     if (oem == 0x01)
         return 0x00a4;
     if ((oem >= 0x02) && (oem <= 0x1f))
         return uni_low[oem - 0x02];
+#endif
     if (oem < 0x80)
         return oem;
+#ifdef CHARSET_CYR_ONLY
+    if (oem < 0xc0)
+        return 0x25a1;
+#else
     if (oem < 0xc0)
         return latin_uni(oem);
+#endif
     if (oem > 0xff)
         return 0;
     return ((oem & 0x20) ? 0x410 : 0x430) + alpha_of_koi[oem & 31];
@@ -171,6 +204,7 @@ WCHAR ff_oem2uni(WCHAR oem, WORD cp)
 
 DWORD ff_wtoupper(DWORD uni)
 {
+#ifndef CHARSET_CYR_ONLY
     unsigned int i;
 
     uni = normalize_latin(uni);
@@ -186,6 +220,13 @@ DWORD ff_wtoupper(DWORD uni)
     for (i = 15; i < ARRAY_SIZE(uni_low); i++)
         if (uni_low[i] == uni)
             return uni_low[i - 15];
+#else
+    if (((uni >= 'a') && (uni <= 'z'))
+        || ((uni >= 0x430) && (uni < 0x450)))
+        return uni - 0x20;
+    if (uni == 0x451)
+        return 0x401;
+#endif
     return uni;
 }
 
@@ -217,6 +258,7 @@ static unsigned int utf8_seq(const uint8_t *p, DWORD *uni)
     return n;
 }
 
+#ifndef CHARSET_CYR_ONLY
 /* The short-name byte of each Latin cell, zero where the code page lacks the
  * character. The tables include 437's sharp S and both pages' pound. */
 static const uint8_t sfn_437[64] = {
@@ -291,6 +333,7 @@ static uint8_t sfn_852_char(uint8_t c)
             return sfn_852_alias[i][1];
     return sfn_latin_char(c, sfn_852);
 }
+#endif
 
 /* Byte @c, over 0x7f, of a short name in the code page of short names. */
 static uint8_t sfn_char(uint8_t c)
@@ -298,19 +341,29 @@ static uint8_t sfn_char(uint8_t c)
     unsigned int i;
 
     switch (sfn_codepage) {
+#ifndef CHARSET_CYR_ONLY
     case CODEPAGE_852:
         return sfn_852_char(c);
     case CODEPAGE_850:
         return sfn_latin_char(c, sfn_850);
     case CODEPAGE_437:
         return sfn_latin_char(c, sfn_437);
+#endif
     case CODEPAGE_mik:
         /* The alphabet at 0x80-0xbf. */
         if (c >= 0xc0)
+#ifdef CHARSET_CYR_ONLY
+            return 0x01;
+#else
             return '?';
+#endif
         i = c - 0x80;
         break;
     default:
+#ifdef CHARSET_CYR_ONLY
+        if (sfn_codepage != CODEPAGE_866)
+            return 0x01;
+#endif
         /* 866: A to small p at 0x80-0xaf, small r to ya at 0xe0-0xef, then
          * capital and small Yo, which share Ye's cells. */
         if (c < 0xb0)
@@ -320,7 +373,11 @@ static uint8_t sfn_char(uint8_t c)
         else if ((c == 0xf0) || (c == 0xf1))
             return letter((c == 0xf0) ? 5 : 32 + 5);
         else
+#ifdef CHARSET_CYR_ONLY
+            return 0x01;
+#else
             return '?';
+#endif
         break;
     }
     return letter(i);
@@ -385,8 +442,27 @@ static DWORD match_upper(DWORD uni)
     return ff_wtoupper(uni);
 }
 
+#ifdef CHARSET_CYR_ONLY
+static bool_t uni_is_fallback(DWORD uni)
+{
+    if (uni == 0x25a1)
+        return TRUE;
+    if (uni < 0x80)
+        return FALSE;
+    if ((uni == 0x401) || (uni == 0x451))
+        return FALSE;
+    return (uni < 0x410) || (uni >= 0x450);
+}
+#endif
+
 bool_t charset_uni_match(DWORD a, DWORD b)
 {
+#ifdef CHARSET_CYR_ONLY
+    if (a == 0x25a1)
+        return uni_is_fallback(b);
+    if (b == 0x25a1)
+        return uni_is_fallback(a);
+#endif
     return match_upper(a) == match_upper(b);
 }
 
@@ -418,10 +494,12 @@ unsigned int charset_key(uint8_t c)
 {
     if ((c >= 'A') && (c <= 'Z'))
         return c + 'a' - 'A';
+#ifndef CHARSET_CYR_ONLY
     if ((c >= 0x02) && (c <= 0x1f))
         return base_low[c - 0x02];
     if ((c >= 0x80) && (c <= 0xbf) && (c != 0x9f))
         return base_latin[c - 0x80];
+#endif
     if (c >= 0xc0)
         return 0xc0 + 2*alpha_of_koi[c & 31];
     return c;
@@ -445,6 +523,7 @@ static const uint8_t cyr_of_koi[64] = {
     0xaf, 0xe2, 0xab, 0xad
 };
 
+#ifndef CHARSET_CYR_ONLY
 /* ROM-specific glyphs that a Latin letter's base cannot stand in for. */
 static const uint8_t rom_special[][3] = {
     { LCDCS_cyr, 0xa9, 0xea }, { LCDCS_cyr, 0xa7, 0xeb },
@@ -452,7 +531,26 @@ static const uint8_t rom_special[][3] = {
     { LCDCS_jap, 0xbb, 0xf5 }, { LCDCS_jap, 0xa2, 0xe1 },
     { LCDCS_jap, 0xb4, 0xef }, { LCDCS_jap, 0xb1, 0xee }
 };
+#endif
 
+#ifdef CHARSET_CYR_ONLY
+uint8_t charset_to_rom(uint8_t c, unsigned int rom)
+{
+    /* A value that flash written by another firmware's layout may hold. */
+    if (rom > CHARSET_osd)
+        rom = LCDCS_jap;
+    if (c < 0x80)
+        return c;
+    if (c < 0xc0)
+        return (rom == CHARSET_osd) ? 0x7f
+            : (rom == LCDCS_eur) ? 0x08 : 0xff;
+    if (rom == LCDCS_cyr)
+        return cyr_of_koi[c - 0xc0];
+    /* KOI-7, the letter case kept: capitals to 0x40-0x5f, small letters to
+     * 0x60-0x7f. */
+    return c - ((c & 0x20) ? 0xa0 : 0x60);
+}
+#else
 uint8_t charset_to_rom(uint8_t c, unsigned int rom)
 {
     unsigned int u, base, i;
@@ -497,6 +595,7 @@ uint8_t charset_to_rom(uint8_t c, unsigned int rom)
             return rom_special[i][2];
     return ((c < 0xa0) && (c != 0x9e)) ? base - 0x20 : base;
 }
+#endif
 
 #endif
 

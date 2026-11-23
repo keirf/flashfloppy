@@ -411,8 +411,8 @@ static void osd_copy_text_row(uint8_t *q, unsigned int row)
 }
 
 /* The glyph of character @c in the active font. Reduced fonts hold ASCII,
- * the Russian letters, then their fallback; accented Latin letters show their
- * ASCII base letters. */
+ * the Russian letters, then their fallback. Small fonts map accented Latin to
+ * ASCII; a Cyrillic-only build shows the fallback for it. */
 static unsigned int oled_font_index(unsigned int c)
 {
 #ifdef OLED_FONT_ASCII_ONLY
@@ -421,10 +421,12 @@ static unsigned int oled_font_index(unsigned int c)
     return 95;
 #else
     if (oled_reduced_font()) {
+#ifndef OLED_FONT_CYR_ONLY
         if (c == 0x01)
             c = '$';
         else if ((c < 0x20) || ((c >= 0x80) && (c < 0xc0)))
             c = charset_to_rom(c, CHARSET_osd);
+#endif
         if ((c >= 0x20) && (c <= 0x7e))
             return c - 0x20;
         if (c >= 0xc0)

@@ -14,6 +14,8 @@ import unittest
 import ffemu_run as fr
 import mk_names_image
 
+CYR_ONLY = os.environ.get("FFEMU_CYR_ONLY") == "1"
+
 # IGRY/IGRA.IMG in Cyrillic, a folder of the root and a PC image in it, which
 # the selector enters and mounts by itself.
 IGRA = {"\u0418\u0433\u0440\u044b/\u0438\u0433\u0440\u0430.img":
@@ -38,6 +40,9 @@ def font_glyphs(font):
 def glyph(font, code):
     """The columns of character @code in @font of FONTS, as the OLED shows it,
     with aliases sharing their canonical or plain-ASCII glyph."""
+    if (CYR_ONLY and code >= 0x80 and code not in (0x401, 0x451)
+            and not 0x410 <= code < 0x450):
+        return font_glyphs(font)[0x25a1]
     aliases = {
         0x401: 0x415, 0x451: 0x435,
         0x10c: 0x106, 0x10d: 0x107, 0x160: 0x15a, 0x161: 0x15b,
@@ -110,9 +115,9 @@ class Names(fr.Case, unittest.TestCase):
                                  r.report())
 
     def test_oled_437(self):
-        """Kaese, L stroke, sharp S and pound; removed peseta as '?'."""
-        want = [ord("K"), 0xe4, ord("s"), ord("e"), ord("?"), 0x141,
-                0x00a3, 0xdf]
+        """Kaese, L stroke, sharp S and pound; removed peseta's fallback."""
+        want = [ord("K"), 0xe4, ord("s"), ord("e"),
+                0x25a1 if CYR_ONLY else ord("?"), 0x141, 0x00a3, 0xdf]
         for font, opts in FONTS.items():
             with self.subTest(font=font):
                 r = fr.run("ffemu", MOUNT, files={
@@ -363,6 +368,8 @@ class NamesImage(fr.Case, unittest.TestCase):
         for i, (name, _, shown, _) in enumerate(mk_names_image.FOLDERS):
             with self.subTest(folder=name, image=shown):
                 r = self.mount(i, ["key right"])
+                if CYR_ONLY:
+                    shown = shown.replace("?", "\u25a1")
                 self.assertEqual(name_cells(r, "6x16", len(shown)),
                                  [glyph("6x16", ord(c)) for c in shown],
                                  r.report())

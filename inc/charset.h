@@ -6,8 +6,11 @@
  * letters at 0x02-0x1f; the Latin letters of code pages 437 and 850 at
  * 0x80-0xbf, with the pound at 0x9f; and the Russian alphabet in KOI8-R's
  * order, small letters at 0xc0-0xdf and capitals at 0xe0-0xff. A character
- * of a long name that the set lacks reads as '?', which no FAT name holds,
- * and one outside the Basic Multilingual Plane as two.
+ * of a long name that the set lacks reads as its replacement, which no FAT
+ * name holds, and one outside the Basic Multilingual Plane as two.
+ *
+ * With CHARSET_CYR_ONLY, cell 0x01 is the replacement for every non-ASCII
+ * character outside the Russian alphabet; the Latin ranges are not produced.
  *
  * Central European capitals occupy 0x02-0x10, their small letters 15 cells
  * below. Latin capitals occupy 0x80-0x9d, with their small letters 32 cells
