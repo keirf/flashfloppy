@@ -64,7 +64,9 @@ static int option_index(const void *cfg, const char *name)
  * with their comments: the firmware keeps the flash value of an option the
  * file does not name, so an option whose value is what @flash holds needs
  * no line, and FF_CFG_nondefault leaves out only those that hold the
- * default too. The first line says that the values come from @source.
+ * default too; FF_CFG_from_defaults writes those that do not hold the
+ * default, whatever @flash holds. The first line says that the values come
+ * from @source.
  * Returns the number of options written. */
 static unsigned int generate(FILE *f, const uint8_t *cfg,
                              const uint8_t *flash, enum ff_cfg_set set,
@@ -85,6 +87,8 @@ static unsigned int generate(FILE *f, const uint8_t *cfg,
             all ? "every option"
             : (set == FF_CFG_nondefault)
             ? "the options that differ from the defaults or from flash"
+            : (set == FF_CFG_from_defaults)
+            ? "the options that differ from the defaults"
             : "the options that differ from flash");
 
     /* @pending is where the comment lines above the next option begin. */
@@ -99,7 +103,9 @@ static unsigned int generate(FILE *f, const uint8_t *cfg,
                 emu_flash_option(i, cfg, value, sizeof(value), &flags);
                 emu_flash_option(i, flash, held, sizeof(held), &hflags);
                 emu_flash_option(i, dfl, dflt, sizeof(dflt), &hflags);
-                write = all || strcmp(value, held)
+                write = (set == FF_CFG_from_defaults)
+                    ? (strcmp(value, dflt) != 0)
+                    : all || strcmp(value, held)
                     || ((set == FF_CFG_nondefault) && strcmp(value, dflt));
                 if (write) {
                     fwrite(pending, 1, p - pending, f);

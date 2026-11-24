@@ -38,18 +38,19 @@ endif
 # code, and the build level is "debug" for its assertions and console output.
 FW_SRCS := main.c config.c fs.c fs_hint.c volume.c cache.c crc.c string.c util.c
 FW_SRCS += time.c timer.c build_info.c spi.c sd_spi.c
-FW_SRCS += fatfs/ff.c fatfs/ffunicode.c
+FW_SRCS += fatfs/ff.c charset.c
 FW_SRCS += display/display.c display/lcd_stm32f105.c display/led_7seg.c
 FW_SRCS += gotek/board.c gotek/speaker.c floppy.c
 FW_SRCS += image/image.c image/adf.c image/dsk.c image/hfe.c image/img.c
 FW_SRCS += image/da.c image/dummy.c image/mfm.c image/apple2.c
 EMU_FW_SRCS := hw.c stubs.c at32f435.c
 # Display fonts, generated from fonts/ as in src/display/Makefile.
-FONTS := 6x13 8x16
+FONTS := 6x16 8x16 7x8 8x8
+$(OUT)/gen/oled_font_7x8.c $(OUT)/gen/oled_font_8x8.c: font_extent := cyr
 
 # The host half: everything that touches the host operating system.
 HOST_SRCS := ffemu.c cpu.c ssd1306.c fatimg.c rc.c tui.c script.c usbdisk.c
-HOST_SRCS += cfgfile.c led_7seg.c hd44780.c wincon.c osd.c crash.c
+HOST_SRCS += cfgfile.c led_7seg.c hd44780.c wincon.c osd.c sfn_cp.c crash.c
 HOST_SRCS += imgcfg.c
 
 FW_OBJS := $(patsubst %.c,$(OUT)/fw/%.o,$(FW_SRCS))
@@ -71,12 +72,19 @@ FW_CFLAGS += -MMD -MP
 # Extra debug flags just for ffemu
 FW_CFLAGS += -ftrivial-auto-var-init=pattern
 
+# The minimal test variant uses ASCII fonts and leaves the extras out.
+ifeq ($(minimal_ui),y)
+FW_CFLAGS += -DMINIMAL_UI=1 -DOLED_FONT_ASCII_ONLY=1
+$(patsubst %,$(OUT)/gen/oled_font_%.c,$(FONTS)): font_extent := ascii
+endif
+
 # The firmware's own code calls __sanitizer_cov_trace_pc() at each of its
 # basic blocks, by which the virtual clock tells a spin from its work.
 $(patsubst %.c,$(OUT)/fw/%.o,$(FW_SRCS)): \
     FW_CFLAGS += -fsanitize-coverage=trace-pc
 
 HOST_CFLAGS := -std=gnu11 -O2 -g -Wall -Werror -D_GNU_SOURCE
+HOST_CFLAGS += -iquote $(ROOT)/inc
 HOST_CFLAGS += -DNCURSES_WIDECHAR=1 -DFFEMU_NAME='"$(NAME)"'
 ifeq ($(TARGET),apple2)
 HOST_CFLAGS += -DFFEMU_APPLE2=1
@@ -117,9 +125,10 @@ $(OUT)/gen/ff_cfg_example.c: $(ROOT)/examples/FF.CFG mk_text.py
 	@mkdir -p $(dir $@)
 	$(Q)$(PYTHON) mk_text.py $< $@ ff_cfg_example
 
-$(OUT)/gen/oled_font_%.c: $(ROOT)/fonts/%.bdf $(ROOT)/scripts/mk_font.py
+$(OUT)/gen/oled_font_%.c: $(ROOT)/fonts/%.png $(ROOT)/scripts/mk_font.py
 	@mkdir -p $(dir $@)
-	$(Q)cd $(dir $@) && $(PYTHON) $(ROOT)/scripts/mk_font.py $< oled_font_$*
+	$(Q)cd $(dir $@) && $(PYTHON) $(ROOT)/scripts/mk_font.py $< oled_font_$* \
+	    $(font_extent)
 
 $(OUT)/gen/%.o: $(OUT)/gen/%.c
 	@echo CC $*.c
@@ -133,7 +142,7 @@ $(OUT)/fw/gotek/board.o $(OUT)/fw/floppy.o: \
     FW_CFLAGS += -ULEVEL -DLEVEL=LEVEL_logfile
 endif
 
-# As in src/display/Makefile: the main firmware has both fonts.
+# As in src/display/Makefile: the main firmware has every font.
 $(OUT)/fw/display/lcd_stm32f105.o $(OUT)/emu/at32f435.o: \
     FW_CFLAGS += -Dfont_extra=1
 
@@ -162,7 +171,8 @@ $(OUT)/fw/display/lcd_stm32f105.o: $(ROOT)/src/display/lcd_stm32f105.c
 	@echo CC display/lcd_stm32f105.c
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(FW_CFLAGS) -c $< -o $@
-	$(Q)$(OBJCOPY) $(foreach f,init clear write backlight sync, \
+	$(Q)$(OBJCOPY) $(foreach f,init clear write write_spinner write_shifted \
+	    backlight sync row_columns column_pixels write_glyphs shown_rows, \
 	    --redefine-sym lcd_$(f)=f105_lcd_$(f)) $@
 
 # stubs.c wraps these with what ffemu adds to them.

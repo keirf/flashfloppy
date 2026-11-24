@@ -22,6 +22,11 @@
 #define WDATA_TOGGLE FALSE
 #endif
 
+/* The stepper phases on, debounced, as bits 0 to 3. */
+#if TARGET == TARGET_apple2
+extern uint8_t apple2_phases;
+#endif
+
 #define FINTF_SHUGART     0
 #define FINTF_IBMPC       1
 #define FINTF_IBMPC_HDOUT 2
@@ -312,7 +317,7 @@ void floppy_cancel(void);
 bool_t floppy_handle(void); /* TRUE -> re-read config file */
 void floppy_set_cyl(uint8_t unit, uint8_t cyl);
 struct track_info {
-    uint8_t cyl, side:1, sel:1, writing:1, in_da_mode:1;
+    uint8_t cyl, side:1, sel:1, writing:1, in_da_mode:1, phases:4;
 };
 void floppy_get_track(struct track_info *ti);
 void floppy_set_fintf_mode(void);

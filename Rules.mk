@@ -51,6 +51,16 @@ $(level) := y
 
 FLAGS += $(MCU_FLAG) $(TARGET_FLAG) $(LEVEL_FLAG)
 
+# minimal_ui=y: the logfile and debug builds for STM32F105 and
+# AT32F415 don't have enough flash memory for future features, so this
+# option leaves fancy UI features out of those builds via -DMINIMAL_UI=1.
+ifeq ($(mcu),stm32f105)
+minimal_ui ?= $(debug)$(logfile)
+endif
+ifeq ($(minimal_ui),y)
+FLAGS += -DMINIMAL_UI=1
+endif
+
 FLAGS += -MMD -MP
 DEPS = *.d
 

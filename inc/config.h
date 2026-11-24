@@ -45,8 +45,10 @@ struct packed ff_cfg {
 #define DISPON_sel 2
     uint8_t display_on_activity;
     uint16_t display_scroll_rate;
-#define FONT_6x13 7
+#define FONT_6x16 7
 #define FONT_8x16 8
+#define FONT_7x8 9
+#define FONT_8x8 10
     uint8_t oled_font; /* FONT_* oled font specifier */
     uint8_t step_volume;
     uint8_t side_select_glitch_filter;
@@ -175,6 +177,30 @@ struct packed ff_cfg {
 #define SHOWEXT_yes  1
 #define SHOWEXT_auto 2
     uint8_t show_filename_ext;
+    bool_t show_tracks_short;
+    /* Bit n: content row n, double height in display_order, is double
+     * width as well. */
+    uint8_t display_order_wide;
+    uint16_t selector_display_order;
+    uint8_t selector_display_order_wide;
+    bool_t display_scroll_by_pixel;
+#define DIRWITH_brackets 0
+#define DIRWITH_prefix_slash 1
+#define DIRWITH_postfix_slash 2
+    uint8_t show_dir_with;
+    bool_t display_error_wide;
+    bool_t show_slot_count_instead_of_max;
+#define CODEPAGE_866 0
+#define CODEPAGE_mik 1
+#define CODEPAGE_437 2
+#define CODEPAGE_850 3
+#define CODEPAGE_852 4
+    uint8_t short_name_codepage;
+    bool_t detect_utf8_in_short_names;
+#define LCDCS_jap 0
+#define LCDCS_eur 1
+#define LCDCS_cyr 2
+    uint8_t lcd_charset;
 };
 
 extern struct ff_cfg ff_cfg;

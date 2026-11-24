@@ -163,9 +163,14 @@ static unsigned int osd_prep_buffer(void)
         return sizeof(struct i2c_osd_info);
     }
 
-    if ((ff_cfg.osd_display_order != DORD_default)
-        && (display_mode == DM_normal))
+    if ((ff_cfg.osd_display_order != DORD_default) && normal_mode)
         order = ff_cfg.osd_display_order;
+#ifndef MINIMAL_UI
+    else if (error_mode)
+        order = error_display_order();
+    else if (glyphs_mode)
+        order = DISPLAY_ORDER(0, 1, 7, 7);
+#endif
 
     heights = rows = 0;
     /* FF OSD takes three rows at most: its row count is two bits. */
@@ -189,12 +194,13 @@ static unsigned int osd_prep_buffer(void)
     *q++ = OSD_BUTTONS | osd_buttons_tx;
     *q++ = OSD_DATA;
     for (row = 0; row < rows; row++) {
-        i = (order >> (row * DORD_shift)) & DORD_row;
+        i = map_content_row((order >> (row * DORD_shift)) & DORD_row);
         /* A blank row, 7, has no text[] of its own. */
         if (i < ARRAY_SIZE(text))
-            memcpy(q, text[i], lcd_columns);
+            osd_copy_text_row(q, i);
         else
             memset(q, ' ', lcd_columns);
+        osd_map_row(q);
         q += lcd_columns;
     }
 
@@ -212,12 +218,12 @@ static unsigned int osd_prep_buffer(void)
 static unsigned int lcd_prep_buffer(void)
 {
     const static uint8_t row_offs[] = { 0x00, 0x40, 0x14, 0x54 };
-    uint16_t order;
+    uint16_t order, configured = lcd_display_order();
     char *p;
     uint8_t *q = buffer;
     unsigned int i, row;
 
-    if (i2c_row == lcd_rows) {
+    if (i2c_row == display_rows) {
         i2c_row++;
         if (has_osd) {
             i2c_stop();
@@ -225,7 +231,7 @@ static unsigned int lcd_prep_buffer(void)
         }
     }
 
-    if (i2c_row > lcd_rows) {
+    if (i2c_row > display_rows) {
         i2c_row = 0;
         refresh_count++;
         i2c_stop();
@@ -233,16 +239,22 @@ static unsigned int lcd_prep_buffer(void)
         i2c->cr1 |= I2C_CR1_START;
     }
 
-    order = (lcd_rows == 2) ? 0x7710 : 0x2103;
-    if ((ff_cfg.display_order != DORD_default) && (display_mode == DM_normal))
-        order = ff_cfg.display_order;
+    order = (display_rows == 2) ? 0x7710 : 0x2103;
+    if ((configured != DORD_default) && normal_mode)
+        order = configured;
+#ifndef MINIMAL_UI
+    else if (error_mode)
+        order = error_display_order();
+    else if (glyphs_mode)
+        order = DISPLAY_ORDER(0, 1, 2, 3);
+#endif
 
-    row = (order >> (i2c_row * DORD_shift)) & DORD_row;
+    row = map_content_row((order >> (i2c_row * DORD_shift)) & DORD_row);
     p = (_bl && row < ARRAY_SIZE(text)) ? text[row] : NULL;
 
     emit8(&q, CMD_SETDDRADDR | row_offs[i2c_row], 0);
     for (i = 0; i < lcd_columns; i++)
-        emit8(&q, p ? *p++ : ' ', _RS);
+        emit8(&q, p ? lcd_char(*p++) : ' ', _RS);
 
     i2c_row++;
 
@@ -486,14 +498,19 @@ bool_t lcd_init(void)
 
         if (is_oled_display) {
             oled_height = (ff_cfg.display_type & DISPLAY_oled_64) ? 64 : 32;
+#if defined(font_extra) && !defined(OLED_FONT_ASCII_ONLY)
             oled_font = ff_cfg.oled_font;
-            lcd_columns = (oled_font == FONT_8x16) ? 16
-                : (ff_cfg.display_type & DISPLAY_narrower) ? 16
-                : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21;
-            lcd_rows = 4;
+#else
+            oled_font = FONT_6x16;
+#endif
+            lcd_columns = (oled_font == FONT_6x16)
+                ? (ff_cfg.display_type & DISPLAY_narrower) ? 16
+                : (ff_cfg.display_type & DISPLAY_narrow) ? 18 : 21
+                : (oled_font == FONT_7x8) ? 18 : 16;
+            display_rows = ((oled_height == 64) || oled_small_font()) ? 4 : 2;
         } else {
             lcd_columns = (ff_cfg.display_type >> _DISPLAY_lcd_columns) & 63;
-            lcd_rows = (ff_cfg.display_type >> _DISPLAY_lcd_rows) & 7;
+            display_rows = (ff_cfg.display_type >> _DISPLAY_lcd_rows) & 7;
         }
 
         if (a != 0) {
@@ -507,8 +524,8 @@ bool_t lcd_init(void)
 
         lcd_columns = max_t(uint8_t, lcd_columns, 16);
         lcd_columns = min_t(uint8_t, lcd_columns, 40);
-        lcd_rows = max_t(uint8_t, lcd_rows, 2);
-        lcd_rows = min_t(uint8_t, lcd_rows, 4);
+        display_rows = max_t(uint8_t, display_rows, 2);
+        display_rows = min_t(uint8_t, display_rows, 4);
 
         lcd_clear();
 
@@ -565,6 +582,7 @@ bool_t lcd_init(void)
     emit8(&p, CMD_DISPLAYCTL, 0);
     emit8(&p, CMD_ENTRYMODE | 2, 0);
     emit8(&p, CMD_DISPLAYCTL | 4, 0); /* display on */
+    lcd_cgram_block(&p);
     i2c->cr2 |= I2C_CR2_DMAEN;
     dma_start(p - buffer);
     
@@ -586,47 +604,6 @@ fail:
     rcc->apb1enr &= ~(1<<i2c_cfg->en);
     return FALSE;
 }
-
-#ifdef font_extra
-/* Instead of storing the 8x16 font in the flash memory, build its glyphs at
- * runtime as a bold (shifted-by-1) version of 6x13.
- */
-#ifndef OLED_FONT_8x16_SYNTH
-#define OLED_FONT_8x16_SYNTH 0
-#endif
-extern const uint8_t oled_font_8x16[];
-static void oled_convert_text_row_8x16(char *pc)
-{
-    unsigned int i, j, c;
-    const uint8_t *p;
-    uint8_t *q = buffer;
-    const unsigned int w = 8;
-
-    for (i = 0; i < lcd_columns; i++) {
-        if ((c = *pc++ - 0x20) > 0x5e)
-            c = '.' - 0x20;
-        /* Testing a macro at runtime allows the build system to supply a
-         * runtime condition.
-         */
-        if (OLED_FONT_8x16_SYNTH) {
-            /* The 6x13 glyph made bold by a second copy a column to the
-             * right, 7 columns by 13 rows: centered in the cell and rounded
-             * up and left, it is at the left, a row down, where the 6x13
-             * font already has it in its 16 rows. */
-            p = &oled_font_6x13[c * 6 * 2];
-            for (j = 0; j < w; j++) {
-                q[j] = ((j < 6) ? p[j] : 0) | ((j-1 < 6) ? p[j-1] : 0);
-                q[128+j] = ((j < 6) ? p[6+j] : 0) | ((j-1 < 6) ? p[5+j] : 0);
-            }
-        } else {
-            p = &oled_font_8x16[c * w * 2];
-            memcpy(q, p, w);
-            memcpy(q+128, p+w, w);
-        }
-        q += w;
-    }
-}
-#endif
 
 static unsigned int oled_start_i2c(uint8_t *buf)
 {
@@ -677,12 +654,13 @@ static unsigned int oled_start_i2c(uint8_t *buf)
 
 static unsigned int ssd1306_prep_buffer(void)
 {
-    int size;
+    bool_t compact = oled_small_font() && (oled_height == 32);
+    unsigned int rows = compact ? 4 : oled_height / 16;
 
     /* If we have completed a complete fill of the OLED display, start a new 
      * I2C transaction. The OLED display seems to occasionally silently lose 
      * a byte and then we lose sync with the display address. */
-    if (i2c_row == (oled_height / 16)) {
+    if (i2c_row == rows) {
         i2c_row++;
         if (has_osd) {
             i2c_stop();
@@ -690,7 +668,7 @@ static unsigned int ssd1306_prep_buffer(void)
         }
     }
 
-    if (i2c_row > (oled_height / 16)) {
+    if (i2c_row > rows) {
         i2c_row = 0;
         refresh_count++;
         i2c_stop();
@@ -698,18 +676,16 @@ static unsigned int ssd1306_prep_buffer(void)
     }
 
     /* Convert one row of text[] into buffer[] writes. */
-    size = oled_to_lcd_row(i2c_row);
-    if (size != 0)
-        oled_double_height(buffer, &buffer[(size == 1) ? 128 : 0], 0x3);
+    oled_to_lcd_row(i2c_row);
 
     i2c_row++;
 
-    return 256;
+    return compact ? 128 : 256;
 }
 
 static unsigned int sh1106_prep_buffer(void)
 {
-    int size;
+    bool_t compact = oled_small_font() && (oled_height == 32);
     uint8_t *p = buffer;
 
     if (i2c_row == (oled_height / 8)) {
@@ -726,14 +702,9 @@ static unsigned int sh1106_prep_buffer(void)
     }
 
     /* Convert one row of text[] into buffer[] writes. */
-    size = oled_to_lcd_row(i2c_row/2);
-    if (size != 0) {
-        oled_double_height(&buffer[128], &buffer[(size == 1) ? 128 : 0],
-                           (i2c_row & 1) + 1);
-    } else {
-        if (!(i2c_row & 1))
-            memcpy(&buffer[128], &buffer[0], 128);
-    }
+    oled_to_lcd_row(compact ? i2c_row : i2c_row/2);
+    if (compact || !(i2c_row & 1))
+        memcpy(&buffer[128], &buffer[0], 128);
 
     /* Every 8 rows needs a new page address and hence new I2C transaction. */
     i2c_stop();

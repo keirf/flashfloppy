@@ -1,9 +1,9 @@
 /*
  * lcd_font_cyr.h
  *
- * CYR, the character ROM of the Cyrillic LCD modules, Latin and Cyrillic,
- * upper and lower case: page 0 of the character generator of MELT's
- * modules, as the MT-16S2H datasheet draws it in its table 5. The page is
+ * cyr-melt, the character ROM of MELT's Cyrillic LCD modules, Latin and
+ * Cyrillic, upper and lower case: page 0 of their character generator, as
+ * the MT-16S2H datasheet draws it in its table 5. The page is
  * chosen by bit 1 of the function set command, which the firmware leaves
  * clear. The Cyrillic letters that Latin ones do not stand for are at
  * 0xa0 to 0xc7 and 0xe0 to 0xe6, and the capital soft sign at 0x08;
@@ -20,7 +20,8 @@
  * "LCD1602 with Cyrillic" modules; Winstar's WS0010 character OLEDs have
  * it as font table 10, with accented Latin at 0x80 to 0x9f. Russian text
  * libraries for such modules, LiquidCrystalRus and Marlin's Cyrillic
- * character set among them, map to these codes.
+ * character set among them, map to these codes. Sitronix's ROM is
+ * cyr-sitronix, lcd_font_cyr_sitronix.h.
  *
  * The form: the glyphs from code 0x08 on, eight to a band, each band under
  * a line that labels its glyphs: an ASCII character as itself, a blank

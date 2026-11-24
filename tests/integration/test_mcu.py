@@ -14,22 +14,25 @@ DUMP_RE = re.compile(r"^([.#]+|[|].*[|])$")
 
 class DisplayDriver(fr.Case, unittest.TestCase):
 
-    def dump(self, display, display_type, controller, mcu):
+    def dump(self, display, display_type, controller, mcu, font=None):
         """The display's dump with the display driver of @mcu, once the image
         is in."""
+        flash = ["display-type = " + display_type]
+        if font:
+            flash.append("oled-font = " + font)
         r = fr.run("ffemu", [
             "wait 10000 log %s" % controller, "wait 10000 log Name: 'PC'",
             "sleep 1000", "dump"],
             settings=["display = " + display, "mcu = " + mcu],
-            flash=["display-type = " + display_type], files=PC)
+            flash=flash, files=PC)
         self.assertWaits(r, 2)
         rows = [line for line in r.lines if DUMP_RE.match(line)]
         self.assertTrue(rows, r.report())
         return rows
 
-    def check(self, display, display_type, controller):
-        own = self.dump(display, display_type, controller, "415")
-        at435 = self.dump(display, display_type, controller, "435")
+    def check(self, display, display_type, controller, font=None):
+        own = self.dump(display, display_type, controller, "415", font)
+        at435 = self.dump(display, display_type, controller, "435", font)
         self.assertEqual(own, at435)
 
     def test_ssd1306_64(self):
@@ -40,6 +43,16 @@ class DisplayDriver(fr.Case, unittest.TestCase):
 
     def test_lcd_20x4(self):
         self.check("hd44780-20x4", "lcd-20x04", "I2C: LCD found at 0x27")
+
+    def test_small_fonts(self):
+        """Both drivers draw every small-font layout identically."""
+        for font in ("7x8", "8x8"):
+            for model, size in (("ssd1306", 32), ("ssd1306", 64),
+                                ("sh1106", 32), ("sh1106", 64)):
+                with self.subTest(font=font, model=model, size=size):
+                    display = "%s-128x%d" % (model, size)
+                    self.check(display, "oled-128x%d" % size,
+                               "OLED: " + model.upper(), font)
 
 
 if __name__ == "__main__":

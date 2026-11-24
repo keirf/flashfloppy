@@ -2,8 +2,8 @@
  * led_7seg.c
  *
  * Model of the 7-segment LED display on the two lines DAT and CLK: three
- * digits on a TM1651 controller, which takes bytes on a two-wire protocol of
- * its own and answers each with an ACK, or two digits on a pair of 74HC164
+ * led_7seg_digits on a TM1651 controller, which takes bytes on a two-wire protocol of
+ * its own and answers each with an ACK, or two led_7seg_digits on a pair of 74HC164
  * shift registers. It decodes what the firmware clocks out, keeps the
  * segments for the user interface, and draws them as pixels from the
  * fonts of led_7seg_font.h.
@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "host.h"
+#include "led_7seg.h"
 #include "led_7seg_font.h"
 
 const char ascii_pixel = ASCII_PIXEL;
@@ -143,7 +144,7 @@ int emu_led_sync(int clk_now, int dat_now)
         return ack;
     }
 
-    /* A bit on each rising edge of CLK, MSB first, 16 for the two digits.
+    /* A bit on each rising edge of CLK, MSB first, 16 for the two led_7seg_digits.
      * The registers show whatever they hold, so they are read once CLK has
      * rested, after a whole frame. */
     now = emu_time_ns();
@@ -167,7 +168,7 @@ void led_init(int display)
 {
     fitted = true;
     nr_digits = DISP_DIGITS(display);
-    /* The shift registers have no switch: their digits are what they hold. */
+    /* The shift registers have no switch: their led_7seg_digits are what they hold. */
     d.on = (nr_digits == 2);
 }
 
@@ -201,7 +202,7 @@ static const struct {
 };
 
 /* The rows of font @font, LED_FONT_*, with its width, the pitch of the
- * digits, and its height; the rows must all be as long as the first. */
+ * led_7seg_digits, and its height; the rows must all be as long as the first. */
 static const char * const *font_rows(unsigned int font, unsigned int *w,
                                      unsigned int *h)
 {
@@ -215,7 +216,7 @@ static const char * const *font_rows(unsigned int font, unsigned int *w,
 }
 
 /* The pixel buffers, allotted on first use for the largest font and all
- * the digits. */
+ * the led_7seg_digits. */
 static uint8_t *lit_px, *all_px;
 
 static void allot_pixels(void)
@@ -272,16 +273,7 @@ void led_pixels(const struct led_view *v, unsigned int font,
 
 void led_text(const struct led_view *v, char *buf, size_t size)
 {
-    /* The firmware's patterns, src/display/led_7seg.c: the digits, then the
-     * letters a to z. */
-    static const uint8_t digits[] = {
-        0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f
-    };
-    static const uint8_t letters[] = {
-        0x77, 0x7c, 0x58, 0x5e, 0x79, 0x71, 0x6f, 0x74, 0x04,
-        0x0e, 0x08, 0x38, 0x40, 0x54, 0x5c, 0x73, 0x67, 0x50,
-        0x6d, 0x78, 0x1c, 0x09, 0x41, 0x76, 0x6e, 0x52
-    };
+    /* The shared digit and letter patterns, inc/led_7seg.h. */
     unsigned int i, j, n = 0;
 
     for (i = 0; (i < v->nr_digits) && (n + 7 < size); i++) {
@@ -289,11 +281,11 @@ void led_text(const struct led_view *v, char *buf, size_t size)
         char c = '?';
         if (s == 0)
             c = ' ';
-        for (j = 0; j < ARRAY_SIZE(digits); j++)
-            if (digits[j] == s)
+        for (j = 0; j < ARRAY_SIZE(led_7seg_digits); j++)
+            if (led_7seg_digits[j] == s)
                 c = '0' + j;
-        for (j = 0; j < ARRAY_SIZE(letters); j++)
-            if (letters[j] == s)
+        for (j = 0; j < ARRAY_SIZE(led_7seg_letters); j++)
+            if (led_7seg_letters[j] == s)
                 c = 'a' + j;
         buf[n++] = c;
         if (v->on && (v->seg[i] & 0x80))

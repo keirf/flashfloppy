@@ -321,6 +321,8 @@ static void print_image_info(struct image *im)
     char msg[25];
     const static char *sync_s[] = { "Raw", "FM", "MFM" };
     const static char dens_c[] = { 'S', 'D', 'H', 'E' };
+    const char *sync = sync_s[im->sync];
+    char sides = (im->nr_sides == 1) ? 'S' : 'D';
     int tlen, i;
 
     i = 0;
@@ -330,10 +332,18 @@ static void print_image_info(struct image *im)
         i++;
     }
     snprintf(msg, sizeof(msg), "%s %cS/%cD %uT",
-             sync_s[im->sync],
-             (im->nr_sides == 1) ? 'S' : 'D',
-             dens_c[i], im->nr_cyls);
-    lcd_write(0, 2, -1, msg);
+             sync, sides, dens_c[i], im->nr_cyls);
+    lcd_write(/*col=*/0, /*row=*/2, /*min=*/-1, msg);
+
+#ifndef MINIMAL_UI
+    /* In the row's layout of half width, the encoding, then the sides, the
+     * density and the cylinders at the row's right. */
+    snprintf(msg, sizeof(msg), "%s%*s%c%c%u", sync,
+             max_t(int, lcd_columns/2 - strlen(sync) - 2
+                   - ((im->nr_cyls > 99) ? 3 : (im->nr_cyls > 9) ? 2 : 1), 1),
+             "", sides, dens_c[i], im->nr_cyls);
+    lcd_write(/*col=*/0, /*row=*/2 | LCD_WIDE, /*min=*/-1, msg);
+#endif
 }
 
 bool_t image_setup_track(

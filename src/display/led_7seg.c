@@ -17,6 +17,8 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#include "led_7seg.h"
+
 /* TM1651, 74HC164: Full clock cycle is 8us (freq = 125kHZ) */
 #define CYCLE 8
 
@@ -24,16 +26,47 @@
 static uint8_t DAT_PIN = 10;
 static uint8_t CLK_PIN = 11;
 
-/* TM1651, 74HC164: Alphanumeric segment arrangements.
- * Bit positions 0-6 correspond to conventional segment labels A-G resp. */
-static const uint8_t letters[] = {
-    0x77, 0x7c, 0x58, 0x5e, 0x79, 0x71, 0x6f, 0x74, 0x04, /* a-i */
-    0x0e, 0x08, 0x38, 0x40, 0x54, 0x5c, 0x73, 0x67, 0x50, /* j-r */
-    0x6d, 0x78, 0x1c, 0x09, 0x41, 0x76, 0x6e, 0x52        /* s-z */
+/* Alphanumeric segment arrangements, shared with ffemu. */
+const uint8_t led_7seg_letters[] = {
+    SEG_T | SEG_TR | SEG_BR | SEG_BL | SEG_TL | SEG_M,
+    SEG_BR | SEG_B | SEG_BL | SEG_TL | SEG_M,
+    SEG_B | SEG_BL | SEG_M,
+    SEG_TR | SEG_BR | SEG_B | SEG_BL | SEG_M,
+    SEG_T | SEG_B | SEG_BL | SEG_TL | SEG_M,
+    SEG_T | SEG_BL | SEG_TL | SEG_M,
+    SEG_T | SEG_TR | SEG_BR | SEG_B | SEG_TL | SEG_M,
+    SEG_BR | SEG_BL | SEG_TL | SEG_M,
+    SEG_BR, /* a-i */
+    SEG_TR | SEG_BR | SEG_B,
+    SEG_B,
+    SEG_B | SEG_BL | SEG_TL,
+    SEG_M,
+    SEG_BR | SEG_BL | SEG_M,
+    SEG_BR | SEG_B | SEG_BL | SEG_M,
+    SEG_T | SEG_TR | SEG_BL | SEG_TL | SEG_M,
+    SEG_T | SEG_TR | SEG_BR | SEG_TL | SEG_M,
+    SEG_BL | SEG_M, /* j-r */
+    SEG_T | SEG_BR | SEG_B | SEG_TL | SEG_M,
+    SEG_B | SEG_BL | SEG_TL | SEG_M,
+    SEG_BR | SEG_B | SEG_BL,
+    SEG_T | SEG_B,
+    SEG_T | SEG_M,
+    SEG_TR | SEG_BR | SEG_BL | SEG_TL | SEG_M,
+    SEG_TR | SEG_BR | SEG_B | SEG_TL | SEG_M,
+    SEG_TR | SEG_BL | SEG_M /* s-z */
 };
 
-static const uint8_t digits[] = {
-    0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f
+const uint8_t led_7seg_digits[] = {
+    SEG_T | SEG_TR | SEG_BR | SEG_B | SEG_BL | SEG_TL,
+    SEG_TR | SEG_BR,
+    SEG_T | SEG_TR | SEG_B | SEG_BL | SEG_M,
+    SEG_T | SEG_TR | SEG_BR | SEG_B | SEG_M,
+    SEG_TR | SEG_BR | SEG_TL | SEG_M,
+    SEG_T | SEG_BR | SEG_B | SEG_TL | SEG_M,
+    SEG_T | SEG_BR | SEG_B | SEG_BL | SEG_TL | SEG_M,
+    SEG_T | SEG_TR | SEG_BR,
+    SEG_T | SEG_TR | SEG_BR | SEG_B | SEG_BL | SEG_TL | SEG_M,
+    SEG_T | SEG_TR | SEG_BR | SEG_B | SEG_TL | SEG_M
 };
 
 static uint8_t nr_digits;
@@ -236,13 +269,18 @@ void led_7seg_write_string(const char *p)
 
     for (i = 0; ((c = *p++) != '\0') && (i < sizeof(d)); i++) {
         if ((c >= '0') && (c <= '9')) {
-            d[i] = digits[c - '0'];
+            d[i] = led_7seg_digits[c - '0'];
         } else if ((c >= 'a') && (c <= 'z')) {
-            d[i] = letters[c - 'a'];
+            d[i] = led_7seg_letters[c - 'a'];
         } else if ((c >= 'A') && (c <= 'Z')) {
-            d[i] = letters[c - 'A'];
+            d[i] = led_7seg_letters[c - 'A'];
         } else if (c == '-') {
-            d[i] = 0x40;
+            d[i] = SEG_M;
+        } else if (c == '?') {
+            d[i] = SEG_T | SEG_TR | SEG_BL | SEG_M;
+        } else if ((TARGET == TARGET_apple2) && (c & 0x80)) {
+            /* The low seven bits are the Apple2 phase digit's segment mask. */
+            d[i] = c & 0x7f;
         } else {
             d[i] = 0;
         }
@@ -254,9 +292,12 @@ void led_7seg_write_string(const char *p)
 void led_7seg_write_decimal(unsigned int val)
 {
     char msg[4];
-    snprintf(msg, sizeof(msg),
-             (nr_digits == 3) ? "%03u" : "%02u",
-             val % ((nr_digits == 3) ? 1000 : 100));
+
+    if (val >= ((nr_digits == 3) ? 1000 : 100)) {
+        led_7seg_write_string((nr_digits == 3) ? "???" : "??");
+        return;
+    }
+    snprintf(msg, sizeof(msg), (nr_digits == 3) ? "%03u" : "%02u", val);
     led_7seg_write_string(msg);
 }
 

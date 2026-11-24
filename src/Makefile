@@ -31,6 +31,7 @@ SUBDIRS += display gotek
 else ifeq ($(target),bootloader)
 
 OBJS += fw_update.o
+OBJS += charset.o
 OBJS += fs_hint.o
 SUBDIRS += display fatfs gotek usb
 
@@ -38,6 +39,7 @@ else
 
 OBJS += main.o
 OBJS += cache.o
+OBJS += charset.o
 OBJS += fs_hint.o
 
 OBJS-$(shugart) += floppy.o
@@ -50,6 +52,20 @@ SUBDIRS += image
 SUBDIRS += gotek
 SUBDIRS += usb
 
+endif
+
+# Small-MCU firmware keeps Cyrillic and shows other non-ASCII characters as a
+# fallback glyph.
+ifeq ($(mcu),stm32f105)
+ifeq ($(filter $(target),bootloader bl_update io_test),)
+charset.o: CFLAGS += -DCHARSET_CYR_ONLY=1
+endif
+endif
+
+# A minimal_ui build shows error codes without their meanings; the bootloader
+# keeps them.
+ifeq ($(minimal_ui)$(filter bootloader,$(target)),y)
+OBJS := $(filter-out fs_hint.o,$(OBJS))
 endif
 
 .PHONY: $(SRCDIR)/build_info.c

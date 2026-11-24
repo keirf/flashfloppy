@@ -22,6 +22,16 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.environ.get("FFEMU_OUT", os.path.join(ROOT, "out"))
 CLOCK = os.environ.get("FFEMU_CLOCK", "virtual")
 LED_7SEG_C = os.path.join(ROOT, "src", "display", "led_7seg.c")
+SEG_T = 1 << 0
+SEG_TR = 1 << 1
+SEG_BR = 1 << 2
+SEG_B = 1 << 3
+SEG_BL = 1 << 4
+SEG_TL = 1 << 5
+SEG_M = 1 << 6
+SEGMENT_NAMES = (
+    "SEG_T", "SEG_TR", "SEG_BR", "SEG_B",
+    "SEG_BL", "SEG_TL", "SEG_M")
 
 # What the status of a run that Windows ended by an exception means.
 EXCEPTIONS = {
@@ -40,8 +50,8 @@ FIRMWARE_RE = re.compile(r"^firmware: ([^,]*), ")
 
 
 def program(name):
-    """The path of ffemu program @name, ffemu-shugart or ffemu-apple2."""
-    path = os.path.join(OUT, *name.split("-"), name)
+    """The path of the particular ffemu flavor executable @name: ffemu-<flavor>."""
+    path = os.path.join(OUT, "ffemu", name.split("-", 1)[1], name)
     if os.path.exists(path + ".exe"):
         return path + ".exe"
     if not os.path.exists(path):
@@ -232,19 +242,27 @@ _font = {}
 
 
 def led_cells(text):
-    """The 7-segment cells of @text, a byte per character, from the tables of
-    letters and digits in the firmware's display driver; `-` is the middle
-    segment, anything else blank."""
+    """The 7-segment cells of @text, a byte per character, from the shared
+    digit and letter tables, with `-` and `?`."""
     if not _font:
+        bits = {name: globals()[name] for name in SEGMENT_NAMES}
         with open(LED_7SEG_C) as f:
             src = f.read()
-        for name, first in (("letters", "a"), ("digits", "0")):
+        for name, first in (("led_7seg_letters", "a"), ("led_7seg_digits", "0")):
             m = re.search(r"\b%s\[\] = \{(.*?)\};" % name, src, re.S)
-            cells = re.findall(r"0x[0-9a-fA-F]{2}", m.group(1))
+            table = re.sub(r"/\*.*?\*/", "", m.group(1), flags=re.S)
+            cells = [sum(bits[s] for s in re.findall(r"SEG_[A-Z]+", entry))
+                     for entry in table.split(",")]
             for i, cell in enumerate(cells):
-                _font[chr(ord(first) + i)] = int(cell, 16)
-        _font["-"] = 0x40
+                _font[chr(ord(first) + i)] = cell
+        _font["-"] = SEG_M
+        _font["?"] = SEG_T | SEG_TR | SEG_BL | SEG_M
     return [_font.get(c, 0) for c in text.lower()]
+
+
+def led_segments(text):
+    """The segment bytes that show @text, as a "wait ... segments" value."""
+    return segments(led_cells(text))
 
 
 def version_frames(name, width):
@@ -270,3 +288,13 @@ class Case:
         for kind, text, ok, ms in waits:
             self.assertTrue(
                 ok, "wait %s %s timed out\n%s" % (kind, text, r.report()))
+
+
+def font_glyphs(font):
+    """The glyphs of the build's OLED font @font, by their code points: each
+    its columns as 16-bit values, bit 0 the top pixel, unpacked
+    from the generated file by scripts/mk_font.py."""
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import mk_font
+    return mk_font.read_font(os.path.join(OUT, "ffemu", "shugart", "gen",
+                                          "oled_font_%s.c" % font))

@@ -33,6 +33,12 @@ def main(argv):
                 val = "FONT_" + val
             elif opt == "show-filename-ext":
                 val = "SHOWEXT_" + val
+            elif opt == "show-dir-with":
+                val = "DIRWITH_" + val.replace("-", "_")
+            elif opt == "short-name-codepage":
+                val = "CODEPAGE_" + val
+            elif opt == "lcd-charset":
+                val = "LCDCS_" + val
             elif opt == "display-type":
                 opts = []
                 for x in val.split("-"):
@@ -57,7 +63,8 @@ def main(argv):
                     else:
                         opts.append('NOTIFY_' + x)
                 val = '|'.join(opts)
-            elif opt == "display-order" or opt == "osd-display-order":
+            elif opt in ("display-order", "osd-display-order",
+                         "selector-display-order"):
                 if val == "default":
                     val = "DORD_" + val
                 else:
@@ -108,7 +115,11 @@ def main(argv):
                     'no': 'FALSE',
                     'yes': 'TRUE'
                 }.get(val,val)
+            if opt in ("display-scroll-by-pixel", "show-dir-with", "display-error-wide"):
+                out_f.write("#if !defined(MINIMAL_UI) || defined(FF_CFG_ALL_OPTIONS)\n")
             out_f.write("x(%s, %s, %s)\n" % (opt, re.sub('-','_',opt), val))
+            if opt in ("display-scroll-by-pixel", "show-dir-with", "display-error-wide"):
+                out_f.write("#endif\n")
 
 if __name__ == "__main__":
     main(sys.argv)
