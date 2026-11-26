@@ -46,6 +46,21 @@ class WriteMarks(fr.Case, unittest.TestCase):
         self.check(
             "ffemu-apple2", "tm1651-3digit", DSK, "00 3f 09", "00 3f 08")
 
+    def test_apple2_lcd_write_and_steps(self):
+        """W stays lit as the phases advance under WRQ."""
+        r = fr.run("ffemu-apple2", [
+            "wait 10000 display   T:00.0",
+            "key write",
+            "wait 3000 display W T:00.0",
+            "key phase-in", "key phase-in",
+            "wait 3000 display W T:01.0",
+            "key phase-in", "key phase-in",
+            "wait 3000 display W T:02.0",
+            "key write",
+            "wait 3000 display   T:02.0"],
+            settings=["display = hd44780-16x2"], files=DSK)
+        self.assertWaits(r, 5)
+
 
 if __name__ == "__main__":
     unittest.main()

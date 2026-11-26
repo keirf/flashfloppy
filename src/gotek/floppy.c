@@ -416,8 +416,6 @@ static void POLL_step(void *unused)
     /* Action a head step. */
     if (dma_rd != NULL)
         rdata_stop();
-    if (dma_wr != NULL)
-        wdata_stop();
     drv->step.start = time_now();
     drv->step.state = STEP_started;
     IRQx_set_pending(FLOPPY_SOFTIRQ);
